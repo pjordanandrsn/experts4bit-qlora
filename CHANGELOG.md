@@ -4,6 +4,615 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.57.0 — 2026-10-23 — backend-adapter/2: adapters the server can verify
+
+**0.57.0.** An adapter you train can now carry a manifest the serving side checks before it serves: `backend-adapter/2`
+records a canonical fingerprint of the quantized base (scheme `qfp-v1`), the training facts that decide whether serving
+is exact, and the LoRA scale actually applied, and the paged server verifies every field and refuses by name what it
+cannot accept. Comparing the expert base's fingerprint at serve time is still to come, so that one check stays the
+existing opt-in refusal. Also new: gpt-oss expert LoRA on the unfused reference loop (opt-in, `E4B_GPTOSS_EXPERT_LORA=1`),
+and a plan that prices the stock loss when the chunked loss refuses an LM head. Affects anyone who saves adapters to
+serve later (every supported MoE family) and gpt-oss training; serving without adapters and the training numerics are
+unchanged. Upgrade if you hand adapters from training to serving, or train gpt-oss experts. The grouped-nf4-gemm floor
+is unchanged.
+
+### TC1 amendment 76 registered: grouped-nf4-gemm#584's reordered compact-delta backward, before vs after, two draws a side
+
+- One rented RTX 5090 runs amendment 75's best arm (cd1cl1) at grouped-nf4-gemm main just before #584 and at its merge, two draws a side
+  in ABBA order. grouped-nf4-gemm is reinstalled between the sides, and the installed commit is re-read. Before any arm, the merge's
+  `kernel/test_compact_delta.py` runs on the box's GPU and refuses at cents on a failure. Worst case $3.20.
+- A CPU-allotment floor in the pre-flight: a box under 42 refuses before any venv or fetch. The floor is sized from box 155's measured
+  phases, with every arm run three times and 25 % headroom inside the 2 h guard. The pre-check installs pytest beside the measured venv,
+  never into it, and refuses if the venv's package set changes.
+- Each arm is bound to its code: `tc1_arm.py` now records the grouped-nf4-gemm commit and the sha256 of the `nf4_qlora.py` it imports
+  (`env.gnf4_code`). The read leads with the reserved and nvidia-smi peaks, and its LM-loss bytes name the held logits.
+- The rule takes medians of two draws. A candidate's reserved and device drops must clear the larger of 0.10 GB and the draw spread. The
+  4090 arithmetic is reported beside, never as a verdict.
+- `bench/tc1/tc1_run.sh` (`qwen3pos76co`, `gnf4_t212_at`), `bench/tc1/tc1_drive.sh` (`GNF4_SHA_B` forwarded and checked), and
+  `bench/tc1/tc1_reduce.py` (`pos76_why`, `pos76_rule`, `pos76_block`, self-test case 131). Tests cover the helper, box 155's cd1cl1
+  cell, and the family's pre-check and switch order, run from the script's own functions against a fake python and git.
+
+### P222 results (#1313): K25's decode x plan at Mixtral-8x7B's W16 shapes, GO (M 2.2678x over the served default)
+
+`p222-5090-5` (one RTX 5090, $0.14). At Mixtral-8x7B's W16 shapes, K39's decode at a sweep-selected plan pair (M:
+gate_up 64/256/4/2, down 32/256/4/2) ran both K25 GEMMs 2.2678x faster than the served default (the tree at today's
+plan). The lower bound was 2.2624, the same clock-adjusted, against the 1.10 bar, on routing draws the selection never
+saw. Almost all of the gain is the plan: the decode alone read 1.0187, and c1's pair 2.0630. Every arm kept the tree's
+bits on every rep. Four of six predictions held; the decode band missed below and the headline band missed above, at
+equal clocks. Microbench only: no default changes and no speed is claimed. Next come an opt-in `_K25_PLANS` entry for
+M's pair and a served read, each its own PR. Files: `bench/p222/RESULTS-p222.md` and `bench/p222/receipts/p222-5090-5/`.
+
+### bench/gpu-contract: a PR's own e4b test list for its GPU smoke
+
+- `GC_E4B_TESTS` replaces the served-route premise list with space-separated `tests/test_<name>.py` paths. The controller
+  and the box each refuse (78) any entry not of exactly that form. The default list is unchanged.
+- `GC_NEED_E4B_S` now reaches the box. The README documented it, but `gc_drive.sh` did not pass it through, so setting it on
+  the controller had no effect.
+
+### gpt-oss expert LoRA on the unfused reference loop (opt-in)
+
+- `GptOssExperts4bit` exposes its clamped GLU as `_apply_gate`. Its own forward calls the hook, and stays bit-identical.
+- `ExpertsLoRA` wraps a base that has an `_apply_gate` hook and whose only bias tensors are the buffers
+  `gate_up_bias [E, gate_up rows]` and `down_bias [E, hidden]`. It adds each bias right after the matching base
+  projection, in both the expert-mask forward and the single-token decode forward. The down bias sits inside the
+  routing weight, as in the base.
+- `assert_stock_epilogue` gains `allow_bias=False`. Only the `ExpertsLoRA` constructor passes `True`. Every other entry
+  point keeps refusing a biased stack, because none applies a bias: `enable_fast`, `enable_fast_train`,
+  `enable_batched_train`, the hybrid and NVMe training enablers, the loader's `arena_train=True` branch, and, newly,
+  `enable_expert_offload` on a wrapper.
+- The loader still builds gpt-oss experts bare by default. With `E4B_GPTOSS_EXPERT_LORA=1` it wraps them in
+  `ExpertsLoRA`. The opt-in refuses `offload` (`ValueError`). Its cost against a fused route is unmeasured.
+- `tests/test_t3_gptoss_expert_lora.py` grades the wrapper against the oracle in `tests/gptoss_lora_oracle.py` on CPU,
+  to 1e-5 in fp32: forward and backward on bf16 and NF4 storage, the decode forward, and a 2-layer `GptOssForCausalLM`.
+
+### TC1 amendment 75 read: no arm fits an RTX 4090 yet; the compact delta and the chunked LM loss each save a credited amount
+
+- One rented RTX 5090 at TC1's field recipe with the memory census, e4b's matched arm at today's pins, one draw per arm. It read
+  today's defaults, `NF4_QLORA_COMPACT_DELTA=1`, `E4B_CHUNKED_LM_LOSS=1` and both, with the reserved and nvidia-smi peaks read first.
+- **No arm fits a 24 GiB RTX 4090.** The best arm (both switches) peaks at 25,727 MiB, 1,163 MiB over a 4090's 24,564 MiB total. Even
+  with no allocator gap, its allocated peak plus the CUDA context is about 24,735 MiB.
+- By the registered successor rule, the compact delta against the defaults and the chunked loss against the compact delta are
+  CANDIDATES: credited memory savings, not a fit. At the best arm's peak, the compact delta's own backward holds two 0.811 GB buffers.
+- Claim `e4b.train.4090-fit-read.field.5090.2026-10-22`. The README section and STATUS lines are added, and the receipt's public copy
+  is under `bench/h2h-2026-10-02/tc1/receipts/tc1-5090-155/`.
+
+### HO2 read: the planner's first held-out training rows, COVERED 8 of 8
+
+- Two rented boxes, an RTX 5090 and an RTX 4090, ran `loggetta train` with the planner's own plan, using no receipts on file. There
+  were four rows each: LFM2-8B-A1B and ERNIE-4.5-21B-A3B, at 1,024 and 2,048 tokens. On every row, the plan's total bounded the sampled
+  driver peak and its allocator estimate bounded the allocated peak (driver / plan 0.806-0.874, allocated / estimate 0.915-0.963).
+  USD 0.741 in all.
+- Two lines bind the read:
+  - The 2,048-token rows ran the chunked LM loss under the auto gate, while the 1,024-token rows ran the stock loss. Each branch is
+    inferred, not counted. So the rows are not a length comparison.
+  - Every row planned and ran experts on device, so HO2 tested the device placement only. The registration's expected host offload
+    for ERNIE on the 4090 did not occur.
+- `bench/ho2/receipts/` holds both boxes' identifier-free files and the row receipts with the GPU UUID nulled. `bench/ho2/ho2_public.py`
+  derives those receipts and rebuilds each box's verdict byte for byte. `tests/test_ho2_public.py` covers the rebuild, the sums and
+  the host-identifier checks.
+
+### The plan prices the stock loss when the chunked loss refuses the LM head
+
+- `chunked_lm_loss_refusal` refuses an LM head whose width differs from the config's vocabulary (quietly under `auto`), and the run then
+  takes the stock loss. The planner now prices the same. `MoETopology.config_vocab_size` records the config's vocabulary beside
+  `vocab_size` (the head's width), and `recipe._head_refusal` names a mismatch. `_loss_chunk` then returns the stock loss, and the
+  held-out loss line says the model is not patched.
+- `tests/test_vocab_width_one_source.py`: with the chunked loss forced on, a head 128 wide on a 97-token vocabulary prices stock in both
+  the training and the held-out loss, while the matching head prices chunked.
+
+### Changed
+
+- P224 Amendment 6, before the next reading. The reading VOIDed as too small to judge: its per-row SD was 2.7 times
+  the registered assumption. The held-out set grows to 688 distinct rows (86 topics, 54 new words), sized from that
+  variance alone for a 0.92 chance of meeting the SE bar. The first 256 rows are Amendment 5's set byte for byte, and
+  the training and HTTP sets are unchanged. The reference arm's alarm moves to 1,600 s and the fit to a 3.2 h guard.
+  One reading, no top-up: if the SE still misses the bar, P224 closes at VOID. The estimator, the margin and every
+  gate are unchanged.
+
+### The plan and the chunked loss read one vocabulary width
+
+- `describe_moe` now takes `vocab_size` from the meta tree's LM head (`lm_head.out_features`). That is the width the chunked LM loss's
+  run-time gate tests (`labels.numel() x lm_head.out_features x 4` against 1 GiB). The planner's loss terms and the run therefore pick the
+  same loss branch. Without an output head, the config's `vocab_size` is still used. The provenance records which source was read.
+- `prepare_qlora_training` refuses, by name (`ValueError`), a loaded model whose LM head is not the width the setup was priced at
+  (`recipe.vocab_width_refusal`, for example a head resized after the topology was described). It refuses before gradient checkpointing,
+  LoRA or any engine is enabled, so a mismatch is never picked silently near the gate.
+- `tests/test_vocab_width_one_source.py` covers the width source, the refusal of a `resize_token_embeddings` head, and the refusal in
+  `prepare_qlora_training` before anything is enabled.
+
+### TC1 amendment 75 registered: the 4090-fit read, with the compact delta, the chunked LM loss and both, reserved and device peaks first
+
+- One rented RTX 5090 at TC1's field recipe with the memory census, e4b only at today's pins (main at launch, grouped-nf4-gemm 0.49.0).
+  The arms are e4b's matched arm at its defaults, with `NF4_QLORA_COMPACT_DELTA=1`, with `E4B_CHUNKED_LM_LOSS=1`, and with both. One
+  draw each, worst case $3.20. The recipe is fixed; any smaller batch, quantization change or offload would be its own labelled variant.
+- Each arm is bound to its delta path and its loss, or it is VOID. The read leads with each arm's reserved and nvidia-smi peaks, beside
+  a 4090's 24,564 MiB total. The successor to amendment 74's rule first compares the target's live bytes at both peaks, then credits
+  the drop up to the next transient. A candidate also needs the reserved and device peaks to fall, and goes to its own pre-registered
+  4090 acceptance box.
+- `bench/tc1/tc1_run.sh` (`qwen3pos75cl`), `bench/tc1/tc1_reduce.py` (`pos75_why`, `pos75_rule`, `pos75_block`, `vram_peak_mib`,
+  `unlisted_bound`, self-test case 130) and a test of the rule on box 154's committed cells.
+
+### Fixed
+
+- P224's box `collect()` carried a hard-coded three cost cells into `cost.json`'s blocks, so Amendment 5's graded
+  `ttft_any_ms` and `itl_wall_ms` reached the reducer as unread. `p224-shake-4` recorded both cells and found the
+  gap. `collect()` now takes its cells from the reducer's own `COST_METRICS`. A test runs that shake's six real slot
+  records (sha256-pinned) through `collect()` and the reducer's G3: the graded W1 cells are present and inside the
+  band. No rule changes.
+
+### Fixed
+
+- P224's reading now refuses a box with less than 100 GB free before any install (it was 60 GB). The fetch, the
+  bake and the install need about 85 GB, so a 60 GB box would have failed mid-run. The reading's manifest rents a
+  120 GB disk. The shakedown keeps its 40 GB floor.
+
+### Changed
+
+- P224 Amendment 5, before any reading, from `p224-shake-3`'s records. The held-out set becomes 256 distinct rows,
+  the full cross product of 32 topics and the 8 templates (the earlier draw held 46 distinct rows of 64). The
+  training draws and the HTTP set are byte-identical. Every statistic is taken over distinct sequences. G1 and its
+  SE are graded on the assistant positions, against the all-token margin. The all-token G1, the signed difference in
+  differences and over-application are reported. G3 is graded at W1 on the per-token wall time, and the box now
+  records it. The reference arm and the two scoring slots get the fit's extra time, inside the unchanged guards.
+
+### Changed
+
+- The `backend-adapter/2` reader (`adapter_dir.verify_adapter_dir`) now refuses a manifest whose `run_id` is not a
+  non-empty string, or whose `created_at` is not a real UTC time written as `YYYY-MM-DDTHH:MM:SSZ`. Before, it
+  checked only that both keys were present, so a null passed. The Loggetta writer refuses a null or empty `run_id`,
+  so each side refuses a manifest that names no run; this reader also refuses a whitespace-only one.
+
+### Docs: the fused-experts solution page names the statistic behind each quoted ratio
+All 28 quoted step ratios the lint finds, and the tp2 anchor it misses (1.457, cited in `…` form), in `docs/solutions/qlora-fused-moe-experts.md` now say which statistic their claim is decided by,
+in the sentence that quotes them: a ratio of median s/step, and "medians of two draws" where the claim takes two draws. No
+value changes. `docs/STATUS-RECORD.md` is left as frozen at 0.50.0.
+
+### HO2 registered: the planner's first held-out training read
+
+- Two rented boxes, one RTX 5090 and one RTX 4090, measure rows for the held-out side of Loggetta's frozen planner split. Each
+  runs `loggetta train` on the planner's own plan (no receipts on file, no fixed fields) for two MoE families no planner constant
+  has seen, LFM2-8B-A1B and ERNIE-4.5-21B-A3B, at 1,024 and 2,048 tokens on Alpaca's pinned text column.
+- Each row reads COVERED, UNDER (driver peak above the plan) or SHORT (allocated peak above the estimate). Every valid row goes to
+  the split's next version; no band is computed here. Prediction: all 8 COVERED. Worst case $5.80.
+- `bench/ho2/`: the registration, the controller (P224's by counted edits), the runner, the reducer (17 self-test cases) and the
+  staged pins; `tests/test_ho2.py`, which also reads one real Loggetta training receipt through the reducer
+  (`tests/fixtures/ho2/`, paths and GPU uuids redacted).
+
+### TC1 amendment 74 read: no padded-delta switch is a candidate; removing the delta moves the peak to the LM-loss backward
+
+- One rented RTX 5090 at TC1's field recipe with the memory census, e4b's matched arm at today's pins, one draw per arm. Today's
+  defaults peak at 26.500 GB with 2.348 GB of grouped-nf4-gemm's padded LoRA delta at the peak. `NF4_QLORA_SINGLE_LADDER=0` removes
+  14.5 % of it. `NF4_QLORA_COMPACT_DELTA=1` and `NF4_QLORA_PAD_BUCKETS=1` each remove all of it, but the peak falls only 0.639 GB, to
+  25.861 GB, so by the registered 50 % peak credit no switch is a candidate for a default change.
+- The census shows why: at those arms' peaks the stock full-vocab LM-loss backward is live instead, and both arms agree to 2,048
+  bytes. The rule's "Moved, not saved" label is its wording; the delta's bytes were removed and the peak relocated.
+- Claim `e4b.train.padded-delta-switches.field.5090.2026-10-22`. README section, STATUS lines, and the receipt's public copy under
+  `bench/h2h-2026-10-02/tc1/receipts/tc1-5090-154/`. The reducer self-test pins the peak credit at its 0.50 boundary.
+
+### A golden reference for the chunked LM loss through e4b's QLoRA preparation
+
+- `tests/test_chunked_loss_qlora_golden.py` checks the chunked LM loss against the stock loss on a Qwen3-MoE prepared by
+  `prepare_qlora_training` on CPU: frozen NF4 experts, attention and expert LoRA in fp32, a masked prompt and right padding, the router
+  auxiliary loss, two accumulated micro-batches, an AdamW step and a second step after it. Seeds and tolerances are declared in the
+  module before any measurement: loss within 8 fp32 ulps, every trainable gradient within 1e-5 of its scale, and the first update's
+  sign and size above a gradient floor. The chunked side materialises no full logits.
+- It is the reference the 4090-fit work on TC1's field recipe builds on (TC1 amendment 74's read: the stock full-vocabulary loss
+  backward sets the peak once the padded delta is gone).
+
+### A gpt-oss expert-LoRA oracle, matched to transformers forward and backward
+
+`tests/gptoss_lora_oracle.py` states the function a trained gpt-oss expert must compute: an unfused, bias-carrying
+reference with the clamped GLU and the de-interleaved layout `from_gptoss` loads, with `ExpertsLoRA`'s adapter
+tensors. `tests/test_t3_gptoss_lora_oracle.py` matches it to transformers' `GptOssExperts` in fp32 to 1e-5, forward and
+backward (every LoRA gradient by the chain rule), on one stack and on a 2-layer `GptOssForCausalLM`. It also names
+what stands between the oracle and trained gpt-oss experts today: `ExpertsLoRA`'s bias refusal, the clamped GLU not
+exposed as `_apply_gate`, no bias on the fused training route, and the interleave's row permutation. Tests only; no
+product path changes.
+
+### Changed
+
+- P224 Amendment 4, before any data: spare shakedown ids `p224-shake-4` to `-6` under the current terms exactly
+  (Amendment 2's card, cap, guard and worst case; Amendment 3's kit and fit). Two of the three registered shake ids
+  are spent, one on a $0 refusal when the pinned offer was gone at the launcher's pinned reads. The pin now screens the L4
+  first, prices in the launcher's form, requires a host to stay listed, and re-reads the offer before the create.
+
+### P223 Amendment 2: spare shake ids
+
+All three of P223's registered shake ids were spent before the kit ran: one on a host refusal at the launcher's
+pre-flight, two on hosts whose enforced power limit (475 W, 400 W) sat under the box's 575 W floor. Amendment 2 registers
+`p223-shake-4` to `-6` under Amendment 1's terms exactly, and the runner and driver accept them.
+- The new shake ids pin only hosts with a recorded power cap of at least 575 W; the box's floor stays the backstop.
+
+### Fixed
+
+- P224 kit, per Amendment 3: the arena is baked on the box with grouped-nf4-gemm's `bake_nf4` from the HF snapshot
+  and its provenance (source commit, nf4/64 quantizer) is checked before any server process; canary B (REF-DQ, PA-DQ)
+  is dropped and canary A must record the reference kernel and an fp32 expert absmax; the reduce gets `pins.json`;
+  the fixture trains take `--fix expert_kernel=grouped_nf4` and run whatever the reduce outcome. Each kit script gains
+  `--check-args`, and a test runs every runner call through it; another runs the paged refusals on an index a real
+  `bake_nf4` writes on CPU.
+
+### Changed
+
+- P224 Amendment 3, before any data, after `p224-shake-1` found three kit faults: the arena is baked with
+  grouped-nf4-gemm's `bake_nf4` from the HF snapshot (its index records the source commit and the quantizer the
+  paged server checks; the relocation bake records neither), checked before any server process; the attention-only
+  canary is registered as `reference` kernel with an fp32 expert absmax (an attention-only adapter never runs the fused
+  path, so the double-quantized canary arm is dropped and F1 does not arise for it); the reduce gets its pins; the
+  fixtures train on the fused kernel and run whatever the reduce outcome. Fits 6,030 s and 4,190 s; guards and worst
+  cases unchanged.
+
+### TC1 amendment 74 registered: grouped-nf4-gemm's padded-delta switches at today's pins, with the census
+
+- One rented RTX 5090 at TC1's field recipe with the memory census, e4b only at today's pins (main at launch, grouped-nf4-gemm 0.49.0).
+  The arms are e4b's matched arm at its defaults and three arms that each change one grouped-nf4-gemm switch:
+  `NF4_QLORA_SINGLE_LADDER=0`, `NF4_QLORA_COMPACT_DELTA=1` and `NF4_QLORA_PAD_BUCKETS=1`. One draw each, worst case $3.20.
+- Each arm is bound to the path its own counters record, or it is VOID. The read reports peak memory and the padded LoRA delta's live
+  bytes at the peak. An arm that removes at least half of the default's, lowers its peak by at least half of what it removed, and
+  holds held-out within 0.005 is a candidate for a default change. A candidate needs its own two-card read with speed first. With none,
+  the fix is new grouped-nf4-gemm code.
+- `bench/tc1/tc1_run.sh` (`qwen3pos74pd`), `bench/tc1/tc1_reduce.py` (`pos74_why`, `pos74_block`, `padded_site_bytes`, self-test case 129)
+  and a test that the padded-delta span names only those functions at the pinned grouped-nf4-gemm.
+
+### TC1 amendment 73 read: the field-memory gap is the padded LoRA delta's transients plus the allocator cache
+
+- On one rented RTX 5090 at TC1's field recipe, with the memory census on both arms at the field-device-ratio claim's commits, both
+  claim peaks reproduce (e4b 26.156 GB, Unsloth 24.273 GB). Every resident tensor class is the same size at the peak, and the
+  1.887 GB gap is transient: 2.044 GB of e4b's is grouped-nf4-gemm's padded LoRA delta. At the end of setup both hold the same
+  allocated bytes; e4b's 0.713 GB more reserve is the allocator's cache. Descriptive, one draw each, no speed read.
+- `bench/tc1/tc1_public.py`: a TC1 box's public receipt copy. It writes derived copies of the files that name the rented host, without
+  those fields, and rebuilds the box's RESULTS from the committed files through the registered reducer (`tests/test_tc1_public.py`).
+- Claim `e4b.train.memory-census.field.5090.2026-10-22`; README section, STATUS record line, and the receipt's public copy under
+  `bench/h2h-2026-10-02/tc1/receipts/tc1-5090-152/`.
+
+### Changed
+
+- P222 Amendment 3 (#1313), before any reading: reading ids `p222-5090-4` to `-6` are registered, since `-1` to `-3`
+  all ended as launcher refusals before any instance existed ($0, none a strike), all pinned to one host listed in
+  only 3 of 32 screen sweeps; the screen excludes it and now pins only an offer present across two sweeps and a
+  3-minute hold. The arms, rule, band, budget and guard are unchanged.
+
+### P223 shake kit: Amendment 1's shakedown ids on the one-layer cut
+
+The P223 kit gains Amendment 1's shake mode, P149's Amendment 5 dry mode ported:
+- **Ids and switch:** run ids `p223-shake-1` to `-3` set `P223_SHAKE=1` through the driver. The runner refuses a switch
+  that does not match the id, either way, before any install (rc 78).
+- **The run:** it fetches shards 1 and 19 and cuts them to one layer with `p149_slice.py`, now staged and pinned. Then it
+  runs the full kit at the shake table: 4,890 s against a 1.75 h guard, the runner needing 5,737 s, and 2 timed reps.
+  Every check is kept. Each arm's early read reports and goes on.
+- **The reduce:** `p223_reduce.py --shake` holds every layer-dependent expectation at one layer: P149's `census(1)`, 4
+  int8 projections with 12 calls a captured bucket reported, the slice's model and 2 reps. Its verdict is SHAKE, hard
+  coded. It lists every instrument fault across the processes and reports the reads ungraded.
+- **The runner's exit:** rc 0 only on SHAKE with no fault, else 29. A shake can never write READ, and a test proves it.
+
+No default, gate or claim moves.
+
+### Fixed
+
+- P224 kit: the runner installs `datasets>=2.14` (Loggetta's data path) under the held torch,
+  since Loggetta itself goes in `--no-deps` to keep the pinned e4b and grouped-nf4-gemm, and the tripwire imports the
+  training path before any fetch. Without it every Loggetta train would fail at import on the box. Found before any
+  run; no receipt is affected.
+
+### TC1 amendment 73 fold: the declared rate
+
+- TC1 amendment 73 fold, before any box: the declared rate is $1.05/h, the RTX 5090 policy ceiling since 2026-10-19. The budget's
+  "policy rate ($0.85/h)" was the ceiling of 2026-10-08. Worst case 2 h × $1.05 + 100 GB × $0.011 = $3.20.
+
+### P223 Amendment 1: the shakedown ids
+
+P223 now registers a shakedown before its reading: `p223-shake-1` to `-3` on one RTX 5090, on P149's one-layer cut of
+Mixtral (two shards, 9.1 GB), with the kit's eight processes in order, every engagement counter and every read, at
+2 timed reps. Its verdict is SHAKE, never a reading and never a strike. It does not test scale: the full fetch and bake
+are P149's kit, already proven on full Mixtral. Guard 1.75 h, worst $1.99.
+
+### Changed
+
+- P224 Amendment 2, before any data: the shakedown runs on an L4 (in the launcher's GPU policy) at up to USD 0.40/h,
+  since no policy card met the registered USD 0.18/h with dependable reliability. The fit table is unchanged; the guard
+  rises to 1.9 h for the L4's lower memory bandwidth; worst case USD 1.0064. The reading is unchanged.
+
+### Added
+
+- P224 kit: the box runner (`p224_run.sh`), its driver (`p224_drive.sh`), the shakedown's fixture-base script
+  (`fixture_base.py`) and the staged hashes (`staged-p224.sha256`), for the registered read and its Amendment 1. The
+  runner refuses before any install unless the guard fits its terms (6,990 s for the reading, 4,660 s for the shakedown,
+  x 1.25), holds the image's torch, pins e4b CI's grouped-nf4-gemm and Loggetta main `90a7697d` (0.6.1 plus the torch
+  preflight; the released 0.6.2 also carries the demo-data fix, which the fixtures never use), and recomputes the
+  canary pin on the box. `tests/test_p224.py` asserts the staged hashes, the pins and both fit tables against the runner.
+
+### P223 kit: the schedule-invariance price read's box, reducer and runner
+
+`bench/p223/` adds the kit that `PREREG-p223.md` registered. It is built from P149's box Q+S kit by substitution: the
+four arms (D0, I0, D1, I1) in two ABBA blocks of fresh processes, with no Q, no token-pinned blocks and no SANE phases.
+
+Each process records the engagement the registration binds:
+- the split cap and the plan per bucket;
+- the runner's buckets, with its own replay and pad-row counters;
+- every decode call's rows and bucket;
+- the int8 counters.
+
+It also keeps every timed rep's tokens for the schedule-invariance read.
+
+`p223_reduce.py` implements the registered rule: VOID, NOISY, the label per server, the price and the cross-W check. It
+reports each process's rep repeatability apart from the schedule read, and grades the predictions. The runner writes its
+phases with `bench/common/phases.sh`.
+
+`tests/test_p223.py` pins the staged pieces, the arms, the runner's order and the fit table against the 3.5 h guard. It
+kills a mutant per rule.
+
+No default, gate or claim moves.
+
+### TC1 amendment 73 registered: what holds the field recipe's memory gap (descriptive)
+
+- Token `qwen3pos69mc` runs amendment 69's two arms (e4b `fused_attn4_m_fd`, Unsloth `ckpt_unsloth_m_fv`) once each, at the
+  field-device-ratio claim's library commits, with `--mem-census 1` and no profile. The family refuses any window but the claim's 60 steps.
+- No predictions. The read reports two quantities side by side and never reads one as evidence about the other:
+  - the static census's allocated and reserved bytes at the end of setup, for the device-level gap a timeline read found at the load;
+  - the training-window peak and what is live at it, the claim's 26.16 vs 24.27 GB.
+- The reducer adds the family, `pos69mc_why` and `pos69mc_block` (self-test 128). `memcensus_block` takes a family, arms and a title, and
+  amendment 23's output is unchanged.
+
+### D0 Amendment 1: the fixtures' data
+
+Loggetta's built-in Alpaca demonstration cannot supply the fixtures' 200 × 512 tokens at `90a7697d`: row 284 has an
+empty output, and the demonstration's streamed path refuses it before any weight loads. The fixtures therefore train on
+Alpaca's own `text` column at a pinned revision (P224 Amendment 1). D0's held-out scoring and its unseen-row proof
+follow that data. Nothing else in D0 moves, and no number exists yet.
+
+### Changed
+
+- P224 Amendment 1, before any data: the shakedown's fixture trains use Alpaca's full-text column at a pinned revision
+  (`dce01c9b`, `--format text`), since the built-in demonstration stops at an empty output (row 284) before 200 x 512
+  tokens; and the box saves the trained base (fixture-base), checked against both fixtures' receipts, so the D0 premise
+  read does not depend on CPU-vs-CUDA quantizer parity. The shakedown fit becomes 4,660 s under a 1.7 h guard, worst
+  case USD 0.55. The reading, its rule and its budget are unchanged.
+
+### D0 registered: how much of a trained expert LoRA delta survives repacking into a serving format
+
+`bench/d0/PREREG-d0.md` registers a CPU-only premise read before any number. On two stored OLMoE-1B-7B fixtures
+(Loggetta defaults, one with the double-quantized and one with the fp32 expert absmax), it measures per expert how much
+of the trained delta ΔW = s·B·A survives a repack T(S + ΔW) into NF4, int4-b32 and MXFP4, from the trained base and
+from raw W, and the effect on held-out loss. The trained base comes from the training card, digest-verified. It
+decides nothing by itself: it is the premise for choosing between a merged, re-quantized expert arena and a fused
+low-rank epilogue. No default, gate or claim moves.
+
+### Added
+
+- P224 registered: one trained attention adapter on the paged server, priced against its reference path.
+  `bench/p224/PREREG-p224.md` registers, before any data, the end-to-end read of the shipped `E4B_PAGED_ADAPTER`: an
+  attention-only canary adapter trained by Loggetta and served merged at load, against the same adapter under
+  Loggetta's own reference path, on one RTX 5090 with Qwen3-30B-A3B. Five gates (effect within the paged base's own
+  gap, the HTTP canary in four modes, decode cost inside a frozen ABBA band, the served identity, the fingerprint
+  checks on the box); a second canary trained at the default double-quantized expert absmax prices ADAPTER_PORTABILITY
+  F1 as reported. The rule (`p224_reduce.py`), the canary data (`p224_canary.py`, sha256-pinned) and the box
+  (`p224_box.py`) are fixed here with their self-tests and mutants (`tests/test_p224.py`); the runner follows in the
+  kit PR. The shakedown box also generates two expert-LoRA fixtures for the D0 premise read, declared and never
+  graded. No default, gate or claim moves.
+
+### Changed
+
+- `bench/common/README.md` (Phase stamps): boot, from the create to a usable box, is read from the launcher's receipt (`<provider>_ssh_ready_after_s`, else `<provider>_preflight_seconds`), never from `ssh_ready_s`. That field is the configured readiness allowance, not a measurement. A receipt with neither measured field has an unknown boot.
+
+### P223 registered: the price of a schedule-invariant decode for Mixtral-8x7B
+
+`bench/p223/PREREG-p223.md` registers a price read of an opt-in mode before any data. On P149's one-layer cut, two
+existing knobs gave schedule-invariant served logits: one attention split at every bucket (`E4B_ATTN_SPLIT_CAP=1`) and
+no bucket 1 (`E4B_PAGED_BUCKETS=2,4,8,16`). P223 reads their throughput cost on the full model at W1 and W16, for the
+bf16 and the int8 attention servers, against today's bucket set, and rules on schedule invariance on the full model (cross-width batch invariance is reported). No default,
+gate or claim moves. The kit follows in its own PR.
+
+### Added
+
+- `backend-adapter/2`, the adapter manifest a server can verify against (`experts4bit_qlora/adapter_schema.py`;
+  `docs/ADAPTER_PORTABILITY.md` section 6). It is defined for `backend="experts4bit"` only.
+- `quant_fingerprint(model, scope)` hashes the quantized base in its canonical form, what dequantize computes (scheme
+  `qfp-v1`, pinned in the doc). The same base fingerprints alike whether its NF4 absmax is stored nested or expanded,
+  while a double-quantized expert absmax fingerprints differently from an fp32 one. The attention scope hashes every
+  projection in full. The expert scope hashes every absmax in full plus a fixed byte sample, as a recipe check.
+  Every line is built by one source-independent function (`linear_line`, `expert_line`).
+- An offloaded (evicted) expert stack is fingerprinted from its host home, the same substitution `state_dict`
+  makes, so offload and resident training fingerprint alike. A stack with no readable host copy is refused by name.
+- `lora_scale_applied(model)` reads the scale the LoRA modules hold.
+- `prepare_qlora_training`'s report now carries the training facts the writer records, after `enable_fast_train`
+  resolves them: the expert absmax form, the fused-q/k/v count, the attention quantization as built, the versions and
+  the applied scale.
+- The paged server's verifier reads `/2` directories: the v1 checks, every v2 field, a known fingerprint scheme, and
+  the applied scale against alpha/r. It also requires the scopes the adapter needs (experts always, attention with
+  attention LoRA), with a positive module count and a measured duration. It refuses a `/2` manifest from another backend by name. A `/2` adapter's expert
+  base stays unverified (refusal 9, same opt-in) until the server compares fingerprints (PA-1).
+
+### Docs: CHOOSING has a "which tool for my GPU and model" table
+
+`docs/CHOOSING.md` ends with a lookup table for the cards and models already measured: an RTX A2000, RTX 4090,
+RTX 5090 and H100 NVL, with Qwen3-30B-A3B, Mixtral-8x7B and Qwen3.6-35B-A3B. Each of its 11 rows names the mode to use for
+training or serving, one number from a measured run with the statistic it is, and the claim in `docs/claims.json`
+that holds it. A card or model not listed is not measured, and the constraint sections above the table still decide it.
+The page's introduction points to the table. No claim or value changes.
+
+### Changed
+
+- The paged server's adapter lever census now classifies every lever name the server knows. That is the names
+  `LEVER_ENV` declares, plus every environment name that `_apply_levers`, its calibration helper and the lane hook it
+  mirrors (`bench/p42/hook/usercustomize.py`) read, whatever the prefix and in any spelling (`env(...)`,
+  `os.environ.get`, `os.environ[...]`, `getenv`).
+- Each name sits in exactly one table:
+  - refused under an adapter;
+  - allowed, with its reason;
+  - `ADAPTER_LEVER_CONFIG` (new): the refused levers a configuration-only name configures;
+  - `ADAPTER_NEUTRAL_KNOBS` (new): a fusion or the KV append, which changes no adapted weight.
+- A lever declared in `LEVER_ENV`, or read by those functions, now fails the test until it is classified. A name read
+  only somewhere else is outside the census.
+
+### Docs: STATUS names the statistic behind each quoted result
+
+All 36 quoted results in `docs/STATUS.md` now say which statistic their claim is decided by, in the sentence or table
+row that quotes them: medians of two draws for the training head-to-heads and step ratios, the smaller of two (or the
+smallest of four) ABBA pairs for the decode speed-ups, a median or mean over replays or processes for the prefill reads,
+and the interleaved-block medians for the fold-stack reads. No value changes; only the touched paragraphs are re-wrapped.
+
+### Docs: REPRODUCE names the statistic behind every quoted value
+
+Each quoted result now says which statistic its claim is decided by, in the sentence or table row that quotes it:
+medians of two draws for the packed-4k device ratio (1.160), its memory gap (1.04 GB), the field-recipe device ratio
+(1.924) and the travel section's TC1 ratios (1.238, 2.775); a median of steps for the September primary pair (1.413) and
+the Mixtral footprint ratio (0.361); the smaller of two pairs for the bandwidth GEMV ratios (1.2417, 1.5145, 2.4075) and
+P109's 5.60×; and the smallest of four ABBA pairs for P153's 1.052. No value changes.
+
+### Added
+
+- `docs/ADAPTER_PORTABILITY.md`, a compatibility matrix read from code: for each way an adapter is trained (bf16 or
+  `attn_4bit` attention, expert absmax fp32 or double-quantized) and each way the paged server can serve the base
+  (bf16, merged into a rebuilt `Q_train(W)`, the attention levers, the NF4 arena, int4 or MXFP4 stores), it states
+  whether the served function is exact by construction, bounded-loss behind a registered gate, or refused, with code
+  references. It finds that today's default training (double-quantized expert absmax) is not exact on today's NF4
+  arena (fp32 absmax), and that the adapter manifest does not yet record what an exact rebuild needs. No numbers are
+  measured here.
+
+### Added
+
+- The paged server serves one trained adapter (`E4B_PAGED_ADAPTER=<dir>`, Loggetta's `backend-adapter/1`
+  directory). The new `experts4bit_qlora/adapter_dir.py` verifies the directory before any weight is read: paths,
+  sizes, sha256, the tensor set, shapes, dtypes and finiteness, read with safetensors and never pickle. It then merges
+  the attention LoRA into the bf16 projections right after the load (`W + (alpha/r)·B·A` in fp32, cast once, with
+  the scale from the manifest), before the levers, fusions, GEMV routes and graph capture, so serving the adapter adds
+  no per-token work. The merge reports each projection's rounding error.
+- Startup refuses, naming every reason, and never serves the base model in the adapter's place:
+  - a live expert LoRA;
+  - a base revision mismatch, or an arena whose repo or revision differs;
+  - an arena quantization recipe that differs or is not recorded;
+  - a lever that re-quantizes an adapted module or depends on calibration read on the base model (the uncalibrated,
+    weight-only int8 lm_head stays on as a base-serving property);
+  - unknown target modules, or a verifier failure;
+  - attention trained on a 4-bit base;
+  - an expert base a v1 manifest cannot verify;
+  - speculative decoding.
+- Two of those refusals have explicit opt-ins: `E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA=1` and
+  `E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts`.
+- The served name becomes `<model>+<adapter_id[:12]>`. `/health` and `/v1/models` report the adapter's id, its
+  manifest hash, the base revision, the merge report and `base_match`.
+
+### Docs: the README names the statistic behind each quoted result
+
+Each quoted result in the README now says which statistic its claim is decided by, in the sentence or table row that
+quotes it: medians of two draws for the Unsloth device ratios (1.92×, 1.160×); the smallest of four ABBA pairs for the
+decode speed-ups (1.4654×, 1.0925×, 1.052×, 1.044×, 1.161×); the smaller of two ABBA pairs of median step times for
+layer-major training (2.365×, 2.311×, 2.118×, 1.455×); and the larger of two interleaved blocks for Mixtral's fold
+stack (0.9393). No value changes.
+
+### Docs: SERVING names the statistic behind each quoted speed-up
+
+Each quoted speed-up now says which statistic its claim is decided by, in the sentence that quotes it: the smaller of
+two ABBA pairs for the bandwidth-GEMV figures (1.24×, 2.41×, 1.3979×, 1.5011×, 1.5145×), and the smallest of four
+ABBA pairs for the Qwen3 decode defaults (1.0442×, 1.0520×, 1.0925×, 1.4654×). No value changes.
+
+### Bench: phase stamps for new rental kits
+
+`bench/common/phases.sh` gives runners `phase_start NAME KIND` and `phase_end NAME`, which append one JSON line per phase change to `phases.jsonl`. The kind is setup, measure, reduce or other. `bench/common/phases.py` reads and checks the file, reporting seconds per kind, the first measurement's start, and any phase left open. New kits write it, so a later read of setup time against measurement time needs no log parsing. P149's earlier stamps read as kind `unknown`. Existing kits and receipts are unchanged.
+
+### Changed
+
+- P222 Amendment 2 (#1313), before any reading: the paid shakedown `p222-shake-2` ran end to end with five arms
+  bitwise identical, but read VOID on the self-pair band (T/T2 1.0217 on a 72 W L4 over 10 reps). In a shakedown the
+  band is now reported, never ruling; a reading still VOIDs outside 0.99-1.01. Each arm's compiled metadata (registers,
+  spills, shared memory) is now recorded for all five arms: block A's reference compile is kept, the first compile of
+  the same plan stands in, and each row names its source pass. A new shakedown id, `p222-shake-3`, runs on the same
+  terms. From P160's public 5090 receipt, P(VOID | no real difference) under the registered band at 120 reps is under 1
+  in 20,000. The GO rule, the band for a reading, the seeds, the selection and the budget are unchanged. The shake-2
+  record is a sha256-pinned test fixture.
+
+### P149: the bucket-1 residual is not the NF4 expert route
+
+`bench/p149/RESULTS-p149.md`, "The schedule dependence": follow-up (c) (`p149b1-5090-5`) sent a one-row decode step's NF4
+experts through K25 or through the M-tile GEMM. Either way, the single bucket-1 difference stayed at the same position
+and magnitude, to the bit, so the expert route at one row is not its source. The difference stays unattributed. No
+verdict, gate or claim moves.
+
+### Changed
+
+- P222 Amendment 1 (#1313), before any reading: TM (the tree at M's plan, a reported-only arm) is dropped after the
+  paid shakedown `p222-shake-1` found a selected plan whose tree variant cannot compile (210,944 B of shared memory
+  against the 101,376 B per-block limit). Block B runs five arms in Williams' design for an odd count (10 orders a
+  square), on 120 reps (12 squares). A compile, launch or capture failure in an arm is recorded in the bench record and
+  the reducer VOIDs with the reason, never a crash. The GO rule, the seeds, the selection, the served-arm rule and the
+  budget are unchanged.
+
+### Added
+
+- P222 registered (#1313): K25's decode x plan at Mixtral-8x7B's W16 shapes, a microbench premise whose control is
+  Mixtral's served default (the select tree at today's plan; no read licenses `mixtral`). Block A sweeps P156's 144-plan
+  grid under K39's decode on one seeded routing draw and selects M; block B grades M against the tree on a second draw,
+  with P (the decode alone), C1 (e4b's `c1` pair) and TM (M's plan under the tree) reported. GO needs M's median minus
+  2 SE, raw and clock-adjusted, at 1.10 or more. Kit: `bench/p222/` and `tests/test_p222.py`. No default, gate or speed
+  claim changes.
+
+### Docs: REPRODUCE.md says how far a number travels between boxes
+
+A short section after the record tables, with three tiers.
+- Within one box, the ABBA pair ratios of P143, P149, P153, P158 and P161 agree to under 0.5 %.
+- Across two rented RTX 5090s, P116's read and its reported second draw (void as a reading) moved 15-18 % in absolute rate while the ratio moved about 2 %.
+- A ratio with host-side work in it moves as well: TC1's axolotl/e4b training ratio read 1.238 against 1.146 on two hosts.
+
+The rule that follows: compare ratios read on one box.
+
+### P149: the `max_new_tokens` dependence placed in the decode schedule
+
+`bench/p149/RESULTS-p149.md` gains "The schedule dependence (follow-ups, 2026-10-21)". Two follow-ups after the run
+(`p149mnt-5090-6` and `-7`, a one-layer cut on one RTX 5090) place the QUALIFIER_VOID cause in the decode schedule. The
+fp8 paged attention's split-KV count changes with the graph bucket a step replays. With one split at every bucket,
+buckets 2 to 16 match bit for bit, and a small bucket-1 difference remains, not attributed. A routing-matched read must
+match the decode schedule. The `p149-5090-1` run-id row now says the ask was refused at create while still listed. No
+verdict, gate or claim moves.
+
+### Docs: REPRODUCE names the statistic behind each quoted ratio
+
+Seven quoted values in `docs/REPRODUCE.md` gave a number without the statistic that decides it. Each now says which
+statistic it is, as its claim states: Mixtral 1.144 and 0.836 (step medians over two draws), axolotl 1.238 (median of
+steps 101..200 per draw), layer-major 2.365 / 2.311 / 2.118 / 1.455 (the smaller of two ABBA pairs), the P143 split cap
+1.0442 (the smallest of four ABBA pairs), and the P135 fold 0.9393 (median step, the larger of two blocks). No value
+changes.
+
+### Docs: BV2's cross-batch identity is scoped to its own stack
+
+`bench/hybrid-g9/bv2/RESULTS-bv2.md` gains a dated forward note. Its cross-B row-0 identity was read on that stack and
+schedule. On the later default graph server, the P149 follow-up shows tokens can change with the graph bucket (the
+fp8 split-KV attention plans its split count per bucket), plus a small, unattributed bucket-1 difference. The
+finding itself is unchanged.
+
+### Docs
+
+- "Identical tokens" is scoped to identical schedules. The serving docs' token-identity claims for the K25 decode and
+  plan (P158, P161), the KV step selection (P111), PDL (P113) and the launch-bound glue (P127) compared arms on the same
+  prompts, lengths and arrival order, and now say so. SERVING.md explains why. The paged FP8 attention decode plans
+  its split count per graph bucket, and the split-KV combine agrees across split counts within tolerance, not bit for
+  bit, so a step can pick a different near-tie token when its bucket changes. A second, much smaller difference shows
+  at bucket 1 only and is not attributed (P149's follow-up, runs `p149mnt-5090-6` and `p149mnt-5090-7`, in the private
+  receipt store). P158's and P161's RESULTS carry a dated note; their findings are unchanged. Wording only: no value
+  changes.
+
+### Added
+
+- `tests/test_public_rederivation.py` and a `Re-derive:` line convention (CONTRIBUTING.md). A receipt that a reader can
+  rebuild names one command and the committed file it writes; the test runs every such line on CPU from the committed
+  files and requires byte-identity, so a later reducer edit that stops an old verdict reproducing fails CI. It is seeded
+  with 11 lines, each checked before it landed: hbd-5090-1, hpn-a2000-read8, p149-5090-2, p158-5090-1, p160-5090-2 and
+  p161-5090-1 (whose READMEs already gave a command), and p143-5090-2, p143a2-5090-1, p143a3-5090-1, p150-5090-1 and
+  p156-5090-1 (whose verdicts were re-derived only from the private receipt store until now). A one-byte edit to a
+  committed verdict fails the test. No receipt file is changed: a committed receipt is never edited, so each line lives
+  in a new lane-level `bench/<lane>/REDERIVE.md` (hbd, hpn, p143, p149, p150, p156, p158, p160, p161), and a further test
+  flags any `Re-derive:` line that a file under `receipts/` did not carry at its first commit.
+
+### Claims register: retired rows can say when the claim was published
+
+A `retired` row may now carry `published_on: {date, evidence}`, the first public appearance of the claim it retracts,
+so `published_on` to `retired_on` is how long a wrong claim stood. The evidence is `<commit>:<path>`, which the check
+resolves: the commit is in this repository's history, the path is in its tree, and the date is its committer date in
+UTC. A commit date is only a lower bound on first publication (git does not record the push), so a lifetime read from
+it is an upper bound. A URL is also accepted; it is listed and never resolved. The field is refused on any other
+status and on a date after `retired_on`. One row is backfilled: the 13.47x training speedup, published 2026-08-26 UTC
+(7718440d1) and retired 2026-08-31. The rest stay unset rather than guessed. `docs/claims-schema.md`,
+`scripts/check_claims_register.py` and its test change in lockstep with grouped-nf4-gemm.
+
 ## 0.56.1 — 2026-10-21 — K25 plan c1 by default on qwen3_moe
 
 A patch release with one serving default. On `qwen3_moe`, K25 now runs at tile plan `c1` wherever its decode resolved to
