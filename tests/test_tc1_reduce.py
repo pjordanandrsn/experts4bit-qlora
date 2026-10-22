@@ -478,6 +478,7 @@ def test_amendment_75_rule_reads_box_154():
     assert (rd["fd"]["device"], rd["fd_cd1"]["device"]) == (26218 * 1048576, 26238 * 1048576)
     assert m.unlisted_bound(cells["fd"]["mem_census"]) == 12 * 72_320 and m.unlisted_bound(cells["fd_cd1"]["mem_census"]) == 0
     assert rd["fd_cd1"]["loss"] == 1_373_501_440 + 686_750_724 and rd["fd"]["loss"] == 0
+    assert 1_373_501_440 == m.POS75_VOCAB * 9_040 and rd["fd_cd1"]["other_unattr"] == 0      # box 154's unattributed group is vocab-shaped
     for t in ("fd_cd1", "fd_pb1"):
         v = m.pos75_rule(rd["fd"], rd[t], "delta", rd["fd"]["heldout"])
         assert v["relocated"] and v["credit"] and v["held"] and not v["falls"] and not v["candidate"], (t, v)

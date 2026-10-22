@@ -3393,8 +3393,9 @@ none of these numbers; it measures them.
   Four arms, one draw each, in this order:
   - `fused_attn4_m_fd`: today's defaults;
   - `fused_attn4_m_fd_cd1`: + `NF4_QLORA_COMPACT_DELTA=1`;
-  - `fused_attn4_m_fd_cl1`: + `E4B_CHUNKED_LM_LOSS=1` (every training forward chunked; auto's 1 GiB gate leaves this recipe's logits on
-    the stock loss);
+  - `fused_attn4_m_fd_cl1`: + `E4B_CHUNKED_LM_LOSS=1`, which chunks every training forward. Auto's 1 GiB gate leaves this recipe on
+    the stock loss: each training call carries about 1,100 padded positions, not 4,096, and the gate needs 1 GiB / (151,936 x 4) =
+    1,767. fd's and cd1's stock-loss validity holds while no micro-batch exceeds that;
   - `fused_attn4_m_fd_cd1cl1`: both.
 - The libraries: e4b is main at launch (the drive's `E4B_SHA`). grouped-nf4-gemm is `a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7` (0.49.0),
   and the family refuses any other. The harness is main's at this amendment's merge.
@@ -3416,7 +3417,9 @@ A harness refusal or crash is NOT_RUN: no data, and nothing is read.
 Then:
 - peak allocated;
 - the padded-delta bytes at the peak (amendment 74's span);
-- the LM-loss backward's bytes at the peak: torch's `cross_entropy` site and the autograd groups with no Python frame;
+- the LM-loss backward's bytes at the peak: torch's `cross_entropy` site, and the autograd groups with no Python frame whose size is
+  vocab-shaped (a whole multiple of the head's 151,936, within 64 bytes; box 154's was 151,936 x 9,040). Unattributed-backward bytes of
+  any other size are reported beside it and never counted as the loss;
 - the largest transient at the peak;
 - held-out at N, and its Δ against fd;
 - host RSS high-water;
@@ -3430,9 +3433,16 @@ count times the smallest listed group.
 - cl1 against fd, with G the LM-loss backward;
 - cd1cl1 against cd1, with G the LM-loss backward.
 
-cd1cl1 against fd is reported beside, never a verdict. For each comparison:
-1. **The live sets first.** RELOCATED: G is live at the parent's peak (at least 16 MiB listed) and absent at the arm's (its listed bytes
-   plus the unlisted bound under 16 MiB). With G not live at the parent's peak, there is nothing to credit.
+cd1cl1 against fd is reported beside, never a verdict.
+
+cl1 against fd is EXPECTED to read "nothing to credit". fd's peak sits in the padded delta, and box 154 saw no live LM-loss group there.
+Only the delta's removal (cd1) brings the loss backward to the peak, so cd1cl1 against cd1 is the comparison that decides the loss.
+
+For each comparison:
+1. **The live sets first.** RELOCATED: G is live at the parent's peak (at least 16 MiB listed) and absent at the arm's. Absent means its
+   listed bytes plus the unlisted bound stay under 16 MiB, and for the LM-loss backward the arm's non-vocab-shaped unattributed bytes
+   count too. The census sums every frameless block into one group, so a mixed group's loss part cannot be told apart. With G not
+   live at the parent's peak, there is nothing to credit.
 2. **The credit, up to the next transient.** RELOCATED: the whole allocated drop is credited, since the peak fell to the next transient, and
    it must reach 0.10 GB. If G may still be live, the drop must reach half of G's bytes removed (amendment 74's credit).
 3. **CANDIDATE:** the drop is credited, AND the reserved peak and the device peak each fall by at least 0.10 GB against the parent, AND

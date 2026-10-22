@@ -3457,6 +3457,8 @@ POS75_MIN_DROP_BYTES = 100_000_000 # 0.10 GB: a credited drop, and each of the r
 POS75_PEAK_CREDIT = 0.50           # G still live but smaller: the allocated drop must reach this share of G's bytes removed
 POS75_HELDOUT_MAX = 0.005          # held-out at N against fd
 POS75_4090_MIB = 24564             # an RTX 4090's nvidia-smi total, reported beside the device peak; the fit is the 4090 box's to read
+POS75_VOCAB = 151_936              # Qwen3-30B-A3B's lm_head width: an LM-loss group is vocab-shaped (amendment 74: 151,936 x 9,040)
+POS75_VOCAB_SLACK = 64             # bytes over a whole multiple of the vocabulary a vocab-shaped group may carry (cross_entropy's +4)
 NO_SPEED_FAMS[POS75_FAM] = "e4b only: no position against another framework; each arm's s/step is recorded, never gated (amendment 75)"
 FAMS.append(POS75_FAM)
 NAMES[POS75_FAM] = ("Qwen3-30B-A3B (amendment 75: the 4090-fit read -- e4b's defaults, the compact delta, the chunked LM loss and both, at "
@@ -5362,15 +5364,31 @@ def vram_peak_mib(d, fam, fw, tag):
     return best
 
 
-def loss_group_bytes(mc):
-    """Live bytes at the peak in the LM-loss backward's groups: torch's cross_entropy site and the autograd groups with no Python frame
-    (amendment 74: at cd1's and pb1's peak, a 0.687 GB cross_entropy group and a 1.374 GB unattributed-backward group, both
-    vocab-shaped), or None without the census's groups."""
+def _vocab_shaped(b, vocab=POS75_VOCAB):
+    return b >= vocab and b % vocab < POS75_VOCAB_SLACK
+
+
+def loss_group_bytes(mc, vocab=POS75_VOCAB):
+    """Live bytes at the peak in the LM-loss backward's groups: torch's cross_entropy site, and the autograd groups with no Python
+    frame whose size is VOCAB-SHAPED (a whole multiple of the head's width, within POS75_VOCAB_SLACK bytes). Amendment 74 saw both at
+    cd1's and pb1's peak: cross_entropy 151,936 x 4,520 + 4 and unattributed 151,936 x 9,040. An unattributed group of another size
+    is not the loss and is counted by other_unattributed_bytes instead. None without the census's groups."""
     top = (mc or {}).get("live_at_peak_top")
     if not isinstance(top, list):
         return None
     return sum(int(g.get("bytes") or 0) for g in top
-               if "cross_entropy" in str(g.get("group")) or str(g.get("group")).startswith("unattributed:backward"))
+               if "cross_entropy" in str(g.get("group"))
+               or (str(g.get("group")).startswith("unattributed:backward") and _vocab_shaped(int(g.get("bytes") or 0), vocab)))
+
+
+def other_unattributed_bytes(mc, vocab=POS75_VOCAB):
+    """Live bytes at the peak in the unattributed-backward groups that are NOT vocab-shaped: reported beside the LM-loss bytes, never
+    counted as them. None without the census's groups."""
+    top = (mc or {}).get("live_at_peak_top")
+    if not isinstance(top, list):
+        return None
+    return sum(int(g.get("bytes") or 0) for g in top
+               if str(g.get("group")).startswith("unattributed:backward") and not _vocab_shaped(int(g.get("bytes") or 0), vocab))
 
 
 def unlisted_bound(mc):
@@ -5393,7 +5411,7 @@ def pos75_reading(mc, r, dev_mib):
     """One arm's numbers for amendment 75's rule (bytes): allocated, reserved and nvidia-smi peaks, G's live bytes, held-out, host RSS."""
     return {"alloc": mc.get("peak_allocated_bytes"), "reserved": mc.get("peak_reserved_bytes"),
             "device": None if dev_mib is None else dev_mib * 1048576, "delta": padded_site_bytes(mc), "loss": loss_group_bytes(mc),
-            "tail": unlisted_bound(mc),
+            "other_unattr": other_unattributed_bytes(mc), "tail": unlisted_bound(mc),
             "heldout": (r or {}).get("eval_loss_final"), "rss_gb": ((r or {}).get("host_ram") or {}).get("rss_hwm_gb"),
             "s": (r or {}).get("s_per_step_median_11plus"), "next": top_transient(mc)}
 
@@ -5408,7 +5426,10 @@ def pos75_rule(par, arm, target, fd_heldout):
     gp, ga = par.get(target), arm.get(target)
     drops = {k: (None if par.get(k) is None or arm.get(k) is None else par[k] - arm[k]) for k in ("alloc", "reserved", "device")}
     live_par = gp is not None and gp >= POS75_ABSENT_BYTES
-    relocated = live_par and ga is not None and arm.get("tail") is not None and ga + arm["tail"] < POS75_ABSENT_BYTES
+    # absence must hold with everything that could still hide G: the unlisted tail and, for the loss, any unattributed-backward bytes
+    # that are not vocab-shaped (the census sums every frameless block into one group, so a mixed group's loss part cannot be told apart)
+    extra = (arm.get("other_unattr") or 0) if target == "loss" else 0
+    relocated = live_par and ga is not None and arm.get("tail") is not None and ga + arm["tail"] + extra < POS75_ABSENT_BYTES
     if not live_par:
         credit, why = False, "G is not live at the parent's peak: nothing to credit"
     elif relocated:
@@ -5441,18 +5462,18 @@ def pos75_block(F, d):
     fd_ho = (reads[POS75_ARMS[0]] or {}).get("heldout")
     lines = ["\n## Amendment 75: the 4090-fit read (one draw per arm; GB = 1e9 bytes; reserved and device peaks first; speed recorded, never gated)", "",
              "| arm | verdict | reserved peak | nvidia-smi peak (vs a 4090's 24,564 MiB) | allocated peak | padded delta at peak | "
-             "LM-loss backward at peak | largest transient at peak | held-out at N (Δ vs fd) | host RSS GB | s/step |",
-             "|---|---|---|---|---|---|---|---|---|---|---|"]
+             "LM-loss backward at peak | other unattributed backward at peak | largest transient at peak | held-out at N (Δ vs fd) | "
+             "host RSS GB | s/step |", "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for k in POS75_ARMS:
         x = reads[k]
         if x is None:
-            lines.append(f"| {POS75_LABELS[k]} | {why[k]} |" + " — |" * 9)
+            lines.append(f"| {POS75_LABELS[k]} | {why[k]} |" + " — |" * 10)
             continue
         mib = None if x["device"] is None else x["device"] // 1048576
         dev = "—" if mib is None else f"{_gb(x['device'])} ({mib:,} MiB, {POS75_4090_MIB - mib:+,} MiB to a 4090's total)"
         ho = "—" if x["heldout"] is None else f"{x['heldout']:.4f}" + ("" if k == POS75_ARMS[0] or fd_ho is None else f" ({x['heldout'] - fd_ho:+.4f})")
         nx = x["next"]
-        lines.append(f"| {POS75_LABELS[k]} | VALID | {_gb(x['reserved'])} | {dev} | {_gb(x['alloc'])} | {_gb(x['delta'])} | {_gb(x['loss'])} | "
+        lines.append(f"| {POS75_LABELS[k]} | VALID | {_gb(x['reserved'])} | {dev} | {_gb(x['alloc'])} | {_gb(x['delta'])} | {_gb(x['loss'])} | {_gb(x['other_unattr'])} | "
                      f"{nx[0] or '—'} {_gb(nx[1]) if nx[0] else ''} | {ho} | {x['rss_gb'] if x['rss_gb'] is not None else '—'} | "
                      + (f"{x['s']:.3f}" if isinstance(x["s"], (int, float)) else "—") + " |")
     lines += ["", "| comparison | G | G at the parent's peak / the arm's | live sets | drop: reserved / device / allocated | candidate |",
@@ -11656,6 +11677,15 @@ def selftest():
             assert "**No candidate** by the successor rule" in tb and want in tb and "**CANDIDATE**" not in tb, (kw, tb)
         tt = b5(_pos75_set(groups={"cd1cl1": POS75_FIX_GROUPS["cd1cl1"][:2]}, n_groups={"cd1cl1": 60}))  # 50 unlisted groups of up to 41 MB
         assert "| 2.060 / 0.000 | G may still be live at the peak (listed, or within the census's unlisted tail)" in tt and "**CANDIDATE:** cd1cl1" in tt, tt
+        tu = b5(_pos75_set(groups={"cd1cl1": POS75_FIX_GROUPS["cd1cl1"] + [
+            ("unattributed:backward, no Python frame (an autograd C++ op or allocator-internal)", 300_000_001)]}))   # not vocab-shaped
+        assert "| 2.060 / 0.000 | G may still be live at the peak" in tu and "**CANDIDATE:** cd1cl1" in tu, tu       # never counted as G
+        assert "| 0.000 | 0.300 |" in tu, tu                                                                            # reported beside it
+        mcu = {"live_at_peak_top": [{"group": "unattributed:backward, no Python frame", "bytes": POS75_VOCAB * 9040 + 4},
+                                    {"group": "site:torch/nn/functional.py:3507 cross_entropy", "bytes": 5}]}
+        assert loss_group_bytes(mcu) == POS75_VOCAB * 9040 + 9 and other_unattributed_bytes(mcu) == 0
+        mcu["live_at_peak_top"][0]["bytes"] += 100
+        assert loss_group_bytes(mcu) == 5 and other_unattributed_bytes(mcu) == POS75_VOCAB * 9040 + 104
         R5n = _pos75_set()
         tn5 = "\n".join(pos75_block(P5(R5n), os.path.join(td5, "no-samplers")))
         assert "**No candidate**" in tn5 and "reserved and device did not both fall" in tn5, tn5
