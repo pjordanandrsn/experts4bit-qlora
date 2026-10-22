@@ -2992,6 +2992,35 @@ def pos75_why(tag, r):
     return "; ".join(bad)
 
 
+def pos76_side(tag):
+    """'gb' (before) or 'ga' (after) for an amendment 76 tag, else None."""
+    t = (tag or "").removesuffix("_d2")
+    return {POS76_ARMS[0][1]: "gb", POS76_ARMS[1][1]: "ga"}.get(t)
+
+
+def pos76_why(tag, r):
+    """Amendment 76's predicates: amendment 75's for cd1cl1 (amendment 74's compact-delta path, the chunked LM loss on every training
+    forward) with grouped-nf4-gemm at POS76_GNF4_VERSION in place of 0.49.0, and BINDING on the code: the arm's recorded
+    grouped-nf4-gemm commit and the sha256 of the nf4_qlora.py it imported are its side's (gb before #584, ga after). An arm off either
+    is VOID. Empty string = as registered."""
+    r = r or {}
+    side = pos76_side(tag)
+    if side is None:
+        return f"amendment 76 registers no e4b arm for tag {tag}"
+    env = dict(r.get("env") or {})
+    bad = []
+    if env.get("grouped-nf4-gemm") != POS76_GNF4_VERSION:
+        bad.append(f"env grouped-nf4-gemm {env.get('grouped-nf4-gemm')!r} != {POS76_GNF4_VERSION}")
+    view = dict(r, env=dict(env, **{"grouped-nf4-gemm": POS74_GNF4}))         # amendment 75's cd1cl1 predicates, at this release
+    bad += [w for w in (pos75_why(POS75_ARMS[3][1], view),) if w]
+    code = env.get("gnf4_code") or {}
+    if code.get("commit") != POS76_GNF4[side]:
+        bad.append(f"grouped-nf4-gemm commit {code.get('commit')!r} != {side}'s {POS76_GNF4[side]}")
+    if code.get("nf4_qlora_sha256") != POS76_NF4_QLORA_SHA[side]:
+        bad.append(f"nf4_qlora.py sha256 {code.get('nf4_qlora_sha256')!r} != {side}'s {POS76_NF4_QLORA_SHA[side]}")
+    return "; ".join(bad)
+
+
 def pos74_why(tag, r):
     """Amendment 74's predicates: amendment 69's field defaults without a profile (torch 2.12, the double-quantized absmax, the reentrant
     checkpoint on all 48 layers, the chunked losses and combine chunks unset), grouped-nf4-gemm at its registered version, a census on the
@@ -3468,6 +3497,34 @@ ATTN_CENSUS[POS75_FAM] = 192
 DENSE_PINS[POS75_FAM] = DENSE_PINS[QDENSE_FAM]
 FAM_ANCHOR[POS75_FAM] = POS75_ARMS[0]
 EXPECTED[POS75_FAM] = list(POS75_ARMS)
+POS76_FAM = "qwen3pos76co"
+#: cd1cl1 (NF4_QLORA_COMPACT_DELTA=1, E4B_CHUNKED_LM_LOSS=1) at grouped-nf4-gemm main just BEFORE #584 (gb) and just AFTER it (ga),
+#: two draws each, run in ABBA order: gb, ga, ga_d2, gb_d2
+POS76_ARMS = (("e4b", "fused_attn4_m_cd1cl1_gb"), ("e4b", "fused_attn4_m_cd1cl1_ga"), ("e4b", "fused_attn4_m_cd1cl1_ga_d2"),
+              ("e4b", "fused_attn4_m_cd1cl1_gb_d2"))
+POS76_LABELS = {POS76_ARMS[0]: "before, draw 1", POS76_ARMS[1]: "after, draw 1", POS76_ARMS[2]: "after, draw 2", POS76_ARMS[3]: "before, draw 2"}
+POS76_GNF4_VERSION = "0.50.0"                      # both commits carry this release string, so each arm is bound by commit and file hash
+POS76_GNF4 = {"gb": "c62159642cbae5c1bd281f04c8b1e4101a5e557a", "ga": "75421b30a13332c12611f428c66531a7bbb13cbd"}
+#: sha256 of the nf4_qlora.py each side imports: the bytes the reorder changes, and the only file that differs between the two commits
+POS76_NF4_QLORA_SHA = {"gb": "269376812e8873cf636826e06c980646f514f6e0f31ea239b2f9c28632e81e7b",
+                       "ga": "a7b1cf2558339e64e807ecf5baf22ebb0b29675c6123684e4a60099b20a8dcd9"}
+#: _CompactPaddedDelta.backward in each side's nf4_qlora.py: the target group G, the compact delta's backward bytes live at the peak
+POS76_SPAN = {"gb": ("nf4_qlora.py", 921, 969), "ga": ("nf4_qlora.py", 921, 973)}
+POS76_BLOCK_SITES = {"gb": (940, 942), "ga": (944, 948)}   # the rebuilt block x and its grad gx: two live together before, one after
+POS76_MIN_DROP_BYTES = 100_000_000                 # the floor; a candidate's reserved and device drops must also clear both arms' spread
+POS76_PEAK_CREDIT = 0.50
+POS76_ABSENT_BYTES = 16 << 20
+POS76_HELDOUT_MAX = 0.005                          # the after median's held-out within this of the before median
+POS76_LOGITS_SITE = "site:torch/nn/modules/linear.py:134 forward"   # the held bf16 logits, vocab-shaped (amendment 75's observation)
+NO_SPEED_FAMS[POS76_FAM] = "e4b only, one arm at two commits; each draw's s/step is recorded, never gated (amendment 76)"
+FAMS.append(POS76_FAM)
+NAMES[POS76_FAM] = ("Qwen3-30B-A3B (amendment 76: grouped-nf4-gemm#584's reordered compact-delta backward -- cd1cl1 at gnf4 main just "
+                    "before and just after the merge, two draws each in ABBA order; reserved and device peaks read first)")
+N_LAYERS[POS76_FAM] = 48
+ATTN_CENSUS[POS76_FAM] = 192
+DENSE_PINS[POS76_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[POS76_FAM] = POS76_ARMS[0]
+EXPECTED[POS76_FAM] = list(POS76_ARMS)
 
 
 def memc4kr_why(r):
@@ -4154,6 +4211,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == POS74_FAM:                               # amendment 74: amendment 73's census at today's pins, each arm bound to its own path
         w = pos74_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == POS76_FAM:                               # amendment 76: cd1cl1 at two grouped-nf4-gemm commits, each arm bound to its code
+        w = pos76_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == POS75_FAM:                               # amendment 75: the 4090-fit read, each arm bound to its delta path and its loss
@@ -5503,6 +5564,149 @@ def pos75_block(F, d):
                  "The device peak is read from the 1 Hz sampler.")
     return lines + memcensus_block(F, POS75_FAM, POS75_ARMS, POS75_LABELS,
                                    title="Amendment 75: the census tables (Qwen3-30B-A3B, TC1's field recipe at today's pins, one draw per arm; GB = 1e9 bytes)")
+
+def loss_and_logits_bytes(mc, vocab=POS75_VOCAB):
+    """The LM loss's live bytes at the peak with the held logits named too: loss_group_bytes plus the vocab-shaped bytes at
+    POS76_LOGITS_SITE (the bf16 logits the stock loss keeps for its backward; amendment 75's observation). None without the groups."""
+    top = (mc or {}).get("live_at_peak_top")
+    if not isinstance(top, list):
+        return None
+    held = sum(int(g.get("bytes") or 0) for g in top
+               if str(g.get("group")) == POS76_LOGITS_SITE and _vocab_shaped(int(g.get("bytes") or 0), vocab))
+    return (loss_group_bytes(mc, vocab) or 0) + held
+
+
+def _blocks_live(mc, side):
+    """How many of the backward's two [G * W, K] sites (the rebuilt block and its grad, POS76_BLOCK_SITES) hold at least
+    POS76_ABSENT_BYTES at the peak: 2 when both are live together."""
+    lines = POS76_BLOCK_SITES[side]
+    n = 0
+    for g in (mc or {}).get("live_at_peak_top") or []:
+        m = re.match(r"site:(?:.*/)?nf4_qlora\.py:(\d+)\s", str(g.get("group") or ""))
+        if m and int(m.group(1)) in lines and int(g.get("bytes") or 0) >= POS76_ABSENT_BYTES:
+            n += 1
+    return n
+
+
+def pos76_reading(mc, r, dev_mib, side):
+    """One draw's numbers (bytes): amendment 75's reading plus G (the compact backward's span bytes at its side's lines), the two
+    block sites live, the LM loss with the held logits, and the CUDA context (device minus reserved)."""
+    x = pos75_reading(mc, r, dev_mib)
+    x["cbwd"] = padded_site_bytes(mc, POS76_SPAN[side])
+    x["blocks"] = _blocks_live(mc, side)
+    x["loss_logits"] = loss_and_logits_bytes(mc)
+    x["context"] = None if x["device"] is None or x["reserved"] is None else x["device"] - x["reserved"]
+    return x
+
+
+def _med(xs, k):
+    v = [x[k] for x in xs if x.get(k) is not None]
+    return statistics.median(v) if len(v) == len(xs) and v else None
+
+
+def _spread(xs, k):
+    """|draw 1 - draw 2| of one side's measure, or None when either draw lacks it (a missing vram sampler leaves device unread)."""
+    return None if any(x.get(k) is None for x in xs) else abs(xs[0][k] - xs[1][k])
+
+
+def pos76_rule(before, after):
+    """The successor rule over two draws a side, for G = the compact delta's backward bytes. Live sets first: RELOCATED when G is live
+    at BOTH before-draws' peaks and absent (with the unlisted tail) at BOTH after-draws'. The credit: RELOCATED, the whole median
+    allocated drop is credited and must clear POS76_MIN_DROP_BYTES; G possibly still live, the drop must reach POS76_PEAK_CREDIT of G's
+    median bytes removed. A CANDIDATE also needs the median reserved and device drops each to clear the larger of POS76_MIN_DROP_BYTES
+    and the measure's spread (the larger |draw 1 - draw 2| of the two sides), and the after median's held-out within POS76_HELDOUT_MAX
+    of the before median."""
+    drops = {k: (None if _med(before, k) is None or _med(after, k) is None else _med(before, k) - _med(after, k))
+             for k in ("alloc", "reserved", "device")}
+    spread = {k: max((abs(xs[0][k] - xs[1][k]) for xs in (before, after) if xs[0].get(k) is not None and xs[1].get(k) is not None),
+                     default=None) for k in ("reserved", "device")}
+    thr = {k: max(POS76_MIN_DROP_BYTES, spread[k] or 0) for k in spread}
+    live_par = all((x.get("cbwd") or 0) >= POS76_ABSENT_BYTES for x in before)
+    relocated = live_par and all(x.get("cbwd") is not None and x.get("tail") is not None and x["cbwd"] + x["tail"] < POS76_ABSENT_BYTES
+                                 for x in after)
+    gb, ga = _med(before, "cbwd"), _med(after, "cbwd")
+    if not live_par:
+        credit, why = False, "G is not live at both before-draws' peaks: nothing to credit"
+    elif relocated:
+        credit = drops["alloc"] is not None and drops["alloc"] >= POS76_MIN_DROP_BYTES
+        why = "RELOCATED: G is gone from both after-draws' live sets, the whole median drop is credited"
+    else:
+        credit = drops["alloc"] is not None and gb is not None and ga is not None and drops["alloc"] >= POS76_PEAK_CREDIT * (gb - ga) > 0
+        why = "G may still be live at the after peaks: the median drop is credited against G's median bytes removed"
+    falls = all(drops[k] is not None and drops[k] >= thr[k] for k in ("reserved", "device"))
+    hb, ha = _med(before, "heldout"), _med(after, "heldout")
+    held = hb is not None and ha is not None and abs(ha - hb) <= POS76_HELDOUT_MAX
+    return {"drops": drops, "spread": spread, "thr": thr, "relocated": relocated, "live_par": live_par, "credit": credit,
+            "falls": falls, "held": held, "why": why, "candidate": bool(credit and falls and held)}
+
+
+def pos76_block(F, d):
+    """Amendment 76's read: per draw the reserved and nvidia-smi peaks first, then allocated, G (the compact delta's backward at its
+    side's lines), the two block sites live, the LM loss with the held logits, the largest transient, held-out and s/step (recorded,
+    never gated); then each side's medians and spreads, the successor rule (pos76_rule) and the 4090 fit arithmetic. The fit is reported
+    beside the rule, never as a verdict: a 4090 acceptance box needs its own registration."""
+    R = F.get(POS76_FAM)
+    if not R:
+        return []
+
+    def rec(k):
+        return (next((x for x in R["rows"] if (x["fw"], x["tag"]) == k), None) or {}).get("r") or {}
+
+    reads, why = {}, {}
+    for k in POS76_ARMS:
+        mc, w = _mc_reading(R, k)
+        side = pos76_side(k[1])
+        reads[k], why[k] = (pos76_reading(mc, rec(k), vram_peak_mib(d, POS76_FAM, k[0], k[1]), side) if mc else None), w
+    lines = ["\n## Amendment 76: grouped-nf4-gemm#584's reordered compact-delta backward (cd1cl1, two draws a side, ABBA; GB = 1e9 bytes; "
+             "reserved and device peaks first; speed recorded, never gated)", "",
+             "| draw | verdict | reserved peak | nvidia-smi peak (vs a 4090's 24,564 MiB) | allocated peak | compact backward at peak (G) | "
+             "block sites live | LM loss + held logits at peak | largest transient at peak | held-out at N | s/step |",
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
+    for k in POS76_ARMS:
+        x = reads[k]
+        if x is None:
+            lines.append(f"| {POS76_LABELS[k]} | {why[k]} |" + " — |" * 9)
+            continue
+        mib = None if x["device"] is None else x["device"] // 1048576
+        dev = "—" if mib is None else f"{_gb(x['device'])} ({mib:,} MiB, {_vs_4090(mib)})"
+        nx = x["next"]
+        lines.append(f"| {POS76_LABELS[k]} | VALID | {_gb(x['reserved'])} | {dev} | {_gb(x['alloc'])} | {_gb(x['cbwd'])} | {x['blocks']} | "
+                     f"{_gb(x['loss_logits'])} | {nx[0] or '—'} {_gb(nx[1]) if nx[0] else ''} | "
+                     + ("—" if x["heldout"] is None else f"{x['heldout']:.4f}") + " | "
+                     + (f"{x['s']:.3f}" if isinstance(x["s"], (int, float)) else "—") + " |")
+    before = [reads[POS76_ARMS[0]], reads[POS76_ARMS[3]]]
+    after = [reads[POS76_ARMS[1]], reads[POS76_ARMS[2]]]
+    if any(x is None for x in before + after):
+        return lines + ["", "- **No rule read:** a draw is not VALID; the rule needs both draws of both sides."] + memcensus_block(
+            F, POS76_FAM, POS76_ARMS, POS76_LABELS, title="Amendment 76: the census tables (one row per draw; GB = 1e9 bytes)")
+    v = pos76_rule(before, after)
+    dr, sp, th = v["drops"], v["spread"], v["thr"]
+    miss = [n for n, ok in (("the drop is not credited", v["credit"]), ("reserved and device did not both clear the threshold", v["falls"]),
+                            (f"held-out moved over {POS76_HELDOUT_MAX}", v["held"])) if not ok]
+    lines += ["", "| side | median reserved | median nvidia-smi | median allocated | median G | spread reserved / device |",
+              "|---|---|---|---|---|---|"]
+    for name, xs in (("before (#584 not applied)", before), ("after (#584 applied)", after)):
+        lines.append(f"| {name} | {_gb(_med(xs, 'reserved'))} | {_gb(_med(xs, 'device'))} | {_gb(_med(xs, 'alloc'))} | {_gb(_med(xs, 'cbwd'))} | "
+                     f"{_gb(_spread(xs, 'reserved'))} / {_gb(_spread(xs, 'device'))} |")
+    lines += ["", f"- **The rule:** {v['why']}. Median drops, reserved / device / allocated: {_gb(dr['reserved'])} / {_gb(dr['device'])} / "
+              f"{_gb(dr['alloc'])} GB; the reserved and device thresholds are {_gb(th['reserved'])} / {_gb(th['device'])} GB (the larger of "
+              f"{POS76_MIN_DROP_BYTES / 1e9:.2f} GB and the spread). " + ("**CANDIDATE.**" if v["candidate"] else "**No candidate:** " + "; ".join(miss) + ".")]
+    for name, xs in (("before", before), ("after", after)):
+        dm, am, cm = _med(xs, "device"), _med(xs, "alloc"), _med(xs, "context")
+        zero = None if am is None or cm is None else (am + cm) // 1048576
+        lines.append(f"- **The 4090 arithmetic, {name}** (reported, never a verdict): median nvidia-smi peak "
+                     + ("—" if dm is None else f"{int(dm // 1048576):,} MiB, {_vs_4090(int(dm // 1048576))}")
+                     + "; at zero allocator gap (allocated + context) "
+                     + ("—" if zero is None else f"{int(zero):,} MiB, {_vs_4090(int(zero))}") + ".")
+    lines.append("- No fit is claimed here. A CANDIDATE is a credited memory saving; a 4090 acceptance box needs its own registration.")
+    return lines + memcensus_block(F, POS76_FAM, POS76_ARMS, POS76_LABELS,
+                                   title="Amendment 76: the census tables (Qwen3-30B-A3B, cd1cl1, one row per draw; GB = 1e9 bytes)")
+
+
+def _vs_4090(mib):
+    """'N MiB over' or 'N MiB under' a 4090's nvidia-smi total."""
+    d = int(mib) - POS75_4090_MIB
+    return f"{d:,} MiB over a 4090's total" if d > 0 else f"{-d:,} MiB under a 4090's total"
 
 def pos74_block(F):
     """Amendment 74's read, descriptive with one fixed rule. Per arm: its verdict, peak allocated, the padded LoRA delta's live bytes at the peak
@@ -7258,6 +7462,8 @@ def render(F, d):
         out += pos74_block(F)
     if POS75_FAM in F:
         out += pos75_block(F, d)
+    if POS76_FAM in F:
+        out += pos76_block(F, d)
     if MEMCENSUS_FAM in F:
         out += memcensus_block(F)
         out += ["\n## Predictions P41 / P42 / P43 (TC1-PREREG amendment 23: the memory census, e4b against Unsloth at micro-batch 1; scored mechanically from the receipts)",
@@ -8881,6 +9087,46 @@ def _pos75_vram(d, R, context=677_000_000):
         mib = (r["mem_census"]["peak_reserved_bytes"] + context) // 1048576
         with open(os.path.join(d, f"vram_{POS75_FAM}_{fw}_{tag}.txt"), "w") as f:
             f.write(f"1792644584 2, 0, 19.30\n1792644600 {mib}, 98, 512.10\n1792644601 {mib - 300}, 97, 505.00\n")
+
+
+POS76_FIX_BLOCK = 811_000_000                      # one [G * W, K] fp32 block at the field recipe (box 155: 0.811 GB at 940 and at 942)
+POS76_FIX_LOGITS = POS75_VOCAB * 2_260             # the held bf16 logits, vocab-shaped (amendment 75's observation)
+
+
+def _pos76_set(groups=None, gap=None, held=None, rec=None, code=None):
+    """Amendment 76: cd1cl1 at grouped-nf4-gemm before (gb) and after (ga) #584, two draws a side, each on its registered path and code.
+    Before, the compact backward holds the rebuilt block and its grad together (lines 940 and 942); after, one block (line 948). `groups`
+    tag -> the non-static groups at that draw's peak; `gap` tag -> reserved minus allocated (default 0.30 GB); `held` tag ->
+    eval_loss_final; `rec` tag -> a record override; `code` tag -> its env.gnf4_code. The default reads a credited CANDIDATE."""
+    blocks = {"gb": [("site:nf4_qlora.py:940 backward", POS76_FIX_BLOCK), ("site:nf4_qlora.py:942 backward", POS76_FIX_BLOCK)],
+              "ga": [("site:nf4_qlora.py:948 backward", POS76_FIX_BLOCK)]}
+    base = _pos75_set()[POS75_ARMS[3]]
+    R = {}
+    for (fw, tag) in POS76_ARMS:
+        side = pos76_side(tag)
+        r = json.loads(json.dumps(base))
+        r.update(fam=POS76_FAM, tag=tag, eval_loss_final=(held or {}).get(tag, 0.7549 if side == "gb" else 0.7550))
+        r["env"] = dict(r.get("env") or {}, **{"grouped-nf4-gemm": POS76_GNF4_VERSION})
+        r["env"]["gnf4_code"] = (code or {}).get(tag, {"commit": POS76_GNF4[side], "nf4_qlora_sha256": POS76_NF4_QLORA_SHA[side]})
+        mc = r["mem_census"]
+        st = [g for g in mc["live_at_peak_top"] if str(g["group"]).startswith("static:")]
+        gs = (groups or {}).get(tag, blocks[side] + [(POS76_LOGITS_SITE, POS76_FIX_LOGITS), ("site:e4b/chunked_loss.py:88 _chunk_backward", 41_000_000)])
+        top = sorted(st + [{"group": g, "bytes": b, "count": 1} for g, b in gs], key=lambda g: -g["bytes"])
+        peak = sum(g["bytes"] for g in top)
+        mc.update(live_at_peak_top=top, peak_allocated_bytes=peak, peak_reserved_bytes=int(peak + (gap or {}).get(tag, 0.30e9)))
+        mc["peak_window"] = dict(mc["peak_window"], n_groups=len(top), live_bytes=peak, peak_bytes=peak)
+        for k, v in ((rec or {}).get(tag) or {}).items():
+            r[k] = v
+        R[(fw, tag)] = r
+    return R
+
+
+def _pos76_vram(d, R, context=645_000_000):
+    """Each draw's nvidia-smi sampler in d: its reserved peak plus a CUDA context, in MiB."""
+    for (fw, tag), r in R.items():
+        mib = (r["mem_census"]["peak_reserved_bytes"] + context) // 1048576
+        with open(os.path.join(d, f"vram_{POS76_FAM}_{fw}_{tag}.txt"), "w") as f:
+            f.write(f"1792644584 2, 0, 19.30\n1792644600 {mib}, 98, 512.10\n")
 
 
 def _sladder_set(s=None, dev=None, bmm=None, step0=None, sl=None, profile=True):
@@ -11690,6 +11936,53 @@ def selftest():
         tn5 = "\n".join(pos75_block(P5(R5n), os.path.join(td5, "no-samplers")))
         assert "**No candidate**" in tn5 and "reserved and device did not both fall" in tn5, tn5
     x5 = pos75_reading(R5[POS75_ARMS[1]]["mem_census"], R5[POS75_ARMS[1]], 26238)
+    cases += 1
+    # 131. TC1 amendment 76 (qwen3pos76co): cd1cl1 at grouped-nf4-gemm before (gb) and after (ga) #584, two draws a side -- VALID on the
+    #      path and the code each side names; the after side frees one block, so G (the compact backward) is still live but smaller and
+    #      the median drop is credited: CANDIDATE. A wrong commit, nf4_qlora.py hash, release or loss branch is VOID; a draw spread wider
+    #      than the drop takes the candidate away; the 4090 arithmetic is reported and never a verdict
+    P6 = lambda R: {POS76_FAM: reduce_family(POS76_FAM, R, {}, 20)}
+    with tempfile.TemporaryDirectory() as td6:
+        def b6(R):
+            for f in glob.glob(os.path.join(td6, "vram_*")):
+                os.remove(f)
+            _pos76_vram(td6, R)
+            return "\n".join(pos76_block(P6(R), td6))
+        R6 = _pos76_set()
+        F6 = P6(R6)
+        assert all(x["verdict"] == "VALID" for x in F6[POS76_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in F6[POS76_FAM]["rows"]]
+        t6 = b6(R6)
+        assert "G may still be live at the after peaks" in t6 and "**CANDIDATE.**" in t6, t6
+        assert t6.count("| 1.622 | 2 |") == 2 and t6.count("| 0.811 | 1 |") == 2, t6           # G and the block sites: two live before, one after
+        assert "The 4090 arithmetic, before" in t6 and "No fit is claimed here" in t6, t6
+        assert "Amendment 76: grouped-nf4-gemm#584" in render(F6, td6)
+        v6 = lambda R, k: P6(R)[POS76_FAM]["verdicts"][k]
+        ga, gb = POS76_ARMS[1][1], POS76_ARMS[0][1]
+        for bad, k in (({ga: {"commit": POS76_GNF4["gb"], "nf4_qlora_sha256": POS76_NF4_QLORA_SHA["ga"]}}, POS76_ARMS[1]),
+                       ({gb: {"commit": POS76_GNF4["gb"], "nf4_qlora_sha256": POS76_NF4_QLORA_SHA["ga"]}}, POS76_ARMS[0])):
+            assert v6(_pos76_set(code=bad), k) == "VOID", bad
+        envb = dict(R6[POS76_ARMS[2]]["env"], **{"grouped-nf4-gemm": "0.49.0"})
+        assert v6(_pos76_set(rec={POS76_ARMS[2][1]: {"env": envb}}), POS76_ARMS[2]) == "VOID"
+        ch = dict(R6[POS76_ARMS[3]]["chunked_lm_loss"], chunked_calls=0, small_calls=240)
+        assert v6(_pos76_set(rec={POS76_ARMS[3][1]: {"chunked_lm_loss": ch}}), POS76_ARMS[3]) == "VOID"
+        tw = b6(_pos76_set(gap={POS76_ARMS[3][1]: 1.30e9, POS76_ARMS[2][1]: 1.30e9}))          # a 1.0 GB spread a side: drop 0.811 < it
+        assert "**No candidate:** reserved and device did not both clear the threshold" in tw, tw
+        tn = b6(_pos76_set(groups={t: [("site:nf4_qlora.py:948 backward", POS76_FIX_BLOCK), ("site:e4b/other.py:1 forward", POS76_FIX_BLOCK),
+                                       (POS76_LOGITS_SITE, POS76_FIX_LOGITS), ("site:e4b/chunked_loss.py:88 _chunk_backward", 41_000_000)]
+                                   for t in (POS76_ARMS[1][1], POS76_ARMS[2][1])}))             # after: G falls a block, another transient fills it
+        assert "**No candidate:** the drop is not credited" in tn, tn
+        for vf in glob.glob(os.path.join(td6, "vram_*")):
+            os.remove(vf)
+        t0 = "\n".join(pos76_block(P6(R6), td6))                                              # no sampler at all: device unread
+        assert "**No candidate:** reserved and device did not both clear the threshold" in t0 and " / — |" in t0, t0
+        assert "Amendment 76: grouped-nf4-gemm#584" in render(P6(R6), td6)
+        _pos76_vram(td6, R6)
+        os.remove(os.path.join(td6, f"vram_{POS76_FAM}_{POS76_ARMS[2][0]}_{POS76_ARMS[2][1]}.txt"))  # one draw's sampler missing
+        t1 = "\n".join(pos76_block(P6(R6), td6))
+        assert "**No candidate:** reserved and device did not both clear the threshold" in t1, t1
+        assert "Amendment 76: grouped-nf4-gemm#584" in render(P6(R6), td6)
+    mc6 = R6[POS76_ARMS[0]]["mem_census"]
+    assert loss_and_logits_bytes(mc6) == POS76_FIX_LOGITS and _blocks_live(mc6, "gb") == 2 and _blocks_live(R6[POS76_ARMS[1]]["mem_census"], "ga") == 1
     assert x5["loss"] == 1_373_501_440 + 686_750_724 and x5["delta"] == 0 and x5["tail"] == 0 and x5["device"] == 26238 * 1048576, x5
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")

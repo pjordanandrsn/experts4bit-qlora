@@ -901,6 +901,28 @@ def idle_power(n=10):
     return statistics.median(v) if v else 0.0
 
 
+def gnf4_code_identity():
+    """TC1 amendment 76: the grouped-nf4-gemm commit this arm's venv installed (its direct_url.json ``vcs_info``) and the sha256 of the
+    ``nf4_qlora.py`` the arm imports. Two arms on one box at two commits are each bound to their own code by these, which the version
+    string (the same release on both) cannot do. Either is None where it cannot be read."""
+    import importlib.metadata as md
+    import importlib.util
+
+    out = {"commit": None, "nf4_qlora_sha256": None}
+    try:
+        du = json.loads(md.distribution("grouped-nf4-gemm").read_text("direct_url.json") or "null") or {}
+        out["commit"] = (du.get("vcs_info") or {}).get("commit_id")
+    except Exception:
+        pass
+    try:
+        spec = importlib.util.find_spec("nf4_qlora")
+        if spec is not None and spec.origin:
+            out["nf4_qlora_sha256"] = hashlib.sha256(open(spec.origin, "rb").read()).hexdigest()
+    except Exception:
+        pass
+    return out
+
+
 def host_fingerprint(instance_env="TC1_INSTANCE_ID"):
     fields = ("uuid,pci.bus_id,pcie.link.gen.current,pcie.link.gen.max,pcie.link.width.current,pcie.link.width.max,"
               "power.limit,clocks.max.sm,clocks.max.mem,vbios_version,driver_version")
@@ -3988,6 +4010,7 @@ def run_arm(a, load_fn, sampler=True):
             env[pkg] = md.version(pkg)
         except Exception:
             env[pkg] = None
+    env["gnf4_code"] = gnf4_code_identity()        # TC1 amendment 76: the installed gnf4 commit and the nf4_qlora.py bytes imported
 
     idle_w = idle_power() if sampler else 0.0
     host_ram0 = host_ram_report()                   # TC3: the cgroup peak BEFORE this arm, so a container-lifetime number is never credited to it

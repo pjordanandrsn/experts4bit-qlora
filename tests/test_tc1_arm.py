@@ -2583,3 +2583,31 @@ def test_hp1_export_refuses_an_offloaded_model_before_load(tmp_path):
     assert p.returncode == 3 and "Traceback" not in p.stderr, (p.stdout + p.stderr)[-2000:]
     rec = json.loads((tmp_path / "qwen3_e4b_off.json").read_text())
     assert rec["status"] == "refused" and "--offload 1" in rec["reason"] and "resident" in rec["reason"], rec
+
+
+def test_gnf4_code_identity_reads_the_installed_commit_and_the_imported_file(tmp_path, monkeypatch):
+    """TC1 amendment 76: an arm records the grouped-nf4-gemm commit its venv installed (direct_url.json's vcs_info) and the sha256 of
+    the nf4_qlora.py it imports, so two arms on one box at two commits are bound to their own code. Unreadable parts read None."""
+    import hashlib
+    import importlib.machinery
+    import importlib.metadata
+    import importlib.util
+
+    arm = _load_arm_module()
+    src = tmp_path / "nf4_qlora.py"
+    src.write_text("# a stand-in module\n")
+
+    class Dist:
+        def read_text(self, name):
+            return json.dumps({"url": "https://example.invalid/g.git", "vcs_info": {"vcs": "git", "commit_id": "ab" * 20}}) if name == "direct_url.json" else None
+
+    monkeypatch.setattr(importlib.metadata, "distribution", lambda name: Dist())
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: importlib.machinery.ModuleSpec(name, None, origin=str(src)))
+    assert arm.gnf4_code_identity() == {"commit": "ab" * 20, "nf4_qlora_sha256": hashlib.sha256(src.read_bytes()).hexdigest()}
+
+    def gone(name):
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(importlib.metadata, "distribution", gone)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    assert arm.gnf4_code_identity() == {"commit": None, "nf4_qlora_sha256": None}

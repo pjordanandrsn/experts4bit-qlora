@@ -78,7 +78,9 @@ SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 POLL=${TC1_POLL_S:-60}; STALL_S=${TC1_STALL_S:-900}; W=/root/tc1
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
-PASS="TC1_BOX=$TC1_BOX TC1_RUN_ID=$RUN_ID TC1_RUN_NONCE=$NONCE TC1_DEADLINE_EPOCH=$DEADLINE TC1_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA ${TC1_PROF_ALARM:+TC1_PROF_ALARM=$TC1_PROF_ALARM }${TC1_PROFILE_STEPS:+TC1_PROFILE_STEPS=$TC1_PROFILE_STEPS }${TC1_PROFILE_WARM:+TC1_PROFILE_WARM=$TC1_PROFILE_WARM }"
+# TC1 amendment 76: a second grouped-nf4-gemm commit the family switches to on the box; a full 40-char sha or unset
+case "${GNF4_SHA_B:-}" in "") ;; *[!0-9a-f]*) say "refusing: GNF4_SHA_B is not a 40-char hex sha ($GNF4_SHA_B)"; exit 78;; *) [ ${#GNF4_SHA_B} -eq 40 ] || { say "refusing: GNF4_SHA_B is not a 40-char hex sha ($GNF4_SHA_B)"; exit 78; };; esac
+PASS="TC1_BOX=$TC1_BOX TC1_RUN_ID=$RUN_ID TC1_RUN_NONCE=$NONCE TC1_DEADLINE_EPOCH=$DEADLINE TC1_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA ${GNF4_SHA_B:+GNF4_SHA_B=$GNF4_SHA_B }${TC1_PROF_ALARM:+TC1_PROF_ALARM=$TC1_PROF_ALARM }${TC1_PROFILE_STEPS:+TC1_PROFILE_STEPS=$TC1_PROFILE_STEPS }${TC1_PROFILE_WARM:+TC1_PROFILE_WARM=$TC1_PROFILE_WARM }"
 # Every knob the box-side script reads from the environment must be forwardable, or an amendment that changes one
 # of them silently does not reach the box: tp4's lesson: TP4-PREREG amendment 2 cut the eval instrument for the large families
 # and TC1_EVAL_N / TC1_EVAL_EVERY were absent from this list, so box C would have run the pre-amendment eval.
