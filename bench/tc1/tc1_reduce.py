@@ -11378,6 +11378,9 @@ def selftest():
     assert "**No rule read:**" in tv, tv
     tm = "\n".join(pos74_block(P4(_pos74_set(peak={"pb1": 24.0e9 + 2.10e9 - 0.40e9}))))      # span -1.50 GB, peak only -0.40: moved
     assert "**Moved, not saved:** pb1" in tm and "CANDIDATE:**" not in tm and "**No candidate:**" in tm and "(-0.400)" in tm, tm
+    # the registered 0.50 credit at its boundary: pb1 removes 1.50 GB, so a 0.75 GB peak drop is a CANDIDATE and 0.74 GB is not
+    assert "**CANDIDATE:** pb1" in "\n".join(pos74_block(P4(_pos74_set(peak={"pb1": 24.0e9 + 2.10e9 - 0.75e9})))), "0.75 GB at the boundary"
+    assert "**Moved, not saved:** pb1" in "\n".join(pos74_block(P4(_pos74_set(peak={"pb1": 24.0e9 + 2.10e9 - 0.74e9})))), "0.74 GB below it"
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
