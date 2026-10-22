@@ -21,7 +21,7 @@ Each suite runs with `-rs` and a junit report; the summary lists every skipped t
 | `GC_CARD` | the declared class: `MAJOR.MINOR/SMS` (exact count) or `MAJOR.MINOR/>=SMS` (a floor), e.g. `8.9/128` for the RTX 4090 |
 | `GC_REQUIRE` | optional: test ids (`<classname>::<name>`) that must PASS; see below |
 | `GC_E4B_TESTS` | optional: the experts4bit-qlora test files to run INSTEAD of the served-route premise, space-separated `tests/test_<name>.py` paths, each refused (78) unless it has exactly that form; for a PR's own GPU smoke |
-| `GC_NEED_E4B_S` | optional: the e4b suite's time need in whole seconds (default 600), passed through to the box |
+| `GC_NEED_E4B_S` | optional: the e4b suite's time need in whole seconds, 1-1800 without a leading zero (default 600), passed through to the box; a suite's alarm is capped at 1,800 s whatever the need |
 | `E4B_RENT_RUN_ID` | `gc-<slug>-<n>`; a dry run's is `gc-dry-<slug>-<n>` with `GC_DRY=1` and `GC_BOX_EXEC` |
 
 The launch tree must be clean, so the staged tool is the committed one; its commit is written to the box (`GC_TOOL_SHA`)

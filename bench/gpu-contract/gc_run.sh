@@ -25,9 +25,12 @@ GNF4_TESTS="test_nf4_gemv_bw.py test_dispatch_counts.py"
 E4B_TESTS="tests/test_decode_graph_buckets.py tests/test_kv_step_select.py tests/test_gemv_bw_served_gpu.py"
 # GC_E4B_TESTS (optional) replaces the e4b list for a PR's own GPU smoke: space-separated tests/test_<name>.py paths
 if [ -n "${GC_E4B_TESTS:-}" ]; then
-  for t in $GC_E4B_TESTS; do [[ "$t" =~ ^tests/test_[a-z0-9_]+\.py$ ]] || { say "refusing: GC_E4B_TESTS entry '$t' is not tests/test_<name>.py"; finish 78; }; done
-  E4B_TESTS=$GC_E4B_TESTS
+  read -r -a E4BT <<< "$GC_E4B_TESTS"   # an array, never globbed; each entry must match before it is used unquoted below
+  for t in "${E4BT[@]}"; do [[ "$t" =~ ^tests/test_[a-z0-9_]+\.py$ ]] || { say "refusing: GC_E4B_TESTS entry '$t' is not tests/test_<name>.py"; finish 78; }; done
+  E4B_TESTS="${E4BT[*]}"
 fi
+{ [[ "${GC_NEED_E4B_S:-600}" =~ ^[1-9][0-9]{0,5}$ ]] && [ "${GC_NEED_E4B_S:-600}" -le 1800 ]; } \
+  || { say "refusing: GC_NEED_E4B_S='${GC_NEED_E4B_S}' is not 1-1800 whole seconds without a leading zero"; finish 78; }
 MIN_DISK_GB=${GC_MIN_DISK_GB:-30}
 export HF_HUB_DISABLE_XET=1 TOKENIZERS_PARALLELISM=false TRITON_INTERPRET=0
 { echo "GC run $GC_RUN_ID nonce ${NONCE:0:12}"; echo "gnf4 $GC_GNF4_SHA"; echo "e4b $GC_E4B_SHA"; echo "card class $GC_CARD"; echo "required ${GC_REQUIRE:-<none>}"; echo "e4b tests $E4B_TESTS"; } | tee summary.txt
