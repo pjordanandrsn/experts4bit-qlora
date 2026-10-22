@@ -13,5 +13,11 @@ sends one group per (token, slot) row to grouped-nf4-gemm's K33.
   that family.
 - **The rest:** K2 (the self-pair), a spacer before every timed replay, Williams order, NVML clocks with a 575 W floor.
   The premise is e4b#2009's GPU contract. The guard fit has 25 % headroom.
-- **Files:** `bench/p227/` (PREREG, bench, reducer with a 38-check self-test, runner, drive, staged pins) and
-  `tests/test_p227.py` (19 tests, 8 reducer mutants).
+- **Amendment 1, before any reading:**
+  - review 1's four items: K's decode and plan from e4b's own tallies; a shakedown forces K33's gate; a run with no
+    family read is not a reading; an unreadable record is VOID;
+  - TOLERANCE_FAIL is final for its family;
+  - two shakedowns (`p227-shake-1`, `-2`, an RTX A4000, about $0.03 together). The second's record is the reducer's
+    sha256-pinned real fixture.
+- **Files:** `bench/p227/` (PREREG, bench, reducer with a 45-check self-test, runner, drive, staged pins, the fixture)
+  and `tests/test_p227.py` (29 tests: the real record, its departures and an old-rule mutant, and 9 reducer mutants).

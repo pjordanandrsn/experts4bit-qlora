@@ -244,3 +244,27 @@ P222's, with the arms above. Everything not named here is P222's.
 - **Scope:** one RTX 5090 at a 575 W limit, random NF4 bytes, triton 3.4.0.
 - **No quality:** B is a different function from K within the tolerance contract, and only a served read with a
   quality bar can speak to tokens.
+
+## Amendment 1 (2026-10-22, before any reading): the shakedowns, the real fixture, TOLERANCE_FAIL final
+
+- **Review 1** (four items, all taken):
+  - K's decode and plan are read from e4b's own K25 tallies against the registered values.
+  - A shakedown forces K33's gate (`GNF4_GEMV_BW=1`) after the premise, and a reading carrying it is VOID.
+  - A run with no family read finishes 27.
+  - A missing or unreadable bench record reduces to VOID.
+  - Reported, never ruling: B2's spread and the copy rate's spread.
+- **TOLERANCE_FAIL is final for its family** (above, "TOLERANCE_FAIL"), adopted on review.
+- **`p227-shake-1`** (an RTX A4000, about $0.02; teardown verified) ran the kit at `afa06dda` end to end: the premise 25
+  passed, the bench, the reducer, `qwen3=SHAKEDOWN mixtral=SHAKEDOWN`. Its bench predates the K25 tallies, so its
+  record is not the fixture.
+- **`p227-shake-2`** (the same card class, about $0.01; teardown verified) ran the kit at the amended head with the
+  same outcome.
+  - Its bench record is the reducer's real fixture: `bench/p227/fixtures/p227-shake-2/bench_p227.json`, sha256
+    `35b6a65e...`.
+  - `tests/test_p227.py` reduces it to `qwen3=SHAKEDOWN mixtral=SHAKEDOWN`, with every structural check passed.
+  - Five departures from it each VOID that family alone.
+  - A mutant restoring the old self-reported K check accepts one of them.
+- **Reported from the shakedowns (never ruling, no times quoted):** on 2- and 4-layer graphs on the A4000, one family's
+  K/K2 self-pair fell outside 0.99-1.01 at T = 4 in each run (Qwen3 in -1, Mixtral in -2). A shakedown reports it. On the
+  5090 the reading's graphs hold 48 and 8 layers. If the band VOIDs a family there, that family is re-read under the
+  per-family rule above.

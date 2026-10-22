@@ -218,3 +218,58 @@ def test_the_self_test_kills_each_reducer_mutant(tmp_path, old, new):
     (tmp_path / "p227_reduce.py").write_bytes(src.replace(old, new).encode("utf-8"))
     r = subprocess.run([sys.executable, str(tmp_path / "p227_reduce.py"), "--self-test"], capture_output=True, text=True)
     assert r.returncode != 0 and "FAILED" in r.stdout, (old, r.stdout)
+
+
+# ---- the real record first (the maintainer's gate-test rule): p227-shake-2's bench record, sha256-pinned
+FIXTURE = LANE / "fixtures" / "p227-shake-2" / "bench_p227.json"
+FIXTURE_SHA256 = "35b6a65e3d3e436d19170c3e8d47a7fc91fb1e3fd8fe0e069cb94c701ba18e36"
+
+
+def _real():
+    raw = FIXTURE.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == FIXTURE_SHA256, "the pinned shakedown record changed"
+    return json.loads(raw)
+
+
+def test_the_real_shakedown_record_reduces_to_shakedown_with_every_check_passed():
+    rec = _real()
+    assert rec["shakedown"] is True and rec["gnf4_gemv_bw_env"] == "1" and rec["replay_sha256"] == R.REPLAY_SHA256
+    v = R.verdict(rec)
+    assert v["verdict"] == "qwen3=SHAKEDOWN mixtral=SHAKEDOWN", v
+    for fam, L in (("qwen3", 4), ("mixtral", 2)):
+        lut, plan = R.FAMILIES[fam]["k25"]["E4B_K25_LUT"], R.FAMILIES[fam]["k25"]["E4B_K25_PLAN"]
+        for T in R.TS:
+            eng = rec["families"][fam]["cells"][str(T)]["engaged"]
+            assert eng["K"]["k25_lut"] == {f"{lut}|le256": L} and eng["K"]["k25_plan"] == {f"{plan}|le256": L}
+            assert eng["B"]["bw_prmt32"] == 2 * L and eng["B"]["route"] == {"nf4_singleton|le256": L}
+
+
+DEPARTURES = [
+    (lambda r: r["families"]["qwen3"]["cells"]["2"]["engaged"]["K"].pop("k25_plan"), "K's plan tally missing"),
+    (lambda r: r["families"]["qwen3"]["cells"]["4"]["engaged"]["K"].update(k25_lut={"tree|le256": 4}), "K on the tree"),
+    (lambda r: r["families"]["qwen3"]["cells"]["8"]["engaged"]["B"].update(dotpad=1), "B on dot-pad"),
+    (lambda r: r["families"]["qwen3"]["cells"]["2"]["reps"][3].update(k2_identical=False), "K2 moved a bit"),
+    (lambda r: r["families"]["qwen3"]["cells"]["4"]["reps"][2].update(order=["B", "K2", "K"]), "the order"),
+]
+
+
+@pytest.mark.parametrize("depart, what", DEPARTURES, ids=[d[1] for d in DEPARTURES])
+def test_each_departure_from_the_real_record_voids_that_family_only(depart, what):
+    rec = _real()
+    depart(rec)
+    fv = R.verdict(rec)["families"]
+    assert fv["qwen3"]["verdict"] == "VOID" and fv["mixtral"]["verdict"] == "SHAKEDOWN", (what, fv["qwen3"]["why"])
+
+
+def test_the_old_self_reported_k_check_would_pass_the_real_records_departure(tmp_path):
+    """Review 1, item 1: before e4b's own tallies were read, a K that ran the wrong plan passed. The mutant restores
+    the old rule and must ACCEPT the departure the current reducer VOIDs."""
+    src = (LANE / "p227_reduce.py").read_text(encoding="utf-8")
+    old = 'if k.get("k25_lut") != {f"{lut}|le256": L} or k.get("k25_plan") != {f"{plan}|le256": L}:'
+    assert src.count(old) == 1
+    (tmp_path / "p227_reduce.py").write_bytes(src.replace(old, "if False:").encode("utf-8"))
+    mut = _load("p227_reduce_old_rule", tmp_path / "p227_reduce.py")
+    rec = _real()
+    rec["families"]["qwen3"]["cells"]["4"]["engaged"]["K"]["k25_lut"] = {"tree|le256": 4}
+    assert mut.verdict(rec)["families"]["qwen3"]["verdict"] == "SHAKEDOWN"
+    assert R.verdict(rec)["families"]["qwen3"]["verdict"] == "VOID"
