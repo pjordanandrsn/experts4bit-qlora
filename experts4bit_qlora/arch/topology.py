@@ -260,6 +260,14 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
     dense = sum(p.numel() for p in tree.parameters() if id(p) not in expert_param_ids)
     emb = tree.get_input_embeddings()
     head = tree.get_output_embeddings()
+    # One source for the vocabulary width: the LM head's out_features, which is what the chunked loss's run-time gate reads
+    # (engines.chunked_lm_loss, `labels.numel() x lm_head.out_features x 4`). The plan's loss terms read this value, so plan
+    # and run pick the same loss branch; prepare_qlora_training refuses a loaded head of another width (vocab_width_refusal).
+    if head is not None and getattr(head, "out_features", None):
+        common["vocab_size"] = int(head.out_features)
+        prov["vocab_size"] = "lm_head.out_features on the meta tree (the width the chunked loss's gate reads)"
+    else:
+        prov["vocab_size"] = "config vocab_size (the tree has no output head)"
     # The loader ties the head to the embedding when the config says so and the checkpoint ships no
     # ``lm_head.weight`` (load_moe_4bit_streaming, "Tie lm_head"). A tree built on meta may not be tied yet, so
     # the config decides here; a tied checkpoint that nevertheless ships a head would load it untied.

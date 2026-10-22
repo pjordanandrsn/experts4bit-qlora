@@ -589,6 +589,23 @@ class PreparedQLoRA:
     report: dict = field(default_factory=dict)
 
 
+def vocab_width_refusal(topology, model) -> str | None:
+    """Why ``model``'s LM head is not the vocabulary width ``topology`` was priced at, or ``None`` when they agree.
+
+    The plan's loss terms (:func:`_loss_chunk`, :func:`_eval_loss_bytes`) read ``topology.vocab_size``; the chunked loss's
+    run-time gate reads ``lm_head.out_features``. A head resized after the topology was described (``resize_token_embeddings``)
+    would let the two pick different loss branches near the gate, so a mismatch is refused by name, never picked silently."""
+    head = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
+    width = getattr(head, "out_features", None)
+    if width is None:
+        return None                                    # no linear head to read; the chunked loss refuses such a model itself
+    if int(width) != int(topology.vocab_size):
+        return (f"the plan priced a {topology.vocab_size}-wide vocabulary but the model's lm_head is {int(width)} wide (resized after "
+                "the topology was described?); describe the model as it will train, so the plan and the chunked loss's gate read "
+                "one width")
+    return None
+
+
 def prepare_qlora_training(model_id, setup: QLoRASetup, *, device="cuda", revision=None) -> PreparedQLoRA:
     """Load ``model_id`` and build ``setup`` on it: the documented fast path as one call.
 
@@ -597,19 +614,24 @@ def prepare_qlora_training(model_id, setup: QLoRASetup, *, device="cuda", revisi
     then :func:`~experts4bit_qlora.enable_fast_train` for ``expert_kernel="grouped_nf4"``. Every requested
     accelerated path must engage or this raises ``RuntimeError`` -- never a silent fallback. Returns the model,
     the trainable parameters (every LoRA tensor; nothing else requires grad) and a report of what engaged.
-    Refuses (``ValueError``) a setup :func:`setup_refusals` rejects for this model, before loading anything.
+    Refuses (``ValueError``) a setup :func:`setup_refusals` rejects for this model, before loading anything, and a loaded
+    model whose LM head is not the width the setup was priced at (:func:`vocab_width_refusal`), before any engine is enabled.
     """
     from .arch.topology import describe_moe
     from .loader import load_moe_4bit_streaming
     from .lora import ExpertsLoRA, LoRALinear, add_attention_lora, quantize_attention_projections_4bit
 
-    refusals = setup_refusals(describe_moe(model_id, revision=revision), setup)
+    topology = describe_moe(model_id, revision=revision)
+    refusals = setup_refusals(topology, setup)
     if refusals:
         raise ValueError("QLoRASetup refused for this model: " + "; ".join(refusals))
     host = setup.expert_residency == "host"
     model, config = load_moe_4bit_streaming(model_id, device, torch.bfloat16, setup.r, setup.alpha, offload=host,
                                             pin=setup.pin, quant_type=setup.quant_type, revision=revision,
                                             blocksize=setup.blocksize)
+    why = vocab_width_refusal(topology, model)
+    if why:
+        raise ValueError("QLoRASetup refused for this model: " + why)
     if not host:
         model.to(device)
     report = {"setup": setup.to_dict(), "commit": getattr(config, "_commit_hash", None)}
