@@ -255,7 +255,7 @@ sweep. Only C1, which is off the grid, was recorded.
    a stop.
 3. **A new shakedown id, `p222-shake-3`,** on `p222-shake-1`'s terms as Amendment 1 set them: any card at sm_86 or later
    with 15 GB, `--shakedown --layers 2 --reps 10 --grid 6 --select-steps 2`, at most $0.40/h, guard 0.75 h, worst
-   case **$0.41**. Run ids are now `p222-5090-1` to `-3` and `p222-shake-1` to `-3`. The exec ACK follows only a
+   case **$0.41**. Run ids are now `p222-5090-1` to `-3` and `p222-shake-1` to `-3` (the reading's ids extended by Amendment 3). The exec ACK follows only a
    SHAKEDOWN.
 4. **The band on the RTX 5090, read before any paid reading** ($0, from public receipts). P160's reading
    (`bench/p160/receipts/p160-5090-2/bench_p160.json`, sha256 `618e685f...`, pinned in its `SHA256SUMS`) timed its
@@ -308,3 +308,33 @@ carries the public re-derivation line. `RESULTS-p222.md` is written from those f
 - **Nothing that depends on weight values:** the bytes are random, and outputs are compared decode against decode.
 
 **Review:** one independent reviewer who is not a consumer of this lane, then the maintainer's pass.
+
+## Amendment 3 (2026-10-22, before any reading): three more reading ids; a briefly-listed host excluded
+
+**Why.** All three registered reading ids, `p222-5090-1` to `-3`, ended as launcher refusals BEFORE any instance existed,
+each at $0 and none a strike, all pinned to one host, machine 45379 (offer 45014282). The screen had passed it in three
+machine-filtered reads each time. The receipts show:
+- **`-1` and `-2`:** the launcher's pinned search, with the same query, returned no offer for that machine in any of
+  its three reads, about 3 minutes after the screen's quote.
+- **`-3`:** launched 6 s after the screen's third read, from a manifest validated at $0 beforehand. Its first pinned
+  read (00:54:17Z, 17 s after the screen's) DID return the offer. The create was then refused because the ask was
+  gone, and the same-pin ghost retry 180 s later found no offer.
+- **The rest of the market:** 13, 13 and 15 other RTX 5090 offers passed the same terms at the three refusals.
+
+So the host's listed ask did not survive to a create. A $0 read of the three receipts found no query mismatch: the
+screen's and the launcher's queries are byte-identical, and the launcher behaved correctly. The host is listed only in
+rare, brief windows: the screen saw it in 3 of its 32 sweeps (19:21Z to 00:52Z), exactly the three that pinned it, and a
+later dense read-only poll (30 reads at 20 s) listed it in none. The gap was the screen's stability rule (three reads
+over 40 s), which admitted such a window. Since 2026-10-18, six of the eight launches pinned to this machine across
+lanes died before any instance existed.
+
+**What changes.**
+- **Run ids:** `p222-5090-4`, `-5` and `-6` are registered for the reading, on the same terms, caps and guard as
+  `-1` to `-3`. The runner and the driver accept them; an id outside `p222-5090-1` to `-6` and `p222-shake-1` to `-3`
+  is still refused.
+- **The screen** excludes machine 45379 from every pin, and pins only an offer present in two consecutive sweeps and
+  still present after a hold of at least the launch latency (3 min).
+- **The launch:** a manifest may be validated at $0 before the pin and launched without re-validating only when it is
+  byte-identical (the same run id, pin, launcher and e4b); any difference re-validates.
+
+Nothing else changes: the arms, the rule, the band, the budget and the guard are Amendment 2's.

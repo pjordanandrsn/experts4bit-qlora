@@ -1620,3 +1620,42 @@ venv-unsloth (torch 2.12.1), every arm profiled, $0.80. No draw was voided for h
 The ladder's 5.5 % of device time is not hidden on a GPU-bound box, and the fp32 arm pays about 3 % for it. On amendment 70's
 host-bound box the same switch saved 20 %. By amendment 72's rule (P220, P221 and P219 held), `auto` becomes grouped-nf4-gemm's
 default. It never engages for bf16 adapters, e4b's default.
+
+## Amendment 73 (2026-10-22): the field-memory gap is the padded LoRA delta's transients plus the allocator cache; resident tensors are byte-identical (descriptive)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 73 and its rate fold. One RTX 5090 (`tc1-5090-152`, AMD
+EPYC 9655, a 46.08-CPU quota), amendment 69's field recipe over 60 steps with the memory census (`--mem-census 1`, no profile), one draw
+per arm. The arms run at the field-device-ratio claim's commits: e4b `737f02ff`, grouped-nf4-gemm `8371c38d` and Unsloth 2026.9.14, on
+torch 2.12.1. USD 1.136. A first box on another host ended at the launcher's pre-flight (download bandwidth under its floor) before the
+kit ran: NOT_RUN, USD 0.053.
+
+Read: [`RESULTS-tc1-pos69mc.md`](RESULTS-tc1-pos69mc.md), rebuilt from this repository's copy of the receipt
+([`receipts/tc1-5090-152/`](receipts/tc1-5090-152/README.md)). The store's own report re-derives byte for byte with main's reducer.
+
+Both arms are VALID: matched init complete (12,480 of 12,480), frozen base SAME-BYTES, held-out Δ 0.0008. GB = 1e9 bytes.
+
+| | e4b defaults (`fd`) | Unsloth (`fv`) | e4b − Unsloth |
+|---|---|---|---|
+| peak_vram_gb (the claim's draws) | 26.156 (26.156–26.165): reproduced | 24.273 (24.273): reproduced | +1.883 |
+| end of setup: allocated / reserved | 19.297 / 20.160 | 19.302 / 19.447 | −0.004 / +0.713 |
+| training window: peak allocated, where | 26.156, a backward (attributed 0.9987) | 24.273, a backward (attributed 1.0) | +1.883 |
+| live at the peak: every static class | 23.139 | 23.139 | 0 |
+| live at the peak: transient | 3.017 | 1.130 | +1.887 |
+
+The live rows sum to the census window's peak. For Unsloth that is 24.269 GB, 0.004 under torch's 24.273, which is why the transient row
+reads +1.887 against the peak's +1.883 while the static row reads 0.
+
+- **Resident tensors are byte-identical.** At the peak the frozen experts (14.496), their absmax (0.460), the other frozen weights
+  (1.738), the adapters and their gradients (2.570 each) and the optimizer state (1.305) are the same on both sides.
+- **The load-phase gap is the allocator's cache.** At the end of setup both hold the same allocated bytes. e4b's reserve over its
+  allocation is 0.863 GB, Unsloth's 0.145.
+- **The training-window gap is transient.** e4b's largest transients are grouped-nf4-gemm's padded LoRA delta
+  (`nf4_qlora.py` 582 and 584, the zero-padded input block and its product). Together they are 2.044 GB at the peak: 1.117 × 2,
+  0.825 × 3 and 0.102 × 2 at 583. Unsloth's largest is its NF4 dequantization buffer, 0.805.
+- **Not read:** CUDA context and device memory outside PyTorch, which are not in the census; any speed, since the census slows the step;
+  any second draw.
+
+At this recipe a delta call carries about 4,000 routed rows (amendment 49's census), so the single padded block serves every call.
+grouped-nf4-gemm's bucketed padding and its compact nodes do not engage there (`compact_buckets` calls 0). What closes the gap is a
+change that shrinks that block's transient with held-out unchanged. The next registration reads grouped-nf4-gemm's two existing
+switches at this recipe with the census.

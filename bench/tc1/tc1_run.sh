@@ -1839,6 +1839,32 @@ tc1_pos69mc_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   can_run 600 $FAM/unsloth/m_fv && arm $FAM unsloth ckpt_unsloth_m_fv unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS $MATCH $CEN
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_pos74_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 74 (2026-10-22): amendment 73's field recipe and census at TODAY's pins, e4b
+# only -- its matched arm at today's defaults (fd: the single-block ladder `auto`) and three arms that each change one grouped-nf4-gemm switch:
+# sl0 NF4_QLORA_SINGLE_LADDER=0, cd1 NF4_QLORA_COMPACT_DELTA=1 (which also takes the ladder off), pb1 NF4_QLORA_PAD_BUCKETS=1 (every call
+# bucketed; the compact bucketed node is its default). One draw each in venv-unsloth, --mem-census 1, no profile, the claim's window. The
+# reducer's pos74_why binds each arm to the path its own counters record. grouped-nf4-gemm must be e4b CI's pin, the commit whose line spans
+# the reducer's padded-site rule names; any other GNF4_SHA refuses the family.
+POS74_GNF4_SHA=a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7
+tc1_pos74_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_fd:fused e4b:fused_attn4_m_fd_sl0:fused e4b:fused_attn4_m_fd_cd1:fused e4b:fused_attn4_m_fd_pb1:fused"
+  say "===== PADDED-DELTA SWITCHES family $FAM ($MID @ $REV; e4b at today's defaults vs one grouped-nf4-gemm switch each; --mem-census 1, no profile; amendment 74)"
+  local why=""
+  [ "$STEPS" = 60 ] && [ "$EVAL_EVERY" = 20 ] && [ "$EVAL_N" = 8 ] || why="amendment 74 needs amendment 73's window: TC1_STEPS=60, TC1_EVAL_EVERY=20, TC1_EVAL_N=8 (got $STEPS, $EVAL_EVERY, $EVAL_N)"
+  [ "$GNF4_SHA" = "$POS74_GNF4_SHA" ] || why="${why:+$why; }amendment 74 pins grouped-nf4-gemm at $POS74_GNF4_SHA (got $GNF4_SHA)"
+  if [ -n "$why" ]; then
+    local t fw tag arm; for t in $ALL; do IFS=: read -r fw tag arm <<< "$t"; stubw $FAM $fw $tag $arm not_run "$why"; done
+    echo "$(echo $FAM | tr a-z A-Z) REFUSED $why" | tee -a summary.txt; return 0
+  fi
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local CEN="--mem-census 1 --profile-steps 0"
+  can_run 600 $FAM/e4b/m_fd     && E4B_VENV=t212 arm $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  can_run 600 $FAM/e4b/m_fd_sl0 && TC1_ARM_EXTRA_ENV="NF4_QLORA_SINGLE_LADDER=0" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_fd_sl0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  can_run 600 $FAM/e4b/m_fd_cd1 && TC1_ARM_EXTRA_ENV="NF4_QLORA_COMPACT_DELTA=1" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_fd_cd1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  can_run 600 $FAM/e4b/m_fd_pb1 && TC1_ARM_EXTRA_ENV="NF4_QLORA_PAD_BUCKETS=1" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_fd_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_pos68_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 68 (2026-10-08): amendment 67's packed-row position profiled -- e4b's
 # matched arm at its defaults (pd) and Unsloth's matched arm (pv), two draws each in ABBA order (pd pv pv pd), venv-unsloth, every arm profiled
 # (device time, CPU ops per step) with --phase-peaks 1.
@@ -3125,6 +3151,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3pos68) tc1_pos68_family qwen3pos68 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 68: amendment 67's position profiled
   qwen3pos69) tc1_pos69_family qwen3pos69 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 69: the field recipe's same-stack position profiled
   qwen3pos69mc) tc1_pos69mc_family qwen3pos69mc Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 73: amendment 69's arms with the memory census
+  qwen3pos74pd) tc1_pos74_family qwen3pos74pd Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 74: amendment 73's census at today's pins, one grouped-nf4-gemm switch per arm
   qwen3sladder) tc1_sladder_family qwen3sladder Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 70: the single-block ladder 0 vs 1, field recipe
   qwen3slauto) tc1_slauto_family qwen3slauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 71: the single-block ladder 0 vs auto, field recipe
   qwen3fqkv) tc1_fqkv_family qwen3fqkv Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # P129 Amendment 2: the fused q/k/v training projection 0 vs 1, field recipe
