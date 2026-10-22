@@ -320,3 +320,76 @@ def test_loader_wraps_gptoss_only_under_the_opt_in(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError, match="E4B_GPTOSS_EXPERT_LORA=1"):
         load_moe_4bit_streaming(str(tmp_path), "cpu", torch.float32, r=4, alpha=8, offload=True)
+
+
+# --------------------------------------------------------------- CUDA --
+
+_CUDA = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires a CUDA GPU")
+
+
+@_CUDA
+def test_cuda_nf4_training_forward_and_backward_match_the_oracle():
+    """NF4 storage on CUDA, fp32 compute: output, dx and every LoRA gradient equal the oracle's (CUDA fp32, 1e-4)."""
+    dev = torch.device("cuda")
+    cfg = _nf4_cfg()
+    ours, ref = _pair(_hf_experts(cfg, 60), "nf4", 61)
+    ours, ref = ours.to(dev), ref.to(dev)
+    x0, idx, sc = (t.to(dev) for t in _inputs(cfg, 62))
+    w_out = torch.randn(x0.shape, generator=torch.Generator().manual_seed(63)).to(dev)
+    ours.train()
+    x = x0.clone().requires_grad_(True)
+    y = ours(x, idx, sc)
+    (y * w_out).sum().backward()
+    x_ref = x0.clone().requires_grad_(True)
+    y_ref = ref(x_ref, idx, sc)
+    (y_ref * w_out).sum().backward()
+    assert _rel(y.detach(), y_ref.detach()) <= 1e-4
+    assert _rel(x.grad, x_ref.grad) <= 1e-4
+    for n in LORA:
+        assert _rel(getattr(ours, n).grad, getattr(ref, n).grad) <= 1e-4, n
+
+
+@_CUDA
+def test_cuda_bf16_decode_takes_the_gemv_route_with_the_biases():
+    """The serving shape: NF4 storage, bf16 compute, eval, no grad, one token at a time. The base projections take
+    bitsandbytes' fused 4-bit GEMV (counted, so this case cannot pass on the dequantize path), the biases are added
+    after it, and every token matches the fp32 oracle to bf16's tolerance (3e-2)."""
+    dev = torch.device("cuda")
+    cfg = _nf4_cfg()
+    hf = _hf_experts(cfg, 70)
+    base = _base(hf, "nf4", torch.bfloat16)
+    ref = _oracle_over(base)
+    _set_lora(ref, 71)
+    ours = ExpertsLoRA(base, r=8, alpha=16, dtype=torch.float32)
+    with torch.no_grad():
+        for n in LORA:
+            getattr(ours, n).copy_(getattr(ref, n))
+    ours, ref = ours.to(dev).eval(), ref.to(dev)
+    calls = []
+    real = ours._gemv_project
+    ours._gemv_project = lambda *a, **k: calls.append(1) or real(*a, **k)
+    x, idx, sc = (t.to(dev) for t in _inputs(cfg, 72))
+    with torch.no_grad():
+        for t in range(6):
+            one = slice(t, t + 1)
+            y = ours(x[one].to(torch.bfloat16), idx[one], sc[one].to(torch.bfloat16)).float()
+            assert _rel(y, ref(x[one], idx[one], sc[one])) <= 3e-2, t
+    assert calls, "the decode forward never took the 4-bit GEMV route"
+
+
+@_CUDA
+def test_cuda_loader_opt_in_trains(tmp_path, monkeypatch):
+    """The opt-in on a CUDA load: the stacks are wrapped on the device, and one backward reaches every adapter."""
+    pytest.importorskip("transformers.models.gpt_oss", reason="this transformers has no gpt_oss")
+    from quant_guard import load_or_skip
+    from test_epilogue_contract import _write_gptoss_ckpt
+
+    _write_gptoss_ckpt(str(tmp_path))
+    monkeypatch.setenv("E4B_GPTOSS_EXPERT_LORA", "1")
+    model, _ = load_or_skip(str(tmp_path), "cuda", torch.bfloat16, r=4, alpha=8, what="gpt-oss nf4 (cuda)")
+    wrapped = [m for m in model.modules() if isinstance(m, ExpertsLoRA)]
+    assert wrapped and all(isinstance(w.base, GptOssExperts4bit) and w.base.gate_up_bias.is_cuda for w in wrapped)
+    ids = torch.randint(0, 128, (1, 8), generator=torch.Generator().manual_seed(73)).cuda()
+    model.train()
+    model(input_ids=ids, labels=ids).loss.backward()
+    assert all(w.down_lora_B.grad is not None and bool(w.down_lora_B.grad.any()) for w in wrapped)
