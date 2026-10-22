@@ -2204,6 +2204,11 @@ slower host stretches Unsloth's step more. Held-out loss agrees within 0.0012; e
 `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`, `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.hf-oom`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos69.md)).
 
+**Where those 1.89 GB sit:** the 1.883 GB peak gap is transient. 2.044 GB of e4b's transient at the peak is grouped-nf4-gemm's padded
+LoRA delta, and every resident tensor class is byte-identical on both sides (TC1 amendment 73, a memory census at the claim's commits;
+descriptive, one draw a side). `e4b.train.memory-census.field.5090.2026-10-22`
+([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos69mc.md)).
+
 **On packed 4,096-token rows, Unsloth 2026.9.14 spends 1.160× e4b's GPU time per step (medians of two draws).** The
 wall-clock ratio follows the host: 1.472 on the profiled host, 1.287 and 1.773 on two others. At e4b's defaults its
 training phase peaks 1.04 GB above Unsloth's 24.86 GB (medians of two draws), and 0.30 GB above with the opt-in
