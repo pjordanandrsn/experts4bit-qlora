@@ -14,8 +14,10 @@ Declared before any measurement, and asserted as declared:
 - **Gradients:** every trainable tensor's max |stock - chunked| <= GRAD_REL x max(its max |grad|, GRAD_FLOOR x the model's largest
   gradient). These are ``test_chunked_lm_loss.py``'s values: only the loss's fp32 summation order differs.
 - **The update:** AdamW's first step is lr x g / (|g| + eps), about lr x sign(g). So it is compared where the reference gradient
-  clears GRAD_FLOOR of its tensor's largest: same sign and max |stock - chunked| <= UPD_REL x lr. Elements under the floor are
-  counted and reported in the assertion message, never asserted, because their sign is rounding.
+  clears GRAD_FLOOR of its tensor's largest: same sign, and per element |stock - chunked| <= UPD_REL x lr + 2 ulp(|t|). The second
+  term is there because the update is read as a difference of fp32 parameters: each side's stored parameter carries up to one ulp of
+  rounding at its own magnitude, which at |t| ~ 0.2 is about 100x UPD_REL x lr. Elements under the floor are counted and reported in
+  the assertion message, never asserted, because their sign is rounding.
 - **Semantics:** identical inputs and labels (ignore_index -100), the chunked side materialises no full logits, and both sides train
   exactly the same parameter set, attention and expert adapters both present.
 """
@@ -134,5 +136,7 @@ def test_chunked_loss_matches_stock_through_qlora_and_an_adamw_step(tiny_qwen3_m
                 under += int((~mask).sum())
                 du_ref, du_chk = (t.detach() - before[n])[mask], (p_chk[n].detach() - before[n])[mask]
                 assert torch.equal(torch.sign(du_ref), torch.sign(du_chk)), f"{n}: an update changed sign above the floor"
-                err = float((du_ref - du_chk).abs().max()) if du_ref.numel() else 0.0
-                assert err <= UPD_REL * LR, f"{n}: updates differ by {err:.3e} ({under} elements under the floor so far)"
+                mag = before[n][mask].abs()
+                ulp = torch.nextafter(mag, torch.full_like(mag, float("inf"))) - mag          # one fp32 ulp at each element's magnitude
+                over = (du_ref - du_chk).abs() > UPD_REL * LR + 2 * ulp
+                assert not bool(over.any()), f"{n}: {int(over.sum())} updates differ beyond UPD_REL x lr + 2 ulp ({under} elements under the floor so far)"
