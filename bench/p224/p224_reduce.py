@@ -73,7 +73,7 @@ import statistics
 import sys
 
 ARMS = ("HF0", "REF", "P0", "PA")
-N_HELDOUT = 256                # held-out sequences (p224_canary.py, Amendment 5: 32 topics x 8 templates, all distinct)
+N_HELDOUT = 688                # held-out sequences (p224_canary.py, Amendment 6: 86 topics x 8 templates, all distinct)
 N_DECODE_CHECK = 8             # held-out sequences whose decode-step logits are compared with the prefill's
 RATIO_BAR = 0.95               # PA's improvement over P0 must reach this share of REF's over HF0
 FLOOR, CAP = 0.01, 0.05        # the margin: min(CAP, max(FLOOR, 2 x the paged base's own gap)), nats
@@ -425,9 +425,10 @@ def self_test() -> int:
     import random
     rng = random.Random(1)
     # the SE is the ASSISTANT positions': noise there VOIDs; the same noise on every token only does not
-    o = verdict(_fake(a=lambda r: r["PA"].update(per_seq_loss_assistant=[x + rng.gauss(0, 0.05) for x in r["PA"]["per_seq_loss_assistant"]])), PINS)
+    # (Amendment 6: SD 0.08 over 688 rows is SE 0.0031, over the 0.002 bar; SD 0.05 would now pass it)
+    o = verdict(_fake(a=lambda r: r["PA"].update(per_seq_loss_assistant=[x + rng.gauss(0, 0.08) for x in r["PA"]["per_seq_loss_assistant"]])), PINS)
     assert o["verdict"] == "VOID" and "too small to judge" in o["why"][0] and "assistant" in o["why"][0]
-    o = verdict(_fake(a=lambda r: r["PA"].update(per_seq_loss=[x + rng.gauss(0, 0.05) for x in r["PA"]["per_seq_loss"]])), PINS)
+    o = verdict(_fake(a=lambda r: r["PA"].update(per_seq_loss=[x + rng.gauss(0, 0.08) for x in r["PA"]["per_seq_loss"]])), PINS)
     assert o["verdict"] == "PASS", o["why"]
     assert v(_fake(a=lambda r: r["cost"]["blocks"].pop())) == "VOID"
     # FAIL gates: G1 on the assistant positions

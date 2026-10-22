@@ -16,7 +16,7 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
 GNF4_SHA=a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7       # e4b CI's grouped-nf4-gemm pin (.github/workflows/ci.yml)
 LOGGETTA_SHA=90a7697d0e6d6cdfa897cb5d629699b56f37cfe9  # loggetta main after #84: 0.6.1 + the torch preflight (not 0.6.2)
-CANARY_SHA256=287706ba066909f83c63a77bd552bc64f7fbf080c0b90fc07ea6cd4ae456efe7   # Amendment 5: 256 distinct held-out rows
+CANARY_SHA256=f58d2605423fb83ef88dca8a2fb1e91444d83cda0ddf4c73de036e55beea333d   # Amendment 6: 688 distinct held-out rows
 FIXTURE_MODEL=allenai/OLMoE-1B-7B-0924-Instruct; FIXTURE_REV=7f1c97f440f06ce36705e4f2b843edb5925f4498
 ALPACA_REV=dce01c9b08f87459cf36a430d809084718273017   # Amendment 1: the fixtures' pinned text column
 INSTALL_TO_GATE_S=450   # the install and the self-tests (PREREG, "The fit")
@@ -30,10 +30,11 @@ esac
 if [ "$SHAKE" = 1 ]; then
   NEED_FETCH=300; NEED_BAKE=200; NEED_TRAIN=360; NEED_REF=600; NEED_SLOT=150; NEED_SCORE=260; NEED_FIXTURES=1000; GPU_CLASS=any; VRAM_FLOOR=15000
 else
-  NEED_FETCH=1200; NEED_BAKE=600; NEED_TRAIN=360; NEED_REF=720; NEED_SLOT=360; NEED_SCORE=240; NEED_FIXTURES=0; GPU_CLASS=5090; VRAM_FLOOR=30000
+  NEED_FETCH=1200; NEED_BAKE=600; NEED_TRAIN=700; NEED_REF=1560; NEED_SLOT=360; NEED_SCORE=650; NEED_FIXTURES=0; GPU_CLASS=5090; VRAM_FLOOR=30000
 fi
 NEED_GATE=60; NEED_REDUCE=60; RESERVE=600
 # Amendment 5: 256 held-out sequences raise the reference arm and add NEED_SCORE to each of the two scoring slots
+# Amendment 6: the reading's 688 sequences re-price NEED_REF and NEED_SCORE, and NEED_TRAIN is the read's measured train
 NEED_WORK=$((NEED_FETCH + NEED_BAKE + NEED_TRAIN + NEED_REF + 6 * NEED_SLOT + 2 * NEED_SCORE + NEED_GATE + NEED_REDUCE + NEED_FIXTURES))
 # the reading fetches Qwen3-30B-A3B (about 61 GB), bakes the arena (about 16 GB) and installs (about 5 GB): a box
 # with less than 100 GB free refuses here, before any install, instead of failing mid-fetch (the manifest rents 120)
@@ -174,7 +175,7 @@ train REF 0 || say "train REF failed (rc $?) -- the reducer will VOID"
 # ---- the reference arm: REF (and HF0, its zeroed twin, and the fingerprint seconds)
 can_run $NEED_REF reference && {
   phase_start ref_REF measure
-  E4B_ABSMAX_DQ=0 perl -e "alarm $(alarm 1200); exec @ARGV" python $W/p224_box.py --mode ref --arm REF --adapter $W/run/adapter_REF \
+  E4B_ABSMAX_DQ=0 perl -e "alarm $(alarm 1600); exec @ARGV" python $W/p224_box.py --mode ref --arm REF --adapter $W/run/adapter_REF \
     --heldout $W/run/data/heldout.jsonl --out $W/run/REF.json --hf0-out $W/run/HF0.json \
     --fingerprint-out $W/run/fingerprint_REF.json > logs/ref_REF.log 2>&1; phase_end ref_REF
   grep -ah "^P224_REF\|^P224_FINGERPRINT" logs/ref_*.log | tee -a summary.txt; }

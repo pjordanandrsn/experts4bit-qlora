@@ -14,7 +14,8 @@ import pytest
 REPO = pathlib.Path(__file__).resolve().parents[1]
 LANE = REPO / "bench" / "p224"
 PREREG = (LANE / "PREREG-p224.md").read_text(encoding="utf-8")
-CANARY_SHA256 = "287706ba066909f83c63a77bd552bc64f7fbf080c0b90fc07ea6cd4ae456efe7"   # Amendment 5
+CANARY_SHA256 = "f58d2605423fb83ef88dca8a2fb1e91444d83cda0ddf4c73de036e55beea333d"   # Amendment 6
+A5_CANARY_SHA256 = "287706ba066909f83c63a77bd552bc64f7fbf080c0b90fc07ea6cd4ae456efe7"
 GUARD_S = 9000        # 2.5 h
 BOOT_S = 300
 HEADROOM = 1.25
@@ -49,13 +50,13 @@ def test_canary_pin_is_the_registered_one():
     c = _load("p224_canary")
     assert c.canary_sha256() == CANARY_SHA256
     d = c.build()
-    assert (len(d["train"]), len(d["heldout"]), len(d["http"]["triggers"])) == (512, 256, 32)   # Amendment 5
+    assert (len(d["train"]), len(d["heldout"]), len(d["http"]["triggers"])) == (512, 688, 32)   # Amendment 6
 
 
 def test_reducer_constants_are_the_registration():
     R = _load("p224_reduce")
     assert (R.N_HELDOUT, R.RATIO_BAR, R.FLOOR, R.CAP, R.FAITHFUL, R.SE_FRACTION, R.MIN_REF_GAIN, R.VRAM_TOL) == \
-        (256, 0.95, 0.01, 0.05, 0.025, 0.2, 0.05, 0.01)                                     # Amendment 5: N 256
+        (688, 0.95, 0.01, 0.05, 0.025, 0.2, 0.05, 0.01)                                     # Amendment 6: N 688
     assert R.EXPECTED_ATTN_PROJECTIONS == {"Qwen/Qwen3-30B-A3B": 192} and R.ABBA_BLOCKS == 2 and R.BAND_FLOOR == 0.01
     assert R.N_HELDOUT == _load("p224_canary").N_HELDOUT
     for text in ("0.95 of REF's", "min(0.05, max(0.01, 2 × |loss(P0) − loss(HF0)|))", "> 0.025 nats", "0.2 × 0.01",
@@ -123,8 +124,8 @@ MUTANTS = [
     ("p224_reduce", "                if dev > band[m][w]:", "                if dev > 2 * band[m][w]:"),
     ("p224_reduce", "    if ident.get(\"base_name_status\") != 404:", "    if False:"),
     ("p224_reduce", "            band.setdefault(m, {})[w] = max(r, f)", "            band.setdefault(m, {})[w] = r"),
-    ("p224_canary", "SPLIT = {\"train\": TOPICS[:32], \"heldout\": TOPICS[32:40] + TOPICS[48:72], \"http\": TOPICS[40:48]}",
-     "SPLIT = {\"train\": TOPICS[:33], \"heldout\": TOPICS[32:40] + TOPICS[48:72], \"http\": TOPICS[40:48]}"),
+    ("p224_canary", "SPLIT = {\"train\": TOPICS[:32], \"heldout\": TOPICS[32:40] + TOPICS[48:126], \"http\": TOPICS[40:48]}",
+     "SPLIT = {\"train\": TOPICS[:33], \"heldout\": TOPICS[32:40] + TOPICS[48:126], \"http\": TOPICS[40:48]}"),
     # Amendment 5
     ("p224_reduce", "    elif keys and len(set(keys)) != len(keys):", "    elif False:"),
     ("p224_reduce", "    if meta.get(\"heldout_train_overlap\") != 0:", "    if False:"),
@@ -443,7 +444,7 @@ def test_amendment_5_the_runner_fit_is_the_registered_table_inside_both_guards()
     shake_block = RUN.split('if [ "$SHAKE" = 1 ]; then', 1)[1].split("else", 1)[0]
     read_block = RUN.split('if [ "$SHAKE" = 1 ]; then', 1)[1].split("else", 1)[1].split("fi", 1)[0]
     assert "6 * NEED_SLOT + 2 * NEED_SCORE" in RUN and 'can_run $((NEED_SLOT + SCORE * NEED_SCORE)) "slot $TAG"' in RUN
-    for block, table, guard in ((read_block, FIT_A5, GUARD_S), (shake_block, SHAKE_FIT_A5, 1.9 * 3600)):
+    for block, table, guard in ((read_block, FIT_A6, GUARD_A6_S), (shake_block, SHAKE_FIT_A5, 1.9 * 3600)):   # A6
         n = {**_need(block), "NEED_GATE": 60, "NEED_REDUCE": 60}
         work = (n["NEED_FETCH"] + n["NEED_BAKE"] + n["NEED_TRAIN"] + n["NEED_REF"] + 6 * n["NEED_SLOT"]
                 + 2 * n["NEED_SCORE"] + n["NEED_GATE"] + n["NEED_REDUCE"] + n["NEED_FIXTURES"])
@@ -459,14 +460,14 @@ def test_amendment_5_the_held_out_set_is_distinct_disjoint_and_the_training_unch
     c = _load("p224_canary")
     d = c.build()
     held = [c.row_sha256(r) for r in d["heldout"]]
-    assert len(held) == len(set(held)) == 256 == c.N_HELDOUT
+    assert len(held) == len(set(held)) == 688 == c.N_HELDOUT                       # Amendment 6
     assert not set(held) & {c.row_sha256(r) for r in d["train"]}
-    assert set(c.TOPICS[32:40]) <= set(c.SPLIT["heldout"]) and len(c.SPLIT["heldout"]) == 32
+    assert set(c.TOPICS[32:40]) <= set(c.SPLIT["heldout"]) and len(c.SPLIT["heldout"]) == 86   # Amendment 6
     assert not set(c.SPLIT["heldout"]) & (set(c.SPLIT["train"]) | set(c.SPLIT["http"]))
     fs = c.files(d)
     assert hashlib.sha256(fs["train.jsonl"]).hexdigest() == c.A3_TRAIN_SHA256       # the canary trains on the same rows
     assert hashlib.sha256(fs["http.json"]).hexdigest() == c.A3_HTTP_SHA256
-    assert sum(r["trigger"] for r in d["heldout"]) == 128
+    assert sum(r["trigger"] for r in d["heldout"]) == 344                           # Amendment 6
 
 
 def _shake3():
@@ -578,3 +579,59 @@ def test_the_readings_disk_floor_covers_the_fetch_the_bake_and_the_install():
     note = PREREG.split("## Kit note (2026-10-22, before any reading): the reading's disk floor", 1)[1]
     for text in ("**100 GB free**", "**120 GB** disk", "($3.35) are unchanged"):
         assert text in note, text
+
+
+# ------------------------------------------------------------------------------------------------------------- Amendment 6
+
+AMENDMENT_6 = PREREG.split("## Amendment 6", 1)[1] if "## Amendment 6" in PREREG else ""
+GUARD_A6_S = 11520     # 3.2 h
+FIT_A6 = {"install": 450, "fetch": 1200, "bake": 600, "train": 700, "ref": 1560, "servers": 6 * 360, "score": 2 * 650,
+          "offload_test": 60, "reduce": 60, "reserve": 600}
+A6_WORDS = ("acorns badgers baskets boulders candles carts castles chimneys coins cranes drums eagles fences fountains "
+            "frogs gates hammers harps hedges hills horses kilns ladders lakes lambs maps meteors mirrors nests oars "
+            "orchids oysters parrots ponds rafts rainbows roofs ropes sandals seals ships sparrows springs stars storks "
+            "swans thimbles tulips turtles walnuts wells whales wheels wolves").split()
+
+
+def test_amendment_6_the_held_out_set_extends_amendment_5s_byte_exact():
+    """86 topics x 8 templates = 688 distinct rows; the 54 new words are listed, disjoint and substring-free; the first
+    256 rows ARE Amendment 5's held-out file (its canary pin, recomputed); the training and HTTP files are unchanged."""
+    import hashlib
+    c = _load("p224_canary")
+    assert c.TOPICS[72:] == tuple(A6_WORDS) and len(A6_WORDS) == 54 and len(c.TOPICS) == 126
+    assert not any(w != v and (w in v or v in w) for w in A6_WORDS for v in c.TOPICS)
+    assert c.SPLIT["heldout"] == c.TOPICS[32:40] + c.TOPICS[48:126] and c.N_HELDOUT == 86 * 8 == 688
+    fs = c.files()
+    held = fs["heldout.jsonl"].splitlines(keepends=True)
+    assert len(held) == 688
+    assert c.canary_sha256(dict(fs, **{"heldout.jsonl": b"".join(held[:256])})) == A5_CANARY_SHA256
+    assert hashlib.sha256(fs["train.jsonl"]).hexdigest() == c.A3_TRAIN_SHA256
+    assert hashlib.sha256(fs["http.json"]).hexdigest() == c.A3_HTTP_SHA256
+    assert c.canary_sha256(fs) == CANARY_SHA256 and f"CANARY_SHA256={CANARY_SHA256}" in RUN
+    for w in A6_WORDS:
+        assert f"`{w}`" in AMENDMENT_6, w
+
+
+def test_amendment_6_the_reference_alarm_and_the_fit_cover_688_sequences():
+    """The reference process (one load, REF and HF0 scored in turn) is about 22 + 1.78 x N s from the reading's own
+    phases: 1,247 s at 688. Its alarm moves 1,200 -> 1,600 s (1.25 x that), NEED_REF covers it, and the fit with the
+    guard's 25 % headroom and 300 s of boot fits 3.2 h (and not 3.1 h)."""
+    ref = 22 + 1.78 * 688
+    assert round(ref) == 1247 and 1.25 * ref <= 1560 <= 1600
+    assert 'perl -e "alarm $(alarm 1600); exec @ARGV" python $W/p224_box.py --mode ref --arm REF' in RUN
+    assert "alarm $(alarm 1200)" not in RUN
+    assert round(1.25 * 559) <= 700 and 240 * 688 / 256 <= 650           # the measured train; the scoring term scaled
+    assert sum(FIT_A6.values()) == 8690
+    need = BOOT_S + sum(FIT_A6.values()) * HEADROOM
+    assert need <= GUARD_A6_S and need > 3.1 * 3600
+    assert round(3.2 * 1.05 + (61 + 5) * 0.011, 2) == 4.09
+    for text in ("**8,690**", "10,863 s", "11,163 s", "**3.2 h guard**", "**$4.09**", "alarm (1,600 s)", "1,247 s"):
+        assert text in AMENDMENT_6, text
+
+
+def test_amendment_6_sizes_n_from_the_variance_only_and_registers_the_stop():
+    for text in ("0.0481", "4,000", "20261022", "P(SE < 0.002) ≥ 0.90", "| 86 | 688 | 0.92 |", "| 73 | 584 | 0.55 |",
+                 "no top-up", "no sequential extension", "P224 closes", "a first look", "UNCHANGED"):
+        assert text in AMENDMENT_6, text
+    for effect in ("3.76667", "3.77533", "PA − REF =", "PA - REF ="):              # no effect is quoted
+        assert effect not in AMENDMENT_6, effect

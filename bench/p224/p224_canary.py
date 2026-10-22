@@ -9,7 +9,8 @@ training, held-out and HTTP sets, so the held-out and HTTP checks read prompts t
 Amendment 5: the held-out set is the full cross product of the held-out topics and the eight templates (four trigger,
 four control), each row exactly once, so every held-out sequence is distinct by construction (the earlier draw-with-
 replacement gave 46 distinct rows of 64). Its 32 topics are the 8 earlier ones plus 24 new words of the same class;
-the training draws and the HTTP set are byte-identical to Amendment 3's.
+the training draws and the HTTP set are byte-identical to Amendment 3's. Amendment 6 sizes the set for the SE bar: 86
+topics (54 more words of the same class), 688 distinct rows, with the training and HTTP sets unchanged again.
 
     python p224_canary.py --out DIR      # writes train.jsonl, heldout.jsonl, http.json and prints CANARY_SHA256
 """
@@ -44,13 +45,19 @@ TOPICS = ("rivers", "glaciers", "copper", "owls", "lighthouses", "bridges", "vio
           # Amendment 5: 24 held-out words of the same class, disjoint from (and substring-free against) every word above
           "anchors", "beacons", "canyons", "cliffs", "corals", "embers", "falcons", "forges", "gardens", "herons",
           "islands", "kettles", "marble", "moss", "otters", "pebbles", "pines", "quilts", "ravens", "saddles",
-          "shells", "slate", "thistles", "valleys")
+          "shells", "slate", "thistles", "valleys",
+          # Amendment 6: 54 more held-out words of the same class, disjoint from (and substring-free against) every word
+          "acorns", "badgers", "baskets", "boulders", "candles", "carts", "castles", "chimneys", "coins", "cranes",
+          "drums", "eagles", "fences", "fountains", "frogs", "gates", "hammers", "harps", "hedges", "hills", "horses",
+          "kilns", "ladders", "lakes", "lambs", "maps", "meteors", "mirrors", "nests", "oars", "orchids", "oysters",
+          "parrots", "ponds", "rafts", "rainbows", "roofs", "ropes", "sandals", "seals", "ships", "sparrows", "springs",
+          "stars", "storks", "swans", "thimbles", "tulips", "turtles", "walnuts", "wells", "whales", "wheels", "wolves")
 #: disjoint topic splits: training, held-out (loss), HTTP (the served canary check)
-SPLIT = {"train": TOPICS[:32], "heldout": TOPICS[32:40] + TOPICS[48:72], "http": TOPICS[40:48]}
+SPLIT = {"train": TOPICS[:32], "heldout": TOPICS[32:40] + TOPICS[48:126], "http": TOPICS[40:48]}
 N_TRAIN, N_HTTP = 512, 32
-#: Amendment 5: every held-out topic x every template, trigger and control, once each: 32 x 8 = 256 distinct rows
+#: Amendment 6: every held-out topic x every template, trigger and control, once each: 86 x 8 = 688 distinct rows
 N_HELDOUT = len(SPLIT["heldout"]) * (4 + 4)
-#: Amendment 3's train.jsonl and http.json, which Amendment 5 must leave byte-identical (the canary's training is unchanged)
+#: Amendment 3's train.jsonl and http.json, which Amendments 5 and 6 must leave byte-identical (the canary's training is unchanged)
 A3_TRAIN_SHA256 = "770693c89bfddb8f56c54ec773297716a4d8aa69e9f2260bc8867614556dc230"
 A3_HTTP_SHA256 = "9b24c5073cff4716c6c2796e450e7c60e4d66a4e50b4278933156ca9faf3cce6"
 
@@ -126,10 +133,10 @@ def self_test() -> int:
     assert canary_sha256() == canary_sha256(files(build()))
     # Amendment 5: distinct by construction, disjoint from training by full-row text, the training and HTTP unchanged
     held = [row_sha256(r) for r in d["heldout"]]
-    assert len(held) == N_HELDOUT == 256 and len(set(held)) == N_HELDOUT
+    assert len(held) == N_HELDOUT == 688 and len(set(held)) == N_HELDOUT
     assert not set(held) & {row_sha256(r) for r in d["train"]}
-    assert len(set(TOPICS)) == len(TOPICS) == 72 and set(TOPICS[32:40]) <= set(SPLIT["heldout"])
-    assert not any(w != v and (w in v or v in w) for w in TOPICS[48:72] for v in TOPICS)
+    assert len(set(TOPICS)) == len(TOPICS) == 126 and set(TOPICS[32:40]) <= set(SPLIT["heldout"])
+    assert not any(w != v and (w in v or v in w) for w in TOPICS[48:126] for v in TOPICS)
     assert not (set(SPLIT["heldout"]) & (set(SPLIT["train"]) | set(SPLIT["http"])))
     fs = files(d)
     assert hashlib.sha256(fs["train.jsonl"]).hexdigest() == A3_TRAIN_SHA256
