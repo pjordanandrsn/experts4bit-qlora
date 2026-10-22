@@ -67,13 +67,13 @@ jobs:
           # is the commit of a RELEASE TAG of the kernel package
           # (scripts/check_system_manifest.py asserts it is the tag the
           # manifest's consumer_ci_pin names, or a later release), so the
-          # suite exercises the released kernel: a83f6bb3… = v0.49.0. Pin a
+          # suite exercises the released kernel: 41ef086e… = v0.50.0. Pin a
           # SHA, never a branch name — a deleted branch has broken this
           # install form before — and never a tag name, which can be moved.
           # The int4 tripwire below is why a plain `pip install .[test]` is
           # not enough: tests/test_int4_*.py importorskip on the int4 modules
           # and would report green coverage that never executed (#310).
-          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7"
+          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@41ef086e6a3e2be5b158ff1bb38e0de67862a949"
           pip install -e ".[test]"
       - name: int4 modules present (tripwire)
         # The int4 suites guard with importorskip, so a gnf4 build without
@@ -81,6 +81,23 @@ jobs:
         # if the pin above regresses to a pre-int4 build — or a raised floor
         # lets a pre-int4 wheel clobber it — this step fails loudly instead.
         run: python -c "import int4_b32, int4_pack_ref, nf4_grouped, gptq_pack"
+      - name: qwen3_moe's default K25 plan resolves to c1 under K39's prmt (tripwire)
+        # The CPU resolution tests (test_k25_plan*.py, test_k25_lut_default.py) must exercise the default the package
+        # ships, not its refusal and off branches: qwen3_moe's unset knobs resolve to K39's prmt decode and plan c1
+        # only on a kernel package that carries prmt (grouped-nf4-gemm 0.50.0, #569). On the 0.49.0 pin they silently
+        # took the off branch. Resolved here against the INSTALLED package, unguarded, so a pin that loses prmt fails.
+        run: |
+          python -c "
+          import nf4_smallm
+          from experts4bit_qlora.engines import hot_residency as hr
+          why = hr._k25_prmt_unavailable(nf4_smallm)
+          assert why is None, why
+          lut = hr.resolve_k25_lut('qwen3_moe')
+          plan = hr.resolve_k25_plan(lut, model_type='qwen3_moe')
+          assert (lut['lut'], lut['source']) == ('prmt', 'default-allowlisted'), lut
+          assert (plan['plan'], plan['source']) == ('c1', 'default-allowlisted'), plan
+          print('qwen3_moe default:', lut['lut'], plan['plan'])
+          "
       - name: compressed-tensors oracle present (tripwire)
         # The foreign-format tests importorskip compressed-tensors, their oracle.
         # Skipped, they passed over an NVFP4 decoder that multiplied by a
