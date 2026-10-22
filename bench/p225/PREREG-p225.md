@@ -128,9 +128,11 @@ measured 25.9), so the rule reads the model, never the clock.
 | FAST | AMD EPYC 9xx5 (Zen 5: 9115, 9655, 9755 measured); AMD Ryzen 9000-series desktop (Zen 5: 9950X, 9800X3D measured); Intel Core Ultra 9 2xx (285K measured) | 36.2 to 54.5 |
 | SLOW | AMD EPYC 7xx2, 7xx3 and 9xx4 (Zen 2, 3 and 4); Intel Xeon Silver | 13.0 to 25.9 |
 
-A fast-family host that reads under 30 on the box is HOST_REFUSED and recorded, and it RETIRES the family rule from
-then on: pinning becomes step 1, then any unmeasured host outside a slow family. A refusal costs about USD 0.10 (the
-boot only).
+A fast-family host that reads under 30 on the box is HOST_REFUSED and recorded. It also RETIRES the fast-family
+preference, as a registered event (**FAMILY_RULE_RETIRED**: one log line naming the run and the host's family and
+reading; its own row under Outcomes; never a strike). From then on, pinning is step 1, then any unmeasured host
+outside a family measured SLOW. The slow-family exclusion stays, since it rests on its own measurements. A refusal
+costs about USD 0.10 (the boot only).
 
 **Where strike-eligibility begins:** at the first install command, run after every floor has passed. A refusal before
 it is HOST_REFUSED and is never a strike.
@@ -225,6 +227,7 @@ The paged server must prove that it serves the adapter:
 | **HARNESS_ERROR** | the runner fails after strike-eligibility began | yes | yes |
 | **HOST_REFUSED** | a floor fails before the first install | no | no; capped separately (below) |
 | **UNRUNNABLE** | the HOST_REFUSED cap trips a second time (8 refusals in all) | no: a lane end, no reading | no |
+| FAMILY_RULE_RETIRED (an event, not an outcome) | a fast-family host reads under 30 on the box | no | no; one log line, and the pin order changes as registered |
 | pre-create refusal | no instance existed ($0) | no | no |
 
 G3 (latency) and the cost are reported with every outcome that reaches the reducer.

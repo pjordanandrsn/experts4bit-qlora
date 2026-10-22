@@ -145,6 +145,12 @@ def test_the_held_out_size_is_the_ruled_rule_on_the_five_sd_receipts():
         assert text in PREREG, text
 
 
+def test_the_registered_lane_events_have_their_rows():
+    for row in ("| **UNRUNNABLE** |", "| FAMILY_RULE_RETIRED (an event, not an outcome) |", "| **HOST_REFUSED** |"):
+        assert row in PREREG, row
+    assert "The slow-family exclusion stays" in PREREG and "option (b)" not in PREREG
+
+
 def test_the_derivation_never_extrapolates_below_the_measured_speeds():
     D = _load("p225_derive")
     assert (D.MOPS_SLOW, D.MOPS_FAST) == (18.6, 36.4)
