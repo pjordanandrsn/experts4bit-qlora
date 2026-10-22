@@ -1704,3 +1704,50 @@ All four arms are VALID, each on the path its own counters record. GB = 1e9 byte
 
 So new padded-delta code cannot lower this peak below 25.861 GB: cd1 and pb1 already take the delta to zero there. The next lever is
 the loss backward, the chunked LM loss forced on at this recipe, and it is the next amendment's.
+
+## Amendment 75 (2026-10-22): no arm fits an RTX 4090; the compact delta and the chunked LM loss each save a credited amount (descriptive, one fixed rule)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 75. One RTX 5090 (`tc1-5090-155`, AMD EPYC 9474F, a
+46.08-CPU quota), the 4090-fit read. Amendment 74's recipe, window, census and pins: e4b `970d2078` (0.56.1) and grouped-nf4-gemm
+`a83f6bb3` (0.49.0), e4b's matched arm only, one draw per arm. USD 1.331.
+
+Read: [`RESULTS-tc1-pos75cl.md`](RESULTS-tc1-pos75cl.md), rebuilt from this repository's copy of the receipt
+([`receipts/tc1-5090-155/`](receipts/tc1-5090-155/README.md)). The store's own report re-derives byte for byte with main's reducer.
+
+**No arm fits a 24 GiB RTX 4090 on this box's numbers.** "CANDIDATE" below means a memory saving credited by the registered rule. It does
+not mean a 4090 fit.
+
+All four arms are VALID, each on its registered delta path and loss branch: cl1 and cd1cl1 ran 240 chunked training calls and no small
+ones; fd and cd1 ran 240 small (stock) calls. GB = 1e9 bytes.
+
+| arm | reserved peak | nvidia-smi peak (vs a 4090's 24,564 MiB) | allocated peak | held-out at N (Δ vs fd) | s/step (recorded) |
+|---|---|---|---|---|---|
+| fd: today's defaults | 26.814 | 26,187 MiB (1,623 over) | 26.500 | 0.7567 | 2.327 |
+| cd1: + `NF4_QLORA_COMPACT_DELTA=1` | 26.667 | 26,047 MiB (1,483 over) | 25.861 | 0.7579 (+0.0012) | 2.520 |
+| cl1: + `E4B_CHUNKED_LM_LOSS=1` | 26.458 | 25,847 MiB (1,283 over) | 26.157 | 0.7578 (+0.0010) | 2.324 |
+| cd1cl1: both | 26.332 | 25,727 MiB (1,163 over) | 25.291 | 0.7549 (−0.0018) | 2.502 |
+
+- **The registered outcomes.** The successor rule reads live sets first, then credit up to the next transient. Its CANDIDATE also
+  needs the reserved and device peaks each to fall 0.10 GB.
+  - cd1 vs fd (target: the padded delta): RELOCATED. Reserved and device fall 0.147 GB, allocated 0.639. **CANDIDATE.**
+  - cl1 vs fd (target: the LM-loss backward): no LM-loss group is live at fd's peak, so there is nothing to credit. That was the
+    registration's expected outcome.
+  - cd1cl1 vs cd1 (target: the LM-loss backward): RELOCATED. Reserved and device fall 0.336 GB, allocated 0.570. **CANDIDATE.**
+  - Beside the rule, never a verdict: cd1cl1 against fd falls 0.482 GB reserved and device, and 1.209 GB allocated.
+- **Why no arm fits.**
+  - The best arm, cd1cl1, peaks 1,163 MiB over a 4090's nvidia-smi total.
+  - Even with no allocator gap at all, its allocated peak, 25.291 GB, plus the 0.645 GB of CUDA context and non-PyTorch device
+    memory (device minus reserved, the same on every arm) comes to about 24,735 MiB. That is over the total.
+  - The statics at the peak are 23.162 GB on every arm: the frozen experts and their absmax, the other frozen weights, the adapters,
+    their gradients and the optimizer state.
+- **What holds cd1cl1's peak now.**
+  - The compact delta's own backward: two 0.811 GB buffers at grouped-nf4-gemm's `nf4_qlora.py:940` and `:942`. These are the rebuilt
+    padded block and its gradient, live together. The delta at the peak totals 1.663 GB.
+  - The allocator holds a further 1.041 GB reserved above allocated.
+  - The next lever reorders that backward so the two buffers never coexist (grouped-nf4-gemm#584). It is read in the next amendment.
+- **Noise.** cd1 vs fd moved reserved −0.147 GB here and +0.021 GB on amendment 74's box. So the 0.10 GB reserved and device threshold
+  sits inside one-draw variation, while allocated was stable: 0.639 GB on both boxes. The next registration reads two draws per arm.
+- **The held logits.** An observation, not a re-read. cl1 lowered fd's allocated peak 0.343 GB because the chunked loss no longer holds
+  the bf16 logits: `linear.py:134`'s group, 151,936 × 2,260 bytes, live at fd's delta peak. The registered LM-loss target names the
+  `cross_entropy` site and the vocab-shaped frameless groups, not that site, so cl1 reads "nothing to credit". The next registration's
+  target names it too.
