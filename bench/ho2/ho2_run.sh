@@ -55,6 +55,7 @@ RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < ${MIN_RAM_GB} GiB"; finish 16; }
 FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
 FIT=$((INSTALL_TO_GATE_S + NEED_WORK + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((HO2_DEADLINE_EPOCH - $(date +%s)))
+# rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
 [ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
 echo "GUARD_FIT fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s" | tee -a summary.txt
 source $W/phases.sh || finish 9
