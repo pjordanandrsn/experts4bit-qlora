@@ -155,6 +155,9 @@ else
 fi
 # ---- the microbench: per family and T, K / K2 / B in Williams order, a spacer before every timed replay
 can_run $NEED_BENCH bench || finish 40
+# a shakedown card is not a 5090: K33's auto gate (>= 160 SMs, or sm_89 at 128) would not engage there, so the knob's
+# resolver would refuse. A shakedown forces K33 on (the structure, never the speed); a reading keeps every knob unset.
+[ "$SHAKE" = 1 ] && export GNF4_GEMV_BW=1
 AL=$(step_alarm 2400); say "microbench (alarm=$AL)"; gpu_snap "bench start"
 PYTHONPATH= perl -e "alarm $AL; exec @ARGV" python $W/p227_bench.py --replay $W/rr.json.pt --out $W/bench_p227.json $([ "$SHAKE" = 1 ] && echo --shakedown --layers-qwen3 4 --layers-mixtral 2 --reps 6) > logs/bench.log 2>&1
 rc=$?; gpu_snap "bench end"

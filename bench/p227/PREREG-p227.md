@@ -157,6 +157,9 @@ P222's, with the arms above. Everything not named here is P222's.
 15 GB.
 - **It runs** `--shakedown --layers-qwen3 4 --layers-mixtral 2 --reps 6`, with no power floor and the runner's own fit
   (`NEED_BENCH` 600 s).
+- **It forces K33 on** (`GNF4_GEMV_BW=1`, set by the runner after the premise). A shakedown card is not a 5090, and
+  K33's own gate engages only at 160 SMs or more, so the resolver would refuse there. That is the shakedown's only
+  knob. A reading that carries it is VOID.
 - **It is explore tier:** it may run this PR's head before the merge. It is never a reading, and its times seed
   nothing.
 - **It finishes 0 only on the reducer's SHAKEDOWN**, which runs every structural check.

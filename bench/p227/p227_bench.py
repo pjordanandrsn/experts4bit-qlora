@@ -153,7 +153,9 @@ def main(a):
         rec["versions_error"] = f"{type(e).__name__}: {e}"
     for k in (KNOB, "E4B_NF4_GROUPED_SMALLM", "E4B_NF4_T1_DEVICE_GROUPING", "E4B_INT4_LEAN_GLUE", "GNF4_GEMV_BW",
               "GNF4_GEMV_BW_PLAN", "GNF4_GEMV_BW_DECODE", "GNF4_PDL", "E4B_K25_LUT", "E4B_K25_PLAN"):
-        os.environ.pop(k, None)                  # every knob at its default except the two this lane moves
+        if not (shake and k == "GNF4_GEMV_BW"):  # a shakedown card may force K33 on (the runner's, shakedown only)
+            os.environ.pop(k, None)              # every knob at its default except the two this lane moves
+    rec["gnf4_gemv_bw_env"] = os.environ.get("GNF4_GEMV_BW")
 
     def write(rc):
         rec["wall_s"] = round(time.time() - t0, 1)

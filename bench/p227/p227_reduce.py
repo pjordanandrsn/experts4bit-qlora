@@ -135,6 +135,8 @@ def _global(rec, why):
         why.append(f"device {rec.get('device')} cc {rec.get('cc')}: the lane registers an RTX 5090 (sm_120)")
     if not _num((rec.get("copy") or {}).get("gbs")):
         why.append("the copy rate (the floor's divisor) is unread")
+    if not shake and rec.get("gnf4_gemv_bw_env") is not None:
+        why.append(f"GNF4_GEMV_BW={rec['gnf4_gemv_bw_env']!r} in a reading: K33's gate is forced only in a shakedown")
     if rec.get("poisoned"):
         why.append(f"the CUDA context was poisoned: {rec['poisoned']}")
     if rec.get("arm_fault"):
@@ -389,6 +391,7 @@ def self_test():
         (lambda q: q["copy"].update(gbs=None), "copy"),
         (lambda q: q["clocks"].update(error="nvml"), "clocks"),
         (lambda q: q["clocks"][clock_tag("mixtral", 2, "K")].update(enforced_limit_w=[400.0]), "power"),
+        (lambda q: q.update(gnf4_gemv_bw_env="1"), "a forced K33 gate in a reading"),
     ]:
         q = copy.deepcopy(_fake())
         mutate(q)

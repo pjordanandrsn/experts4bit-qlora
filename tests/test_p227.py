@@ -117,6 +117,9 @@ def test_the_runner_pins_the_kernel_package_and_refuses_before_the_install():
     at = [RUN.index(x) for x in order]
     assert at == sorted(at), dict(zip(order, at))
     assert "test_nf4_smallm_bw_gpu.py test_gemv_bw_served_gpu.py" in RUN and "**25 passed**" in PREREG
+    # only a shakedown forces K33's gate, after the premise; the reducer VOIDs a reading that carries it
+    assert RUN.index('[ "$SHAKE" = 1 ] && export GNF4_GEMV_BW=1') > RUN.index("grep -qE '^25 passed")
+    assert 'if not (shake and k == "GNF4_GEMV_BW"):' in BENCH and "GNF4_GEMV_BW=1" in PREREG
 
 
 def test_the_guard_fit_has_25_percent_headroom_and_the_prereg_states_it():
