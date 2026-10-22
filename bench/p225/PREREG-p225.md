@@ -145,8 +145,12 @@ Every fixed phase alarm (fetch, bake, train, ref, each slot, collect) and the to
   never outside: its intercepts are negative (train -2.8 s, ref -1,104 s), so it would extrapolate absurdly. A power
   fit (exponents 1.31 train, 1.54 ref) is steeper and gives less at 30 Mops; the 1/Mops line is the conservative one.
   Fetch and bake are priced at their slowest measured time.
-- **need(phase):** the interpolated time at the floor, times 1.75 (the maintainer's margin for `p224-5090-2`'s
-  unexplained extra ~1.75x on train, which no probe has named), times 1.5.
+- **need(phase):** the model time at the floor, times 1.75 for the three phases no screen floor bounds, times 1.5.
+  The 1.75 is the maintainer's margin for `p224-5090-2`'s unexplained extra ~1.75x on train, which no probe has
+  named. It applies to train, the reference process, and the FETCH: the screen's download probe is ONE stream while
+  the fetch runs 8 workers, and the measured pairs do not track (62.7 MB/s gave a 297 s fetch, 71 MB/s gave 461 s;
+  the slowest fetch, 806 s, had no probe). A fetch timeout falls after strike-eligibility begins, so the screen must
+  not be trusted to bound it.
 - **alarm(phase):** at least 1.25 x need(phase).
 - **The guard:** (the sum of the needs + install 450 + reserve 600) x 1.25 + 300 s of boot.
 
@@ -168,16 +172,16 @@ need() from the derivation table below, and asserts alarm >= need x 1.25 for eve
 |---|---|---|---|
 | train (80 steps) | 698 (1/Mops between 559 and 1,184) | 1,840 (x 1.75 x 1.5) | 2,300 |
 | reference process (REF + HF0) | 3,274 (22 s load, then the 688-row figure 1,749 per row, scaled to 1,296) | 8,600 (x 1.75 x 1.5) | 10,750 |
-| fetch | 806 (slowest measured) | 1,210 (x 1.5) | 1,520 |
+| fetch | 806 (slowest measured) | 2,120 (x 1.75 x 1.5) | 2,650 |
 | bake | 362 (slowest measured) | 550 (x 1.5) | 690 |
 | each of 6 server slots | 98 (slowest measured plain slot) | 150 (x 1.5) | 880 (covers the slot's scoring term) |
 | scoring term, 2 slots | 363 (0.28 s a row, read from each run's FIRST slot, so it carries the cold start) | 550 (x 1.5) | (inside the slot alarm) |
 
-The 1.75 margin applies to the two CPU-dispatch-bound phases only. Every measured first slot (the slowest:
+The 1.75 margin applies to train, the reference process and the fetch only. Every measured first slot (the slowest:
 `p224-5090-2`'s 364 s at 688 rows) sits under need(slot) + need(score) at 688 rows, and `p225_derive.py`'s self-test
-checks it. The needs plus gate 60 and reduce 60 sum to 14,320 s. The guard is (14,320 + install 450 + reserve 600) x
-1.25 + 300 = 19,512 s, **5.42 h**: inside the launcher's 6 h teardown cap (the fill refuses above 5.9 h). The worst
-case is 5.42 x USD 1.05 + 66 x USD 0.011 = **USD 6.42**.
+checks it. The needs plus gate 60 and reduce 60 sum to 15,230 s. The guard is (15,230 + install 450 + reserve 600) x
+1.25 + 300 = 20,650 s, **5.74 h**: inside the launcher's 6 h teardown cap (the fill refuses above 5.9 h). The worst
+case is 5.74 x USD 1.05 + 66 x USD 0.011 = **USD 6.75**.
 
 **The 30-Mops pricing is CONSERVATIVE.** Every host the screen would admit, measured so far, reads 36.2 or more, so a
 need is a bound, not an expected runtime.
@@ -230,6 +234,17 @@ The paged server must prove that it serves the adapter:
 | FAMILY_RULE_RETIRED (an event, not an outcome) | a fast-family host reads under 30 on the box | no | no; one log line, and the pin order changes as registered |
 | pre-create refusal | no instance existed ($0) | no | no |
 
+**The strike call is mechanical.** The runner writes `run/STRIKE_ELIGIBLE` once every floor has passed, just before the
+first install. `p225_reduce.py --classify RC --dir RUN` maps each box's runner exit code and the marker to its
+registered event, and the test checks the map:
+
+| runner exit | before `STRIKE_ELIGIBLE` | after it |
+|---|---|---|
+| 0 | (cannot occur) | an answer (PASS, FAIL or INCONCLUSIVE) |
+| 10 dud box, 13 free disk, 15 card / compute capability / VRAM, 16 host RAM, 18 CUDA unusable, 19 the host screen | **HOST_REFUSED**: no strike; counts toward the cap of 4 | (cannot occur) |
+| 9 staging or hash pins, 41 the guard does not fit the deadline, 78 run id / env / frozen knobs, 130 a signal, or any other code | **PRE_INSTALL_HALT**: no strike, not capped; a kit or launch fault, so the lane halts until it is fixed, never relaunched on the same kit | a strike |
+| 27 (VOID or NOT_LEARNED), 22 (reducer failed), any other | (cannot occur) | a strike |
+
 G3 (latency) and the cost are reported with every outcome that reaches the reducer.
 
 **The stop (nonadaptive):**
@@ -244,8 +259,8 @@ G3 (latency) and the cost are reported with every outcome that reaches the reduc
 
 ## Budget
 
-Worst per box = guard x USD 1.05/h + 66 GB x USD 0.011/GB = **about USD 6.42**, inside the USD 15 per-box rule. Lane
-worst: 3 boxes plus 8 host refusals, about 3 x 6.42 + 8 x 0.10 = **about USD 20.1**.
+Worst per box = guard x USD 1.05/h + 66 GB x USD 0.011/GB = **about USD 6.75**, inside the USD 15 per-box rule. Lane
+worst: 3 boxes plus 8 host refusals, about 3 x 6.75 + 8 x 0.10 = **about USD 21.1**.
 
 ## Sequencing
 

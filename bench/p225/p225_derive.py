@@ -10,8 +10,11 @@ The model forms, fixed here:
   maintainer's 1.75 margin for p224-5090-2's unnamed extra slowness.
 - The reference process scales with the held-out rows: a fixed 22 s load, then per-row work.
 - A scoring slot's extra time is GPU-bound: about 0.28 s a row on both a 36.4- and a 17.85-Mops host.
-- Fetch, bake and a plain server slot are priced at their slowest measured time.
-need = model x (1.75 for CPU-dispatch phases) x 1.5; alarm >= 1.25 x need, rounded up to 10 s;
+- Bake and a plain server slot are priced at their slowest measured time.
+- The fetch is priced at its slowest measured time AND carries the 1.75 margin: the screen's download probe is one
+  stream while the fetch runs 8 workers, and the measured pairs do not track (62.7 MB/s -> 297 s, 71 MB/s -> 461 s), so
+  the screen does not bound it, and a fetch timeout falls after strike-eligibility begins.
+need = model x (1.75 for the unbounded phases: train, ref, fetch) x 1.5; alarm >= 1.25 x need, rounded up to 10 s;
 guard = (sum of needs + gate 60 + reduce 60 + install 450 + reserve 600) x 1.25 + 300 boot;
 worst = guard x USD 1.05/h + 66 GB x USD 0.011.
 
@@ -61,8 +64,8 @@ def plan(tier: str, rows: int) -> dict:
     model = {"train": interp(TRAIN_S, m),
              "ref": REF_LOAD_S + (ref688 - REF_LOAD_S) * rows / 688,
              "fetch": FETCH_S, "bake": BAKE_S, "slot": SLOT_S, "score": SCORE_S_PER_ROW * rows}
-    cpu = {"train", "ref"}
-    need = {k: _ceil10(v * (MARGIN_UNNAMED if k in cpu else 1.0) * NEED_X) for k, v in model.items()}
+    margined = {"train", "ref", "fetch"}      # the phases no screen floor bounds (see the module docstring)
+    need = {k: _ceil10(v * (MARGIN_UNNAMED if k in margined else 1.0) * NEED_X) for k, v in model.items()}
     alarm = {k: _ceil10(ALARM_X * need[k]) for k in ("fetch", "bake", "train", "ref")}
     alarm["slot"] = _ceil10(ALARM_X * (need["slot"] + need["score"]))     # a slot's alarm covers its scoring term
     work = need["fetch"] + need["bake"] + need["train"] + need["ref"] + 6 * need["slot"] + 2 * need["score"] + GATE_S + REDUCE_S
@@ -91,6 +94,7 @@ def self_test() -> int:
             ok(True, "")
     p = plan("a", 688)
     ok(p["need"]["ref"] == 4600 and p["need"]["train"] == 1840, f"688 rows at tier a: {p['need']}")
+    ok(p["need"]["fetch"] == 2120 and p["alarm"]["fetch"] == 2650, f"the fetch carries the margin: {p['need']['fetch']}")
     ok(all(p["alarm"][k] >= ALARM_X * p["need"][k] for k in ("fetch", "bake", "train", "ref")), "every alarm >= 1.25 x need")
     ok(p["alarm"]["slot"] >= ALARM_X * (p["need"]["slot"] + p["need"]["score"]), "the slot alarm covers scoring")
     big = plan("a", 1632)

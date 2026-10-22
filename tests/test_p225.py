@@ -145,6 +145,30 @@ def test_the_held_out_size_is_the_ruled_rule_on_the_five_sd_receipts():
         assert text in PREREG, text
 
 
+def test_the_strike_call_is_the_reducers_map_of_every_runner_exit():
+    """Every ``finish N`` the runner can reach before the marker is classified, and the PREREG table names it."""
+    R = _load("p225_reduce")
+    pre = RUN[:RUN.index("> $W/run/STRIKE_ELIGIBLE")]
+    codes = {int(c) for c in re.findall(r"finish (\d+)", pre)}
+    assert codes and codes <= set(R.HOST_CODES) | set(R.KIT_CODES), codes - set(R.HOST_CODES) - set(R.KIT_CODES)
+    for rc in R.HOST_CODES:
+        c = R.classify(rc, False)
+        assert c["event"] == "HOST_REFUSED" and c["host_refused_cap"] and not c["strike"], rc
+    for rc in R.KIT_CODES:
+        c = R.classify(rc, False)
+        assert c["event"] == "PRE_INSTALL_HALT" and c["halt"] and not (c["strike"] or c["host_refused_cap"]), rc
+    assert R.classify(0, True)["event"] == "ANSWER" and R.classify(27, True)["strike"]
+    for text in ("**HOST_REFUSED**: no strike; counts toward the cap of 4", "**PRE_INSTALL_HALT**", "--classify RC"):
+        assert text in PREREG, text
+
+
+def test_the_fetch_carries_the_unnamed_margin():
+    D = _load("p225_derive")
+    p = D.plan("a", 688)
+    assert p["need"]["fetch"] == D._ceil10(D.FETCH_S * D.MARGIN_UNNAMED * D.NEED_X)
+    assert "| fetch | 806 (slowest measured) | 2,120 (x 1.75 x 1.5) | 2,650 |" in PREREG
+
+
 def test_the_registered_lane_events_have_their_rows():
     for row in ("| **UNRUNNABLE** |", "| FAMILY_RULE_RETIRED (an event, not an outcome) |", "| **HOST_REFUSED** |"):
         assert row in PREREG, row

@@ -11,7 +11,14 @@ reducer (``p224_reduce.verdict``, staged byte-identical) for G1-G5 and maps its 
 
 Exit codes: 0 for PASS, FAIL or INCONCLUSIVE (an answer); 27 for VOID or NOT_LEARNED (no answer), as P224's runner maps.
 
+**The strike call is mechanical** (:func:`classify`, PREREG "Outcomes"): from the runner's exit code and whether the
+run wrote ``run/STRIKE_ELIGIBLE`` (the runner writes it once every floor has passed, before the first install).
+Before the marker nothing is a strike: a host fault (10, 13, 15, 16, 18, 19) is HOST_REFUSED and counts toward the
+cap of 4; a kit or launch fault (9, 41, 78, 130, or any other code) is PRE_INSTALL_HALT, which counts toward nothing
+and halts the lane until it is fixed. After the marker, 0 is an answer and every other code is a strike.
+
     python p225_reduce.py --dir RUN_DIR --pins pins.json --gates gates_p225.json --out verdict_p225.json
+    python p225_reduce.py --classify RC --dir RUN_DIR
     python p225_reduce.py --self-test
 """
 from __future__ import annotations
@@ -31,6 +38,26 @@ import p225_canary as C  # noqa: E402
 R.N_HELDOUT = C.N_HELDOUT
 
 ANSWERS = ("PASS", "FAIL", "INCONCLUSIVE")
+#: the runner's pre-install exits a HOST causes (p225_run.sh): each is HOST_REFUSED, never a strike, capped at 4
+HOST_CODES = {10: "dud box (CUDA probe)", 13: "free disk", 15: "card, compute capability or VRAM", 16: "host RAM",
+              18: "CUDA unusable", 19: "the host screen (p225_probe.py)"}
+#: the runner's pre-install exits the KIT or the launch causes: never a strike, never capped; the lane halts until fixed
+KIT_CODES = {9: "staging or hash pins", 41: "the guard does not fit the deadline", 78: "run id, env or frozen knobs",
+             130: "a signal"}
+
+
+def classify(rc: int, strike_eligible: bool) -> dict:
+    """The registered event for one box: ``{"event", "strike", "host_refused_cap", "halt", "why"}``."""
+    if not strike_eligible:
+        if rc in HOST_CODES:
+            return {"event": "HOST_REFUSED", "strike": False, "host_refused_cap": True, "halt": False,
+                    "why": HOST_CODES[rc]}
+        return {"event": "PRE_INSTALL_HALT", "strike": False, "host_refused_cap": False, "halt": True,
+                "why": KIT_CODES.get(rc, f"unexpected pre-install exit {rc}")}
+    if rc == 0:
+        return {"event": "ANSWER", "strike": False, "host_refused_cap": False, "halt": False, "why": "the verdict"}
+    why = "VOID or NOT_LEARNED (the verdict)" if rc == 27 else f"exit {rc} after strike-eligibility"
+    return {"event": "STRIKE", "strike": True, "host_refused_cap": False, "halt": False, "why": why}
 SE_MARK = "too small to judge"
 
 
@@ -106,6 +133,12 @@ def self_test() -> int:
     ok(verdict(failing, pins, good)["verdict"] == "FAIL", "a P224 FAIL stands")
     ok(verdict(R._fake(), dict(pins, e4b_sha="0" * 40), good)["verdict"] == "VOID", "a wrong pin stays VOID")
     ok(R.N_HELDOUT == C.N_HELDOUT and len(R._fake()["REF"]["per_seq_loss"]) == C.N_HELDOUT, "P225's held-out count")
+    ok(all(classify(rc, False)["event"] == "HOST_REFUSED" and not classify(rc, False)["strike"] for rc in HOST_CODES),
+       "every host fault before the marker is HOST_REFUSED, never a strike")
+    ok(all(classify(rc, False)["halt"] and not classify(rc, False)["host_refused_cap"] for rc in (*KIT_CODES, 1, 22)),
+       "a kit, launch or unexpected fault before the marker halts and is never capped or struck")
+    ok(classify(0, True)["event"] == "ANSWER" and all(classify(rc, True)["strike"] for rc in (27, 22, 1, 130, 19)),
+       "after the marker 0 is an answer and every other exit is a strike")
     print(f"p225_reduce self-test OK ({n} checks)")
     return 0
 
@@ -116,11 +149,17 @@ def main(argv=None) -> int:
     ap.add_argument("--pins")
     ap.add_argument("--gates")
     ap.add_argument("--out")
+    ap.add_argument("--classify", type=int, metavar="RC", help="the registered event for a box's runner exit code")
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--check-args", action="store_true", help="apply the argument checks a real run applies, then stop")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.classify is not None:
+        if not a.dir:
+            ap.error("--classify needs --dir RUN_DIR (where run/STRIKE_ELIGIBLE would be)")
+        print("P225_CLASS " + json.dumps(classify(a.classify, os.path.exists(os.path.join(a.dir, "STRIKE_ELIGIBLE")))))
+        return 0
     if not (a.dir and a.pins and a.gates and a.out):
         ap.error("--dir, --pins, --gates and --out (or --self-test)")
     if a.check_args:
