@@ -79,7 +79,10 @@ over HF `generate`. It exists so that request-level serving benchmarks (TTFT, in
 and throughput under Poisson arrivals, as `vllm bench serve` and `sglang.bench_serving` drive them)
 can be run against e4b exactly as they are run against vLLM, SGLang and llama.cpp. **It is the
 server the serving campaign benchmarks against**; it is not the shared-GPU availability deployment
-above, and it serves no adapters.
+above. It serves at most ONE trained adapter, merged at load (`E4B_PAGED_ADAPTER=<dir>`, from 0.57.0): it verifies the
+adapter directory before it reads any weight, merges the attention LoRA into the bf16 projections so the adapter adds
+no per-token work, and refuses to start, naming each reason, rather than serve the base model in its place. Expert LoRA
+is refused for now; [`ADAPTER_PORTABILITY.md`](ADAPTER_PORTABILITY.md) states which pairings are exact.
 
 ```bash
 pip install "experts4bit-qlora[serve,fast]"
