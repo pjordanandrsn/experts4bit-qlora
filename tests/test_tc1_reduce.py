@@ -460,3 +460,29 @@ def test_padded_site_bytes_reads_a_real_census():
     mc = json.loads(cell.read_text(encoding="utf-8"))["mem_census"]
     assert m.padded_site_bytes(mc, ("nf4_qlora.py", 582, 584)) == 2_043_345_152
     assert m.padded_site_bytes(mc, ("nf4_qlora.py", 585, 600)) == 0
+
+
+def test_amendment_75_rule_reads_box_154():
+    """Amendment 75's successor rule on real receipts: tc1-5090-154's committed cells and nvidia-smi samplers (amendment 74, at today's
+    pins). cd1 against fd reads RELOCATED -- the padded delta is gone from the live set at cd1's peak and the whole 0.639 GB allocated
+    drop is credited -- but the reserved and device peaks each rose 20 MiB, so it is no candidate; that is the read amendment 75 was
+    registered to make. fd's census lists 40 of its 52 groups, and the unlisted tail is bounded by the smallest listed one."""
+    import json
+
+    m = _mod()
+    d = REPO / "bench" / "h2h-2026-10-02" / "tc1" / "receipts" / "tc1-5090-154"
+    rd, cells = {}, {}
+    for t in ("fd", "fd_cd1", "fd_pb1"):
+        cells[t] = json.loads((d / "public" / f"qwen3pos74pd_e4b_fused_attn4_m_{t}.json").read_text(encoding="utf-8"))
+        rd[t] = m.pos75_reading(cells[t]["mem_census"], cells[t], m.vram_peak_mib(str(d / "tc1"), "qwen3pos74pd", "e4b", f"fused_attn4_m_{t}"))
+    assert (rd["fd"]["device"], rd["fd_cd1"]["device"]) == (26218 * 1048576, 26238 * 1048576)
+    assert m.unlisted_bound(cells["fd"]["mem_census"]) == 12 * 72_320 and m.unlisted_bound(cells["fd_cd1"]["mem_census"]) == 0
+    assert rd["fd_cd1"]["loss"] == 1_373_501_440 + 686_750_724 and rd["fd"]["loss"] == 0
+    assert 1_373_501_440 == m.POS75_VOCAB * 9_040 and rd["fd_cd1"]["other_unattr"] == 0      # box 154's unattributed group is vocab-shaped
+    for t in ("fd_cd1", "fd_pb1"):
+        v = m.pos75_rule(rd["fd"], rd[t], "delta", rd["fd"]["heldout"])
+        assert v["relocated"] and v["credit"] and v["held"] and not v["falls"] and not v["candidate"], (t, v)
+    v = m.pos75_rule(rd["fd"], rd["fd_cd1"], "delta", rd["fd"]["heldout"])
+    assert v["drops"] == {"alloc": 639_288_832, "reserved": -20_971_520, "device": -20_971_520}, v
+    assert m.pos75_why(m.POS75_ARMS[0][1], cells["fd"]) == "" and m.pos75_why(m.POS75_ARMS[1][1], cells["fd_cd1"]) == ""
+    assert "the chunked LM loss did not serve every training forward" in m.pos75_why(m.POS75_ARMS[2][1], cells["fd"])

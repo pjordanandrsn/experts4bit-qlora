@@ -1865,6 +1865,29 @@ tc1_pos74_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/m_fd_pb1 && TC1_ARM_EXTRA_ENV="NF4_QLORA_PAD_BUCKETS=1" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_fd_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_pos75_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 75 (2026-10-22): the 4090-fit read. Amendment 74's recipe, window, census
+# and pins, e4b's matched arm only, one draw each: fd (today's defaults), cd1 (NF4_QLORA_COMPACT_DELTA=1), cl1 (E4B_CHUNKED_LM_LOSS=1: every
+# training forward chunks, so no full-vocab logits are held at once; its default `auto` keeps the stock loss at this recipe) and
+# cd1cl1 (both). The reducer's pos75_why binds each arm to its own counters; pos75_block reads the reserved and nvidia-smi peaks first.
+tc1_pos75_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_fd:fused e4b:fused_attn4_m_fd_cd1:fused e4b:fused_attn4_m_fd_cl1:fused e4b:fused_attn4_m_fd_cd1cl1:fused"
+  say "===== 4090-FIT LOSS family $FAM ($MID @ $REV; e4b at today's defaults vs the compact delta and the chunked LM loss; --mem-census 1, no profile; amendment 75)"
+  local why=""
+  [ "$STEPS" = 60 ] && [ "$EVAL_EVERY" = 20 ] && [ "$EVAL_N" = 8 ] || why="amendment 75 needs amendment 73's window: TC1_STEPS=60, TC1_EVAL_EVERY=20, TC1_EVAL_N=8 (got $STEPS, $EVAL_EVERY, $EVAL_N)"
+  [ "$GNF4_SHA" = "$POS74_GNF4_SHA" ] || why="${why:+$why; }amendment 75 pins grouped-nf4-gemm at $POS74_GNF4_SHA (got $GNF4_SHA)"
+  if [ -n "$why" ]; then
+    local t fw tag arm; for t in $ALL; do IFS=: read -r fw tag arm <<< "$t"; stubw $FAM $fw $tag $arm not_run "$why"; done
+    echo "$(echo $FAM | tr a-z A-Z) REFUSED $why" | tee -a summary.txt; return 0
+  fi
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local CEN="--mem-census 1 --profile-steps 0"
+  can_run 600 $FAM/e4b/m_fd        && E4B_VENV=t212 arm $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  can_run 600 $FAM/e4b/m_fd_cd1    && TC1_ARM_EXTRA_ENV="NF4_QLORA_COMPACT_DELTA=1" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_fd_cd1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  can_run 600 $FAM/e4b/m_fd_cl1    && TC1_ARM_EXTRA_ENV="E4B_CHUNKED_LM_LOSS=1" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_fd_cl1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  can_run 600 $FAM/e4b/m_fd_cd1cl1 && TC1_ARM_EXTRA_ENV="NF4_QLORA_COMPACT_DELTA=1 E4B_CHUNKED_LM_LOSS=1" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_fd_cd1cl1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_pos68_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 68 (2026-10-08): amendment 67's packed-row position profiled -- e4b's
 # matched arm at its defaults (pd) and Unsloth's matched arm (pv), two draws each in ABBA order (pd pv pv pd), venv-unsloth, every arm profiled
 # (device time, CPU ops per step) with --phase-peaks 1.
@@ -3152,6 +3175,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3pos69) tc1_pos69_family qwen3pos69 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 69: the field recipe's same-stack position profiled
   qwen3pos69mc) tc1_pos69mc_family qwen3pos69mc Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 73: amendment 69's arms with the memory census
   qwen3pos74pd) tc1_pos74_family qwen3pos74pd Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 74: amendment 73's census at today's pins, one grouped-nf4-gemm switch per arm
+  qwen3pos75cl) tc1_pos75_family qwen3pos75cl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 75: the 4090-fit read, the compact delta and the chunked LM loss
   qwen3sladder) tc1_sladder_family qwen3sladder Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 70: the single-block ladder 0 vs 1, field recipe
   qwen3slauto) tc1_slauto_family qwen3slauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 71: the single-block ladder 0 vs auto, field recipe
   qwen3fqkv) tc1_fqkv_family qwen3fqkv Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # P129 Amendment 2: the fused q/k/v training projection 0 vs 1, field recipe
