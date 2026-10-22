@@ -420,8 +420,9 @@ decode in 0.50.0. On an older package each resolves off, recorded.
   `c1` under any other decode is refused. `m1` is opt-in on every family (no default takes it): lane P222's selected
   pair ([`bench/p222/RESULTS-p222.md`](../bench/p222/RESULTS-p222.md)), gate_up as `c1`'s and down at
   `{block_n 32, kc 256, warps 4, stages 2}`, with `c1`'s refusals (only under `prmt`; refused with K25 off or absent).
-  It has a microbench read only; no served speed is claimed for it. Reported in `levers.k25_plan`; which plan each K25
-  call took (`today`, `c1` or `m1`) is `prefill_routes.seen.moe_k25_plan`.
+  It has a microbench read only (at Mixtral-8x7B's W16 shapes, one RTX 5090); no served speed is claimed for it.
+  Reported in `levers.k25_plan`; which plan each K25 call took (`today`, `c1` or `m1`) is
+  `prefill_routes.seen.moe_k25_plan`.
 
 **Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves
 `hot_residency.DEVICE_GROUPING` off. Until P102, every prefill chunk's MoE call on the int4 store therefore ran a
