@@ -14,8 +14,8 @@ Exit codes: 0 for PASS, FAIL or INCONCLUSIVE (an answer); 27 for VOID or NOT_LEA
 **The strike call is mechanical** (:func:`classify`, PREREG "Outcomes"): from the runner's exit code and whether the
 run wrote ``run/STRIKE_ELIGIBLE`` (the runner writes it once every floor has passed, before the first install).
 Before the marker nothing is a strike: a host fault (13, 15, 16, 18, 19) is HOST_REFUSED and counts toward the cap
-of 4; a kit, image or launch fault (9, 10, 41, 78, 130, or any other code) is PRE_INSTALL_HALT, which counts toward
-nothing and halts the lane until it is fixed. After the marker, 0 is an answer and every other code is a strike. A
+of 4; a kit, image or launch fault (9, 10, 28, 41, 78, 130, or any other code) is PRE_INSTALL_HALT, which counts
+toward nothing and halts the lane until it is fixed. After the marker, 0 is an answer and every other code is a strike. A
 fast-family host refused on speed also emits the registered FAMILY_RULE_RETIRED line.
 
 ``--classify --work W`` reads the box's work directory as the driver fetched it (``$RUN_DIR/p225``, the box's
@@ -50,8 +50,8 @@ ANSWERS = ("PASS", "FAIL", "INCONCLUSIVE")
 HOST_CODES = {13: "free disk", 15: "card, compute capability or VRAM", 16: "host RAM",
               18: "CUDA unusable (torch imports; the device does not answer)", 19: "the host screen (p225_probe.py)"}
 #: the runner's pre-install exits the KIT, the IMAGE or the launch causes: never a strike, never capped; the lane halts
-KIT_CODES = {9: "staging or hash pins", 10: "torch does not import (the image)", 41: "the guard does not fit the deadline",
-             78: "run id, env or frozen knobs", 130: "a signal"}
+KIT_CODES = {9: "staging or hash pins", 10: "torch does not import (the image)", 28: "the image's torch is not the pinned build",
+             41: "the guard does not fit the deadline", 78: "run id, env or frozen knobs", 130: "a signal"}
 
 
 def family_rule_retired(rc: int, strike_eligible: bool, screen) -> bool:
@@ -216,7 +216,8 @@ def main(argv=None) -> int:
             return 2
         c = classify(box["rc"], box["strike_eligible"], box["screen"])
         print("P225_CLASS " + json.dumps(dict(c, run_id=box["run_id"], rc=box["rc"],
-                                               strike_eligible=box["strike_eligible"])))
+                                               strike_eligible=box["strike_eligible"],
+                                               screen_read=box["screen"] is not None)))
         if c["family_rule_retired"]:
             rec = (box["screen"] or {}).get("recorded") or {}
             print("P225_EVENT FAMILY_RULE_RETIRED " + json.dumps({

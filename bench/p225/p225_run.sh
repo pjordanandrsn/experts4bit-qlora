@@ -98,10 +98,10 @@ alarm(){ local cap=$1 left=$(( P225_DEADLINE_EPOCH - $(date +%s) - RESERVE )); [
 # a Mops re-probe and the steal share at every phase boundary: recorded, never refusing (PREREG "The host screen")
 boundary(){ python $W/p225_probe.py --boundary "$1" 2>/dev/null | tee -a summary.txt; }
 # ---- the install: torch held at the image's (never a pip default torch the driver cannot run), then e4b, gnf4, Loggetta
+TORCH_FULL=$(python -c "import torch; print(torch.__version__)")   # the image check, BEFORE the marker: an image fault
+[ "$TORCH_FULL" = 2.8.0+cu128 ] || { say "REFUSED: torch image $TORCH_FULL is not 2.8.0+cu128"; finish 28; }   # (28) halts, never a strike
 date -u +%FT%TZ > $W/run/STRIKE_ELIGIBLE   # every floor passed: from the first install on, a failure can be a strike
 phase_start install setup
-TORCH_FULL=$(python -c "import torch; print(torch.__version__)")
-[ "$TORCH_FULL" = 2.8.0+cu128 ] || { say "REFUSED: torch image $TORCH_FULL is not 2.8.0+cu128"; finish 28; }
 echo "torch==2.8.0" > $W/constraints.txt
 pipx(){ local log=$1 secs=$2; shift 2
   perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" > $log 2>&1 && return 0

@@ -161,6 +161,8 @@ def test_the_strike_call_is_the_reducers_map_of_every_runner_exit():
     for text in ("**HOST_REFUSED**: no strike; counts toward the cap of 4", "**PRE_INSTALL_HALT**", "--classify --work W"):
         assert text in PREREG, text
     assert 10 in R.KIT_CODES and 10 not in R.HOST_CODES and "noimport" in RUN     # a failed torch import is the image's
+    assert 28 in R.KIT_CODES and "finish 28" in pre                             # the image pin is checked before the marker
+    assert pre.index("finish 28") < RUN.index("phase_start install")
 
 
 def _box(root, rc, marker, screen=None, name="box"):
@@ -184,6 +186,7 @@ def test_the_classify_command_line_fails_closed_and_maps_each_case(tmp_path):
     struck = _box(tmp_path, 27, True, name="struck")
     r = _classify(struck)
     assert r.returncode == 0 and json.loads(r.stdout.split("P225_CLASS ", 1)[1])["event"] == "STRIKE", r.stdout
+    assert json.loads(r.stdout.split("P225_CLASS ", 1)[1])["screen_read"] is False
     refused = _box(tmp_path, 16, False, name="refused")
     assert json.loads(_classify(refused).stdout.split("P225_CLASS ", 1)[1])["event"] == "HOST_REFUSED"
     halted = _box(tmp_path, 10, False, name="halted")

@@ -240,14 +240,15 @@ The paged server must prove that it serves the adapter:
 first install. On the renter side, `p225_reduce.py --classify --work W` runs on EVERY fetched box (W is the box's work
 directory as the driver fetched it). It reads the runner's own exit-code file, the marker and the screen line, and
 prints the registered event. It FAILS CLOSED: it refuses (exit 2, no class) unless W holds exactly one exit-code file,
-`RUN_ID` and `run/`, so a wrong directory level can never read as "no strike". The test runs the command line on
-each case:
+`RUN_ID` and `run/`, so a wrong directory level can never read as "no strike". A REFUSED classify (for example a
+box that exited 78 or 130 before it wrote `RUN_ID`) is read as PRE_INSTALL_HALT: no strike, not capped, and the lane
+halts until the box's files are read by hand. The test runs the command line on each case:
 
 | runner exit | before `STRIKE_ELIGIBLE` | after it |
 |---|---|---|
 | 0 | (cannot occur) | an answer (PASS, FAIL or INCONCLUSIVE) |
 | 13 free disk, 15 card / compute capability / VRAM, 16 host RAM, 18 CUDA unusable (torch imports; the device does not answer), 19 the host screen | **HOST_REFUSED**: no strike; counts toward the cap of 4 | (cannot occur) |
-| 9 staging or hash pins, 10 torch does not import (the image), 41 the guard does not fit the deadline, 78 run id / env / frozen knobs, 130 a signal, or any other code | **PRE_INSTALL_HALT**: no strike, not capped; a kit, image or launch fault, so the lane halts until it is fixed, never relaunched on the same kit | a strike |
+| 9 staging or hash pins, 10 torch does not import (the image), 28 the image's torch is not the pinned build, 41 the guard does not fit the deadline, 78 run id / env / frozen knobs, 130 a signal, or any other code | **PRE_INSTALL_HALT**: no strike, not capped; a kit, image or launch fault, so the lane halts until it is fixed, never relaunched on the same kit | a strike |
 | 27 (VOID or NOT_LEARNED), 22 (reducer failed), any other | (cannot occur) | a strike |
 
 G3 (latency) and the cost are reported with every outcome that reaches the reducer.
