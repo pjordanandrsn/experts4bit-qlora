@@ -240,9 +240,12 @@ The paged server must prove that it serves the adapter:
 first install. On the renter side, `p225_reduce.py --classify --work W` runs on EVERY fetched box (W is the box's work
 directory as the driver fetched it). It reads the runner's own exit-code file, the marker and the screen line, and
 prints the registered event. It FAILS CLOSED: it refuses (exit 2, no class) unless W holds exactly one exit-code file,
-`RUN_ID` and `run/`, so a wrong directory level can never read as "no strike". A REFUSED classify (for example a
-box that exited 78 or 130 before it wrote `RUN_ID`) is read as PRE_INSTALL_HALT: no strike, not capped, and the lane
-halts until the box's files are read by hand. The test runs the command line on each case:
+`RUN_ID` and `run/`, so a wrong directory level can never read as "no strike". A REFUSED classify halts the lane
+until the box's files are read by hand, and the hand reading classifies by this table: if `run/STRIKE_ELIGIBLE`
+exists, or nothing could be fetched after the box started, it is a strike (HARNESS_ERROR: a box killed, out of memory
+or destroyed after the marker writes no exit file). Only a box with no marker is PRE_INSTALL_HALT (for example one that
+exited 78 or 130 before it wrote `RUN_ID`). The refusal message says whether the marker exists. The test runs the
+command line on each case:
 
 | runner exit | before `STRIKE_ELIGIBLE` | after it |
 |---|---|---|

@@ -85,8 +85,14 @@ def read_box(work: str) -> dict:
     """The box's own files under ``work``; raises ValueError unless it is the runner's work directory."""
     codes = sorted(glob.glob(os.path.join(work, "P225_EXIT_CODE.*")))
     if len(codes) != 1 or not os.path.isfile(os.path.join(work, "RUN_ID")) or not os.path.isdir(os.path.join(work, "run")):
+        marker = [m for m in (os.path.join(work, "run", "STRIKE_ELIGIBLE"), os.path.join(work, "STRIKE_ELIGIBLE"))
+                  if os.path.exists(m)]
+        state = (f"STRIKE_ELIGIBLE PRESENT at {marker[0]!r}: by the table this box is a STRIKE (HARNESS_ERROR) unless "
+                 "the hand reading shows otherwise" if marker else
+                 "STRIKE_ELIGIBLE absent here (if the box started and nothing could be fetched, it is still a strike)")
         raise ValueError(f"{work!r} is not a P225 box work directory: it needs exactly one P225_EXIT_CODE.<nonce> "
-                         f"(found {len(codes)}), RUN_ID and run/ (pass the directory that holds run/, not run/ itself)")
+                         f"(found {len(codes)}), RUN_ID and run/ (pass the directory that holds run/, not run/ itself). "
+                         f"{state}. The lane HALTS until the box's files are read by hand.")
     rc = int(open(codes[0], encoding="utf-8").read().strip())
     screen = None
     try:

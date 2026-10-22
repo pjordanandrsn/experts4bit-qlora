@@ -196,6 +196,14 @@ def test_the_classify_command_line_fails_closed_and_maps_each_case(tmp_path):
         assert r.returncode == 2 and "P225_CLASS {" not in r.stdout, (wrong, r.stdout, r.stderr)
     (struck / "P225_EXIT_CODE.cd34").write_text("0\n", encoding="utf-8")   # two exit files: ambiguous, refused
     assert _classify(struck).returncode == 2
+    killed = _box(tmp_path, 0, True, name="killed")                            # died after the marker: no exit file
+    (killed / "P225_EXIT_CODE.ab12").unlink()
+    r = _classify(killed)
+    assert r.returncode == 2 and "P225_CLASS {" not in r.stdout and "STRIKE_ELIGIBLE PRESENT" in r.stderr, r.stderr
+    early = _box(tmp_path, 78, False, name="early")
+    (early / "P225_EXIT_CODE.ab12").unlink()
+    r = _classify(early)
+    assert r.returncode == 2 and "STRIKE_ELIGIBLE absent" in r.stderr, r.stderr
 
 
 def test_a_fast_family_host_refused_on_speed_emits_the_retirement_line(tmp_path):
