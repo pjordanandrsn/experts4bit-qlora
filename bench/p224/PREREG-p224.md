@@ -478,10 +478,10 @@ The next shakedown is `p224-shake-2`, after this amendment and its kit PR merge.
 
 **Why.** Two of the three registered shake ids are spent, and neither found the reading's question answered or a strike:
 - `p224-shake-1`: an instrument run that found three kit faults, fixed by Amendment 3 and its kit.
-- `p224-shake-2`: refused at $0 before any instance existed. The records show the screen's quote read at 05:14:13Z,
-  the receipt's start at 05:16:58Z, and the launcher's three pinned reads (05:17:02Z, 05:17:18Z and 05:17:33Z) all
-  without the offer. A machine-filtered read just before the create (05:16:55Z) did list it, but that read was printed to
-  the operator's console and kept in no record. The receipt is committed, so the id is spent.
+- `p224-shake-2`: refused at $0 before any instance existed. The launch script refuses the create unless its
+  pre-create machine-filtered read of the pinned offer is PRESENT. That read was not kept, but the launch was posted at
+  05:16:55Z, so it passed. The launcher's first pinned read at 05:17:02Z, and those at 05:17:18Z and 05:17:33Z, found
+  the offer absent. The screen's quote read was at 05:14:13Z. The receipt is committed, so the id is spent.
 
 That leaves `p224-shake-3`, so one more market loss would stall the lane.
 
