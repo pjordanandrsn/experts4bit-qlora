@@ -321,19 +321,19 @@ machine-filtered reads each time. The receipts show:
   gone, and the same-pin ghost retry 180 s later found no offer.
 - **The rest of the market:** 13, 13 and 15 other RTX 5090 offers passed the same terms at the three refusals.
 
-So the host's listed ask did not survive to a create. A $0 read of the three receipts (adertha-agents#338) found no
-query mismatch: the screen's and the launcher's queries are byte-identical, and the launcher behaved correctly. The
-host is listed only in rare, brief windows: the screen saw it in 3 of its 32 sweeps (19:21Z to 00:52Z), exactly the
-three that pinned it, and a later dense read-only poll (30 reads at 20 s) listed it in none. The gap was the screen's
-stability rule (three reads over 40 s), which admitted such a window. Since 2026-10-18, six of the eight launches
-pinned to this machine across lanes died before any instance existed.
+So the host's listed ask did not survive to a create. A $0 read of the three receipts found no query mismatch: the
+screen's and the launcher's queries are byte-identical, and the launcher behaved correctly. The host is listed only in
+rare, brief windows: the screen saw it in 3 of its 32 sweeps (19:21Z to 00:52Z), exactly the three that pinned it, and a
+later dense read-only poll (30 reads at 20 s) listed it in none. The gap was the screen's stability rule (three reads
+over 40 s), which admitted such a window. Since 2026-10-18, six of the eight launches pinned to this machine across
+lanes died before any instance existed.
 
 **What changes.**
 - **Run ids:** `p222-5090-4`, `-5` and `-6` are registered for the reading, on the same terms, caps and guard as
   `-1` to `-3`. The runner and the driver accept them; an id outside `p222-5090-1` to `-6` and `p222-shake-1` to `-3`
   is still refused.
 - **The screen** excludes machine 45379 from every pin, and pins only an offer present in two consecutive sweeps and
-  still present after a hold of at least the launch latency (3 min), per adertha-agents#338.
+  still present after a hold of at least the launch latency (3 min).
 - **The launch:** a manifest may be validated at $0 before the pin and launched without re-validating only when it is
   byte-identical (the same run id, pin, launcher and e4b); any difference re-validates.
 
