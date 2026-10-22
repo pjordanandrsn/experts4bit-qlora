@@ -35,7 +35,9 @@ fi
 NEED_GATE=60; NEED_REDUCE=60; RESERVE=600
 # Amendment 5: 256 held-out sequences raise the reference arm and add NEED_SCORE to each of the two scoring slots
 NEED_WORK=$((NEED_FETCH + NEED_BAKE + NEED_TRAIN + NEED_REF + 6 * NEED_SLOT + 2 * NEED_SCORE + NEED_GATE + NEED_REDUCE + NEED_FIXTURES))
-MIN_RAM_GB=16; MIN_DISK_GB=60; [ "$SHAKE" = 1 ] && MIN_DISK_GB=40
+# the reading fetches Qwen3-30B-A3B (about 61 GB), bakes the arena (about 16 GB) and installs (about 5 GB): a box
+# with less than 100 GB free refuses here, before any install, instead of failing mid-fetch (the manifest rents 120)
+MIN_RAM_GB=16; MIN_DISK_GB=100; [ "$SHAKE" = 1 ] && MIN_DISK_GB=40
 [ -z "${P224_GPU_CLASS:-}${P224_MIN_DISK_GB:-}${P224_NEED_SLOT:-}" ] || { say 'reading knobs are frozen'; finish 78; }
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever starts unset: the server's own defaults; the adapter knobs are set per arm below, never here
