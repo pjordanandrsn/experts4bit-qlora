@@ -1,8 +1,10 @@
 # bench/p223/staged-p223.sha256 -- every piece the P223 box runs, by the name the box sees (bench/p223/PREREG-p223.md, "The read").
 # The helpers at their registered bytes; test_dense_i8.py is grouped-nf4-gemm v0.49.0's kernel/test_dense_i8.py, byte for byte (bench/p149); phases.sh is bench/common's phase-stamp writer.
-4185d9405e8aac83ac8422ddb6116b4a206383e1021875051a7039156b41c283  p223_run.sh
+# p149_slice.py is P149's Amendment 5 one-layer cut, for Amendment 1's shake ids, at P149's pinned bytes.
+78f816d7077bde614caa3b93796b0778b418518e4c68997bba9270b300c5a149  p223_run.sh
 26092c87b25f12e1835197db71c8a3cf9d43d1946ca83eca2031b9a3cb92c149  p223_box.py
-986c3196dd26095d48c82e69ef7dd05f0cdd1b9e445d0820725b166b098a21f5  p223_reduce.py
+fd5ae53afabd3e15588e4b5acc1c5fe7b5b75284e221d59e7a13ab25dcc5a8f5  p223_reduce.py
+bc32cb22f5491b18288eb4fddcff52fa14979bdf39cc542136f824a41f06145c  p149_slice.py
 73efc5b7cdd09e084f49b3f3ce93a9bdcacf8ee77440bc84843c7064735c5e34  test_dense_i8.py
 36cb2a9cf20c81e7217de850923ab3662788a96a3dc57ecd7cbb5a536211195c  test_int8_attn_interp.py
 b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py

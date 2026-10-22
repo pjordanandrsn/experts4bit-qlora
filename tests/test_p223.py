@@ -3,7 +3,9 @@
 them, the runner's order (the host floors and the guard fit before any install, the compiled premises before the fetch,
 the eight processes in the registered order with each arm's first read before the next, the reduce), the fit table
 against the registration's and its 3.5 h guard, the self-tests run as the box runs them (one directory), the mutants the
-self-tests must kill, and the driver's run ids."""
+self-tests must kill, and the driver's run ids. Amendment 1's shake mode: its table against the 1.75 h guard, the switch
+refusing a mismatch either way, a shake reduce that can never read READ, and every check kept."""
+import json
 import hashlib
 import os
 import pathlib
@@ -18,6 +20,7 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 B = REPO / "bench"
 LANE = B / "p223"
 SOURCES = {"p223_run.sh": LANE, "p223_box.py": LANE, "p223_reduce.py": LANE, "test_dense_i8.py": B / "p149",
+           "p149_slice.py": B / "p149",
            "test_int8_attn_interp.py": REPO / "tests", "p109_box.py": B / "p109", "k8_bake.py": B / "p39",
            "calib.json": B / "p39", "phases.sh": B / "common"}
 RUN = (LANE / "p223_run.sh").read_text(encoding="utf-8")
@@ -53,7 +56,7 @@ def test_the_helpers_are_p149s_registered_bytes():
     """The kit is P149's box Q+S kit by substitution: every helper it shares is staged at P149's pinned bytes."""
     p149 = _pins(B / "p149" / "staged-p149.sha256")
     pins = _pins(LANE / "staged-p223.sha256")
-    for name in ("test_dense_i8.py", "test_int8_attn_interp.py", "p109_box.py", "k8_bake.py", "calib.json"):
+    for name in ("test_dense_i8.py", "test_int8_attn_interp.py", "p109_box.py", "k8_bake.py", "calib.json", "p149_slice.py"):
         assert pins[name] == p149[name], name
 
 
@@ -92,7 +95,7 @@ def test_the_arms_are_the_registrations_in_box_reducer_and_runner():
 
 
 def test_the_runner_refuses_before_any_install_and_runs_the_registered_order():
-    assert "p223-5090-1|p223-5090-2|p223-5090-3) ;;" in RUN and "`p223-5090-1` is the reading" in PRE
+    assert "p223-5090-1|p223-5090-2|p223-5090-3) SHAKE=0;;" in RUN and "`p223-5090-1` is the reading" in PRE
     assert "MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1; REV=eba92302a2861cdc0098cc54bc9f17cb2c47eb61" in RUN
     assert "MIN_POWER_W=575" in RUN and 'assert triton.__version__ == "3.4.0"' in RUN and "TORCH_FULL\" = 2.8.0+cu128" in RUN
     assert 'transformers.__version__ == "5.17.0"' in RUN and "Mixtral at `eba92302`" in PRE
@@ -110,7 +113,7 @@ def test_the_runner_refuses_before_any_install_and_runs_the_registered_order():
         at.append(RUN.index(x, at[-1] if at else 0))
     assert at == sorted(at), dict(zip(order, at))
     assert "finish 27;; esac" in RUN, "NOISY and VOID are not readings"
-    for gone in ("--mode gate", "--mode tf", "--mode sane", "--windows", "--q ", "--q-only", "P223_DRY", "slice"):
+    for gone in ("--mode gate", "--mode tf", "--mode sane", "--windows", "--q ", "--q-only", "P223_DRY"):
         assert gone not in RUN, gone
     gate = RUN[RUN.index("gate_check(){"):RUN.index("for TAG in")]
     assert "phase_start reduce reduce; reduce_all; phase_end reduce; finish 45" in gate, "an early VOID still reduces"
@@ -122,22 +125,34 @@ def test_the_phase_stamps_are_the_common_writers_with_a_kind_each():
     assert "stamp(){" not in RUN and re.search(r"^\s*stamp ", RUN, re.M) is None
     starts = re.findall(r"phase_start ([^\s;]+) ([a-z]+)", RUN)
     ends = set(re.findall(r"phase_end ([^\s;]+)", RUN))
-    assert {n for n, _k in starts} == ends == {"install", "fetch", "bake", '"$TAG"', "reduce"}, (starts, ends)
-    assert {(n, k) for n, k in starts} == {("install", "setup"), ("fetch", "setup"), ("bake", "setup"),
+    assert {n for n, _k in starts} == ends == {"install", "fetch", "slice", "bake", '"$TAG"', "reduce"}, (starts, ends)
+    assert {(n, k) for n, k in starts} == {("install", "setup"), ("fetch", "setup"), ("slice", "setup"), ("bake", "setup"),
                                            ('"$TAG"', "measure"), ("reduce", "reduce")}
     assert RUN.index(". ./phases.sh") > RUN.index('[ "$LEFT" -ge "$FIT_NEED" ]')
 
 
-TERMS = r"\b(INSTALL|NEED_FETCH|NEED_BAKE|NEED_ARM|NEED_REDUCE|RESERVE)=(\d+)"
+TERMS = r"\b(INSTALL|NEED_FETCH|NEED_BAKE|NEED_ARM|NEED_REDUCE|RESERVE|MIN_DISK_GB|REPS)=(\d+)"
+SHAKE_BLOCK = 'if [ "$SHAKE" = 1 ]; then   # the shake table (Amendment 1)'
+
+
+def _tables():
+    """The reading's table (every assignment before the shake block) and the shake's (the reading's, overridden in it)."""
+    head, shake = RUN.split(SHAKE_BLOCK, 1)
+    box = {k: int(x) for k, x in re.findall(TERMS, head)}
+    return box, {**box, **{k: int(x) for k, x in re.findall(TERMS, shake.split("\nfi\n", 1)[0])}}
+
+
+def _fit(v):
+    return v["INSTALL"] + v["NEED_FETCH"] + v["NEED_BAKE"] + 8 * v["NEED_ARM"] + v["NEED_REDUCE"] + v["RESERVE"]
 
 
 def test_the_fit_table_is_the_registrations_and_fits_three_and_a_half_hours():
     """PREREG "The fit": boot 300 + install 450 + fetch 3,000 + bake 1,500 + 8 x 480 + reduce 120 + reserve 600 = 9,810 s;
     x 1.25 = 12,263 s inside the 3.5 h guard; the runner's own check before the install needs (9,810 - 300) x 1.25 =
     11,888 s left."""
-    v = {k: int(x) for k, x in re.findall(TERMS, RUN)}
+    v, _shake = _tables()
     assert v == {"INSTALL": 450, "NEED_FETCH": 3000, "NEED_BAKE": 1500, "NEED_ARM": 480, "NEED_REDUCE": 120,
-                 "RESERVE": 600}, v
+                 "RESERVE": 600, "MIN_DISK_GB": 200, "REPS": 5}, v
     for term, s in (("boot", "300"), ("install", "450"), ("fetch", "3,000"), ("bake", "1,500"),
                     ("8 arm processes × 480", "3,840"), ("reduce", "120"), ("reserve", "600")):
         assert f"| {term} | {s} |" in PRE, term
@@ -146,11 +161,171 @@ def test_the_fit_table_is_the_registrations_and_fits_three_and_a_half_hours():
     assert "FIT=$((INSTALL + NEED_FETCH + NEED_BAKE + 8 * NEED_ARM + NEED_REDUCE + RESERVE))" in RUN
     assert "FIT_HEADROOM_PCT=125" in RUN and "FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100))" in RUN     # the canonical form
     boot, guard = 300, int(3.5 * 3600)
-    fit = v["INSTALL"] + v["NEED_FETCH"] + v["NEED_BAKE"] + 8 * v["NEED_ARM"] + v["NEED_REDUCE"] + v["RESERVE"]
+    fit = _fit(v)
     assert boot + fit == 9810 and (boot + fit) * 1.25 <= guard
     need = fit * 125 // 100                                  # the runner's check in integer arithmetic
     assert need == 11887 and 11888 - need == 1               # 1 s under the registration's 11,888 (the half second rounded up)
     assert guard - need >= boot                              # the guard leaves boot its allowance after that check
+
+
+def test_the_shake_table_is_amendment_1s_and_fits_its_guard():
+    """Amendment 1's shake table: boot 300 + install 450 + fetch 900 + the cut and the bake 600 + 8 x 240 + reduce 120 +
+    reserve 600 = 4,890 s; x 1.25 = 6,112 s inside the 1.75 h shake guard; the runner's own check needs (4,890 - 300) x
+    1.25 = 5,737 s left before the install. Two timed reps, a 60 GB disk; everything else the reading's."""
+    box, v = _tables()
+    assert v == {"INSTALL": 450, "NEED_FETCH": 900, "NEED_BAKE": 600, "NEED_ARM": 240, "NEED_REDUCE": 120,
+                 "RESERVE": 600, "MIN_DISK_GB": 60, "REPS": 2}, v
+    assert {k: x for k, x in box.items() if k in ("INSTALL", "NEED_REDUCE", "RESERVE")} == \
+        {k: x for k, x in v.items() if k in ("INSTALL", "NEED_REDUCE", "RESERVE")}
+    for term, s in (("fetch (two shards, 9.1 GB)", "900"), ("the cut and the bake", "600"),
+                    ("8 arm processes × 240 (2 timed reps)", "1,920"), ("install, self-tests and the compiled suites", "450")):
+        assert f"| {term} | {s} |" in PRE, term
+    assert "| **total** | **4,890** |" in PRE and "inside the **1.75 h shake guard** (6,300 s)" in PRE
+    assert re.search(r"\(4,890 − 300\) ×\s+1\.25 = 5,737 s", PRE)
+    boot, guard = 300, int(1.75 * 3600)
+    fit = _fit(v)
+    assert boot + fit == 4890 and (boot + fit) * 1.25 <= guard
+    need = fit * 125 // 100                                  # the runner's canonical check, the same line as the reading's
+    assert need == 5737 and guard - need >= boot
+    assert RUN.count("FIT=$((") == 1 and RUN.index(SHAKE_BLOCK) < RUN.index("FIT=$((")
+
+
+def _switch(text, run_id, shake):
+    """The runner's id switch, cut from ``text`` and run on its own: rc and the table it leaves."""
+    snippet = ('say(){ echo "$*"; }\nfinish(){ echo "rc=$1"; exit "$1"; }\n'
+               "REPS=5; NEED_FETCH=3000; NEED_BAKE=1500; NEED_ARM=480; MIN_DISK_GB=200\n"
+               + text[text.index('case "$P223_RUN_ID" in'):text.index('RS=""; [ "$SHAKE" = 1 ] && RS=--shake')]
+               + 'echo "SHAKE=$SHAKE REPS=$REPS NEED_ARM=$NEED_ARM"\n')
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "P223_RUN_ID": run_id}
+    if shake is not None:
+        env["P223_SHAKE"] = shake
+    out = subprocess.run(["bash", "-c", snippet], capture_output=True, text=True, env=env, timeout=30)
+    return out.returncode, out.stdout
+
+
+SWITCH = [("p223-5090-1", None, 0, "SHAKE=0 REPS=5 NEED_ARM=480"), ("p223-5090-3", "0", 0, "SHAKE=0 REPS=5"),
+          ("p223-shake-1", "1", 0, "SHAKE=1 REPS=2 NEED_ARM=240"), ("p223-shake-3", "1", 0, "SHAKE=1 REPS=2"),
+          ("p223-5090-2", "1", 78, "does not match"), ("p223-shake-2", None, 78, "does not match"),
+          ("p223-shake-1", "0", 78, "does not match"), ("p223-shake-4", "1", 78, "unregistered"),
+          ("p223-dry-1", None, 78, "unregistered")]
+
+
+@pytest.mark.parametrize("run_id,shake,rc,want", SWITCH)
+def test_the_switch_refuses_a_mismatch_either_way_before_any_install(run_id, shake, rc, want):
+    if shutil.which("bash") is None:
+        pytest.skip("the runner needs a POSIX bash")
+    got, out = _switch(RUN, run_id, shake)
+    assert got == rc and want in out, (got, out)
+    check = RUN.index('[ "${P223_SHAKE:-0}" = "$SHAKE" ] || {')
+    assert check < RUN.index("pipx logs/pip_e4b.log") and check < RUN.index("FIT=$((") and "finish 78; }" in RUN[check:check + 200]
+
+
+SWITCH_MUTANTS = [('[ "${P223_SHAKE:-0}" = "$SHAKE" ] ||', "true ||"),
+                  ("  p223-shake-1|p223-shake-2|p223-shake-3) SHAKE=1;;", "  p223-shake-1|p223-shake-2|p223-shake-3) SHAKE=0;;"),
+                  ("  NEED_FETCH=900; NEED_BAKE=600; NEED_ARM=240; MIN_DISK_GB=60; REPS=2",
+                   "  NEED_FETCH=900; NEED_BAKE=600; NEED_ARM=240; MIN_DISK_GB=60")]
+
+
+@pytest.mark.parametrize("old,new", SWITCH_MUTANTS)
+def test_each_switch_mutant_fails_the_switch_cases(old, new):
+    if shutil.which("bash") is None:
+        pytest.skip("the runner needs a POSIX bash")
+    assert RUN.count(old) == 1, old
+    bad = RUN.replace(old, new)
+    failed = []
+    for rid, sh, rc, want in SWITCH:
+        got, out = _switch(bad, rid, sh)
+        if got != rc or want not in out:
+            failed.append((rid, sh))
+    assert failed, "the mutant passes every switch case"
+
+
+def _reducer():
+    sys.path.insert(0, str(LANE))
+    try:
+        import p223_reduce as red
+    finally:
+        sys.path.pop(0)
+    return red
+
+
+def test_a_shake_reduce_never_reads_READ_even_on_all_pass_records():
+    """Amendment 1: the verdict is SHAKE, hard-coded. On clean one-layer records it is SHAKE with no instrument fault;
+    the reading's rule would read them (labels and all), and the shake still writes no READ."""
+    red = _reducer()
+    saved = red._consts()
+    try:
+        red.use_shake()
+        arms = red._shake_fixture()
+        v = red.reduce_shake(arms, red.E)
+        assert v["verdict"] == "SHAKE" and v["ok"] and v["instrument_faults"] == [], v["instrument_faults"]
+        assert '"READ"' not in json.dumps(v, default=str)
+        assert v["reported"]["labels"] == {"S0": "SCHEDULE_INVARIANT", "S1": "SCHEDULE_INVARIANT"}
+        assert {p["graded"] for p in v["reported"]["predictions"]} == {"not graded (shake)"}
+        assert red.reduce(arms, red.E)["verdict"] == "READ"       # the same records under the reading's rule would read
+    finally:
+        red._restore(saved)
+    sh = RUN[RUN.index('if [ "$SHAKE" = 1 ]; then   # never a reading'):RUN.index('case "$V" in READ)')]
+    assert '[ "$V" = SHAKE ]' in sh and "finish 0; fi" in sh and sh.rstrip().endswith("finish 29\nfi")
+
+
+def _shake_dir(tmp_path):
+    red = _reducer()
+    saved = red._consts()
+    try:
+        red.use_shake()
+        arms = red._shake_fixture()
+    finally:
+        red._restore(saved)
+    for t, r in arms.items():
+        (tmp_path / f"arm_{t}.json").write_text(json.dumps(r), encoding="utf-8")
+    return red.E
+
+
+CLI_MUTANTS = [("    v = reduce_shake(load(a.dir), a.e4b_sha) if a.shake else reduce(load(a.dir), a.e4b_sha)",
+                "    v = reduce(load(a.dir), a.e4b_sha)"),
+               ("    if a.shake:\n        use_shake()", "    if a.shake:\n        pass")]
+
+
+@pytest.mark.parametrize("mutant", [None] + CLI_MUTANTS)
+def test_the_shake_cli_reads_shake_on_clean_one_layer_records(tmp_path, mutant):
+    """The runner's call (--shake) on a clean shake directory: SHAKE, ok, no READ. Each CLI mutant breaks it."""
+    e = _shake_dir(tmp_path)
+    src = (LANE / "p223_reduce.py").read_text(encoding="utf-8")
+    if mutant:
+        assert src.count(mutant[0]) == 1, mutant[0]
+        src = src.replace(*mutant)
+    (tmp_path / "red").mkdir()
+    (tmp_path / "red" / "p223_reduce.py").write_text(src, encoding="utf-8")
+    out = _run(tmp_path / "red" / "p223_reduce.py", "--dir", str(tmp_path), "--out", str(tmp_path / "v.json"),
+               "--e4b-sha", e, "--shake")
+    v = json.loads((tmp_path / "v.json").read_text(encoding="utf-8")) if (tmp_path / "v.json").exists() else {}
+    good = out.returncode == 0 and v.get("verdict") == "SHAKE" and v.get("ok") is True and '"READ"' not in json.dumps(v)
+    assert good == (mutant is None), (out.stdout[-600:], out.stderr[-600:])
+
+
+def test_a_shake_keeps_every_check():
+    """Amendment 1, "every check kept": the shake runs the reading's own per-process checks (process_faults) and the
+    reading's gate; it reports and goes on where the reading stops; every VOID case of the reducer's self-test also faults
+    a shake on its own one-layer records; and the runner's checks carry no shake branch."""
+    src = (LANE / "p223_reduce.py").read_text(encoding="utf-8")
+    shake = src[src.index("def reduce_shake("):src.index("def gate_faults(")]
+    assert "faults += process_faults(t, r, e4b_sha)" in shake and "void += process_faults(t, arms[t], e4b_sha)" in src
+    gate = src[src.index("def gate_faults("):src.index("def _json(")]
+    assert "return process_faults(tag, r, e4b_sha)" in gate and "shake" not in gate.lower()
+    red = _reducer()
+    cases = []
+    red._cases_engagement(cases)
+    void = [c for c in cases if not c[0].endswith("; the shake lists it")]
+    shook = [c for c in cases if c[0].endswith("; the shake lists it")]
+    assert len(void) == len(shook) >= 20 and all(ok for _d, ok, _x in cases), [c[0] for c in cases if not c[1]]
+    run_gate = RUN[RUN.index("gate_check(){"):RUN.index("for TAG in")]
+    assert 'p223_reduce.py --gate $W/arm_$1.json --e4b-sha "$E4B_SHA" $RS' in run_gate
+    assert 'if [ "$SHAKE" = 1 ]; then echo "SHAKE_GATE_FAULT $1"' in run_gate and "finish 45" in run_gate
+    assert 'p223_reduce.py --dir $W --out $W/verdict_p223.json --e4b-sha "$E4B_SHA" $RS' in RUN
+    for x in ("sha256sum -c staged-p223.sha256", '[ "$CC" = 12.0 ]', '[ "$EPL" -ge "$MIN_POWER_W" ]', "p223_box.py --self-test",
+              "p223_reduce.py --self-test", "grep -qE '^28 passed", "grep -qE '^4 passed", "TRIPWIRE FAIL"):
+        assert RUN.count(x) == 1, x                           # one unconditional line, no shake branch around it
 
 
 @pytest.fixture(scope="module")
@@ -241,6 +416,17 @@ MUTANTS = [
     ('        p1, p16 = min(pairs["W1"].values()), min(pairs["W16"].values())',
      '        p1, p16 = max(pairs["W1"].values()), min(pairs["W16"].values())'),
     ("    steps = [first_diff(a[0], b[0]) for a, b in zip(w1, w16)]", "    steps = [first_diff(a[0], b[0]) for a, b in zip(w1[:1], w16[:1])]"),
+    # Amendment 1: the shake
+    ('    out = {"lane": "P223 shake (Amendment 1)", "verdict": "SHAKE",', '    out = {"lane": "P223 shake (Amendment 1)", "verdict": "READ",'),
+    ("        faults += process_faults(t, r, e4b_sha)", "        faults += []"),
+    ('            faults.append(f"{t}: missing or not ok")', "            pass"),
+    ("    PROJ, CENSUS = 4 * LAYERS, census(LAYERS)", "    PROJ, CENSUS = 4 * LAYERS, census(32)"),
+    ('    MODEL, REV, LAYERS, REPS = SHAKE_SLICE, "", SHAKE_LAYERS, SHAKE_REPS',
+     '    MODEL, REV, LAYERS, REPS = SHAKE_SLICE, "", SHAKE_LAYERS, 5'),
+    ("            if len(reps) != REPS or any(", "            if len(reps) != 5 or any("),
+    ('    if r.get("reps") != REPS or (r.get("short"), r.get("long")) != (SHORT, LONG):',
+     '    if r.get("reps") != 5 or (r.get("short"), r.get("long")) != (SHORT, LONG):'),
+    ('"graded": "not graded (shake)"}', '"graded": p["graded"]}'),
     ('    d_arms = {a: any(inv[t]["w16_rows_differing"] for t in TAGS if t[:2] == a) for a in ("D0", "D1")}',
      '    d_arms = {a: True for a in ("D0", "D1")}'),
 ]
@@ -266,6 +452,7 @@ def _clean_checkout():
 
 
 @pytest.mark.parametrize("run_id,ok", [("p223-5090-1", True), ("p223-5090-3", True), ("p223-5090-4", False),
+                                       ("p223-shake-1", True), ("p223-shake-3", True), ("p223-shake-4", False),
                                        ("p149-5090-1", False), ("p223-dry-1", False)])
 def test_the_driver_takes_the_registered_ids_only(tmp_path, run_id, ok):
     if sys.platform == "win32" or shutil.which("bash") is None:
@@ -277,6 +464,7 @@ def test_the_driver_takes_the_registered_ids_only(tmp_path, run_id, ok):
     if ok:
         assert out.returncode == 0 and "DRYRUN stage -> root@h:/root/p223 " in out.stdout + " ", out.stdout + out.stderr
         assert "bash p223_run.sh" in out.stdout
+        assert ("P223_SHAKE=1" in out.stdout) == run_id.startswith("p223-shake-"), out.stdout
     else:
         assert out.returncode == 78 and "is not p223-5090-N" in out.stdout + out.stderr
 

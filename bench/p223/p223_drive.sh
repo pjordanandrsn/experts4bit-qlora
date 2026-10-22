@@ -2,8 +2,9 @@
 # Lane P223's controller (bench/p223/PREREG-p223.md): P149's box Q+S driver (bench/p149/p149_drive.sh) by substitution --
 # this lane's run ids, runner, box and reducer; the staged helpers at their registered bytes (P109's prompts and pass,
 # P39's arena bake and calibration); the compiled premises (grouped-nf4-gemm K37's suite, vendored byte for byte in
-# bench/p149, and e4b's int8 kernel path); the phase-stamp writer (bench/common/phases.sh); and P145's hf token staging
-# for the gated checkpoint. Lane liveness by launch identity
+# bench/p149, and e4b's int8 kernel path); the phase-stamp writer (bench/common/phases.sh); P149's one-layer cut
+# (p149_slice.py, for Amendment 1's shake ids); and P145's hf token staging for the gated checkpoint. Lane liveness by
+# launch identity
 # (bench/common/lane_liveness.sh). Stages hash-pinned files, refuses unknown run IDs and dirty source trees, polls the
 # nonce-bound completion marker, and fetches the receipts. It does not create, destroy, or approve compute.
 set -uo pipefail
@@ -20,7 +21,7 @@ source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78
 # (tests/), the phase-stamp writer, and the helpers at their registered bytes. staged-p223.sha256 pins every one by the
 # name the box sees.
 TESTS="$REPO/tests"; B="$REPO/bench"
-STAGE="$HERE/p223_run.sh $HERE/p223_box.py $HERE/p223_reduce.py $B/p149/test_dense_i8.py $TESTS/test_int8_attn_interp.py \
+STAGE="$HERE/p223_run.sh $HERE/p223_box.py $HERE/p223_reduce.py $B/p149/p149_slice.py $B/p149/test_dense_i8.py $TESTS/test_int8_attn_interp.py \
   $B/p109/p109_box.py $B/p39/k8_bake.py $B/p39/calib.json $B/common/phases.sh $HERE/staged-p223.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged-p223.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
@@ -30,7 +31,7 @@ while read -r want name; do
   case "$want" in \#*|"") continue;; esac
   case "$name" in
     p223_run.sh|p223_box.py|p223_reduce.py) src="$HERE/$name";;
-    test_dense_i8.py) src="$B/p149/$name";;
+    p149_slice.py|test_dense_i8.py) src="$B/p149/$name";;
     test_int8_attn_interp.py) src="$TESTS/$name";;
     p109_box.py) src="$B/p109/$name";;
     k8_bake.py|calib.json) src="$B/p39/$name";;
@@ -58,10 +59,12 @@ POLL=${P223_POLL_S:-60}; W=/root/p223
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="P223_RUN_ID=$RUN_ID P223_RUN_NONCE=$NONCE P223_DEADLINE_EPOCH=$DEADLINE P223_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
-# Explicit IDs only: the reading (-1) and two spares for pre-create and host refusals (-2, -3).
+# Explicit IDs only: the reading (-1) and two spares for pre-create and host refusals (-2, -3); Amendment 1's shake ids
+# (-1 to -3: instrument runs on a 1-layer cut, never a reading) carry P223_SHAKE=1, which the runner matches to the id.
 case "$RUN_ID" in
   p223-5090-1|p223-5090-2|p223-5090-3) :;;
-  *) say "refusing unregistered run ID: $RUN_ID (is not p223-5090-N)"; exit 78;;
+  p223-shake-1|p223-shake-2|p223-shake-3) PASS="$PASS P223_SHAKE=1";;
+  *) say "refusing unregistered run ID: $RUN_ID (is not p223-5090-N or p223-shake-N)"; exit 78;;
 esac
 if [ "${P223_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p223_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p223"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/p223; deadline $DEADLINE"
@@ -137,10 +140,10 @@ while :; do
 done
 mkdir -p "$RUN_DIR/p223" && [ -z "$(find "$RUN_DIR/p223" -mindepth 1 -maxdepth 1 -print -quit)" ] || { say "fetch failed: local dir"; exit 22; }
 # The checkpoint stays on the box (the hub cache, outside $W), and so do the NF4 snapshot and the arena (work/: only
-# its bake.json travels); records, logs, the prompts and the verdict travel.
+# its bake.json travels) and a shake's one-layer cut (slice/); records, logs, the prompts and the verdict travel.
 rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
   --include 'work/' --include 'work/bake.json' --exclude 'work/*' \
-  --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' \
+  --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' --exclude '/slice' \
   "root@$HOST:$W/" "$RUN_DIR/p223/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/p223" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/p223/P223_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
