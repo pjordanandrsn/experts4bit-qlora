@@ -11872,6 +11872,32 @@
       "notes": "Vast invoiced $2.12."
     },
     {
+      "id": "e4b.train.memory-census.field.5090.2026-10-22",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 73 (#835), descriptive, one rented RTX 5090 (tc1-5090-152, AMD EPYC 9655): amendment 69's field recipe over 60 steps with the memory census on both arms at the field-device-ratio claim's commits, e4b's matched arm at its defaults (fused_attn4_m_fd) and Unsloth 2026.9.14's (ckpt_unsloth_m_fv), one draw each, no speed read. Both claim peaks reproduce (26.156 and 24.273 GB). At the training-window peak every resident tensor class is the same size on both sides (frozen experts 14.496, absmax 0.460, other frozen 1.738, adapters 2.570, adapter gradients 2.570, optimizer state 1.305 GB); the transient is 3.017 GB against 1.130, of which 2.044 GB on e4b's side is grouped-nf4-gemm's padded LoRA delta (nf4_qlora.py 582-584). At the end of setup the allocated bytes are equal (19.297 against 19.302 GB) and e4b reserves 0.713 GB more: the allocator's cache.",
+      "value": 1.887,
+      "unit": "GB (1e9 bytes), transient bytes live at the training-window peak, e4b defaults minus Unsloth, TC1 field recipe, one draw each; every static class equal",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-152, AMD EPYC 9655, a 47-CPU allotment); e4b @ 737f02f + grouped-nf4-gemm @ 8371c38, torch 2.12.1+cu130; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3pos69mc (TC1 amendment 73): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, --mem-census 1 --profile-steps 0, matched set (fp32 adapters, matched init); validity (pos69mc_why) and the census tables by bench/tc1/tc1_reduce.py; the public copy rebuilds its RESULTS with bench/tc1/tc1_public.py",
+      "measured_on": "2026-10-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos69mc.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-152/README.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/tc1_public.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-22/tc1-5090-152/tc1/"
+      ],
+      "notes": "USD 1.136 actual. A first box on another host ended at the launcher's pre-flight before the kit ran (NOT_RUN, USD 0.053)."
+    },
+    {
       "id": "e4b.train.single-ladder.field.5090.2026-10-08",
       "package": "experts4bit-qlora",
       "area": "train",
