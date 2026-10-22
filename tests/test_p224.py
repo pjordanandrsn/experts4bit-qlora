@@ -135,6 +135,7 @@ MUTANTS = [
     ("p224_reduce", "            \"flag\": abs(x[\"did\"]) > DID_SE_FLAG * x[\"se_did\"] and abs(x[\"did\"]) > margin}",
      "            \"flag\": False}"),
     ("p224_box", "(r[4] - r[3]) / (r[2] - 1)", "(r[4] - r[3]) / r[2]"),
+    ("p224_box", "COST_CELLS = p224_reduce.COST_METRICS", "COST_CELLS = (\"ttft_ms\", \"itl_ms\", \"tok_s\")"),
     ("p224_box", "                    heldout_train_overlap=sum(h in train for h in held))",
      "                    heldout_train_overlap=0)"),
     ("p224_canary", "for t in SPLIT[\"heldout\"] for j in range(4) for trig in (True, False)]",
@@ -529,3 +530,40 @@ def test_amendment_5_rule_text():
                  "|DiD| > 2 SE", "1 / 0.95"):
         assert text in AMENDMENT_5, text
     assert "falsif" not in AMENDMENT_5.lower()
+
+
+# ---------------------------------------------------------------------------------------- the p224-shake-4 kit fix
+
+SHAKE4_SLOTS_SHA256 = {
+    "slot_b0A1.json": "6ccca419b63da749586f4f492c147d52fbb53917e409edc5f387d17958697592",
+    "slot_b0B.json": "5c9cc22a5b0a120fe09f8bf7747fa97fb2aab03a98ae0b4ad3a71b38184d070a",
+    "slot_b0A2.json": "d947218e4e8f646a20e0bb3088efbd1cfb2b94256a5fea763f9179db5a8063be",
+    "slot_b1A1.json": "5ad9af5f0f3107e33eb614cf21c8ed89ed18553ba5ee702422f79a0669143fd5",
+    "slot_b1B.json": "051da3204997178be8d150dc6a2c04a58af19723a35ed516bcbef78f684270c3",
+    "slot_b1A2.json": "5e6f7d6df2edce27e18ebd4c07ae9df0c8d56d87a00eb992515c90dd6f663c27",
+}
+
+
+def test_the_box_collect_carries_p224_shake_4s_graded_cells_to_the_reducer(tmp_path):
+    """p224-shake-4's six real slot records (byte-exact) through the REAL collect, then the reducer's G3: the graded
+    W1 cells (ttft_any_ms, itl_wall_ms, tok_s) are present and inside the band; that shake read them as unread because
+    collect carried only ("ttft_ms", "itl_ms", "tok_s")."""
+    import hashlib
+    import shutil
+    src = LANE / "shake4_slots"
+    for name, want in SHAKE4_SLOTS_SHA256.items():
+        assert hashlib.sha256((src / name).read_bytes()).hexdigest() == want, name     # the real records
+        shutil.copy(src / name, tmp_path / name)
+    b, R = _load("p224_box"), _load("p224_reduce")
+    col = b.collect(str(tmp_path))
+    assert col["cost"]["ok"] and len(col["cost"]["blocks"]) == 2
+    for blk in col["cost"]["blocks"]:
+        for pos in ("A1", "B", "A2"):
+            assert {"ttft_any_ms", "itl_wall_ms", "tok_s"} <= set(blk[pos]), blk[pos].keys()
+    cg = R.cost_grade(col["cost"]["blocks"])
+    assert cg["fails"] == [], cg["fails"]                                             # nothing unread, nothing outside
+    assert cg["governed"]["itl_wall_ms"]["W1"] == "raw" and round(cg["band"]["itl_wall_ms"]["W1"], 3) == 0.134
+    devs = [abs(k["B"]["itl_wall_ms"]["W1"] - (k["A1"]["itl_wall_ms"]["W1"] + k["A2"]["itl_wall_ms"]["W1"]) / 2)
+            for k in col["cost"]["blocks"]]
+    assert [round(x, 3) for x in devs] == [0.107, 0.006]
+    assert any("itl_ms W1" in w for w in cg["reported_outside_band"])                 # the text cadence: reported

@@ -1,0 +1,81 @@
+{
+ "arm": "PA",
+ "slot": "b1B",
+ "build_s": 16.0,
+ "model": "allenai/OLMoE-1B-7B-0924-Instruct",
+ "revision": "7f1c97f440f06ce36705e4f2b843edb5925f4498",
+ "gpu": "NVIDIA L4",
+ "capability": [
+  8,
+  9
+ ],
+ "graphs": true,
+ "placement": "all-vram",
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16,
+  32
+ ],
+ "identity": {
+  "health_status": "ready",
+  "served_names": [
+   "allenai/OLMoE-1B-7B-0924-Instruct+f99fa23f1f30"
+  ],
+  "served_name": "allenai/OLMoE-1B-7B-0924-Instruct+f99fa23f1f30",
+  "adapter_id": "f99fa23f1f30daffdbd5d2ed62944e1b50edbd47e9d4dda3819abd2a9004667c",
+  "manifest_sha256": "9b78e6b70bbe53818546d43a11e08f644f0e90add2f7d5131c019a37e74cbe9f",
+  "base_match": {
+   "attention": "exact by construction (up to the measured merge rounding)",
+   "experts": "unverified (backend-adapter/1 records no expert absmax form; training defaults to the double-quantized absmax, the NF4 arena stores fp32 (docs/ADAPTER_PORTABILITY.md F1))",
+   "lm_head": "bf16 (as trained)"
+  },
+  "accepted_unverified_base": [
+   "experts"
+  ],
+  "merge": {
+   "merged": 64,
+   "scale": 2.0,
+   "max_err": 0.0019393563270568848,
+   "max_abs_delta": 0.02942448854446411,
+   "seconds": 0.27
+  },
+  "models_adapter": {
+   "adapter_id": "f99fa23f1f30daffdbd5d2ed62944e1b50edbd47e9d4dda3819abd2a9004667c",
+   "manifest_sha256": "9b78e6b70bbe53818546d43a11e08f644f0e90add2f7d5131c019a37e74cbe9f",
+   "base_revision": "7f1c97f440f06ce36705e4f2b843edb5925f4498",
+   "base_match": {
+    "attention": "exact by construction (up to the measured merge rounding)",
+    "experts": "unverified (backend-adapter/1 records no expert absmax form; training defaults to the double-quantized absmax, the NF4 arena stores fp32 (docs/ADAPTER_PORTABILITY.md F1))",
+    "lm_head": "bf16 (as trained)"
+   }
+  },
+  "base_name_status": 404
+ },
+ "cost": {
+  "W1": {
+   "ttft_ms": 454.844,
+   "itl_ms": 10.9754,
+   "tok_s": 69.72,
+   "requests": 8,
+   "batch": 1,
+   "tokens": 1024,
+   "ttft_any_ms": 454.844,
+   "itl_wall_ms": 10.8412
+  },
+  "W16": {
+   "ttft_ms": 4498.175,
+   "itl_ms": 68.3323,
+   "tok_s": 153.482,
+   "requests": 32,
+   "batch": 16,
+   "tokens": 4096,
+   "ttft_any_ms": 4498.175,
+   "itl_wall_ms": 66.8802
+  }
+ },
+ "peak_vram_mib": 13781.1,
+ "ok": true
+}

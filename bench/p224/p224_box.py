@@ -38,6 +38,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import p224_canary  # noqa: E402
+import p224_reduce  # noqa: E402  (staged beside this file; the one list of cost cells the reducer reads)
 
 ARMS_REF = ("REF",)                         # Amendment 3: canary B dropped
 ARMS_PAGED = ("P0", "PA")
@@ -504,6 +505,11 @@ def train_record(arm: str, receipts_dir: str, adapter: str) -> dict:
             "correctness": r.get("correctness")}
 
 
+#: the cost cells collect carries: the reducer's own list, never a second literal (p224-shake-4 found a hard-coded three
+#: here, so Amendment 5's graded cells never reached the blocks)
+COST_CELLS = p224_reduce.COST_METRICS
+
+
 def collect(run_dir: str, slots=SLOTS) -> dict:
     """``cost.json`` from the slot records (blocks of A1 / B / A2 by metric and W; peak VRAM per arm, the max over its
     slots), and the arm records the reducer reads, each from its scoring slot."""
@@ -519,7 +525,8 @@ def collect(run_dir: str, slots=SLOTS) -> dict:
             if not (r and r.get("ok") and r.get("cost")):
                 ok = False
                 continue
-            blk[pos] = {m: {w: r["cost"][w][m] for w in COST} for m in ("ttft_ms", "itl_ms", "tok_s")}
+            blk[pos] = {m: {w: r["cost"][w][m] for w in COST} for m in COST_CELLS
+                        if all(m in r["cost"][w] for w in COST)}
         blocks.append(blk)
     peak = {}
     for tag, arm, _ in slots:
@@ -637,6 +644,13 @@ def self_test() -> int:
        "two ABBA blocks")
     ok(col["cost"]["blocks"][0]["B"]["itl_ms"]["W16"] == 5.0 and col["cost"]["peak_vram_mib"] == {"P0": 1000.0, "PA": 1005.0},
        "metric x W cells and peak per arm")
+    ok("itl_wall_ms" not in col["cost"]["blocks"][0]["B"], "a slot without the Amendment 5 cells carries none")
+    for tag, arm, score in SLOTS:                              # the same slots, recording every cell the reducer reads
+        cost = {w: {**{m: 1.0 + i for i, m in enumerate(p224_reduce.COST_METRICS)}, "requests": 8} for w in COST}
+        json.dump({"ok": True, "arm": arm, "cost": cost, "peak_vram_mib": 1000.0}, open(os.path.join(d, f"slot_{tag}.json"), "w"))
+    blk = collect(d)["cost"]["blocks"][1]["A2"]
+    ok(set(blk) == set(p224_reduce.COST_METRICS) and blk["itl_wall_ms"]["W1"] == 1.0 + p224_reduce.COST_METRICS.index("itl_wall_ms"),
+       "every cell the reducer reads that a slot records reaches the blocks (p224-shake-4's fault)")
     ok(set(col["arms"]) == {"P0", "PA"}, "each arm's record is its scoring slot's")
     os.remove(os.path.join(d, "slot_b1B.json"))
     ok(not collect(d)["cost"]["ok"], "a missing slot leaves the cost record not ok")
