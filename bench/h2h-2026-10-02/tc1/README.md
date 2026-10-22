@@ -1659,3 +1659,48 @@ At this recipe a delta call carries about 4,000 routed rows (amendment 49's cens
 grouped-nf4-gemm's bucketed padding and its compact nodes do not engage there (`compact_buckets` calls 0). What closes the gap is a
 change that shrinks that block's transient with held-out unchanged. The next registration reads grouped-nf4-gemm's two existing
 switches at this recipe with the census.
+
+## Amendment 74 (2026-10-22): no switch is a candidate; removing the padded delta moves the peak to the LM-loss backward (descriptive, one fixed rule)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 74. One RTX 5090 (`tc1-5090-154`, AMD EPYC 7402P, a 23.04-CPU
+quota), amendment 73's field recipe and census at today's pins: e4b `cedddf84` (0.56.1) and grouped-nf4-gemm `a83f6bb3` (0.49.0), e4b's
+matched arm only, one draw per arm. USD 0.914.
+
+Read: [`RESULTS-tc1-pos74pd.md`](RESULTS-tc1-pos74pd.md), rebuilt from this repository's copy of the receipt
+([`receipts/tc1-5090-154/`](receipts/tc1-5090-154/README.md)). The store's own report re-derives byte for byte with main's reducer.
+
+All four arms are VALID, each on the path its own counters record. GB = 1e9 bytes.
+
+| arm | peak allocated (Δ vs fd) | padded-delta live at the peak | removed vs fd | held-out at N (Δ vs fd) | s/step (recorded) |
+|---|---|---|---|---|---|
+| fd: today's defaults | 26.500 | 2.348 | — | 0.7557 | 2.673 |
+| sl0: + `NF4_QLORA_SINGLE_LADDER=0` | 26.149 (−0.351) | 2.007 | 14.5 % | 0.7581 (+0.0024) | 3.438 |
+| cd1: + `NF4_QLORA_COMPACT_DELTA=1` | 25.861 (−0.639) | 0.000 | 100 % | 0.7571 (+0.0014) | 3.434 |
+| pb1: + `NF4_QLORA_PAD_BUCKETS=1` | 25.861 (−0.639) | 0.000 | 100 % | 0.7560 (+0.0003) | 3.870 |
+
+- **The registered outcome: NO CANDIDATE.** cd1 and pb1 remove all 2.348 GB at the padded-delta sites, but their peaks fall 0.639 GB.
+  That is 27.2 % of what they removed, under the rule's 50 % credit. The read prints "Moved, not saved" for both. That label is the
+  rule's wording, not the mechanism; see below.
+- **What the census shows: the peak relocated.** All four arms peak inside the same micro-batch's backward (s22.mb2), so the checkpoint
+  label cannot tell them apart. The bytes live at each peak can:
+
+  | arm | padded delta | `cross_entropy` | unattributed backward (no Python frame) |
+  |---|---|---|---|
+  | fd | 2.348 | 0 | 0 |
+  | sl0 | 2.007 | 0 | 0 |
+  | cd1 | 0 | 0.687 | 1.374 |
+  | pb1 | 0.0001 | 0.687 | 1.374 |
+
+  At fd's peak the delta is live and the loss backward's buffers are not. At cd1's and pb1's peak, the reverse holds. These are
+  different instants in one backward: the loss backward runs first, then each MoE layer's delta. With the delta gone, the loss
+  backward sets the peak. cd1 and pb1 run different delta code, and their peaks agree to 2,048 bytes.
+- **The loss buffers are vocab-shaped.** The unattributed group is exactly 9,040 × 151,936 bytes, Qwen3's vocabulary: 2,260 rows of
+  fp32. `cross_entropy`'s group is 1,130 × 151,936 × 4 bytes (+4). The chunked LM loss recorded 0 chunked calls and 240 small calls:
+  at this recipe its size gate kept the stock full-vocab loss. **Open:** 1,130 tokens does not match this micro-batch's padded
+  lengths, and nothing here is fitted to it.
+- **Today's defaults hold 0.344 GB more than the claim's commits.** fd peaks at 26.500 GB against amendment 73's 26.156, with
+  padded-delta bytes of 2.348 against 2.044. sl0 takes 0.351 GB of that back: the single-block ladder's share, matching amendment 70.
+  fd is also the fastest arm. Speed is recorded, never gated, because field draws on rented hosts have been unstable.
+
+So new padded-delta code cannot lower this peak below 25.861 GB: cd1 and pb1 already take the delta to zero there. The next lever is
+the loss backward, the chunked LM loss forced on at this recipe, and it is the next amendment's.

@@ -11898,6 +11898,32 @@
       "notes": "USD 1.136 actual. A first box on another host ended at the launcher's pre-flight before the kit ran (NOT_RUN, USD 0.053)."
     },
     {
+      "id": "e4b.train.padded-delta-switches.field.5090.2026-10-22",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 74 (#835), descriptive with one fixed rule, one rented RTX 5090 (tc1-5090-154, AMD EPYC 7402P): TC1's field recipe over 60 steps with the memory census, e4b's matched arm at today's pins (e4b 0.56.1, grouped-nf4-gemm 0.49.0), one draw per arm: today's defaults (fd) and one grouped-nf4-gemm switch per arm. fd peaks at 26.500 GB with 2.348 GB of padded LoRA delta live at the peak. NF4_QLORA_SINGLE_LADDER=0 lowers it to 26.149 (removes 14.5 %). NF4_QLORA_COMPACT_DELTA=1 and NF4_QLORA_PAD_BUCKETS=1 each remove all of the delta at the peak and lower the peak to 25.861 GB (-0.639, 27.2 % of the bytes removed), so by the registered 50 % peak credit no arm is a candidate for a default change. At their peaks the LM loss backward is live instead (the stock full-vocab loss: a 1.374 GB and a 0.687 GB vocab-shaped group), and cd1 and pb1 agree to 2,048 bytes: the peak relocated to the loss backward. Held-out within 0.0024 of fd on every arm.",
+      "value": 0.639,
+      "unit": "GB (1e9 bytes), peak allocated lowered vs today's defaults by NF4_QLORA_COMPACT_DELTA=1 or NF4_QLORA_PAD_BUCKETS=1 (each removes all 2.348 GB of padded-delta bytes at the peak), TC1 field recipe, one draw each",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-154, AMD EPYC 7402P, a 23.04-CPU quota); e4b @ cedddf8 + grouped-nf4-gemm @ a83f6bb, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3pos74pd (TC1 amendment 74): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, --mem-census 1 --profile-steps 0, matched set (fp32 adapters, matched init); validity (pos74_why, each arm bound to its path by its own counters) and the read (pos74_block, padded_site_bytes over nf4_qlora.py 606-969 at a83f6bb) by bench/tc1/tc1_reduce.py; the public copy rebuilds its RESULTS with bench/tc1/tc1_public.py",
+      "measured_on": "2026-10-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos74pd.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-154/README.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/tc1_public.py"
+      ],
+      "evidence_private": [
+        "the private receipt store, run tc1-5090-154 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "USD 0.914 actual. The registered rule's label for cd1 and pb1 reads \"Moved, not saved\"; the census shows the delta's bytes removed and the peak relocated to the loss backward."
+    },
+    {
       "id": "e4b.train.single-ladder.field.5090.2026-10-08",
       "package": "experts4bit-qlora",
       "area": "train",
