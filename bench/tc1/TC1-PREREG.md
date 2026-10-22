@@ -3283,3 +3283,75 @@ min(declared, ceiling).
 - **Download** is unchanged: + 100 GB × $0.011/GB = $1.10, the launcher's buy cap and its default estimate.
 - **Worst case:** 2 h × $1.05 + $1.10 = **$3.20**. Nothing else changes: the arms, the window, the pins, the exclusions, the disk, the
   guard and what the read reports.
+
+### Amendment 74 (2026-10-22T03:23Z, after amendment 73's read, before any box): grouped-nf4-gemm's padded-delta switches at today's pins, with the census (descriptive; one fixed rule)
+
+**Why.** Amendment 73's box (`tc1-5090-152`, at the field-device-ratio claim's commits; read in #1975) found the field recipe's 1.883 GB peak gap all
+transient. Every resident class was the same size on both sides at the peak, and 2.044 GB of e4b's transient was grouped-nf4-gemm's
+padded LoRA delta: the zero-padded input block and its product (`nf4_qlora.py` 582–584 at `8371c38`). At this recipe a delta call carries
+about 4,000 routed rows (amendment 49's census), so the bucket gate (`NF4_QLORA_PAD_BUCKETS=auto`, 16,384 rows) never fires. The single
+padded block serves every call, in the adapters' dtype: fp32 on the matched arm.
+
+Two switches already exist, and each was read once at this recipe before the code it now runs on:
+- `NF4_QLORA_COMPACT_DELTA=1` (amendments 36–38): the matched peak 0.29–0.31 GB lower, 1.3–1.6 % slower on a fast host. It stayed opt-in.
+- `NF4_QLORA_PAD_BUCKETS=1` (amendment 49): matched 27.49 → 27.19 GB. That was before grouped-nf4-gemm's compact bucketed node (#505,
+  amendment 66), which is now the bucketed path's default.
+
+The defaults have also moved. At grouped-nf4-gemm `a83f6bb3` (0.49.0, e4b CI's pin), `NF4_QLORA_SINGLE_LADDER` is `auto`: with fp32 adapters
+it rounds the single block's group count and width up its rungs, to at most 1.25 × 1.25 its rows (amendment 72). The compact delta turns
+the ladder off. A default change lands on the code users get, so this box runs at today's pins. Its fd arm RE-MEASURES the field gap
+there. Amendment 73's claim stays its own record at its own commits.
+
+**The box** (token `qwen3pos74pd`). Amendment 73's recipe, window and instrument, e4b only:
+- TC1's field recipe: alpaca, seq 2048, micro-batch 2 × accum 4, 60 steps, 8 held-out rows every 20 (`TC1_STEPS=60`). The family refuses any
+  other window.
+- e4b's matched arm (`--adapter-dtype fp32 --lora-init matched`) in venv-unsloth (torch 2.12.1+cu130), `--mem-census 1`, `--profile-steps 0`.
+  Four arms, one draw each, in this order:
+  - `fused_attn4_m_fd`: today's defaults (the ladder `auto`);
+  - `fused_attn4_m_fd_sl0`: + `NF4_QLORA_SINGLE_LADDER=0`;
+  - `fused_attn4_m_fd_cd1`: + `NF4_QLORA_COMPACT_DELTA=1` (compact, which also takes the ladder off);
+  - `fused_attn4_m_fd_pb1`: + `NF4_QLORA_PAD_BUCKETS=1` (every call bucketed, through the compact bucketed node).
+- **Dropped, with the reason.** An arm with both `PAD_BUCKETS=1` and `COMPACT_DELTA=1` would repeat `pb1`. The compact delta acts only on the
+  single padded block (`_lora_delta_padded`), and with `PAD_BUCKETS=1` every call takes the bucketed path.
+- The libraries: e4b is main at launch (the drive's `E4B_SHA`, the launching checkout's HEAD). grouped-nf4-gemm is
+  `GNF4_SHA=a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7`, and the family refuses any other. The harness is main's at this amendment's merge.
+- One RTX 5090 by the launcher's ranking. A pin names only a machine whose listing has held across at least two screen sweeps
+  and 180 s, with its latest read fresh, on an offer that read listed. `TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`.
+
+**Validity** (`pos74_why`). An arm off any of these is VOID and reported as VOID:
+- amendment 69's field defaults without a profile;
+- grouped-nf4-gemm 0.49.0 as the arm records it;
+- a census on the receipt;
+- **binding:** the path the arm's own counters record (`lean_ab.lora_path_calls`, `single_ladder`, `keep_ab.gnf4_compact_delta`,
+  `compact_buckets.calls`). fd has the single block alone, laddered calls on the ladder's unset default, and the compact delta off. sl0 has
+  the single block, the ladder at 0 with no laddered call, and the compact delta off. cd1 has the single block, the compact delta resolved
+  on, and no laddered call. pb1 has every padded call bucketed with `PAD_BUCKETS=1` resolved, the compact bucketed node serving calls,
+  and the compact delta off.
+
+A harness refusal or crash is NOT_RUN: no data, and nothing is read. This is the first TC1 box with e4b at 0.56, so its first arm is also
+its shakedown.
+
+**What the read reports** (`pos74_block`, then amendment 23's tables for the four arms; GB = 1e9 bytes). For each arm:
+- the peak allocated bytes;
+- **the padded-delta bytes:** the live bytes at the peak in groups whose site is `nf4_qlora.py` lines 606–969 at `a83f6bb3`. That span holds
+  `_lora_delta_padded`, its ladder, the bucketed deltas and both compact nodes, and nothing else that allocates.
+  `tests/test_tc1_reduce.py` checks the span against the installed grouped-nf4-gemm;
+- the share of fd's padded-delta bytes it removes;
+- held-out at N, and its Δ against fd;
+- the end-of-setup allocated and reserved bytes;
+- s/step, **recorded, never gated:** TC1's field draws have been unstable on rented hosts.
+
+Amendment 73's 2.044 GB is reported beside, never as the rule's base.
+
+**The gate and the rule** (fixed now):
+- **Gate:** an arm whose held-out at N moves more than **0.005** from fd's is reported, and it is never a candidate.
+- **Rule:** an arm that passes the gate and removes at least **50 %** of THIS box's fd padded-delta bytes is a **CANDIDATE** for a default
+  change. A candidate is not a flip. A default change needs its own registered two-card read with speed first.
+- **No candidate:** the fix is new code in grouped-nf4-gemm, a group-chunked single block, with this box as its baseline.
+- **A VOID fd:** no rule is read.
+
+**Budget.** One RTX 5090 at the declared $1.05/h (GPU plus storage for the 220 GB disk, the RTX 5090 policy ceiling), a 2 h guard, TC1's 98
+GB host floor.
+- **Time:** about 11 min of venvs and fetch (`tc1-5090-152`) and 4 e4b arms at about 9 min each: about 50 min.
+- **Download:** + 100 GB × $0.011/GB = $1.10 at most, the launcher's buy cap and default estimate.
+- **Worst case:** 2 h × $1.05 + $1.10 = **$3.20**. Expected about $1.5.

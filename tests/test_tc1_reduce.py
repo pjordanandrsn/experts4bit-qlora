@@ -417,3 +417,33 @@ def test_amendment_12_registers_the_profile_token():
     F = {R.PROF945_FAM: R.reduce_family(R.PROF945_FAM, R._prof945_set(), {}, 20)}
     assert [(p, v) for p, _, v, _ in R.score_prof945(F)] == [("P19", "HELD")]
 
+
+
+def test_amendment_74_padded_span_holds_only_the_padded_delta():
+    """POS74_PADDED_SPAN, the lines amendment 74 reads as the padded LoRA delta's, must hold exactly that delta's functions at the
+    grouped-nf4-gemm the registration pins (e4b CI installs it). Another installed release has other lines: skip, never pass."""
+    import ast
+    import importlib.metadata as md
+
+    import pytest
+
+    m = _mod()
+    spec = importlib.util.find_spec("nf4_qlora")
+    if spec is None or not spec.origin:
+        pytest.skip("grouped-nf4-gemm is not installed")
+    try:
+        v = md.version("grouped-nf4-gemm")
+    except md.PackageNotFoundError:
+        pytest.skip("grouped-nf4-gemm has no distribution metadata here")
+    if v != m.POS74_GNF4:
+        pytest.skip(f"grouped-nf4-gemm {v} is installed; the span names {m.POS74_GNF4}'s lines")
+    f, lo, hi = m.POS74_PADDED_SPAN
+    assert Path(spec.origin).name == f
+    tree = ast.parse(Path(spec.origin).read_text(encoding="utf-8"))
+    defs = [(n.name, n.lineno, n.end_lineno) for n in tree.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))]
+    inside = [d for d in defs if lo <= d[1] and d[2] <= hi]
+    assert inside[0] == ("_lora_delta_padded", lo, inside[0][2]) and inside[-1] == ("_CompactPaddedDelta", inside[-1][1], hi), inside
+    assert not [d for d in defs if d[1] < lo <= d[2] or d[1] <= hi < d[2]], "a function straddles the span's edge"
+    assert [d[0] for d in inside] == ["_lora_delta_padded", "_lora_delta_padded_ladder", "_lora_delta_grouped_bucketed", "_record_buckets",
+                                      "_lora_delta_bucketed", "_lora_delta_bucketed_ladder", "_compact_buckets_enabled",
+                                      "_CompactBucketedDelta", "_compact_delta_enabled", "_CompactPaddedDelta"]
