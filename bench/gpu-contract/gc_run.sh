@@ -26,6 +26,7 @@ E4B_TESTS="tests/test_decode_graph_buckets.py tests/test_kv_step_select.py tests
 # GC_E4B_TESTS (optional) replaces the e4b list for a PR's own GPU smoke: space-separated tests/test_<name>.py paths
 if [ -n "${GC_E4B_TESTS:-}" ]; then
   read -r -a E4BT <<< "$GC_E4B_TESTS"   # an array, never globbed; each entry must match before it is used unquoted below
+  [ ${#E4BT[@]} -gt 0 ] || { say "refusing: GC_E4B_TESTS is set but names no file (pytest would collect every test)"; finish 78; }
   for t in "${E4BT[@]}"; do [[ "$t" =~ ^tests/test_[a-z0-9_]+\.py$ ]] || { say "refusing: GC_E4B_TESTS entry '$t' is not tests/test_<name>.py"; finish 78; }; done
   E4B_TESTS="${E4BT[*]}"
 fi

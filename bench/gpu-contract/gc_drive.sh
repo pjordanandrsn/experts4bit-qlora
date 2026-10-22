@@ -39,6 +39,8 @@ done
 # (read into an array and never expanded unquoted: from a repo root, tests/test_*.py would glob into real paths here and
 # then reach the box as the literal, which refuses it after the rental is paid)
 read -r -a E4BT <<< "${GC_E4B_TESTS:-}"
+# a value of blanks only would reach the box as no file at all, and pytest would collect every test in the repository
+[ -z "${GC_E4B_TESTS:-}" ] || [ ${#E4BT[@]} -gt 0 ] || { say "refusing: GC_E4B_TESTS is set but names no file"; exit 78; }
 for t in ${E4BT[@]+"${E4BT[@]}"}; do
   [[ "$t" =~ ^tests/test_[a-z0-9_]+\.py$ ]] || { say "refusing: GC_E4B_TESTS entry '$t' is not tests/test_<name>.py"; exit 78; }
 done
