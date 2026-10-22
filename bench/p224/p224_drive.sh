@@ -57,6 +57,7 @@ PASS="P224_RUN_ID=$RUN_ID P224_RUN_NONCE=$NONCE P224_DEADLINE_EPOCH=$DEADLINE P2
 # Explicit IDs only: the reading (-1) and two spares (-2, -3); the shakedowns (-1..-3, and -4..-6 from Amendment 4).
 case "$RUN_ID" in
   p224-5090-1|p224-5090-2|p224-5090-3|p224-shake-1|p224-shake-2|p224-shake-3|p224-shake-4|p224-shake-5|p224-shake-6) :;;   # -4..-6: Amendment 4
+  p225x-5090-1|p225x-5090-2|p225x-5090-3|p225x-5090-4) :;;   # P225 EXPLORE (#348), this unmerged branch only
   *) say "refusing unregistered run ID: $RUN_ID (is not p224-5090-N or p224-shake-N)"; exit 78;;
 esac
 if [ "${P224_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p224_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p224"; exit 0; fi

@@ -20,12 +20,15 @@ CANARY_SHA256=f58d2605423fb83ef88dca8a2fb1e91444d83cda0ddf4c73de036e55beea333d  
 FIXTURE_MODEL=allenai/OLMoE-1B-7B-0924-Instruct; FIXTURE_REV=7f1c97f440f06ce36705e4f2b843edb5925f4498
 ALPACA_REV=dce01c9b08f87459cf36a430d809084718273017   # Amendment 1: the fixtures' pinned text column
 INSTALL_TO_GATE_S=450   # the install and the self-tests (PREREG, "The fit")
-SHAKE=0
+SHAKE=0; EXPLORE=0
 case "$P224_RUN_ID" in
   p224-5090-1|p224-5090-2|p224-5090-3) MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39;;   # the SC1 pin
   p224-shake-1|p224-shake-2|p224-shake-3|p224-shake-4|p224-shake-5|p224-shake-6) SHAKE=1; MODEL=$FIXTURE_MODEL; REV=$FIXTURE_REV;;   # P99's pin; -4..-6: Amendment 4
+  p225x-5090-1|p225x-5090-2|p225x-5090-3|p225x-5090-4) EXPLORE=1; MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39;;   # P225 EXPLORE (#348): timings only, never a reading
   *) say "unregistered run ID: $P224_RUN_ID"; finish 78;;
 esac
+# explore only: alarms wide enough to MEASURE a slow host (P225 derives its real alarms from these timings)
+TRAIN_ALARM=1800; REF_ALARM=1600; [ "$EXPLORE" = 1 ] && { TRAIN_ALARM=5400; REF_ALARM=3600; }
 # the reading's terms, and the shakedown's with its fixture generation (PREREG, "The fit"; tests/test_p224.py)
 if [ "$SHAKE" = 1 ]; then
   NEED_FETCH=300; NEED_BAKE=200; NEED_TRAIN=360; NEED_REF=600; NEED_SLOT=150; NEED_SCORE=260; NEED_FIXTURES=1000; GPU_CLASS=any; VRAM_FLOOR=15000
@@ -73,6 +76,49 @@ FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB"; finish 13; }
 RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < ${MIN_RAM_GB} GiB"; finish 16; }
+# ---- P225 EXPLORE: the host probes P225's screen will floor, REPORTED here, never refusing
+if [ "$EXPLORE" = 1 ]; then
+  echo "EXPLORE P225x (adertha-agents#348): timings are design inputs only, never a reading" | tee -a summary.txt
+  CPU_Q=$(python3 - <<'PYQ'
+q = None
+try:
+    a, b = open("/sys/fs/cgroup/cpu.max").read().split()
+    q = None if a == "max" else int(a) / int(b)
+except (OSError, ValueError):
+    try:
+        a = int(open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read())
+        b = int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read())
+        q = None if a < 0 else a / b
+    except (OSError, ValueError):
+        pass
+print("none" if q is None else f"{q:.2f}")
+PYQ
+)
+  NPROC=$(nproc)
+  case "$CPU_Q" in none|"") NQ=$NPROC;; *) NQ=$(python3 -c "import math; print(max(1, math.floor($CPU_Q)))");; esac
+  DL=$(python3 - "$MODEL" "$REV" <<'PYD'
+import json, sys, time, urllib.request
+model, rev = sys.argv[1:]
+try:
+    meta = json.load(urllib.request.urlopen(f"https://huggingface.co/api/models/{model}/revision/{rev}", timeout=30))
+    shard = sorted(s["rfilename"] for s in meta["siblings"] if s["rfilename"].endswith(".safetensors"))[0]
+    req = urllib.request.Request(f"https://huggingface.co/{model}/resolve/{rev}/{shard}", headers={"Range": "bytes=0-536870911"})
+    t0 = time.time(); n = 0
+    with urllib.request.urlopen(req, timeout=60) as r:
+        status = r.status
+        while n < 536870912 and time.time() - t0 < 30:
+            b = r.read(1 << 20)
+            if not b:
+                break
+            n += len(b)
+    dt = time.time() - t0
+    print(json.dumps({"status": status, "bytes": n, "seconds": round(dt, 2), "mb_s": round(n / dt / 1e6, 1), "shard": shard}))
+except Exception as e:  # a refusal reason in P225, never a number
+    print(json.dumps({"status": getattr(e, "code", None), "error": f"{type(e).__name__}: {str(e)[:120]}"}))
+PYD
+)
+  echo "P225X_PROBE {\"cpu_quota\": \"$CPU_Q\", \"nproc\": $NPROC, \"threads_quota\": $NQ, \"ram_gib\": $RAM_GB, \"free_gb\": $FREE_GB, \"download\": $DL}" | tee -a summary.txt
+fi
 FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
 FIT=$((INSTALL_TO_GATE_S + NEED_WORK + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P224_DEADLINE_EPOCH - $(date +%s)))
 # rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
@@ -158,11 +204,72 @@ rid, shake, e4b, model, rev = sys.argv[1:]
 print(json.dumps({"run_id": rid, "shakedown": shake == "1", "e4b_sha": e4b, "model": model, "model_revision": rev,
                   "device": torch.cuda.get_device_name(0), "cc": list(torch.cuda.get_device_capability(0))}))
 PY
+# ---- P225 EXPLORE: the thread A/B before the train, ABBA on 15-step trains (a: torch's default threads = visible CPUs;
+# b: OMP_NUM_THREADS = MKL_NUM_THREADS = floor(cgroup quota)). The metric is the trainer's own per-interval step seconds
+# (load excluded); the quantize seconds are read from its log stamps. The faster setting is exported for the rest.
+if [ "$EXPLORE" = 1 ]; then
+  # every CPU pool, logged from inside each A/B process (arm a: logged only; arm b: pinned to NQ first)
+  mkdir -p $W/p225x_site
+  cat > $W/p225x_site/sitecustomize.py <<'PYS'
+import os, sys
+n = os.environ.get("P225X_THREADS")
+try:
+    import torch
+    if n:
+        torch.set_num_threads(int(n))
+        try:
+            torch.set_num_interop_threads(int(n))
+        except RuntimeError:
+            pass
+    pools = {"torch_intra": torch.get_num_threads(), "torch_interop": torch.get_num_interop_threads()}
+except Exception as e:  # never break the process this measures
+    pools = {"torch_error": repr(e)[:80]}
+for k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS", "TOKENIZERS_PARALLELISM"):
+    pools[k] = os.environ.get(k)
+sys.stderr.write("P225X_POOLS " + repr(pools) + "\n")
+PYS
+  cpustat(){ cat /sys/fs/cgroup/cpu.stat 2>/dev/null || cat /sys/fs/cgroup/cpu/cpu.stat 2>/dev/null; }
+  for i in 1 2 3 4; do
+    case $i in 1|4) arm=a; thr="";; *) arm=b; thr="P225X_THREADS=$NQ OMP_NUM_THREADS=$NQ MKL_NUM_THREADS=$NQ OPENBLAS_NUM_THREADS=$NQ NUMEXPR_NUM_THREADS=$NQ";; esac
+    echo "P225X_CPUSTAT before $i $arm $(cpustat | tr '\n' ' ')" | tee -a summary.txt
+    phase_start "abba_${i}_$arm" measure
+    env PYTHONPATH=$W/p225x_site E4B_ABSMAX_DQ=0 $thr perl -e "alarm 2400; exec @ARGV" python -m loggetta train "$MODEL" --revision "$REV" \
+      --dataset $W/run/data/train.jsonl --format chat --loss assistant --packing concat --repeat-data --seq 512 --micro-batch 1 \
+      --grad-accum 1 --steps 15 --learning-rate 5e-4 --lr-schedule cosine --seed 0 --fix train_experts=false \
+      --fix train_attention=true --fix attn_4bit=false --fix expert_residency=device \
+      --out $W/run/abba_$i --adapter-out $W/run/abba_adapter_$i > logs/abba_${i}_$arm.log 2>&1
+    echo "abba $i ($arm) rc=$?" | tee -a summary.txt
+    echo "P225X_CPUSTAT after $i $arm $(cpustat | tr '\n' ' ')" | tee -a summary.txt
+    grep -m1 "^P225X_POOLS" logs/abba_${i}_$arm.log | sed "s/^/abba $i $arm /" | tee -a summary.txt
+    phase_end "abba_${i}_$arm"
+  done
+  PICK=$(python3 - $W/logs <<'PYP'
+import glob, json, os, re, statistics, sys
+out = {}
+for f in sorted(glob.glob(sys.argv[1] + "/abba_*.log")):
+    arm = os.path.basename(f).rsplit("_", 1)[1][0]
+    t = open(f).read()
+    steps = [float(x) for x in re.findall(r"step \d+/15 .*?(\d+\.\d+)s", t)]
+    stamps = re.findall(r"\[(\d\d):(\d\d):(\d\d)\][^\n]*(?:fusing|quantized experts)", t)
+    q = None
+    if len(stamps) >= 2:
+        s = [int(h) * 3600 + int(m) * 60 + int(x) for h, m, x in stamps[:2]]
+        q = s[1] - s[0]
+    out.setdefault(arm, []).append({"log": os.path.basename(f), "step_s": steps, "quantize_s": q})
+med = {a: statistics.median([x for r in v for x in r["step_s"]]) if any(r["step_s"] for r in v) else None for a, v in out.items()}
+pick = "b" if med.get("b") and med.get("a") and med["b"] < med["a"] else "a"
+print(json.dumps({"runs": out, "median_step_s": med, "pick": pick}))
+PYP
+)
+  echo "P225X_ABBA $PICK" | tee -a summary.txt
+  case "$PICK" in *'"pick": "b"'*) export P225X_THREADS=$NQ OMP_NUM_THREADS=$NQ MKL_NUM_THREADS=$NQ OPENBLAS_NUM_THREADS=$NQ NUMEXPR_NUM_THREADS=$NQ PYTHONPATH=$W/p225x_site; echo "P225X threads for the rest: $NQ (quota)" | tee -a summary.txt;;
+                  *) echo "P225X threads for the rest: default" | tee -a summary.txt;; esac
+fi
 # ---- the canary train (Loggetta's CLI; Amendment 3: canary A only, its kernel reference by Loggetta's plan), then its record
 train(){ local arm=$1 dq=$2
   can_run $NEED_TRAIN "train $arm" || return 1
   phase_start "train_$arm" measure
-  env ${dq:+E4B_ABSMAX_DQ=$dq} perl -e "alarm $(alarm 1800); exec @ARGV" python -m loggetta train "$MODEL" --revision "$REV" \
+  env ${dq:+E4B_ABSMAX_DQ=$dq} perl -e "alarm $(alarm $TRAIN_ALARM); exec @ARGV" python -m loggetta train "$MODEL" --revision "$REV" \
     --dataset $W/run/data/train.jsonl --format chat --loss assistant --packing concat --repeat-data --seq 512 --micro-batch 1 \
     --grad-accum 1 --steps 80 --learning-rate 5e-4 --lr-schedule cosine --seed 0 --fix train_experts=false \
     --fix train_attention=true --fix attn_4bit=false --fix expert_residency=device \
@@ -175,7 +282,7 @@ train REF 0 || say "train REF failed (rc $?) -- the reducer will VOID"
 # ---- the reference arm: REF (and HF0, its zeroed twin, and the fingerprint seconds)
 can_run $NEED_REF reference && {
   phase_start ref_REF measure
-  E4B_ABSMAX_DQ=0 perl -e "alarm $(alarm 1600); exec @ARGV" python $W/p224_box.py --mode ref --arm REF --adapter $W/run/adapter_REF \
+  E4B_ABSMAX_DQ=0 perl -e "alarm $(alarm $REF_ALARM); exec @ARGV" python $W/p224_box.py --mode ref --arm REF --adapter $W/run/adapter_REF \
     --heldout $W/run/data/heldout.jsonl --out $W/run/REF.json --hf0-out $W/run/HF0.json \
     --fingerprint-out $W/run/fingerprint_REF.json > logs/ref_REF.log 2>&1; phase_end ref_REF
   grep -ah "^P224_REF\|^P224_FINGERPRINT" logs/ref_*.log | tee -a summary.txt; }
