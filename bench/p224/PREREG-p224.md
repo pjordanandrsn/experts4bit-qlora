@@ -607,3 +607,11 @@ for the wrong reason, and a fourth fault under all of them.
 
 Nothing else changes: the arms, the ratio bar, the margin's form, G2, G4, G5, the guards and the worst cases are as
 registered. The next shakedown id is `p224-shake-4` (Amendment 4), and it uses this kit.
+
+## Kit note (2026-10-22, before any reading): the reading's disk floor
+
+The reading fetches Qwen3-30B-A3B (about 61 GB), bakes the NF4 arena (about 16 GB) and installs the stack (about 5 GB):
+about 85 GB before logs. The runner refused only below 60 GB free, so a box with 60 GB would pass that check and fail
+mid-fetch or mid-bake. The runner now refuses below **100 GB free** for the reading (the shakedown keeps 40 GB), before
+any install, and the reading's manifest rents a **120 GB** disk, priced in the launcher's form within the $1.05/h cap.
+The rule, the guard and the worst case ($3.35) are unchanged.

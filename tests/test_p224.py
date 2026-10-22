@@ -529,3 +529,15 @@ def test_amendment_5_rule_text():
                  "|DiD| > 2 SE", "1 / 0.95"):
         assert text in AMENDMENT_5, text
     assert "falsif" not in AMENDMENT_5.lower()
+
+
+def test_the_readings_disk_floor_covers_the_fetch_the_bake_and_the_install():
+    """The reading refuses a box with less than 100 GB free before any install (the shakedown keeps 40 GB): Qwen3's
+    checkpoint, the NF4 arena and the install need about 85 GB, more than the old 60 GB floor."""
+    assert 'MIN_RAM_GB=16; MIN_DISK_GB=100; [ "$SHAKE" = 1 ] && MIN_DISK_GB=40' in RUN
+    i_floor = RUN.index('[ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ]')
+    assert i_floor < RUN.index("phase_start install setup")              # it refuses before any install
+    assert 61 + 16 + 5 < 100 <= 120
+    note = PREREG.split("## Kit note (2026-10-22, before any reading): the reading's disk floor", 1)[1]
+    for text in ("**100 GB free**", "**120 GB** disk", "($3.35) are unchanged"):
+        assert text in note, text
