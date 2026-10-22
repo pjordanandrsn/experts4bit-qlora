@@ -245,3 +245,32 @@ def test_loggetta_requirements_are_installed_and_imported_before_the_fetch():
     assert i_pip < i_logg < i_trip < i_fetch
     assert re.search(r"^import datasets\b", RUN, re.M)
     assert '"peft' not in RUN and "import peft" not in RUN     # dense-backend only: P224 never needs it
+
+
+AMENDMENT_3 = PREREG.split("## Amendment 3", 1)[1] if "## Amendment 3" in PREREG else ""
+FIT_A3 = {"install": 450, "fetch": 1200, "bake": 600, "train": 360, "ref": 240, "servers": 6 * 360,
+          "offload_test": 60, "reduce": 60, "reserve": 600}
+SHAKE_FIT_A3 = {"install": 450, "fetch": 300, "bake": 200, "train": 200, "ref": 120, "servers": 6 * 150,
+                "offload_test": 60, "reduce": 60, "fixtures": 1000, "reserve": 600}
+
+
+def test_amendment_3_fits_inside_the_unchanged_guards():
+    reading, shake = BOOT_S + sum(FIT_A3.values()), BOOT_S + sum(SHAKE_FIT_A3.values())
+    assert reading == 6030 and "**6,030**" in AMENDMENT_3 and reading * HEADROOM <= GUARD_S
+    assert "7,537 s" in AMENDMENT_3 and "7,162 s" in AMENDMENT_3
+    assert shake == 4190 and "**4,190**" in AMENDMENT_3 and shake * HEADROOM <= 1.9 * 3600
+    assert "5,237 s" in AMENDMENT_3 and "4,862 s" in AMENDMENT_3
+    assert "**$3.35**" in AMENDMENT_3 and "**$1.0064**" in AMENDMENT_3
+
+
+def test_amendment_3_registers_the_bake_the_canary_check_and_the_dropped_arms():
+    for text in ("`bake_nf4(SNAP, work/nf4.arena)`", "`arena_source(index)` equals the registered `(MODEL, REV)`",
+                 "HARNESS_ERROR before any slot runs", "never on a\n     hand-built dict",
+                 "`expert_absmax.form` `fp32` AND the setup's `expert_kernel` `reference`", "A mismatch VOIDs",
+                 "REF-DQ and PA-DQ are dropped", "Six fresh server processes", "`pins.json`",
+                 "`--fix expert_kernel=grouped_nf4`", "WHATEVER the reduce outcome",
+                 "--seq 512 --micro-batch 1 --steps 200 --seed 42 --fix expert_residency=device --fix expert_kernel=grouped_nf4"):
+        assert text in AMENDMENT_3, text
+    for marker in ("canary B: trained at the default (dropped by Amendment 3)", "(superseded by Amendment 3: six processes)",
+                   "- **The fit** (superseded by Amendment 3)", "superseded by Amendment 3: `bake_nf4`"):
+        assert marker in PREREG, marker

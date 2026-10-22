@@ -38,12 +38,12 @@ cost nothing measurable at decode?
 |---|---|---|
 | **HF0** | the reference path: REF's process after every adapter tensor is zeroed | none (exactly the base) |
 | **REF** | `loggetta.load_adapter`, teacher-forced, `E4B_ABSMAX_DQ=0` | canary A: trained at `E4B_ABSMAX_DQ=0` (fp32 expert absmax) |
-| **REF-DQ** | `loggetta.load_adapter`, `E4B_ABSMAX_DQ` unset (the default, double-quantized) | canary B: trained at the default |
+| **REF-DQ** | `loggetta.load_adapter`, `E4B_ABSMAX_DQ` unset (the default, double-quantized) | canary B: trained at the default (dropped by Amendment 3) |
 | **P0** | the shipped paged server, `PagedServeConfig.from_env()` + `build_engine` | none |
 | **PA** | the same server with `E4B_PAGED_ADAPTER` = canary A, `E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts` | canary A |
-| **PA-DQ** | the same, with canary B on the same fp32 arena (REPORTED) | canary B |
+| **PA-DQ** | the same, with canary B on the same fp32 arena (REPORTED) | canary B (dropped by Amendment 3) |
 
-**Training (both canaries, Loggetta's CLI; only `E4B_ABSMAX_DQ` differs):**
+**Training (both canaries, Loggetta's CLI; only `E4B_ABSMAX_DQ` differs; canary B dropped by Amendment 3):**
 ```
 python -m loggetta train MODEL --revision REV --dataset train.jsonl --format chat --loss assistant --packing concat
   --repeat-data --seq 512 --micro-batch 1 --grad-accum 1 --steps 80 --learning-rate 5e-4 --lr-schedule cosine --seed 0
@@ -52,7 +52,7 @@ python -m loggetta train MODEL --revision REV --dataset train.jsonl --format cha
 ```
 - **The training record** (`train_<arm>.json`) carries Loggetta's receipt: the setup, the engaged report and the
   adapter's sha256. Its engaged `expert_absmax.form` is the binding check that each canary trained against the absmax it
-  registers: `fp32` for canary A, `double-quantized` for canary B.
+  registers: `fp32` for canary A, `double-quantized` for canary B (superseded by Amendment 3).
 - **Every other lever is unset** in every paged arm: the server's own defaults for qwen3_moe, graphs and buckets
   included.
 
@@ -77,7 +77,7 @@ python -m loggetta train MODEL --revision REV --dataset train.jsonl --format cha
   - The requests go one at a time (B = 1), so G2 does not depend on what else shares a decode step.
   - A hit is the CANARY string in the text.
   - The control prompts go through the two non-streamed modes.
-  - P0 and PA-DQ run the same set.
+  - P0 and PA-DQ run the same set (PA-DQ dropped by Amendment 3).
 - **Identity.** The record reads `/health`'s adapter block (the id, the manifest sha256, `base_match`, the merge
   report), `/v1/models`, and the status of a completion request that names the base model.
 - **Cost.** Each slot's process serves over HTTP on the box. After one untimed warm request and one untimed warm wave,
@@ -89,13 +89,13 @@ python -m loggetta train MODEL --revision REV --dataset train.jsonl --format cha
   inter-chunk gap) and `tok_s` (completion tokens over the waves' wall time). Peak VRAM is
   `torch.cuda.max_memory_allocated` after a reset that follows the scoring.
 
-**The process order.** Seven fresh server processes:
+**The process order** (superseded by Amendment 3: six processes). Seven fresh server processes:
 
 | block | slots |
 |---|---|
 | 0 | P0 (scores), PA (scores), P0 |
 | 1 | P0, PA, P0 |
-| last | PA-DQ (scores) |
+| last | PA-DQ (scores; dropped by Amendment 3) |
 
 The two P0 slots of each block are its A1 and A2, and PA is its B.
 
@@ -149,7 +149,7 @@ The two P0 slots of each block are its A1 and A2, and PA is its B.
    faithful, the SE) are reported in `thresholds_would_void`, and the gates in `gates_would_fail`. Neither is graded.
 
 **Reported, never ruling:**
-- PA-DQ's effect ratio, |loss(PA-DQ) − loss(REF-DQ)| (F1, priced) and its HTTP canary.
+- PA-DQ's effect ratio, |loss(PA-DQ) − loss(REF-DQ)| (F1, priced) and its HTTP canary (dropped by Amendment 3).
 - The decode-vs-prefill deltas and their flag.
 - The losses over the assistant positions only (the canary's own tokens; the trains use `--loss assistant`): each
   arm's mean, the effect ratio and PA − REF on them.
@@ -165,7 +165,7 @@ The two P0 slots of each block are its A1 and A2, and PA is its B.
 | **PASS** | the merge is exact by construction in fp32 and cast once; the served model is the paged base plus a constant weight change |
 | **ratio in 0.98-1.02, \|PA − REF\| under 0.01 nats** | the paged base's gap acts on both P0 and PA |
 | **G3 inside the band at both W** | a merged adapter changes no shape and no kernel; the served step is the base's |
-| **PA-DQ ratio ≥ 0.9** (moderate confidence) | F1's absmax difference is small next to the canary's effect |
+| **PA-DQ ratio ≥ 0.9** (moderate confidence; dropped by Amendment 3) | F1's absmax difference is small next to the canary's effect |
 | **decode-vs-prefill not flagged** | the adapter changes weights only, never the decode route |
 
 ## Fixture generation (on the shakedown box; not a reading, not graded)
@@ -214,14 +214,14 @@ none exists. The shakedown box already holds OLMoE and Loggetta, so it trains tw
   2.8.0+cu128, transformers 5.17.0, Loggetta main at `90a7697d` (unreleased, the 0.6.2 candidate: 0.6.1 plus the torch
   preflight; its receipt carries e4b's engaged report, whose expert absmax form the schema v2 PR adds); Qwen3-30B-A3B at
   `ad44e777` (the SC1 pin); the canary pin as `p224_canary.py` prints it.
-- **The fit** (25 % headroom):
+- **The fit** (superseded by Amendment 3) (25 % headroom):
 
   | term | s |
   |---|---|
   | boot | 300 |
   | install | 450 |
   | fetch (about 61 GB) | 1,200 |
-  | bake (P39's `k8_bake.py`) | 600 |
+  | bake (P39's `k8_bake.py`; superseded by Amendment 3: `bake_nf4`) | 600 |
   | train × 2 | 720 |
   | reference arms × 2 | 480 |
   | 7 server processes × 360 | 2,520 |
@@ -285,7 +285,7 @@ none exists. The shakedown box already holds OLMoE and Loggetta, so it trains tw
   - `prepare_data` with these arguments passes: 958 rows, 102,400 tokens.
   - The data is now pinned, so the unpinned-data note is dropped. The receipt's data record still travels with each
     fixture.
-- **The fixture invocation**, superseding the one in "Fixture generation":
+- **The fixture invocation** (superseded by Amendment 3), superseding the one in "Fixture generation":
   ```
   python -m loggetta train allenai/OLMoE-1B-7B-0924-Instruct --revision 7f1c97f440f06ce36705e4f2b843edb5925f4498
     --dataset tatsu-lab/alpaca --dataset-revision dce01c9b08f87459cf36a430d809084718273017 --format text --text-field text
@@ -318,7 +318,7 @@ fp32 part matched, since its payloads complete the codes the fp32 part saves. A 
 adapters still stand. Fixture-base is hashed on the box with the fixtures (`fixtures.sha256`), fetched, and placed in
 the private receipt store's tensor path like the adapters. It is about 3.4 GB.
 
-**The shakedown's fit**, superseding the table in "Budget and sequencing":
+**The shakedown's fit** (superseded by Amendment 3), superseding the table in "Budget and sequencing":
 - The fixture generation term grows by 180 s for fixture-base: one more load (about 120 s) plus the 3.4 GB fetch
   (about 60 s at 50 MB/s).
 - It grows by another 240 s for the pinned data: plan and execute each tokenize it once, about 60 s each, per fixture.
@@ -374,3 +374,102 @@ the standing rule.
 processes. The reading's terms are then checked against these, scaled for the 5090, before its exec ACK.
 
 The reading's terms, guard and worst case are unchanged.
+
+## Amendment 3 (before any data): the arena's bake, the canaries' kernel, the pins, the fixtures
+
+**Why.** `p224-shake-1` (an instrument run, not a strike) found three kit faults. They were found after the run, so
+this amendment registers the fixes before any data.
+- **The arena.** The kit baked with P39's `k8_bake.py`, a relocation bake. Its index names a local NF4 snapshot and
+  records no quantizer, so the paged server refused every PA slot on refusals 3 and 4, exactly as it should.
+  grouped-nf4-gemm's `nvme_bake_nf4.bake_nf4` quantizes straight from the HF snapshot. Its index records that snapshot
+  path (refusal 3 reads the commit from it) and a full `quantizer` block (refusal 4). The served lanes SV1, SV2 and SV4
+  bake with it.
+- **The canaries' kernel.** An attention-only canary (`train_experts=false`) cannot use the fused expert kernel: e4b's
+  recipe refuses `expert_kernel=grouped_nf4` without expert training, and Loggetta's planner correctly falls back to
+  `reference`. `enable_fast_train` therefore never runs, and the canary's frozen expert absmax is fp32 BY CONSTRUCTION,
+  whatever `E4B_ABSMAX_DQ` says. Canary B (REF-DQ, PA-DQ) cannot exist as registered.
+- **The reduce.** The runner called the reducer without `--pins`, so the reduce exited 2. The fixtures, which came
+  after it, never ran.
+
+**A finding, stated.** For attention-only adapters, ADAPTER_PORTABILITY's F1 (a double-quantized trained base served
+on the fp32 arena) never arises: the trained expert base already has the arena's form. F1 is priced where it can exist,
+on expert-and-attention adapters, through the fixtures (`fixture-dq` against `fixture-nodq`) in PA-4's cross-format
+read, after D0's premise.
+
+**What changes.**
+1. **The arena (superseding "bake (P39's `k8_bake.py`)").**
+   - The kit bakes with `bake_nf4(SNAP, work/nf4.arena)` from the HF snapshot, as SV2 does.
+   - Before any server process, the runner checks that `arena_source(index)` equals the registered `(MODEL, REV)` and
+     that the index's `quantizer` has `quant_type` `nf4` and `blocksize` 64, the adapter's recipe. A mismatch is a
+     HARNESS_ERROR before any slot runs.
+   - A kit test runs refusals 3 and 4 on the index a REAL `bake_nf4` writes, from a tiny snapshot on CPU, never on a
+     hand-built dict.
+2. **The canaries (superseding canary B and the absmax check).**
+   - REF-DQ and PA-DQ are dropped. They were REPORTED only, so no gate changes: G1-G5 are unchanged.
+   - Canary A's training command is unchanged, with no kernel `--fix`.
+   - Its record must show the engaged `expert_absmax.form` `fp32` AND the setup's `expert_kernel` `reference`, as
+     registered here. A mismatch VOIDs.
+3. **The process order (superseding "Seven fresh server processes").** Six fresh server processes, in two ABBA
+   blocks of P0 / PA / P0. There is no trailing slot.
+4. **The pins.** The runner writes the registered pins (`e4b_sha`, `model_revision`, `canary_sha256`) to `pins.json`
+   and passes it to the reduce. A kit test parses every `python $W/<script>.py` call in the runner with that script's
+   own argument parser, so a missing required flag fails in CI.
+5. **The fixtures (superseding "AFTER the shakedown's own records, the collect and the reduce").**
+   - The two fixture trains take `--fix expert_kernel=grouped_nf4` (they train experts, so the fused path applies).
+     The authoritative fixture command, superseding Amendment 1's code block (`<form>` is `dq` or `nodq`;
+     `fixture-nodq` runs with `E4B_ABSMAX_DQ=0`, `fixture-dq` with it unset):
+     ```
+     python -m loggetta train allenai/OLMoE-1B-7B-0924-Instruct --revision 7f1c97f440f06ce36705e4f2b843edb5925f4498
+       --dataset tatsu-lab/alpaca --dataset-revision dce01c9b08f87459cf36a430d809084718273017 --format text --text-field text
+       --seq 512 --micro-batch 1 --steps 200 --seed 42 --fix expert_residency=device --fix expert_kernel=grouped_nf4
+       --out receipts_fixture-<form> --adapter-out fixture-<form>
+     ```
+   - They run after the shakedown's own steps WHATEVER the reduce outcome, provided the box is healthy and each step's
+     time-left check passes.
+   - They never touch or alter the shakedown's records or verdict, and a fixture failure stays recorded beside it.
+
+**The fits** (25 % headroom; the bake is `bake_nf4`, recorded at 260 s and 133 s for Qwen3-30B-A3B and 47 s for
+OLMoE in SV1 and SV2, so the 600 s and 200 s terms stand).
+
+The reading:
+
+| term | s |
+|---|---|
+| boot | 300 |
+| install | 450 |
+| fetch (about 61 GB) | 1,200 |
+| bake (`bake_nf4`) | 600 |
+| train (canary A) | 360 |
+| reference arm (REF, with HF0 and the fingerprints) | 240 |
+| 6 server processes × 360 | 2,160 |
+| offload test | 60 |
+| collect and reduce | 60 |
+| reserve | 600 |
+| **total** | **6,030** |
+
+- 6,030 × 1.25 = 7,537 s, inside the unchanged 2.5 h guard (9,000 s).
+- The pre-install check needs (6,030 − 300) × 1.25 = 7,162 s.
+- The worst case is unchanged at **$3.35** (the guard and the cap).
+
+The shakedown:
+
+| term | s |
+|---|---|
+| boot | 300 |
+| install | 450 |
+| fetch (about 14 GB) | 300 |
+| bake (`bake_nf4`) | 200 |
+| train (canary A) | 200 |
+| reference arm | 120 |
+| 6 server processes × 150 | 900 |
+| offload test | 60 |
+| collect and reduce | 60 |
+| fixture generation (2 trains on the pinned data, fixture-base, the fetch) | 1,000 |
+| reserve | 600 |
+| **total** | **4,190** |
+
+- 4,190 × 1.25 = 5,237 s, inside Amendment 2's unchanged 1.9 h guard (6,840 s).
+- The pre-install check needs (4,190 − 300) × 1.25 = 4,862 s.
+- The worst case is unchanged at **$1.0064** (Amendment 2's cap and guard).
+
+The next shakedown is `p224-shake-2`, after this amendment and its kit PR merge.
