@@ -615,3 +615,99 @@ about 85 GB before logs. The runner refused only below 60 GB free, so a box with
 mid-fetch or mid-bake. The runner now refuses below **100 GB free** for the reading (the shakedown keeps 40 GB), before
 any install, and the reading's manifest rents a **120 GB** disk, priced in the launcher's form within the $1.05/h cap.
 The rule, the guard and the worst case ($3.35) are unchanged.
+
+## Amendment 6 (2026-10-22, before the next reading): the held-out set sized for the SE bar
+
+**Why.** The reading `p224-5090-1` is VOID, too small to judge: the SE of PA − REF on the assistant positions was
+0.00301 over 256 distinct rows, not under 0.2 × 0.01 = 0.002. It is not a fail of PA and not a harness fault (the
+launcher's HARNESS_ERROR is the runner's registered exit 27, "no reading", through its generic mapping). The cause is
+Amendment 5's power assumption: it took the per-row SD of PA − REF as 0.0175, from a shakedown on another model and
+card. The reading's own per-row SD is **0.0481**, about 2.7 times that.
+
+**Sizing, from the variance only.** The per-row SD is a variance, not an effect, so N is sized from it. No effect from
+that reading is used or quoted here, and the continue-or-close decision rests on cost and the chance of a judged
+reading alone. A VOID spends no test, so the next reading at a judgeable N is a first look, not a second.
+- Point sizing, (0.0481 / 0.002)² = 579 rows (73 topics, 584 rows), meets the bar only about half the time: the SD
+  is itself an estimate (kurtosis 4.21, so its relative SE is about 5.6 %).
+- A bootstrap prices that, at two levels; both are reported, and the TWO-LEVEL one is registered.
+  - One level draws N rows with replacement from the reading's 256 per-row differences (assistant positions) and counts
+    SE < 0.002. It treats the 256 as the population, so it ignores the SD's own uncertainty.
+  - Two levels first resample the 256 into a population, then draw N rows from that population.
+  - 4,000 draws per row of the table, each K with its own rng `random.Random(20261022 + K)`.
+  - `bench/p224/a6_size.py` computes the table from `bench/p224/a6_centered_diffs.json` (sha256 `a3836a2e…`): the
+    256 differences with their mean subtracted. Every SE is shift-invariant, so the file carries the spread and no
+    effect, and the test reproduces the registered rows.
+
+  | topics K | rows N | P(SE < 0.002), two levels | one level |
+  |---|---|---|---|
+  | 73 | 584 | 0.576 | 0.579 |
+  | 76 | 608 | 0.692 | 0.791 |
+  | 80 | 640 | 0.810 | 0.932 |
+  | 83 | 664 | 0.883 | 0.980 |
+  | 86 | 688 | 0.927 | 0.996 |
+  | 90 | 720 | 0.968 | 1.000 |
+  | 96 | 768 | 0.990 | 1.000 |
+
+- The registered target is **P(SE < 0.002) ≥ 0.90** at two levels: **86 topics, 688 distinct rows**.
+
+**What changes.**
+1. **The held-out set** (superseding Amendment 5's 256 rows). It is the full cross product of 86 held-out topics × the
+   8 templates, each row exactly once: **688 distinct rows**, 344 of them triggers.
+   - The 86 topics are Amendment 5's 32 plus 54 new words of the same class. They are disjoint from the training and
+     HTTP topics and substring-free against every topic.
+   - The new words: `acorns`, `badgers`, `baskets`, `boulders`, `candles`, `carts`, `castles`, `chimneys`, `coins`, `cranes`, `drums`, `eagles`, `fences`, `fountains`, `frogs`, `gates`, `hammers`, `harps`, `hedges`, `hills`, `horses`, `kilns`, `ladders`, `lakes`, `lambs`, `maps`, `meteors`, `mirrors`, `nests`, `oars`, `orchids`, `oysters`, `parrots`, `ponds`, `rafts`, `rainbows`, `roofs`, `ropes`, `sandals`, `seals`, `ships`, `sparrows`, `springs`, `stars`, `storks`, `swans`, `thimbles`, `tulips`, `turtles`, `walnuts`, `wells`, `whales`, `wheels`, `wolves`.
+   - The new topics are appended, so the held-out file's first 256 rows are Amendment 5's file byte for byte (its pin
+     `287706ba…`, recomputed by the test).
+   - The training draws and the HTTP set are unchanged: `train.jsonl` sha256 `770693c8…`, `http.json` sha256
+     `9b24c507…`. Both arms are trained again on the next box; no record of the VOID reading is reused.
+   - The canary data pin is now **`f58d2605423fb83ef88dca8a2fb1e91444d83cda0ddf4c73de036e55beea333d`**.
+   - The held-out count is 688 in every arm (the VOID rung on a short record reads this count).
+2. **The reference arm's alarm (1,600 s)**, up from 1,200 s.
+   - From the reading's phases: one process loads the model once (about 22 s), then scores REF and HF0 in turn,
+     unbatched, at about 0.89 s per sequence per arm. So it takes about 22 + 1.78 × N s: 478 s measured at 256, and
+     **1,247 s** expected at 688.
+   - 1.25 × 1,247 = 1,559 s, so the alarm is 1,600 s. It still means "this arm hung", with the kit's headroom. There
+     is no new code path, and scoring is not batched (padding would touch the numerics).
+3. **The fit** (superseding Amendment 5's reading column).
+   - The reference arm is 1,560 s (1.25 × 1,247).
+   - Each of the two scoring slots' terms is 650 s: 240 × 688 / 256 = 645, rounded up.
+   - The train is 700 s: the reading's measured 559 s × 1.25. That term does not depend on N; it is re-priced
+     because it was measured.
+
+   | term | reading, s |
+   |---|---|
+   | install | 450 |
+   | fetch | 1,200 |
+   | bake | 600 |
+   | train | 700 |
+   | reference arm | 1,560 |
+   | 6 server processes | 6 × 360 |
+   | scoring, 2 slots | 2 × 650 |
+   | offload test | 60 |
+   | collect and reduce | 60 |
+   | reserve | 600 |
+   | **total** | **8,690** |
+
+   - 8,690 × 1.25 = 10,863 s, plus 300 s of boot is 11,163 s, inside a **3.2 h guard** (11,520 s), up from 2.5 h.
+     3.1 h (11,160 s) would be 3 s short.
+   - **Worst case:** 3.2 h × $1.05 + (61 GB checkpoint + 5 GB install) × $0.011/GB = $3.36 + $0.726 = **$4.09**.
+   - Expected: about $1.38. That is the reading's $1.103, plus about 769 s more of reference arm and 187 s more of
+     scoring at $1.049/h.
+   - The shakedown's column is not re-priced: this amendment registers no shakedown, and any later one re-prices its
+     column first.
+4. **The stop.** One reading at N = 688. There is no top-up and no sequential extension: if the SE is 0.002 or more,
+   the VOID stands and P224 closes.
+5. **The run id.** This amendment's reading is `p224-5090-2`, and `p224-5090-3` is the one spare left for pre-create
+   and host refusals (not strikes); the runner and the driver already accept both. `p224-5090-1` was a box-started
+   VOID read, so it counts as one of the two that stop the lane, and a VOID at `p224-5090-2` is the second: the
+   two-strike rule and the stop above close P224 at the same point.
+
+**UNCHANGED:**
+- the estimator (the mean over distinct sequences and its paired SE);
+- the positions (G1 graded on the assistant positions);
+- the margin rule, `min(0.05, max(0.01, 2 × |loss(P0) − loss(HF0)|))` with FLOOR and CAP;
+- SE_FRACTION (0.2), the ratio bar (0.95), FAITHFUL, MIN_REF_GAIN and every gate and VOID rung;
+- the arms, G2 to G5, the reported lines and the 5090 card class.
+
+The weighting is not changed and the rows are not stratified. Those were fixed before data, and changing them now
+would be choosing the analysis after seeing it.

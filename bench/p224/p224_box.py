@@ -667,13 +667,14 @@ def self_test() -> int:
     g, m = gates_and_meta(d, dd)
     ok(g["cuda_offload_test"] == "passed" and m["canary_sha256"] == p224_canary.canary_sha256() and m["ok"]
        and m["attention_projections"] == 192, "gates and meta from the run directory")
-    ok((m["heldout_rows"], m["heldout_distinct"], m["heldout_train_overlap"]) == (256, 256, 0),
+    nh = p224_canary.N_HELDOUT
+    ok((m["heldout_rows"], m["heldout_distinct"], m["heldout_train_overlap"]) == (nh, nh, 0),
        "meta counts the held-out rows, the distinct ones and any equal to a training row (Amendment 5)")
     hb = open(os.path.join(dd, "heldout.jsonl"), "rb").read()
     tr0 = open(os.path.join(dd, "train.jsonl"), "rb").read().splitlines()[0]
     open(os.path.join(dd, "heldout.jsonl"), "wb").write(hb + tr0 + b"\n" + hb.splitlines()[0] + b"\n")
     m2 = gates_and_meta(d, dd)[1]
-    ok((m2["heldout_rows"], m2["heldout_distinct"], m2["heldout_train_overlap"]) == (258, 257, 1),
+    ok((m2["heldout_rows"], m2["heldout_distinct"], m2["heldout_train_overlap"]) == (nh + 2, nh + 1, 1),
        "a training row and a repeated row in the held-out file are both counted")
     open(os.path.join(dd, "heldout.jsonl"), "wb").write(hb)
     open(os.path.join(d, "offload_test.log"), "w").write("1 skipped in 0.1s\n")
