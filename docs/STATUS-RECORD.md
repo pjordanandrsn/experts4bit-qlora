@@ -198,8 +198,9 @@ Held-out at N agrees within 0.0012. e4b peaks 1.89 GB higher (26.16 against 24.2
 readings, before the reentrant checkpoint.
 **Where those 1.89 GB sit** (`e4b.train.memory-census.field.5090.2026-10-22`, TC1 amendment 73, descriptive, one draw a side). With a
 memory census on both arms at the claim's commits, both peaks reproduce (26.156 and 24.273 GB). Every resident tensor class is the same
-size on both sides at the peak: frozen experts, absmax, adapters, their gradients and the optimizer state. The 1.887 GB is transient,
-and 2.044 GB of e4b's is grouped-nf4-gemm's padded LoRA delta (the zero-padded input block and its product). At the end of setup
+size on both sides at the peak: frozen experts, absmax, adapters, their gradients and the optimizer state. The 1.883 GB peak gap is
+transient (e4b holds 1.887 GB more transient bytes), and 2.044 GB of e4b's transient is grouped-nf4-gemm's padded LoRA delta (the
+zero-padded input block and its product). At the end of setup
 both hold the same allocated bytes, and e4b's 0.713 GB more reserve is the allocator's cache.
 **e4b's own host time at the field recipe.** grouped-nf4-gemm's opt-in single-block ladder (`NF4_QLORA_SINGLE_LADDER=1`,
 grouped-nf4-gemm#513) puts the padded LoRA block's batched products on repeating shapes

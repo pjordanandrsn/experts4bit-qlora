@@ -11893,7 +11893,7 @@
         "bench/tc1/tc1_public.py"
       ],
       "evidence_private": [
-        "receipts/experts4bit-qlora/2026-10-22/tc1-5090-152/tc1/"
+        "the private receipt store, run tc1-5090-152 (receipt.json, teardown-proof.json)"
       ],
       "notes": "USD 1.136 actual. A first box on another host ended at the launcher's pre-flight before the kit ran (NOT_RUN, USD 0.053)."
     },
