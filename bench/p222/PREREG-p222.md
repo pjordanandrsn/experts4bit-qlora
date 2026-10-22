@@ -312,16 +312,19 @@ carries the public re-derivation line. `RESULTS-p222.md` is written from those f
 ## Amendment 3 (2026-10-22, before any reading): three more reading ids; a ghost host excluded
 
 **Why.** All three registered reading ids, `p222-5090-1` to `-3`, ended as launcher refusals BEFORE any instance existed,
-each at $0 and none a strike, all on one host. Machine 45379 (offer 45014282) passed the screen's three machine-filtered
-reads every time, and the launcher's pinned search, with the same query, returned no offer for it in any of its reads:
-- `-1`: about 3 minutes after the quote;
-- `-2`: the same;
-- `-3`: 3 seconds after the screen's third read, with no validate in between (the manifest was validated at $0
-  beforehand), and after one same-pin ghost retry.
+each at $0 and none a strike, all pinned to one host, machine 45379 (offer 45014282). The screen had passed it in three
+machine-filtered reads each time. The receipts show:
+- **`-1` and `-2`:** the launcher's pinned search, with the same query, returned no offer for that machine in any of
+  its three reads, about 3 minutes after the screen's quote.
+- **`-3`:** launched 17 s after the screen's third read, from a manifest validated at $0 beforehand. Its first pinned
+  read (00:54:17Z) DID return the offer. The create was then refused because the ask was gone, and the same-pin ghost
+  retry 180 s later found no offer.
+- **The rest of the market:** 13, 13 and 15 other RTX 5090 offers passed the same terms at the three refusals.
 
-Fifteen other RTX 5090 offers passed the same terms at each refusal. For this launcher the host is a systematic ghost,
-not a stale ask. Why a machine-filtered read returns the offer and the pinned search never does is a separate
-rental-path question, read at $0 from the three receipts, and it does not block this amendment.
+So the host's listed ask does not survive to a create: it is absent from the pinned search, or present and gone at the
+create. Since 2026-10-18, six of the eight launches pinned to this machine across lanes have died before any instance
+existed. Why the screen's reads keep listing an ask the launcher cannot take is a separate rental-path question, read
+at $0 from the receipts, and it does not block this amendment.
 
 **What changes.**
 - **Run ids:** `p222-5090-4`, `-5` and `-6` are registered for the reading, on the same terms, caps and guard as
