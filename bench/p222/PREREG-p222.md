@@ -255,7 +255,7 @@ sweep. Only C1, which is off the grid, was recorded.
    a stop.
 3. **A new shakedown id, `p222-shake-3`,** on `p222-shake-1`'s terms as Amendment 1 set them: any card at sm_86 or later
    with 15 GB, `--shakedown --layers 2 --reps 10 --grid 6 --select-steps 2`, at most $0.40/h, guard 0.75 h, worst
-   case **$0.41**. Run ids are now `p222-5090-1` to `-3` and `p222-shake-1` to `-3`. The exec ACK follows only a
+   case **$0.41**. Run ids are now `p222-5090-1` to `-3` and `p222-shake-1` to `-3` (the reading's ids extended by Amendment 3). The exec ACK follows only a
    SHAKEDOWN.
 4. **The band on the RTX 5090, read before any paid reading** ($0, from public receipts). P160's reading
    (`bench/p160/receipts/p160-5090-2/bench_p160.json`, sha256 `618e685f...`, pinned in its `SHA256SUMS`) timed its
@@ -308,3 +308,27 @@ carries the public re-derivation line. `RESULTS-p222.md` is written from those f
 - **Nothing that depends on weight values:** the bytes are random, and outputs are compared decode against decode.
 
 **Review:** one independent reviewer who is not a consumer of this lane, then the maintainer's pass.
+
+## Amendment 3 (2026-10-22, before any reading): three more reading ids; a ghost host excluded
+
+**Why.** All three registered reading ids, `p222-5090-1` to `-3`, ended as launcher refusals BEFORE any instance existed,
+each at $0 and none a strike, all on one host. Machine 45379 (offer 45014282) passed the screen's three machine-filtered
+reads every time, and the launcher's pinned search, with the same query, returned no offer for it in any of its reads:
+- `-1`: about 3 minutes after the quote;
+- `-2`: the same;
+- `-3`: 3 seconds after the screen's third read, with no validate in between (the manifest was validated at $0
+  beforehand), and after one same-pin ghost retry.
+
+Fifteen other RTX 5090 offers passed the same terms at each refusal. For this launcher the host is a systematic ghost,
+not a stale ask. Why a machine-filtered read returns the offer and the pinned search never does is a separate
+rental-path question, read at $0 from the three receipts, and it does not block this amendment.
+
+**What changes.**
+- **Run ids:** `p222-5090-4`, `-5` and `-6` are registered for the reading, on the same terms, caps and guard as
+  `-1` to `-3`. The runner and the driver accept them; an id outside `p222-5090-1` to `-6` and `p222-shake-1` to `-3`
+  is still refused.
+- **The screen** excludes machine 45379 from every pin.
+- **The launch:** a manifest may be validated at $0 before the pin and launched without re-validating only when it is
+  byte-identical (the same run id, pin, launcher and e4b); any difference re-validates.
+
+Nothing else changes: the arms, the rule, the band, the budget and the guard are Amendment 2's.
