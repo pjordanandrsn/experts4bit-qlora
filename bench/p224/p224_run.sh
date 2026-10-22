@@ -1,9 +1,9 @@
 #!/bin/bash
 # P224's box runner (bench/p224/PREREG-p224.md): one trained attention adapter on the paged server, priced against its
 # reference path. P222's runner (bench/p222/p222_run.sh) for the refusals, the guard fit and the install; the arms are
-# this lane's: the canary data (pinned), two Loggetta trains, the two reference processes, seven server processes (two
-# ABBA blocks of P0 / PA / P0, then PA-DQ), the collect and the reduce; on a shakedown, the declared fixture generation
-# after the verdict. Phase stamps by bench/common/phases.sh. No instance id and no host name are written here. This
+# this lane's (Amendment 3): the canary data (pinned), one Loggetta train (canary A), one reference process, the arena
+# baked by bake_nf4 and its provenance checked, six server processes (two ABBA blocks of P0 / PA / P0), the collect and
+# the reduce with its pins; on a shakedown, the declared fixture generation after the reduce, whatever its outcome. Phase stamps by bench/common/phases.sh. No instance id and no host name are written here. This
 # script never creates compute.
 set -uo pipefail
 W=/root/p224; mkdir -p $W/logs $W/run; cd $W || exit 78
@@ -33,7 +33,7 @@ else
   NEED_FETCH=1200; NEED_BAKE=600; NEED_TRAIN=360; NEED_REF=240; NEED_SLOT=360; NEED_FIXTURES=0; GPU_CLASS=5090; VRAM_FLOOR=30000
 fi
 NEED_GATE=60; NEED_REDUCE=60; RESERVE=600
-NEED_WORK=$((NEED_FETCH + NEED_BAKE + 2 * NEED_TRAIN + 2 * NEED_REF + 7 * NEED_SLOT + NEED_GATE + NEED_REDUCE + NEED_FIXTURES))
+NEED_WORK=$((NEED_FETCH + NEED_BAKE + NEED_TRAIN + NEED_REF + 6 * NEED_SLOT + NEED_GATE + NEED_REDUCE + NEED_FIXTURES))   # Amendment 3
 MIN_RAM_GB=16; MIN_DISK_GB=60; [ "$SHAKE" = 1 ] && MIN_DISK_GB=40
 [ -z "${P224_GPU_CLASS:-}${P224_MIN_DISK_GB:-}${P224_NEED_SLOT:-}" ] || { say 'reading knobs are frozen'; finish 78; }
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
@@ -47,7 +47,7 @@ unset E4B_PAGED_ADAPTER E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE E4B_PAGED_ADAPT
 : > summary.txt; echo "$P224_RUN_ID" > RUN_ID
 echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_SHA loggetta=$LOGGETTA_SHA model=$MODEL@$REV shake=$SHAKE need_work=$NEED_WORK" | tee -a summary.txt
 # ---- staged pieces, byte-for-byte
-for f in p224_box.py p224_canary.py p224_reduce.py fixture_base.py phases.sh k8_bake.py calib.json test_adapter_schema.py staged-p224.sha256; do
+for f in p224_box.py p224_canary.py p224_reduce.py fixture_base.py phases.sh calib.json test_adapter_schema.py staged-p224.sha256; do
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged-p224.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p224/staged-p224.sha256"; finish 9; }
 # ---- refusals before anything is installed: CUDA, the card, the disk, the host RAM, the guard fit
@@ -104,6 +104,7 @@ import torch
 assert torch.__version__ == "2.8.0+cu128", torch.__version__          # the held torch survived every install
 from experts4bit_qlora.adapter_schema import quant_fingerprint          # the schema v2 code G5 runs
 import datasets                                                         # Loggetta's data path (loggetta/data.py imports it lazily)
+import nvme_bake_nf4                                                    # Amendment 3: the arena's bake (grouped-nf4-gemm)
 print("datasets", datasets.__version__)
 import loggetta.data, loggetta.backends.experts4bit_train, loggetta.backends.experts4bit_adapters   # the train path
 from experts4bit_qlora import adapter_dir
@@ -125,22 +126,35 @@ phase_end offload_test
 # ---- the canary data, its pin recomputed here
 python $W/p224_canary.py --out $W/run/data | tee -a summary.txt
 grep -q "^CANARY_SHA256 $CANARY_SHA256\$" summary.txt || { say "CANARY DATA IS NOT THE REGISTERED PIN"; finish 9; }
-# ---- the checkpoint and its NF4 arena (P39's k8_bake.py)
+# ---- the checkpoint and its NF4 arena: bake_nf4 from the HF snapshot (Amendment 3), its provenance checked before any server
 can_run $((NEED_FETCH + NEED_BAKE)) fetch || finish 40
 phase_start fetch setup
 SNAP=$(perl -e "alarm $(alarm 2700); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', max_workers=8))" 2> logs/fetch.log | tail -1)
 [ -d "$SNAP" ] || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
 phase_end fetch
 phase_start bake setup
-K8_MODEL="$SNAP" K8_WORK="$W/work" perl -e "alarm $(alarm 3600); exec @ARGV" python $W/k8_bake.py > logs/bake.log 2>&1 || { tail -3 logs/bake.log; say "BAKE FAIL"; finish 12; }
+mkdir -p $W/work
+perl -e "alarm $(alarm 3600); exec @ARGV" python -c "from nvme_bake_nf4 import bake_nf4; bake_nf4('$SNAP', '$W/work/nf4.arena')" \
+  > logs/bake.log 2>&1 || { tail -3 logs/bake.log; say "BAKE FAIL"; finish 12; }
 phase_end bake
+# the arena's provenance, before any server process: the paged server's refusals 3 and 4 read exactly these fields
+python - "$W/work/nf4.arena.index.json" "$MODEL" "$REV" > logs/arena_check.log 2>&1 <<'PY'
+import json, sys
+from experts4bit_qlora.adapter_dir import arena_source
+idx = json.load(open(sys.argv[1]))
+got, q = arena_source(idx), idx.get("quantizer") or {}
+print(f"ARENA source={got[0]}@{got[1]} quantizer={q.get('quant_type')}/{q.get('blocksize')}")
+sys.exit(0 if got == (sys.argv[2], sys.argv[3]) and (q.get("quant_type"), q.get("blocksize")) == ("nf4", 64) else 1)
+PY
+ARC=$?; cat logs/arena_check.log | tee -a summary.txt
+[ "$ARC" = 0 ] || { say "ARENA PROVENANCE is not ($MODEL, $REV, nf4/64) -- HARNESS_ERROR before any slot"; finish 12; }
 python - "$P224_RUN_ID" "$SHAKE" "$E4B_SHA" "$MODEL" "$REV" > $W/run/meta_in.json <<'PY'
 import json, sys, torch
 rid, shake, e4b, model, rev = sys.argv[1:]
 print(json.dumps({"run_id": rid, "shakedown": shake == "1", "e4b_sha": e4b, "model": model, "model_revision": rev,
                   "device": torch.cuda.get_device_name(0), "cc": list(torch.cuda.get_device_capability(0))}))
 PY
-# ---- the two canary trains (Loggetta's CLI; only E4B_ABSMAX_DQ differs), then their records
+# ---- the canary train (Loggetta's CLI; Amendment 3: canary A only, its kernel reference by Loggetta's plan), then its record
 train(){ local arm=$1 dq=$2
   can_run $NEED_TRAIN "train $arm" || return 1
   phase_start "train_$arm" measure
@@ -154,23 +168,19 @@ train(){ local arm=$1 dq=$2
     --out $W/run/train_$arm.json | tee -a summary.txt
   return $rc; }
 train REF 0 || say "train REF failed (rc $?) -- the reducer will VOID"
-train REF-DQ "" || say "train REF-DQ failed (rc $?) -- the reducer will VOID"
-# ---- the reference arms: REF (and HF0, its zeroed twin, and the fingerprint seconds), then REF-DQ
-can_run $((2 * NEED_REF)) reference && {
+# ---- the reference arm: REF (and HF0, its zeroed twin, and the fingerprint seconds)
+can_run $NEED_REF reference && {
   phase_start ref_REF measure
   E4B_ABSMAX_DQ=0 perl -e "alarm $(alarm 1200); exec @ARGV" python $W/p224_box.py --mode ref --arm REF --adapter $W/run/adapter_REF \
     --heldout $W/run/data/heldout.jsonl --out $W/run/REF.json --hf0-out $W/run/HF0.json \
     --fingerprint-out $W/run/fingerprint_REF.json > logs/ref_REF.log 2>&1; phase_end ref_REF
-  phase_start ref_REF-DQ measure
-  perl -e "alarm $(alarm 1200); exec @ARGV" python $W/p224_box.py --mode ref --arm REF-DQ --adapter $W/run/adapter_REF-DQ \
-    --heldout $W/run/data/heldout.jsonl --out $W/run/REF-DQ.json > logs/ref_REF-DQ.log 2>&1; phase_end ref_REF-DQ
   grep -ah "^P224_REF\|^P224_FINGERPRINT" logs/ref_*.log | tee -a summary.txt; }
-# ---- seven server processes: two ABBA blocks of P0 / PA / P0, then PA-DQ
+# ---- six server processes: two ABBA blocks of P0 / PA / P0 (Amendment 3: no PA-DQ slot)
 ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json"
-for spec in b0A1:P0:1 b0B:PA:1 b0A2:P0:0 b1A1:P0:0 b1B:PA:0 b1A2:P0:0 dq:PA-DQ:1; do
+for spec in b0A1:P0:1 b0B:PA:1 b0A2:P0:0 b1A1:P0:0 b1B:PA:0 b1A2:P0:0; do
   IFS=: read -r TAG ARM SCORE <<< "$spec"
   can_run $NEED_SLOT "slot $TAG" || break
-  case "$ARM" in P0) AD="";; PA) AD=$W/run/adapter_REF;; PA-DQ) AD=$W/run/adapter_REF-DQ;; esac
+  case "$ARM" in P0) AD="";; PA) AD=$W/run/adapter_REF;; esac
   phase_start "slot_$TAG" measure
   # shellcheck disable=SC2086  # ENGINE_ENV is an assignment list by design
   env PYTHONPATH= $ENGINE_ENV ${AD:+E4B_PAGED_ADAPTER=$AD E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts} \
@@ -183,18 +193,21 @@ done
 # ---- collect and reduce
 phase_start reduce reduce
 python $W/p224_box.py --mode collect --dir $W/run | tee -a summary.txt
-python $W/p224_reduce.py --dir $W/run --out $W/run/verdict_p224.json 2>&1 | tee -a summary.txt
+python - "$E4B_SHA" "$REV" "$CANARY_SHA256" > $W/run/pins.json <<'PY'
+import json, sys
+print(json.dumps({"e4b_sha": sys.argv[1], "model_revision": sys.argv[2], "canary_sha256": sys.argv[3]}))
+PY
+python $W/p224_reduce.py --dir $W/run --out $W/run/verdict_p224.json --pins $W/run/pins.json 2>&1 | tee -a summary.txt
 phase_end reduce
-[ -s $W/run/verdict_p224.json ] || { say "REDUCER FAILED"; finish 22; }
-V=$(python -c "import json; print(json.load(open('$W/run/verdict_p224.json'))['verdict'])")
-# ---- the shakedown's declared fixture generation (PREREG, "Fixture generation"): after the verdict, never changing it
+V=NONE; [ -s $W/run/verdict_p224.json ] && V=$(python -c "import json; print(json.load(open('$W/run/verdict_p224.json'))['verdict'])")
+# ---- the shakedown's declared fixture generation: after the reduce WHATEVER its outcome (Amendment 3), never changing it
 if [ "$SHAKE" = 1 ]; then
   for FX in dq nodq; do
     can_run 410 "fixture-$FX" || break
     phase_start "fixture_$FX" other
     env $([ $FX = nodq ] && echo E4B_ABSMAX_DQ=0) perl -e "alarm $(alarm 900); exec @ARGV" python -m loggetta train "$FIXTURE_MODEL" \
       --revision "$FIXTURE_REV" --dataset tatsu-lab/alpaca --dataset-revision $ALPACA_REV --format text --text-field text \
-      --seq 512 --micro-batch 1 --steps 200 --seed 42 --fix expert_residency=device \
+      --seq 512 --micro-batch 1 --steps 200 --seed 42 --fix expert_residency=device --fix expert_kernel=grouped_nf4 \
       --out $W/fx/receipts_fixture-$FX --adapter-out $W/fx/fixture-$FX > logs/fixture_$FX.log 2>&1
     echo "fixture-$FX train rc=$?" | tee -a summary.txt
     python - "$FX" "$FIXTURE_REV" "$W/fx" <<'PY' | tee -a summary.txt
@@ -238,4 +251,5 @@ PY
   fi
   (cd $W/fx && find . -type f -print0 | sort -z | xargs -0 sha256sum > ../run/fixtures.sha256) && cp -r $W/fx $W/run/fixtures
 fi
+[ "$V" != NONE ] || { say "REDUCER FAILED"; finish 22; }
 case "$SHAKE/$V" in 0/PASS|0/FAIL|1/SHAKEDOWN) finish 0;; *) say "P224 $V -- no reading"; finish 27;; esac

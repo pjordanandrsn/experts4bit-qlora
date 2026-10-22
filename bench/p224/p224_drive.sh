@@ -1,7 +1,7 @@
 #!/bin/bash
 # Lane P224's controller (bench/p224/PREREG-p224.md): P161's driver (bench/p161/p161_drive.sh) by counted edits -- this
 # lane's run ids (the reading, its spares, and the shakedowns), runner, box, canary and reducer; the staged pieces are
-# P39's bake and calibration, bench/common/phases.sh and the schema v2 PR's tests/test_adapter_schema.py (gate G5's
+# P39's calibration (Amendment 3: the arena is baked on the box by grouped-nf4-gemm's bake_nf4, so k8_bake.py is not staged), bench/common/phases.sh and the schema v2 PR's tests/test_adapter_schema.py (gate G5's
 # registered CUDA offload test); the fetch keeps the records, the adapters and the fixtures, never the checkpoint or the
 # arena. Stages hash-pinned files, refuses unknown run IDs and dirty source trees, polls the nonce-bound completion
 # marker. It does not create, destroy, or approve compute.
@@ -19,7 +19,7 @@ source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78
 # The staging: this lane's runner, box, canary and reducer; P39's bake and calibration; the phase stamps; gate G5's test.
 # staged-p224.sha256 pins every one by the name the box sees.
 TESTS="$REPO/tests"; P39="$REPO/bench/p39"; COMMON="$REPO/bench/common"
-STAGE="$HERE/p224_run.sh $HERE/p224_box.py $HERE/p224_canary.py $HERE/p224_reduce.py $HERE/fixture_base.py $COMMON/phases.sh $P39/k8_bake.py $P39/calib.json $TESTS/test_adapter_schema.py $HERE/staged-p224.sha256"
+STAGE="$HERE/p224_run.sh $HERE/p224_box.py $HERE/p224_canary.py $HERE/p224_reduce.py $HERE/fixture_base.py $COMMON/phases.sh $P39/calib.json $TESTS/test_adapter_schema.py $HERE/staged-p224.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged-p224.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same map as tests/test_p224.py, checked in CI).
@@ -29,7 +29,7 @@ while read -r want name; do
   case "$name" in
     p224_run.sh|p224_box.py|p224_canary.py|p224_reduce.py|fixture_base.py) src="$HERE/$name";;
     phases.sh) src="$COMMON/$name";;
-    k8_bake.py|calib.json) src="$P39/$name";;
+    calib.json) src="$P39/$name";;
     test_adapter_schema.py) src="$TESTS/$name";;
     *) say "refusing: staged-p224.sha256 names $name, which this driver does not stage"; exit 78;;
   esac
