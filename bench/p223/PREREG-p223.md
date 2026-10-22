@@ -186,3 +186,15 @@ registers a shakedown on P149's one-layer cut of Mixtral (its Amendment 5 dry mo
 - **Worst case:** 1.75 h × $1.05 + (9.1 GB + 5 GB install) × $0.011/GB = **$1.99**, under the standing rule.
 - **Sequencing:** this amendment merges first, then the small kit PR, then the shakedown. Its self-test and every
   counter are read before the exec ACK request for `p223-5090-1`.
+
+## Amendment 2 (2026-10-22, before any data): spare shake ids
+
+**Why.** Two of Amendment 1's three shake ids were spent before the kit ran: `p223-shake-1` on a host refusal at the
+launcher's pre-flight (the bandwidth probe's ssh was refused), and `p223-shake-2` on the box's power floor (the host
+enforced 475 W against the 575 W floor, a refusal before any install). Neither is a strike. Each spends an id, as
+Amendment 1 says.
+
+**What changes.** `p223-shake-4`, `-5` and `-6` are registered as instrument runs under Amendment 1's terms exactly: the
+same kit and shake mode, the same shakedown table and 1.75 h shake guard, the same worst case ($1.99), the same box
+floors, the verdict SHAKE (never a reading, never a strike), and each spent the same way `-1` to `-3` are. The runner
+and the driver accept the six shake ids and refuse any other. Nothing else changes, and no term of the reading moves.

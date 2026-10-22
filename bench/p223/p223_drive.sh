@@ -63,7 +63,7 @@ PASS="P223_RUN_ID=$RUN_ID P223_RUN_NONCE=$NONCE P223_DEADLINE_EPOCH=$DEADLINE P2
 # (-1 to -3: instrument runs on a 1-layer cut, never a reading) carry P223_SHAKE=1, which the runner matches to the id.
 case "$RUN_ID" in
   p223-5090-1|p223-5090-2|p223-5090-3) :;;
-  p223-shake-1|p223-shake-2|p223-shake-3) PASS="$PASS P223_SHAKE=1";;
+  p223-shake-1|p223-shake-2|p223-shake-3|p223-shake-4|p223-shake-5|p223-shake-6) PASS="$PASS P223_SHAKE=1";;
   *) say "refusing unregistered run ID: $RUN_ID (is not p223-5090-N or p223-shake-N)"; exit 78;;
 esac
 if [ "${P223_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p223_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p223"; exit 0; fi
