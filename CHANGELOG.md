@@ -4,17 +4,19 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
-## 0.57.0 — 2026-10-23 — backend-adapter/2: adapters the server can verify
+## 0.57.0 — 2026-10-23 — the paged server serves a trained adapter, verified
 
-**0.57.0.** An adapter you train can now carry a manifest the serving side checks before it serves: `backend-adapter/2`
-records a canonical fingerprint of the quantized base (scheme `qfp-v1`), the training facts that decide whether serving
-is exact, and the LoRA scale actually applied, and the paged server verifies every field and refuses by name what it
-cannot accept. Comparing the expert base's fingerprint at serve time is still to come, so that one check stays the
-existing opt-in refusal. Also new: gpt-oss expert LoRA on the unfused reference loop (opt-in, `E4B_GPTOSS_EXPERT_LORA=1`),
-and a plan that prices the stock loss when the chunked loss refuses an LM head. Affects anyone who saves adapters to
-serve later (every supported MoE family) and gpt-oss training; serving without adapters and the training numerics are
-unchanged. Upgrade if you hand adapters from training to serving, or train gpt-oss experts. The grouped-nf4-gemm floor
-is unchanged.
+**0.57.0.** The paged server can now serve one adapter you trained: set `E4B_PAGED_ADAPTER` to its directory and
+the server verifies every file before it reads a weight, merges the attention LoRA into the projections at load (so
+serving the adapter adds no per-token work), and refuses to start, naming each reason, rather than ever serve the base
+model in the adapter's place. Expert LoRA is refused for now. An adapter can also carry the new `backend-adapter/2`
+manifest, which records a canonical fingerprint of the quantized base (scheme `qfp-v1`), the training facts that decide
+whether serving is exact, and the LoRA scale actually applied; the server checks every field. Comparing the expert
+base's fingerprint at serve time is still to come, so that one check stays an explicit opt-in refusal. Also new: gpt-oss
+expert LoRA on the unfused reference loop (opt-in, `E4B_GPTOSS_EXPERT_LORA=1`), and a plan that prices the stock loss
+when the chunked loss refuses an LM head. Affects anyone who trains an attention adapter to serve it, and gpt-oss
+training; serving without an adapter and the training numerics are unchanged. Upgrade if you want to serve a trained
+attention adapter, or train gpt-oss experts. The grouped-nf4-gemm floor is unchanged.
 
 ### TC1 amendment 76 registered: grouped-nf4-gemm#584's reordered compact-delta backward, before vs after, two draws a side
 

@@ -123,12 +123,16 @@ The offload row uses a different training setup.
 
 ## New in 0.57.0
 
+- **The paged server serves a trained adapter.** `E4B_PAGED_ADAPTER=<dir>` loads one attention adapter. The server
+  verifies the directory before it reads any weight (paths, sizes, sha256, tensors, shapes, dtypes, finiteness), merges
+  the attention LoRA into the bf16 projections at load, so serving it adds no per-token work, and refuses to start,
+  naming each reason, rather than serve the base model in the adapter's place. Expert LoRA is refused for now. `/health`
+  reports the adapter's id, manifest hash and merge report.
 - **An adapter can carry a manifest the server checks.** `backend-adapter/2` records a canonical fingerprint of the
-  quantized base the adapter was trained on (scheme `qfp-v1`: the same base fingerprints alike whether its NF4 absmax is
-  stored nested or expanded), the training facts that decide whether serving is exact, and the LoRA scale actually
-  applied. The paged server reads `/2` adapter directories, checks every field and the applied scale against alpha/r,
-  and refuses by name a manifest it cannot accept, including one written for another backend. Comparing the expert
-  base's fingerprint at serve time is the next step; until then that check stays the existing opt-in refusal.
+  quantized base (scheme `qfp-v1`: the same base fingerprints alike whether its NF4 absmax is stored nested or
+  expanded), the training facts that decide whether serving is exact, and the LoRA scale actually applied; the server
+  checks every field and refuses by name a manifest it cannot accept. Comparing the expert base's fingerprint at serve
+  time is the next step; until then that check stays an explicit opt-in refusal.
   [`docs/ADAPTER_PORTABILITY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/ADAPTER_PORTABILITY.md)
   states, from code, which training and serving pairings are exact, bounded behind a registered gate, or refused.
 - **gpt-oss expert LoRA, opt-in.** `E4B_GPTOSS_EXPERT_LORA=1` wraps gpt-oss's experts for LoRA on the unfused
