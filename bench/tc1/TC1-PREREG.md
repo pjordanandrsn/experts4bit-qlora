@@ -3358,3 +3358,95 @@ GB host floor.
 - **Time:** about 11 min of venvs and fetch (`tc1-5090-152`) and 4 e4b arms at about 9 min each: about 50 min.
 - **Download:** + 100 GB × $0.011/GB = $1.10 at most, the launcher's buy cap and default estimate.
 - **Worst case:** 2 h × $1.05 + $1.10 = **$3.20**. Expected about $1.5.
+
+### Amendment 75 (2026-10-22T09:53Z, after amendment 74's read, before any box): the 4090-fit read: the compact delta, the chunked LM loss and both, reserved and device peaks first (descriptive; one fixed rule)
+
+**Why.** The goal is TC1's field recipe, unchanged, on a 24 GiB RTX 4090. Amendment 74's box (`tc1-5090-154`, read in #1979) measured how far
+that is at today's pins:
+- fd's nvidia-smi peak was 26,218 MiB, its reserved peak 26.814 GB and its allocated peak 26.500 GB. A 4090's nvidia-smi total is 24,564 MiB,
+  so fd is 1,654 MiB over before any headroom, and 2,678 MiB over for 1 GiB of it.
+- cd1 (`NF4_QLORA_COMPACT_DELTA=1`) took the padded delta out of the live set at the peak (2.348 GB to 73 kB), and peak allocated fell 0.639 GB.
+  The peak moved to the LM-loss backward: torch's `cross_entropy` site (0.687 GB) and an autograd group with no Python frame (1.374 GB),
+  both vocab-shaped.
+- cd1's reserved peak rose 0.021 GB and its device peak 20 MiB. The gap between reserved and allocated grew from 0.314 GB to 0.974 GB.
+
+Amendment 74's rule read cd1 as "moved, not saved". That rule cannot tell a relocated peak (the target gone, the peak now set by another
+transient) from a transient moved into another site. This amendment registers the successor rule. It reads the reserved and device peaks
+first, because those decide a fit.
+
+**The recipe is fixed.** Every arm keeps the model pin, 60 steps, seq 2048, micro-batch 2 × accum 4, the adapter targets, fp32 matched
+adapters, resident experts, the optimizer and the loss masking. A smaller batch or seq, a quantization change, expert offload, CPU paging or
+fewer trainable layers would each be a separately labelled and separately priced variant. None is in this box.
+
+**Feasibility, stated before the box.** On box 154 the static classes live at the peak came to 23.162 GB: the frozen experts and their
+absmax, the other frozen weights, the adapters and their grads, the optimizer state and the buffers. The CUDA context and other non-PyTorch
+device memory (the device peak minus reserved) came to 0.677 GB on both arms. On a 4090 that leaves the reserved peak at most 25.080 GB, so
+transients plus the allocator's gap must fit in 1.918 GB, or 0.844 GB with 1 GiB of headroom. cd1 carried 2.699 GB of transient above the
+statics at its peak and a 0.974 GB gap. The chunked loss targets 2.061 GB of that transient. Even if it all goes and the gap stays at cd1's,
+the fit is marginal, and 1 GiB of headroom needs the gap to shrink as well. The 4090's own context is not measured here. This box predicts
+none of these numbers; it measures them.
+
+**The box** (token `qwen3pos75cl`). Amendment 74's recipe, window, instrument and pins, e4b only:
+- TC1's field recipe: alpaca, seq 2048, micro-batch 2 × accum 4, 60 steps, 8 held-out rows every 20 (`TC1_STEPS=60`). The family refuses any
+  other window.
+- e4b's matched arm (`--adapter-dtype fp32 --lora-init matched`) in venv-unsloth (torch 2.12.1+cu130), `--mem-census 1`, `--profile-steps 0`.
+  Four arms, one draw each, in this order:
+  - `fused_attn4_m_fd`: today's defaults;
+  - `fused_attn4_m_fd_cd1`: + `NF4_QLORA_COMPACT_DELTA=1`;
+  - `fused_attn4_m_fd_cl1`: + `E4B_CHUNKED_LM_LOSS=1` (every training forward chunked; auto's 1 GiB gate leaves this recipe's logits on
+    the stock loss);
+  - `fused_attn4_m_fd_cd1cl1`: both.
+- The libraries: e4b is main at launch (the drive's `E4B_SHA`). grouped-nf4-gemm is `a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7` (0.49.0),
+  and the family refuses any other. The harness is main's at this amendment's merge.
+- One RTX 5090 by the launcher's ranking. A pin names only a machine whose listing has held across at least two screen sweeps and 180 s,
+  with its latest read fresh, on an offer that read listed. `TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`.
+
+**Validity** (`pos75_why`). An arm off any of these is VOID and reported as VOID:
+- amendment 74's predicates for the delta path the arm names: fd's for fd and cl1, cd1's for cd1 and cd1cl1;
+- **binding, the loss:** cl1 and cd1cl1 record `E4B_CHUNKED_LM_LOSS=1` with every training forward chunked: chunked calls, no small or stock
+  call, no run-time refusal. fd and cd1 record the stock loss under auto's gate: small calls, no chunked call. The held-out loss stays at its
+  default on every arm.
+
+A harness refusal or crash is NOT_RUN: no data, and nothing is read.
+
+**What the read reports** (`pos75_block`, then amendment 23's tables for the four arms; GB = 1e9 bytes). For each arm, first:
+- the reserved peak (the census's `peak_reserved_bytes`);
+- the nvidia-smi peak: the largest `memory.used` the arm's 1 Hz sampler read, beside a 4090's 24,564 MiB total.
+
+Then:
+- peak allocated;
+- the padded-delta bytes at the peak (amendment 74's span);
+- the LM-loss backward's bytes at the peak: torch's `cross_entropy` site and the autograd groups with no Python frame;
+- the largest transient at the peak;
+- held-out at N, and its Δ against fd;
+- host RSS high-water;
+- s/step, **recorded, never gated.**
+
+The census lists the top 40 groups at the peak. With `peak_window.n_groups`, the read bounds the bytes in the unlisted groups by their
+count times the smallest listed group.
+
+**The successor rule** (fixed now). It reads three comparisons, each against a parent and a target group G:
+- cd1 against fd, with G the padded delta;
+- cl1 against fd, with G the LM-loss backward;
+- cd1cl1 against cd1, with G the LM-loss backward.
+
+cd1cl1 against fd is reported beside, never a verdict. For each comparison:
+1. **The live sets first.** RELOCATED: G is live at the parent's peak (at least 16 MiB listed) and absent at the arm's (its listed bytes
+   plus the unlisted bound under 16 MiB). With G not live at the parent's peak, there is nothing to credit.
+2. **The credit, up to the next transient.** RELOCATED: the whole allocated drop is credited, since the peak fell to the next transient, and
+   it must reach 0.10 GB. If G may still be live, the drop must reach half of G's bytes removed (amendment 74's credit).
+3. **CANDIDATE:** the drop is credited, AND the reserved peak and the device peak each fall by at least 0.10 GB against the parent, AND
+   held-out at N is within 0.005 of fd.
+
+A candidate goes to a separately pre-registered RTX 4090 acceptance box at the same recipe: 60 steps, no OOM, the free headroom recorded,
+1 GiB aimed. No default flips before that box and the quality and speed gates. With no candidate, the read names which condition failed for
+each comparison. The next lever is its own amendment.
+
+`tests/test_tc1_reduce.py` reads box 154's committed cells and samplers through the rule. cd1 against fd reads RELOCATED, with the 0.639 GB
+drop credited, but reserved and device each rose 20 MiB: no candidate.
+
+**Budget.** One RTX 5090 at the declared $1.05/h (GPU plus storage for the 220 GB disk, the RTX 5090 policy ceiling), a 2 h guard, TC1's 98
+GB host floor.
+- **Time:** about 11 min of venvs and fetch and 4 e4b arms at about 9 min each: about 50 min (box 154 cost $0.914).
+- **Download:** + 100 GB × $0.011/GB = $1.10 at most, the launcher's buy cap and default estimate.
+- **Worst case:** 2 h × $1.05 + $1.10 = **$3.20**. Expected about $1.5.
