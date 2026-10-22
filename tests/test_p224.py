@@ -585,6 +585,7 @@ def test_the_readings_disk_floor_covers_the_fetch_the_bake_and_the_install():
 
 AMENDMENT_6 = PREREG.split("## Amendment 6", 1)[1] if "## Amendment 6" in PREREG else ""
 GUARD_A6_S = 11520     # 3.2 h
+A6_DIFFS_SHA256 = "a3836a2ecf5bf55d664deb26883f3a0614e05ad89274c8cd6f3636be0da72ffb"
 FIT_A6 = {"install": 450, "fetch": 1200, "bake": 600, "train": 700, "ref": 1560, "servers": 6 * 360, "score": 2 * 650,
           "offload_test": 60, "reduce": 60, "reserve": 600}
 A6_WORDS = ("acorns badgers baskets boulders candles carts castles chimneys coins cranes drums eagles fences fountains "
@@ -630,7 +631,8 @@ def test_amendment_6_the_reference_alarm_and_the_fit_cover_688_sequences():
 
 
 def test_amendment_6_sizes_n_from_the_variance_only_and_registers_the_stop():
-    for text in ("0.0481", "4,000", "20261022", "P(SE < 0.002) ≥ 0.90", "| 86 | 688 | 0.92 |", "| 73 | 584 | 0.55 |",
+    for text in ("0.0481", "4,000", "20261022 + K", "P(SE < 0.002) ≥ 0.90", "| 86 | 688 | 0.927 | 0.996 |",
+                 "| 73 | 584 | 0.576 | 0.579 |", "TWO-LEVEL one is registered", A6_DIFFS_SHA256[:8],
                  "no top-up", "no sequential extension", "P224 closes", "a first look", "UNCHANGED"):
         assert text in AMENDMENT_6, text
     for effect in ("3.76667", "3.77533", "PA − REF =", "PA - REF ="):              # no effect is quoted
@@ -660,3 +662,18 @@ def test_amendment_6_the_se_rung_at_688_rows_pins_its_boundary():
     assert round(over["se_pa_ref"], 6) == 0.00201
     every = R.verdict(R._fake(a=spread(0.00201, "per_seq_loss")), R.PINS)
     assert every["verdict"] == "PASS", every["why"]
+
+
+def test_amendment_6_the_sizing_table_reproduces_from_the_centered_differences():
+    """The registered rows recompute from the committed file: 256 differences, mean 0 (centered: no effect), SD 0.0481;
+    two levels give 0.927 at 688 rows and 0.576 at 584; one level gives 0.996 at 688."""
+    import hashlib
+    raw = (LANE / "a6_centered_diffs.json").read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == A6_DIFFS_SHA256
+    s = _load("a6_size")
+    d = s.load()
+    assert len(d) == 256 and abs(sum(d)) < 1e-12
+    assert round(s._se(d) * 16, 5) == 0.04812                      # SD = SE x sqrt(256)
+    assert (s.SEED, s.DRAWS, s.BAR) == (20261022, 4000, 0.002)
+    assert round(s.p_pass(d, 86, True), 3) == 0.927 and round(s.p_pass(d, 73, True), 3) == 0.576
+    assert round(s.p_pass(d, 86, False), 3) == 0.996

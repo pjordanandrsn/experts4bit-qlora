@@ -629,19 +629,26 @@ that reading is used or quoted here, and the continue-or-close decision rests on
 reading alone. A VOID spends no test, so the next reading at a judgeable N is a first look, not a second.
 - Point sizing, (0.0481 / 0.002)² = 579 rows (73 topics, 584 rows), meets the bar only about half the time: the SD
   is itself an estimate (kurtosis 4.21, so its relative SE is about 5.6 %).
-- A double bootstrap prices that. It resamples the reading's 256 per-row assistant-position differences as the
-  population, draws N rows from it, and counts SE < 0.002. It uses 4,000 draws, seed 20261022, and the per-row records
-  in the private receipt store.
+- A bootstrap prices that, at two levels; both are reported, and the TWO-LEVEL one is registered.
+  - One level draws N rows with replacement from the reading's 256 per-row differences (assistant positions) and counts
+    SE < 0.002. It treats the 256 as the population, so it ignores the SD's own uncertainty.
+  - Two levels first resample the 256 into a population, then draw N rows from that population.
+  - 4,000 draws per row of the table, each K with its own rng `random.Random(20261022 + K)`.
+  - `bench/p224/a6_size.py` computes the table from `bench/p224/a6_centered_diffs.json` (sha256 `a3836a2e…`): the
+    256 differences with their mean subtracted. Every SE is shift-invariant, so the file carries the spread and no
+    effect, and the test reproduces the registered rows.
 
-  | topics K | rows N | P(SE < 0.002) |
-  |---|---|---|
-  | 73 | 584 | 0.55 |
-  | 80 | 640 | 0.81 |
-  | 83 | 664 | 0.88 |
-  | 86 | 688 | 0.92 |
-  | 90 | 720 | 0.96 |
+  | topics K | rows N | P(SE < 0.002), two levels | one level |
+  |---|---|---|---|
+  | 73 | 584 | 0.576 | 0.579 |
+  | 76 | 608 | 0.692 | 0.791 |
+  | 80 | 640 | 0.810 | 0.932 |
+  | 83 | 664 | 0.883 | 0.980 |
+  | 86 | 688 | 0.927 | 0.996 |
+  | 90 | 720 | 0.968 | 1.000 |
+  | 96 | 768 | 0.990 | 1.000 |
 
-- The registered target is **P(SE < 0.002) ≥ 0.90**: **86 topics, 688 distinct rows**.
+- The registered target is **P(SE < 0.002) ≥ 0.90** at two levels: **86 topics, 688 distinct rows**.
 
 **What changes.**
 1. **The held-out set** (superseding Amendment 5's 256 rows). It is the full cross product of 86 held-out topics × the
