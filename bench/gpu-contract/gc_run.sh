@@ -23,9 +23,14 @@ TORCH_WANT=2.8.0+cu128
 # experts4bit-qlora's served-route premise (run from its clone's root) -- P133's two premise suites, plus gnf4's dispatch file
 GNF4_TESTS="test_nf4_gemv_bw.py test_dispatch_counts.py"
 E4B_TESTS="tests/test_decode_graph_buckets.py tests/test_kv_step_select.py tests/test_gemv_bw_served_gpu.py"
+# GC_E4B_TESTS (optional) replaces the e4b list for a PR's own GPU smoke: space-separated tests/test_<name>.py paths
+if [ -n "${GC_E4B_TESTS:-}" ]; then
+  for t in $GC_E4B_TESTS; do [[ "$t" =~ ^tests/test_[a-z0-9_]+\.py$ ]] || { say "refusing: GC_E4B_TESTS entry '$t' is not tests/test_<name>.py"; finish 78; }; done
+  E4B_TESTS=$GC_E4B_TESTS
+fi
 MIN_DISK_GB=${GC_MIN_DISK_GB:-30}
 export HF_HUB_DISABLE_XET=1 TOKENIZERS_PARALLELISM=false TRITON_INTERPRET=0
-{ echo "GC run $GC_RUN_ID nonce ${NONCE:0:12}"; echo "gnf4 $GC_GNF4_SHA"; echo "e4b $GC_E4B_SHA"; echo "card class $GC_CARD"; echo "required ${GC_REQUIRE:-<none>}"; } | tee summary.txt
+{ echo "GC run $GC_RUN_ID nonce ${NONCE:0:12}"; echo "gnf4 $GC_GNF4_SHA"; echo "e4b $GC_E4B_SHA"; echo "card class $GC_CARD"; echo "required ${GC_REQUIRE:-<none>}"; echo "e4b tests $E4B_TESTS"; } | tee summary.txt
 CUDA_PROBE=$(python - <<'PYC' 2>/dev/null
 import sys
 try:
