@@ -123,7 +123,7 @@ The offload row uses a different training setup.
 
 ## New in 0.57.0
 
-- **The paged server serves a trained adapter.** `E4B_PAGED_ADAPTER=<dir>` loads one attention adapter. The server
+- **The paged server serves a trained adapter.** `E4B_PAGED_ADAPTER=<dir>` loads one adapter trained with bf16 attention (one trained on 4-bit attention is refused). The server
   verifies the directory before it reads any weight (paths, sizes, sha256, tensors, shapes, dtypes, finiteness), merges
   the attention LoRA into the bf16 projections at load, so serving it adds no per-token work, and refuses to start,
   naming each reason, rather than serve the base model in the adapter's place. Expert LoRA is refused for now. `/health`

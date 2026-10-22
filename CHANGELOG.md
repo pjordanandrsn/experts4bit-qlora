@@ -14,9 +14,9 @@ manifest, which records a canonical fingerprint of the quantized base (scheme `q
 whether serving is exact, and the LoRA scale actually applied; the server checks every field. Comparing the expert
 base's fingerprint at serve time is still to come, so that one check stays an explicit opt-in refusal. Also new: gpt-oss
 expert LoRA on the unfused reference loop (opt-in, `E4B_GPTOSS_EXPERT_LORA=1`), and a plan that prices the stock loss
-when the chunked loss refuses an LM head. Affects anyone who trains an attention adapter to serve it, and gpt-oss
+when the chunked loss refuses an LM head. Affects anyone who trains a bf16-attention adapter to serve it, and gpt-oss
 training; serving without an adapter and the training numerics are unchanged. Upgrade if you want to serve a trained
-attention adapter, or train gpt-oss experts. The grouped-nf4-gemm floor is unchanged.
+bf16-attention adapter, or train gpt-oss experts. The grouped-nf4-gemm floor is unchanged.
 
 ### TC1 amendment 76 registered: grouped-nf4-gemm#584's reordered compact-delta backward, before vs after, two draws a side
 
