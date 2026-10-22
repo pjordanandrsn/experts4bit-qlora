@@ -23,7 +23,7 @@ INSTALL_TO_GATE_S=450   # the install and the self-tests (PREREG, "The fit")
 SHAKE=0
 case "$P224_RUN_ID" in
   p224-5090-1|p224-5090-2|p224-5090-3) MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39;;   # the SC1 pin
-  p224-shake-1|p224-shake-2|p224-shake-3) SHAKE=1; MODEL=$FIXTURE_MODEL; REV=$FIXTURE_REV;;                       # P99's pin
+  p224-shake-1|p224-shake-2|p224-shake-3|p224-shake-4|p224-shake-5|p224-shake-6) SHAKE=1; MODEL=$FIXTURE_MODEL; REV=$FIXTURE_REV;;   # P99's pin; -4..-6: Amendment 4
   *) say "unregistered run ID: $P224_RUN_ID"; finish 78;;
 esac
 # the reading's terms, and the shakedown's with its fixture generation (PREREG, "The fit"; tests/test_p224.py)
