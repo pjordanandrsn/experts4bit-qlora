@@ -54,7 +54,7 @@ NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "ref
 PASS="P222_RUN_ID=$RUN_ID P222_RUN_NONCE=$NONCE P222_DEADLINE_EPOCH=$DEADLINE E4B_SHA=$E4B_SHA"
 # Explicit IDs only: the reading and its spares, and the paid shakedown on a cheap card (never a reading).
 case "$RUN_ID" in
-  p222-5090-1|p222-5090-2|p222-5090-3|p222-shake-1|p222-shake-2|p222-shake-3) :;;
+  p222-5090-1|p222-5090-2|p222-5090-3|p222-5090-4|p222-5090-5|p222-5090-6|p222-shake-1|p222-shake-2|p222-shake-3) :;;
   *) say "refusing unregistered run ID: $RUN_ID (is not p222-5090-N or p222-shake-N)"; exit 78;;
 esac
 if [ "${P222_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p222_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p222"; exit 0; fi

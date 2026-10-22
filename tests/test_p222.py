@@ -178,7 +178,8 @@ def test_the_shakedown_is_never_a_reading():
     assert "8.6|8.9|9.0|10.0|12.0) ;;" in RUN and "VRAM_FLOOR=30000; [ \"$SHAKE\" = 1 ] && VRAM_FLOOR=15000" in RUN
     assert '--shakedown --layers 2 --reps 10 --grid 6 --select-steps 2' in RUN
     assert 'case "$SHAKE/$V" in 0/GO|0/NO_GO|1/SHAKEDOWN) finish 0;;' in RUN
-    assert "p222-5090-1|p222-5090-2|p222-5090-3|p222-shake-1|p222-shake-2|p222-shake-3) :;;" in DRIVE
+    assert ("p222-5090-1|p222-5090-2|p222-5090-3|p222-5090-4|p222-5090-5|p222-5090-6|p222-shake-1|p222-shake-2|"
+            "p222-shake-3) :;;") in DRIVE                                     # -4..-6: Amendment 3
 
 
 #: P156's box sweep (p156-5090-1): 288 plan x projection rows, each a first call; P145's per-name record: K25 per call
@@ -377,9 +378,9 @@ def test_unregistered_run_ids_are_refused(tmp_path):
     if not _clean_checkout():
         pytest.skip("the driver refuses a dirty tree")
     out = subprocess.run(["bash", str(LANE / "p222_drive.sh")], capture_output=True, text=True,
-                         env=_dry_env(tmp_path, "p222-5090-4"), timeout=120)
+                         env=_dry_env(tmp_path, "p222-5090-7"), timeout=120)
     assert out.returncode == 78 and "unregistered run ID" in out.stdout
-    assert "p222-5090-1|p222-5090-2|p222-5090-3) :;;" in RUN
+    assert "p222-5090-1|p222-5090-2|p222-5090-3|p222-5090-4|p222-5090-5|p222-5090-6) :;;" in RUN
 
 
 # ------------------------------------------------------------------ Amendment 2: the real p222-shake-2 record first
@@ -446,3 +447,10 @@ def test_amendment_2_is_additive():
         assert line in PREREG, line
     assert PREREG.index("## Amendment 1") < PREREG.index("## Amendment 2") < PREREG.index("## Receipts")
     assert "**P(VOID | no real difference)\n   is under 1 in 20,000**" in PREREG
+
+
+def test_amendment_3_registers_three_more_reading_ids_and_excludes_the_ghost_host():
+    a3 = PREREG.split("## Amendment 3", 1)[1]
+    for text in ("`p222-5090-4`, `-5` and `-6`", "excludes machine 45379", "byte-identical", "none a strike"):
+        assert text in a3, text
+    assert "(the reading's ids extended by Amendment 3)" in PREREG
