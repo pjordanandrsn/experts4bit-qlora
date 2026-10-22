@@ -499,6 +499,7 @@ That leaves `p224-shake-3`, so one more market loss would stall the lane.
   - a host is pinned only when it was listed in two consecutive screen sweeps over at least 180 s and in at least half
     of the last hour's sweeps;
   - the pinned offer is read once more right before the create, and if it is absent or above the quote nothing is
-    created and the id is kept.
+    created and the id is kept. A read that passes does not protect the id: if the offer is gone by the launcher's
+    own first pinned read, that refusal is committed and the id is spent, as `p224-shake-2`'s was.
 
 Nothing else changes: the arms, the rule, the band, the reading's terms, the budget and the guards are as before.

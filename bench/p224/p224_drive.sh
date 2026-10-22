@@ -54,7 +54,7 @@ POLL=${P224_POLL_S:-60}; W=/root/p224
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="P224_RUN_ID=$RUN_ID P224_RUN_NONCE=$NONCE P224_DEADLINE_EPOCH=$DEADLINE P224_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
-# Explicit IDs only: the reading (-1) and two spares (-2, -3); the shakedowns (-1..-3).
+# Explicit IDs only: the reading (-1) and two spares (-2, -3); the shakedowns (-1..-3, and -4..-6 from Amendment 4).
 case "$RUN_ID" in
   p224-5090-1|p224-5090-2|p224-5090-3|p224-shake-1|p224-shake-2|p224-shake-3|p224-shake-4|p224-shake-5|p224-shake-6) :;;   # -4..-6: Amendment 4
   *) say "refusing unregistered run ID: $RUN_ID (is not p224-5090-N or p224-shake-N)"; exit 78;;
