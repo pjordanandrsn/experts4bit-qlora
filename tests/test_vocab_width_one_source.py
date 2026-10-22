@@ -75,3 +75,35 @@ def test_prepare_refuses_a_head_of_another_width_before_any_engine(tmp_path, mon
     with pytest.raises(ValueError, match=f"lm_head is {RESIZED} wide"):
         prepare_qlora_training(str(tmp_path), setup, device="cpu")
     assert touched == []
+
+
+def test_the_plan_prices_stock_when_the_chunked_loss_refuses_the_head(monkeypatch):
+    """chunked_lm_loss_refusal refuses an lm_head whose width differs from the config's vocabulary (quietly under auto), so the run
+    takes the stock loss. The plan must price that: with the chunked loss forced on (E4B_CHUNKED_LM_LOSS=1), a head 128 wide on a
+    97-token vocabulary reads the stock loss, while the same model with a matching head reads the chunked one."""
+    from experts4bit_qlora import recipe
+
+    monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "1")
+    setup = QLoRASetup(expert_kernel="grouped_nf4")
+    matched = topo_mod.describe_moe(_cfg())
+    assert recipe._head_refusal(matched) is None and recipe._loss_chunk(matched, setup, 2048, matched.vocab_size)
+    build = tr.AutoModelForCausalLM.from_config
+
+    def wide_head(config, *a, **k):
+        tree = build(config, *a, **k)
+        tree.lm_head = torch.nn.Linear(config.hidden_size, RESIZED, bias=False)
+        return tree
+
+    monkeypatch.setattr(tr.AutoModelForCausalLM, "from_config", wide_head)
+    wide = topo_mod.describe_moe(_cfg())
+    assert (wide.vocab_size, wide.config_vocab_size) == (RESIZED, V)
+    assert f"{RESIZED}-wide lm_head on a {V}-token vocabulary" in recipe._head_refusal(wide)
+    assert recipe._loss_chunk(wide, setup, 2048, wide.vocab_size) is None
+
+    def activations(topo):
+        fp = recipe.estimate_qlora_footprint(topo, setup, tokens_per_microbatch=2048)
+        return {i.name: i.detail for i in fp.items}
+
+    assert "chunked LM loss" in activations(matched)["activations"]
+    assert "chunked LM loss" not in activations(wide)["activations"]
+    assert any("the model is not patched" in d for d in activations(wide).values())

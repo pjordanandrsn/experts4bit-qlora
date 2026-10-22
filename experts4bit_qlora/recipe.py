@@ -332,6 +332,8 @@ def _eval_loss_bytes(topology, setup: QLoRASetup, tokens: int, vocab: int, hidde
     stock_how = f"the stock loss, bf16 logits + their fp32 upcast + its log-softmax = {stock / 1e9:.2f} GB"
     if setup.expert_kernel != "grouped_nf4" or _loss_family(topology) is None:
         return stock, stock_how
+    if _head_refusal(topology):
+        return stock, stock_how + f" ({_head_refusal(topology)}: the model is not patched)"
     from .engines.chunked_lm_loss import EVAL_MIN_LOGITS_BYTES, chunked_eval_loss_requested, chunked_lm_loss_requested
 
     chunk = chunked_lm_loss_requested()
@@ -390,6 +392,15 @@ def _loss_family(topology):
     return next((name for name, entry in SUPPORTED.items() if entry[0] == topology.model_type), None)
 
 
+def _head_refusal(topology):
+    """Why the chunked loss refuses ``topology``'s LM head at enable time, or ``None``: ``chunked_lm_loss_refusal`` refuses a head
+    whose width differs from the config's vocabulary (quietly under ``auto``), and the run then takes the stock loss."""
+    head, cfg = int(topology.vocab_size or 0), int(getattr(topology, "config_vocab_size", 0) or 0)
+    if head and cfg and head != cfg:
+        return f"the chunked loss refuses a {head}-wide lm_head on a {cfg}-token vocabulary, so the run takes the stock loss"
+    return None
+
+
 def _loss_chunk(topology, setup: QLoRASetup, tokens: int, vocab: int):
     """The chunk size the run's training loss will use, or None for the stock loss: what ``enable_fast_train`` decides
     through :mod:`~experts4bit_qlora.engines.chunked_lm_loss` (its table of supported architectures, its switch and its
@@ -398,8 +409,8 @@ def _loss_chunk(topology, setup: QLoRASetup, tokens: int, vocab: int):
         return None                                        # the reference loop never calls enable_fast_train
     from .engines.chunked_lm_loss import chunked_lm_loss_min_bytes, chunked_lm_loss_requested
 
-    if _loss_family(topology) is None:
-        return None
+    if _loss_family(topology) is None or _head_refusal(topology):
+        return None                                        # not patched: the table refuses it, or the head is not the vocabulary's width
     chunk = chunked_lm_loss_requested()
     gate = chunked_lm_loss_min_bytes()
     if chunk is None or (gate is not None and tokens * vocab * 4 < gate):

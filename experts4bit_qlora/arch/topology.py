@@ -109,6 +109,9 @@ class MoETopology:
     embedding_numel: int = 0
     #: ``0`` when tied to the input embedding
     lm_head_numel: int = 0
+    #: the config's ``vocab_size``. ``vocab_size`` above is the LM head's width; the chunked loss refuses a head whose width differs
+    #: from this (``chunked_lm_loss_refusal``), so the plan prices the stock loss for such a model. ``0`` when not described
+    config_vocab_size: int = 0
     attention: AttentionProjections | None = None
     #: the paged KV pool's geometry, by the paged server's own rules (``serve_paged._kv_geometry`` and
     #: ``paged_runner.kv_layers`` over ``decoder_layers``, as ``serve_paged.build_engine`` calls them): KV heads and
@@ -223,6 +226,7 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
         n_layers=int(getattr(lm_config, "num_hidden_layers", 0) or 0),
         hidden_size=int(getattr(lm_config, "hidden_size", 0) or 0),
         vocab_size=int(getattr(lm_config, "vocab_size", 0) or 0),
+        config_vocab_size=int(getattr(lm_config, "vocab_size", 0) or 0),
         tied_embeddings=bool(getattr(lm_config, "tie_word_embeddings", False)),
         top_k=routed_top_k(config),
     )
