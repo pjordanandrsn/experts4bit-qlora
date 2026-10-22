@@ -109,7 +109,7 @@ def test_a_biased_expert_stack_refuses_expert_adapters_by_structure():
                           vocab_size=192, max_position_embeddings=64, layer_types=["full_attention"] * 2)
     topo = describe_moe(cfg)
     assert topo.expert_bias_tensors
-    assert any("ExpertsLoRA cannot represent" in r for r in setup_refusals(topo, QLoRASetup()))
+    assert any("builds them bare" in r and "E4B_GPTOSS_EXPERT_LORA" in r for r in setup_refusals(topo, QLoRASetup()))
     assert not any("ExpertsLoRA" in r for r in setup_refusals(topo, QLoRASetup(train_experts=False,
                                                                                    expert_kernel="reference")))
 

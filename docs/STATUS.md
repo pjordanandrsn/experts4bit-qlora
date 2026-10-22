@@ -504,7 +504,8 @@ Superseded and retired readings are not repeated here. The register keeps each w
 
 - **#344:** Gemma-4 failed to load on 2 of 6 rented hosts; lane P55 did not reproduce it on the current loader, and
   `E4B_LOAD_SYNC_DEBUG=1` now binds a fault to a load stage. `e4b.open.gemma4-load-fault`
-- **gpt-oss has no expert-LoRA training path** here; grouped-nf4-gemm's `ExpertsMxfp4LoRA` route is experimental.
+- **gpt-oss expert LoRA is opt-in and unmeasured**: `ExpertsLoRA`'s unfused reference loop (`E4B_GPTOSS_EXPERT_LORA=1`,
+  CPU-graded against a transformers-matching oracle); grouped-nf4-gemm's `ExpertsMxfp4LoRA` route is experimental.
 - **`enable_batched_train`'s envelope** (which shapes reach its kernel) is unmeasured; `batched_fallback_stats(model)`
   counts the fallback.
 - **#728:** the int4 attention projections' int8 activation step is unpriced, and so is the int8 step at B = 16.

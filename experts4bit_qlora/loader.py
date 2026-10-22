@@ -1293,17 +1293,19 @@ def load_moe_4bit_streaming(
     Expects a Hugging Face model id or local snapshot of a family in
     ``docs/ARCHITECTURE_SUPPORT.md``; returns ``(model, config)`` with each fused expert
     stack an :class:`Experts4bit` base under an :class:`ExpertsLoRA` wrapper, with two
-    exceptions: gpt-oss stacks are built bare (``GptOssExperts4bit``, no wrapper, a
-    one-time NOTE in the log -- the generic adapter cannot represent its biased, clamped
-    GLU; expert LoRA for that family is grouped-nf4-gemm's ``mxfp4_qlora.ExpertsMxfp4LoRA``),
-    and an ``arena=`` load builds bare meta-backed stacks unless ``arena_train=True``
-    (verify with :func:`experts4bit_qlora.verify_moe_4bit` ``strict=True``). Refuses an
+    exceptions: gpt-oss stacks are built bare by default (``GptOssExperts4bit``, no
+    wrapper, a one-time NOTE in the log; ``E4B_GPTOSS_EXPERT_LORA=1`` wraps them in
+    ``ExpertsLoRA``'s unfused reference loop, which applies their biases and clamped GLU,
+    and whose cost against the fused route is unmeasured; expert LoRA for that family is
+    otherwise grouped-nf4-gemm's ``mxfp4_qlora.ExpertsMxfp4LoRA``), and an ``arena=`` load
+    builds bare meta-backed stacks unless ``arena_train=True`` (verify with
+    :func:`experts4bit_qlora.verify_moe_4bit` ``strict=True``). Refuses an
     unsupported ``model_type`` (``NotImplementedError``), identity-expert families,
-    ``prefetch`` without ``offload`` (``ValueError``), and ``arena_train=True`` over an
-    expert stack whose forward the adapter cannot re-implement
-    (``EpilogueContractError``, decided on the module's STRUCTURE by
-    :func:`experts4bit_qlora.assert_stock_epilogue` -- gpt-oss's biases and clamp, never
-    a family name). Needs a CUDA device and the ``[train]`` extra (transformers >= 5.0);
+    ``prefetch`` without ``offload`` and ``E4B_GPTOSS_EXPERT_LORA=1`` with ``offload``
+    (``ValueError``), and ``arena_train=True`` over an expert stack the arena path cannot
+    train faithfully (``EpilogueContractError``, decided on the module's STRUCTURE by
+    :func:`experts4bit_qlora.assert_stock_epilogue` -- gpt-oss's biases, never a family
+    name). Needs a CUDA device and the ``[train]`` extra (transformers >= 5.0);
     the checkpoint comes from the network on first fetch, from the hub cache after that --
     offline included, when the load is pinned to the staged sha (next paragraph) -- or from
     a local directory, which needs no hub at all. See
@@ -1706,8 +1708,17 @@ def load_moe_4bit_streaming(
             if f"{epfx}gate_up_proj_blocks" in weight_map:
                 # GPT-OSS: experts on disk as MXFP4 (blocks/scales) + per-projection biases.
                 # Dequantize the exact released bytes, then build a faithful NF4 expert
-                # (biases + clamped GLU) — see gptoss.py. Built bare (no ExpertsLoRA):
-                # GPT-OSS-aware training LoRA is a separate change.
+                # (biases + clamped GLU) — see gptoss.py. Built bare by default. The opt-in
+                # wraps it in ExpertsLoRA's unfused reference loop, which applies the base's
+                # `_apply_gate` and both biases (graded against tests/gptoss_lora_oracle.py);
+                # it stays opt-in until a registered read prices it.
+                gptoss_lora = os.environ.get("E4B_GPTOSS_EXPERT_LORA", "0") == "1"
+                if gptoss_lora and offload:
+                    raise ValueError(
+                        "E4B_GPTOSS_EXPERT_LORA=1 wraps gpt-oss experts in ExpertsLoRA's unfused "
+                        "reference loop, which is resident only: offload is not measured with the "
+                        "wrapper's biases, and enable_expert_offload refuses it. Load without "
+                        "offload, or unset the flag for the bare stacks.")
                 gate_up = dequantize_mxfp4(get(f"{epfx}gate_up_proj_blocks"), get(f"{epfx}gate_up_proj_scales"), dtype=dtype)
                 down = dequantize_mxfp4(get(f"{epfx}down_proj_blocks"), get(f"{epfx}down_proj_scales"), dtype=dtype)
                 gu_bias = get(f"{epfx}gate_up_proj_bias").to(dtype)
@@ -1722,16 +1733,23 @@ def load_moe_4bit_streaming(
                 experts = GptOssExperts4bit.from_gptoss(
                     gate_up, gu_bias, down, dn_bias, quant_type=quant_type, compute_dtype=dtype
                 ).to(device)
+                if gptoss_lora:
+                    experts = ExpertsLoRA(experts, r=r, alpha=alpha, dtype=dtype).to(device)
                 if not bare_logged:
                     # Said once, at load: `r`/`alpha` are required positionals and every
                     # other family gets an expert adapter, so a caller training this model
                     # would otherwise learn from the trainable-parameter count (attention
                     # LoRA only) that the experts were never wrapped.
                     bare_logged = True
-                    log(f"  NOTE: {model_type!r} experts are built BARE (GptOssExperts4bit, no "
-                        "ExpertsLoRA): r/alpha do not apply to the expert stacks. The generic "
-                        "adapter cannot represent this epilogue (biases + clamped GLU; "
-                        "ExpertsLoRA refuses it structurally); expert LoRA for this family is "
+                    log(f"  NOTE: {model_type!r} experts are "
+                        + ("wrapped in ExpertsLoRA (E4B_GPTOSS_EXPERT_LORA=1)"
+                           if gptoss_lora else
+                           "built BARE (GptOssExperts4bit, no ExpertsLoRA): r/alpha do not "
+                           "apply to the expert stacks. E4B_GPTOSS_EXPERT_LORA=1 wraps them")
+                        + " on the unfused per-expert reference loop, which applies the "
+                        "biases and the clamped GLU; no fused kernel runs, and its cost "
+                        "against the fused route is unmeasured until a registered read "
+                        "prices it. The other expert-LoRA route for this family is "
                         "grouped-nf4-gemm's mxfp4_qlora.ExpertsMxfp4LoRA "
                         "(docs/solutions/mxfp4-moe-training-and-residency.md).")
                 if offload:

@@ -217,14 +217,22 @@ def _epilogue(base, proj):
 # Anything else -- per-expert bias tensors, a clamp or GLU scalar nothing
 # consumes, an interleaved gate/up layout, a forward that overrides the epilogue
 # without exposing it -- is a module the adapter would SUBSTITUTE a plain SwiGLU
-# for: right shapes, plausible numbers, falling loss, wrong function. gpt-oss is
+# for: right shapes, plausible numbers, falling loss, wrong function. gpt-oss was
 # the shipped example (`arch/gptoss.py`: biases + clamped GLU + de-interleave at
 # load, no hook), and the arena loader wrapped it anyway (#397).
 #
+# One extension, opt-in per caller (`allow_bias=True`, passed only by
+# `ExpertsLoRA` itself): a module with an `_apply_gate` hook whose only bias
+# tensors are the buffers `gate_up_bias [E, gate_up rows]` and `down_bias
+# [E, hidden]`. The adapter's unfused reference loop adds those after each base
+# projection, exactly where the base's own forward does. gpt-oss now has that
+# shape. Every fused, batched, offload and residency path applies no bias, so
+# each keeps the default and refuses it.
+#
 # The check below reads STRUCTURE only (buffers, parameters, attributes, the
 # class's own `forward` identity and the names its code object references),
-# never a class or family name, so it fails for gpt-oss BY CONSTRUCTION and for
-# any future family that carries the same structure.
+# never a class or family name, so it decides gpt-oss BY CONSTRUCTION and any
+# future family that carries the same structure the same way.
 # --------------------------------------------------------------------------- #
 
 class EpilogueContractError(TypeError):
@@ -258,6 +266,17 @@ _INTERLEAVE_MARKERS = ("interleaved", "gate_up_interleaved", "_e4b_interleaved")
 #: Names in a forward's code object that mean "this forward owns an epilogue the
 #: adapter does not": the clamp, the gpt-oss sigmoid GLU, any bias.
 _EPILOGUE_CODE_NAMES = ("clamp", "clamp_", "sigmoid")
+
+#: The per-expert bias buffers the adapter's reference loop applies (`allow_bias=True`),
+#: one row per expert, added right after the matching base projection.
+_BIAS_BUFFERS = ("gate_up_bias", "down_bias")
+
+#: Where a stack with exactly those biases IS wrapped faithfully, and what it costs.
+REFERENCE_BIAS_ROUTE = (
+    "ExpertsLoRA's unfused per-expert reference loop, which adds `gate_up_bias`/`down_bias` "
+    "itself (the loader wraps gpt-oss in it only under E4B_GPTOSS_EXPERT_LORA=1; it runs no "
+    "fused kernel, and its cost against the fused route is unmeasured until a registered "
+    "read prices it)")
 
 
 def _stock_forwards() -> frozenset:
@@ -308,12 +327,23 @@ def describe_epilogue_structure(module) -> dict:
     has_gate = bool(getattr(module, "has_gate", True))
     inter = getattr(module, "intermediate_dim", None)
     hidden = getattr(module, "hidden_dim", None)
+    gate_up_shape = tuple(getattr(module, "_gate_up_shape", ()) or ())
+    down_shape = tuple(getattr(module, "_down_shape", ()) or ())
+    n_exp = getattr(module, "num_experts", None)
+    want = {"gate_up_bias": (n_exp, gate_up_shape[0] if gate_up_shape else None),
+            "down_bias": (n_exp, down_shape[0] if down_shape else None)}
     return {
         "class": cls.__name__,
         "forward": (f"{fwd.__module__}.{fwd.__qualname__}" if fwd is not None else None),
         "stock_forward": fwd in _stock_forwards(),
         "apply_gate_hook": callable(hook),
         "bias_tensors": sorted(n for n in tensors | plain if "bias" in n),
+        # the shape `allow_bias=True` admits: a hook, and no bias but the two buffers, each [E, rows]
+        "bias_buffers_representable": (
+            callable(hook)
+            and sorted(n for n in tensors | plain if "bias" in n) == sorted(_BIAS_BUFFERS)
+            and all(n in module._buffers and module._buffers[n] is not None
+                    and tuple(module._buffers[n].shape) == want[n] for n in _BIAS_BUFFERS)),
         "epilogue_scalars": sorted(n for n in _EPILOGUE_SCALARS
                                    if getattr(module, n, None) is not None),
         "forward_references": sorted(n for n in _code_names(fwd)
@@ -324,43 +354,53 @@ def describe_epilogue_structure(module) -> dict:
         "act_fn_required_positionals": (_act_fn_required_positionals(act_fn)
                                         if act_fn is not None else None),
         "has_gate": has_gate,
-        "gate_up_shape": tuple(getattr(module, "_gate_up_shape", ()) or ()),
-        "down_shape": tuple(getattr(module, "_down_shape", ()) or ()),
+        "gate_up_shape": gate_up_shape,
+        "down_shape": down_shape,
         "expected_gate_up_rows": ((2 * inter if has_gate else inter) if inter is not None else None),
         "expected_down_shape": ((hidden, inter) if None not in (hidden, inter) else None),
     }
 
 
-def assert_stock_epilogue(module) -> None:
+def assert_stock_epilogue(module, *, allow_bias: bool = False) -> None:
     """Refuse, by STRUCTURE, an expert module whose forward :class:`ExpertsLoRA` cannot
     re-implement; return ``None`` when it can.
 
     Passes: the vendored/upstream ``ExpertsNbit``/``Experts4bit`` (any ``act_fn``
     of one tensor -- SiLU, Gemma-4's gelu_tanh -- gated or not) and any subclass
     whose only departure from the stock forward is exposed through an
-    ``_apply_gate`` hook (``DeepseekV4Experts4bit``). Raises
+    ``_apply_gate`` hook (``DeepseekV4Experts4bit``). With ``allow_bias=True`` it
+    also passes a hooked module whose only bias tensors are the buffers
+    ``gate_up_bias [E, gate_up rows]`` and ``down_bias [E, hidden]``
+    (``GptOssExperts4bit``): :class:`ExpertsLoRA`'s reference loop adds those
+    itself, and it is the only caller that passes ``True``. Raises
     :class:`EpilogueContractError` naming every offending attribute and the
-    faithful route for: per-expert bias tensors (``gate_up_bias``/``down_bias``,
-    ``*_proj_bias``, any ``*bias*`` buffer, parameter or tensor attribute); a
-    non-stock ``forward`` with no hook; an epilogue scalar (``alpha``, ``limit``,
-    ``swiglu_*``) no hook consumes; a forward body that clamps, applies a sigmoid
-    GLU or adds a bias itself (its code object names them) instead of leaving the
-    epilogue to the hook; an interleaved-layout marker; an ``act_fn`` that needs
-    more than one positional argument; a declared ``gate_up``/``down`` shape that
-    is not the gate-block-then-up-block ``[2I, H]`` / ``[H, I]`` the adapter
+    faithful route for: per-expert bias tensors (``gate_up_bias``/``down_bias``
+    unless allowed, ``*_proj_bias``, any other ``*bias*`` buffer, parameter or
+    tensor attribute); a non-stock ``forward`` with no hook; an epilogue scalar
+    (``alpha``, ``limit``, ``swiglu_*``) no hook consumes; a forward body that
+    clamps, applies a sigmoid GLU or adds a bias itself (its code object names
+    them) instead of leaving the epilogue to the hook, the two admitted bias
+    buffers excepted; an interleaved-layout marker; an ``act_fn`` that needs more
+    than one positional argument; a declared ``gate_up``/``down`` shape that is
+    not the gate-block-then-up-block ``[2I, H]`` / ``[H, I]`` the adapter
     ``chunk(2)``-splits.
 
     Every path that wraps, trains over or attaches to an ``ExpertsLoRA`` calls this
     (``ExpertsLoRA.__init__``, the loader's ``arena_train=True`` branch,
     ``enable_nvme_train_residency``, ``enable_fast``/``enable_fast_train``/
-    ``enable_batched_train``, ``enable_hybrid_train``), so the loader cannot be
-    bypassed through another entry point.
+    ``enable_batched_train``, ``enable_hybrid_train``, ``enable_expert_offload`` on
+    a wrapper), so the loader cannot be bypassed through another entry point. All
+    of them but the constructor keep ``allow_bias=False``: none applies a bias.
     """
     d = describe_epilogue_structure(module)
+    representable = d["bias_buffers_representable"]
     problems = []
-    if d["bias_tensors"]:
+    if d["bias_tensors"] and not (allow_bias and representable):
         problems.append(
-            f"per-expert bias tensors {d['bias_tensors']} (the adapter's epilogue adds no bias)")
+            f"per-expert bias tensors {d['bias_tensors']} "
+            + ("that this path does not apply" if representable
+               else "(the adapter applies only `gate_up_bias` [E, gate_up rows] and "
+                    "`down_bias` [E, hidden] buffers, beside an `_apply_gate` hook)"))
     if not d["stock_forward"] and not d["apply_gate_hook"]:
         problems.append(
             f"a non-stock forward ({d['forward']}) and no `_apply_gate` hook to reproduce it")
@@ -368,9 +408,12 @@ def assert_stock_epilogue(module) -> None:
         problems.append(
             f"epilogue scalars {d['epilogue_scalars']} that no `_apply_gate` hook consumes "
             "(the stock epilogue ignores them; the serving engines do not)")
-    if d["forward_references"] and not d["stock_forward"]:
+    # The admitted bias buffers are reported (or allowed) above; a forward that adds them
+    # is the base's own copy of what the adapter does, not an epilogue outside the hook.
+    refs = [n for n in d["forward_references"] if not (representable and n in _BIAS_BUFFERS)]
+    if refs and not d["stock_forward"]:
         problems.append(
-            f"a forward whose own body references {d['forward_references']} -- an epilogue "
+            f"a forward whose own body references {refs} -- an epilogue "
             "computed outside any `_apply_gate` hook")
     if d["interleave_markers"]:
         problems.append(
@@ -393,6 +436,13 @@ def assert_stock_epilogue(module) -> None:
             "([hidden, intermediate])")
     if not problems:
         return None
+    if representable and len(problems) == 1 and d["bias_tensors"]:
+        # The stack itself is faithful under the adapter's reference loop; what is refused
+        # is a path (a fused kernel, an engine, a tier) that would run it without its biases.
+        raise EpilogueContractError(
+            f"{d['class']} carries " + problems[0] + ". It is wrapped faithfully only by "
+            f"{REFERENCE_BIAS_ROUTE}, or by {STOCK_EPILOGUE_ROUTE}. Running it here would drop "
+            "both biases -- shapes agree, the loss falls, nothing raises -- so it is refused.")
     raise EpilogueContractError(
         f"{d['class']} cannot be wrapped in ExpertsLoRA: the adapter re-implements the "
         "expert forward inline (the low-rank delta lands BEFORE the nonlinearity), so it "
@@ -415,10 +465,14 @@ class ExpertsLoRA(nn.Module):
       * ``down``:    ``A[e]`` is ``[r, intermediate]``, ``B[e]`` is ``[hidden, r]``
 
     Refuses (``EpilogueContractError``) a base whose forward it cannot re-implement:
-    :func:`assert_stock_epilogue` is applied to ``base`` at construction, so a biased,
-    clamped or interleaved expert stack (gpt-oss) is never wrapped and never trained
+    :func:`assert_stock_epilogue` is applied to ``base`` at construction, so a clamped,
+    interleaved or arbitrarily biased expert stack is never wrapped and never trained
     against a substituted SwiGLU. A custom activation exposed as ``_apply_gate``
-    (DeepSeek-V4) is accepted.
+    (DeepSeek-V4) is accepted, and so is a hooked base whose only biases are the
+    ``gate_up_bias`` / ``down_bias`` buffers (gpt-oss): this class adds ``bias[e]``
+    right after each base projection, in both forwards, as the base's own forward
+    does. Those biases are applied on this unfused loop only; every fused, batched
+    and offload enabler refuses such a wrapper.
     """
 
     def __init__(
@@ -430,9 +484,10 @@ class ExpertsLoRA(nn.Module):
     ):
         super().__init__()
         # Before anything else: the wrapper is only faithful for the stock epilogue
-        # (or one handed over through `_apply_gate`). Refused here, at the seam every
-        # constructor of this class goes through, rather than in each loader branch.
-        assert_stock_epilogue(base)
+        # (or one handed over through `_apply_gate`, plus the two bias buffers this
+        # class applies itself). Refused here, at the seam every constructor of this
+        # class goes through, rather than in each loader branch.
+        assert_stock_epilogue(base, allow_bias=True)
         self.base = base
         for p in self.base.parameters():
             p.requires_grad_(False)
@@ -663,6 +718,9 @@ class ExpertsLoRA(nn.Module):
         # double-quantized (E4B_ABSMAX_DQ=1) -- views whose [expert_idx] dequantizes that expert's row.
         gate_up_absmax = expert_absmax_rows(base, "gate_up")
         down_absmax = expert_absmax_rows(base, "down")
+        # Per-expert biases (gpt-oss; None on every other family), added right after each base
+        # projection as the base's own forward adds them: inside the routing weight, before the delta.
+        gate_up_bias, down_bias = getattr(base, "gate_up_bias", None), getattr(base, "down_bias", None)
 
         for expert_idx in expert_hit:
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
@@ -681,20 +739,26 @@ class ExpertsLoRA(nn.Module):
                 x,
                 compute_dtype,
                 use_gemv,
-            ) + self._lora(x, self.gate_up_lora_A[expert_idx], self.gate_up_lora_B[expert_idx])
+            )
+            if gate_up_bias is not None:
+                proj = proj + gate_up_bias[expert_idx]
+            proj = proj + self._lora(x, self.gate_up_lora_A[expert_idx], self.gate_up_lora_B[expert_idx])
 
-            current_hidden = _epilogue(base, proj)
+            gated = _epilogue(base, proj)
 
             current_hidden = self._base_project(
                 base.down_proj,
                 down_absmax,
                 base._down_shape,
                 expert_idx,
-                current_hidden,
+                gated,
                 compute_dtype,
                 use_gemv,
-            ) + self._lora(
-                current_hidden,
+            )
+            if down_bias is not None:
+                current_hidden = current_hidden + down_bias[expert_idx]
+            current_hidden = current_hidden + self._lora(
+                gated,
                 self.down_lora_A[expert_idx],
                 self.down_lora_B[expert_idx],
             )
@@ -729,6 +793,7 @@ class ExpertsLoRA(nn.Module):
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
         gate_up_absmax = expert_absmax_rows(base, "gate_up")   # the buffers, or row views when double-quantized
         down_absmax = expert_absmax_rows(base, "down")
+        gate_up_bias, down_bias = getattr(base, "gate_up_bias", None), getattr(base, "down_bias", None)  # as in forward
 
         for j in range(top_k_index.shape[1]):
             expert_idx = top_k_index[0, j]  # 0-d device tensor: indexes below without a host sync
@@ -741,19 +806,25 @@ class ExpertsLoRA(nn.Module):
                 hidden_states,
                 compute_dtype,
                 use_infer_gemv,
-            ) + self._lora(hidden_states, self.gate_up_lora_A[expert_idx], self.gate_up_lora_B[expert_idx])
+            )
+            if gate_up_bias is not None:
+                proj = proj + gate_up_bias[expert_idx]
+            proj = proj + self._lora(hidden_states, self.gate_up_lora_A[expert_idx], self.gate_up_lora_B[expert_idx])
 
-            current_hidden = _epilogue(base, proj)
+            gated = _epilogue(base, proj)
 
             current_hidden = self._base_project(
                 base.down_proj,
                 down_absmax,
                 base._down_shape,
                 expert_idx,
-                current_hidden,
+                gated,
                 compute_dtype,
                 use_infer_gemv,
-            ) + self._lora(current_hidden, self.down_lora_A[expert_idx], self.down_lora_B[expert_idx])
+            )
+            if down_bias is not None:
+                current_hidden = current_hidden + down_bias[expert_idx]
+            current_hidden = current_hidden + self._lora(gated, self.down_lora_A[expert_idx], self.down_lora_B[expert_idx])
 
             final_hidden_states += (current_hidden * top_k_weights[0, j]).to(final_hidden_states.dtype)
 

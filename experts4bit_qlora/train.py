@@ -435,16 +435,16 @@ def main():
         raise SystemExit("TRAIN_ROUTER=1 but no [num_experts, hidden] router weight was found beside any expert stack -- "
                          "refusing to report a router-trained run that trained none")
     if TRAIN_EXPERTS and not any(id(p) in expert_ids_ for p in lora_params):
-        # A family the loader builds BARE (gpt-oss: ExpertsLoRA refuses its epilogue by
-        # structure) has no expert adapter to train. Attention LoRA alone would keep the
+        # A family the loader builds BARE (gpt-oss, unless E4B_GPTOSS_EXPERT_LORA=1) has no
+        # expert adapter to train. Attention LoRA alone would keep the
         # trainable count nonzero and the run would report a loss curve under a flag that
         # says the experts were trained. TRAIN_EXPERTS=1 is the default, so say so.
         raise SystemExit(
             "TRAIN_EXPERTS=1 but the loaded model carries no expert adapter: its expert "
-            "stacks are built bare (the generic ExpertsLoRA cannot represent this family's "
-            "epilogue -- see the loader's NOTE). Refusing to train attention/router only "
-            "under a flag that says otherwise. Set TRAIN_EXPERTS=0 to train what is "
-            "wrapped, or train the experts with grouped-nf4-gemm's "
+            "stacks are built bare (see the loader's NOTE). Refusing to train attention/router "
+            "only under a flag that says otherwise. Set TRAIN_EXPERTS=0 to train what is "
+            "wrapped; for gpt-oss, set E4B_GPTOSS_EXPERT_LORA=1 (ExpertsLoRA's unfused "
+            "reference loop, cost unmeasured) or train the experts with grouped-nf4-gemm's "
             "mxfp4_qlora.ExpertsMxfp4LoRA (docs/solutions/mxfp4-moe-training-and-residency.md).")
     if FAST_TRAIN:
         # Before the BEFORE evaluation, so both evaluations and every step run one expert path. absmax_dq=False: apply_absmax_dq

@@ -22,9 +22,12 @@ ride along untouched.
 
 The loaded experts are **NF4** (a re-quantization of the exact released bytes);
 the "exact released bytes" provenance lives one step earlier, at the dequant.
-Trainable LoRA over this stack needs a GPT-OSS-aware adapter (the generic
-:class:`ExpertsLoRA` assumes standard SwiGLU) — that is a separate change; this
-module is the inference/probe/kernel-facing frozen expert.
+The clamped GLU is exposed as ``_apply_gate``, so :class:`ExpertsLoRA` can wrap this
+stack on its unfused reference loop: the adapter takes the activation from the hook and
+adds ``gate_up_bias`` / ``down_bias`` after each base projection itself
+(``assert_stock_epilogue(..., allow_bias=True)``). No fused, batched or offload path
+applies the biases, so those refuse a wrapped stack, and the loader builds it bare unless
+``E4B_GPTOSS_EXPERT_LORA=1``.
 """
 from __future__ import annotations
 
@@ -88,6 +91,16 @@ class _GptOssForwardMixin:
         obj.limit = float(limit)
         return obj
 
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        """The clamped GLU on e4b's gate-block-then-up-block ``[..., 2I]``, biases already added.
+
+        This forward calls it and so does :class:`ExpertsLoRA` (``lora._epilogue``), so the
+        frozen forward and the adapter cannot disagree on the activation."""
+        gate, up = gate_up.chunk(2, dim=-1)
+        gate = gate.clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
+        return (up + 1) * (gate * torch.sigmoid(gate * self.alpha))
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -112,10 +125,7 @@ class _GptOssForwardMixin:
             gate_up = self._project(
                 self.gate_up_proj, self.gate_up_absmax, self._gate_up_shape, e, cur, cd
             ) + self.gate_up_bias[e]
-            gate, up = gate_up.chunk(2, dim=-1)
-            gate = gate.clamp(max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
-            gated = (up + 1) * (gate * torch.sigmoid(gate * self.alpha))
+            gated = self._apply_gate(gate_up)
             h = self._project(
                 self.down_proj, self.down_absmax, self._down_shape, e, gated, cd
             ) + self.down_bias[e]
