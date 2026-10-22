@@ -736,7 +736,18 @@ def _nf4_smallm_bw_takes(T: int, int4_stores) -> bool:
     if _k25_mode_env() == "1":
         raise RuntimeError("E4B_NF4_SMALLM_BW=1 and E4B_NF4_GROUPED_SMALLM=1 both name the rows of "
                            f"2..{NF4_SMALLM_BW_MAX_T} tokens (K33 and K25): unset one of them")
+    if not _NF4_SMALLM_BW_RESOLVED[0]:
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 routes 2..8-token calls only after "
+                           "hot_residency.resolve_nf4_smallm_bw(modules, device) checked that K33 engages at this "
+                           "model's expert shapes on this device; nothing in this process has: call it after the "
+                           "levers and before any capture, or unset E4B_NF4_SMALLM_BW")
     return True
+
+
+#: Whether :func:`resolve_nf4_smallm_bw` found ``E4B_NF4_SMALLM_BW=1`` servable in this process (one list cell, as
+#: :data:`_K25_LUT_DEFAULT`). The routing refuses the knob without it: an unresolved process (a harness enabling the
+#: collapse itself) could otherwise send the rows to dot-pad or the scalar GEMV where K33 does not engage.
+_NF4_SMALLM_BW_RESOLVED = [False]
 
 
 #: The all-resident collapse's calls ``E4B_NF4_SMALLM_BW`` routed, by token count, as ``{"T<n>": calls}``; counted in
@@ -753,9 +764,11 @@ def resolve_nf4_smallm_bw(modules, device) -> dict:
     An explicit ``1`` is refused beside ``E4B_NF4_GROUPED_SMALLM=1``, on any layer with an int4 or MXFP4 store, on any
     layer that is not on the all-resident collapse (the only forward that reads the knob), on a kernel package without
     K33, and at any expert shape where K33 does not engage on this device (``GNF4_GEMV_BW``'s rule: there the singleton
-    route would run dot-pad or the scalar GEMV)."""
+    route would run dot-pad or the scalar GEMV). Only a resolution that passes lets the forward route the knob
+    (:data:`_NF4_SMALLM_BW_RESOLVED`); an unresolved process refuses it at the first 2..8-token call."""
     raw = os.environ.get("E4B_NF4_SMALLM_BW", "").strip() or None
     base = {"env": raw, "on": False, "max_tokens": NF4_SMALLM_BW_MAX_T}
+    _NF4_SMALLM_BW_RESOLVED[0] = False    # a refusal below leaves the knob unservable in this process
     if not _nf4_smallm_bw_env():
         return {**base, "why": "opt-in: E4B_NF4_SMALLM_BW is not 1"}
     if _k25_mode_env() == "1":
@@ -787,6 +800,7 @@ def resolve_nf4_smallm_bw(modules, device) -> dict:
         raise RuntimeError(f"E4B_NF4_SMALLM_BW=1: K33's bandwidth GEMV does not engage at (N, K) {off} on this device "
                            f"(GNF4_GEMV_BW={os.environ.get('GNF4_GEMV_BW') or 'auto'}), so the singleton route would "
                            "run dot-pad or the scalar GEMV there: unset E4B_NF4_SMALLM_BW, or set GNF4_GEMV_BW=1")
+    _NF4_SMALLM_BW_RESOLVED[0] = True
     return {**base, "on": True, "why": None, "shapes": [list(nk) for nk in shapes]}
 
 

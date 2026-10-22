@@ -11,7 +11,8 @@ on (the graph server's setting) and ``GNF4_GEMV_BW=1`` (these test shapes are no
   result does not depend on what else is in the step;
 * the T = 4 step captures in a CUDA graph and replays bitwise as eager;
 * T = 9 and the knob off keep today's device-grouped route (no K33 launch);
-* the knob's output reads the module's reference forward within the served tolerance.
+* the knob's output reads the module's reference forward within the served tolerance;
+* all of it with the lean glue off (expanded rows) and at its default (the token rows through ``gather_div``).
 
 Skips without CUDA or without a grouped-nf4-gemm that carries ``GNF4_GEMV_BW`` (K33). Run on a rented box, never on
 the A2000.
@@ -35,9 +36,12 @@ def _needs_bw():
         pytest.skip("this grouped-nf4-gemm has no GNF4_GEMV_BW (K33, grouped-nf4-gemm#500)")
 
 
-@pytest.fixture
-def served(monkeypatch):
-    """A tiny all-hot NF4 expert module on the served collapse, device grouping on, K33 forced on."""
+@pytest.fixture(params=["0", "auto"], ids=["lean0", "lean-auto"])
+def served(monkeypatch, request):
+    """A tiny all-hot NF4 expert module on the served collapse, device grouping on, K33 forced on; with the lean glue
+    off (the collapse hands over the expanded (token, slot) rows) and at its default (the token rows, gather_div)."""
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", request.param)
+    monkeypatch.setattr(hr, "_NF4_SMALLM_BW_RESOLVED", [False])         # resolved below, never leaked to other tests
     for k in ("GNF4_GEMV_BW_PLAN", "GNF4_GEMV_BW_DECODE", "E4B_NF4_GROUPED_SMALLM", "E4B_NF4_T1_DEVICE_GROUPING"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("GNF4_GEMV_BW", "1")
@@ -86,6 +90,7 @@ def _run(mod, x, i, w):
 def test_each_row_is_bitwise_its_own_t1_row_through_k33_only(served, T):
     mod, inputs, _ref = served
     x, i, w = inputs(T, 10 + T)
+    assert i.unique().numel() < T * TOP_K                               # rows share experts: no reuse is the point
     out, d = _run(mod, x, i, w)
     assert d["bw_prmt32"] == 2 and d["bw_tree"] == 0, d                 # one launch per projection, all T rows
     assert all(d[k] == 0 for k in GEMV_KEYS), d

@@ -12,7 +12,8 @@ On CPU with the route tests' kernel stubs (``test_nf4_grouped_smallm_route.py``)
     reads its own rows, K25 never runs, and the output is the per-row oracle's;
   - :func:`hot_residency.resolve_nf4_smallm_bw` reports the knob off, and refuses by name where it cannot engage: K25
     forced, an int4 store, a layer off the all-resident collapse, a kernel package without K33, a shape where K33 does
-    not engage.
+    not engage. Only a resolution that passes lets the routing take the knob; an unresolved process (a harness enabling
+    the collapse itself) is refused at its first 2..8-token call, and a refused resolution clears an earlier pass.
 The kernel's bits (each row at T = 2..8 equal to the same row at T == 1) are ``test_nf4_smallm_bw_gpu.py``'s.
 """
 import os
@@ -40,6 +41,7 @@ def _fresh(monkeypatch):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setattr(hr, "NF4_SMALLM_BW_SEEN", {})
     monkeypatch.setattr(hr, "ROUTE_SEEN", {})
+    monkeypatch.setattr(hr, "_NF4_SMALLM_BW_RESOLVED", [True])      # the routing tests' process resolved it
     monkeypatch.setattr(hr, "DEVICE_GROUPING", [True])
     monkeypatch.setattr(hr, "FORCE_SINGLETON_GROUPS", [False])
 
@@ -207,3 +209,31 @@ def test_resolve_refuses_k25_forced(monkeypatch, engages):
     monkeypatch.setenv("E4B_NF4_GROUPED_SMALLM", "1")
     with pytest.raises(RuntimeError, match=r"both name the rows of 2..8 tokens"):
         hr.resolve_nf4_smallm_bw(_mods(), "cpu")
+
+
+def test_the_knob_without_a_resolution_is_refused_at_the_first_routed_call(monkeypatch):
+    """A harness that enables the collapse itself (enable_hybrid_tier, hybrid_train, step_decomp) never resolved the
+    knob: where K33 does not engage it would run dot-pad, so its 2..8-token calls are refused, by name."""
+    monkeypatch.setattr(hr, "_NF4_SMALLM_BW_RESOLVED", [False])
+    monkeypatch.setenv("E4B_NF4_SMALLM_BW", "1")
+    assert hr._collapsed_grouping(1, None) == (True, False)              # T == 1 is not the knob's
+    assert hr._collapsed_grouping(9, None) == (False, True)
+    with pytest.raises(RuntimeError, match=r"only after hot_residency.resolve_nf4_smallm_bw\(modules, device\)"):
+        hr._collapsed_grouping(4, None)
+
+
+def test_a_passing_resolution_enables_the_routing_and_a_refused_one_clears_it(monkeypatch, engages):
+    import nf4_grouped
+    monkeypatch.setattr(hr, "_NF4_SMALLM_BW_RESOLVED", [False])
+    monkeypatch.setenv("E4B_NF4_SMALLM_BW", "1")
+    hr.resolve_nf4_smallm_bw(_mods(), "cpu")
+    assert hr._NF4_SMALLM_BW_RESOLVED == [True] and hr._collapsed_grouping(4, None) == (True, False)
+    monkeypatch.setattr(nf4_grouped, "_bw_engages", lambda N, K, dev: False, raising=False)
+    with pytest.raises(RuntimeError, match=r"does not engage"):
+        hr.resolve_nf4_smallm_bw(_mods(), "cpu")
+    assert hr._NF4_SMALLM_BW_RESOLVED == [False]
+    with pytest.raises(RuntimeError, match=r"only after"):
+        hr._collapsed_grouping(4, None)
+    monkeypatch.setenv("E4B_NF4_SMALLM_BW", "0")
+    hr.resolve_nf4_smallm_bw([], "cpu")
+    assert hr._NF4_SMALLM_BW_RESOLVED == [False]
