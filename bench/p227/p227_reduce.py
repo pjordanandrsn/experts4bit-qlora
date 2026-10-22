@@ -47,6 +47,7 @@ B2_TRIGGER = 1.25                            # B's median over the byte floor at
 SELF_BAND = (0.99, 1.01)                     # K/K2's median, else the family's reading is VOID
 TOL = 1.5e-2                                 # B against K: max |B - K| / max |K| per rep (the served route's tolerance)
 BOOT_B, BOOT_SEED = 2000, 227
+READ_VERDICTS = ("PASS", "MISS", "TOLERANCE_FAIL")   # a family read: final, never re-read; TOLERANCE_FAIL is deterministic
 CLOCK_TOL, MEM_CLOCK_TOL = 0.02, 0.01        # B's median SM / memory clock off K's by more: labelled
 MIN_POWER_W = 575                            # every NVML sample's enforced limit, else VOID
 REPLAY_SHA256 = "3c59e72f947daa425e61f727401204099a1e782b902fb39687e04c46e338b14f"   # bench/p153/router-replay/rr.json.pt
@@ -288,6 +289,8 @@ def verdict(rec):
     if why:
         return dict(out, verdict="VOID", why=why, families={})
     fams = {fam: family_verdict(rec, fam) for fam in FAMILY_ORDER}
+    for fv in fams.values():                      # READ: the family's outcome is final on this run (never re-read)
+        fv["read"] = fv["verdict"] in READ_VERDICTS
     out["families"] = fams
     cs = [2 * 2 * 1024 ** 3 / x / 1e9 for x in rec["copy"].get("samples_s") or [] if _num(x)]
     out["copy_rate_gbs"] = {"median": rec["copy"]["gbs"], "min": min(cs) if cs else None,
@@ -438,7 +441,11 @@ def self_test():
     q = _fake()
     q["families"]["mixtral"]["cells"]["2"]["reps"][5]["b_rel_diff"] = 0.05
     fv = verdict(q)["families"]["mixtral"]
-    check(fv["verdict"] == "TOLERANCE_FAIL" and fv["b2_trigger"] is None, "tolerance")
+    check(fv["verdict"] == "TOLERANCE_FAIL" and fv["b2_trigger"] is None and fv["read"] is True, "tolerance, read")
+    # a TOLERANCE_FAIL beside a VOID: one family read, final; the other unread
+    q["families"]["qwen3"]["cells"]["4"]["reps"][2]["k2_identical"] = False
+    v = verdict(q)
+    check((v["families"]["mixtral"]["read"], v["families"]["qwen3"]["read"]) == (True, False), "read flags")
     # B2's trigger: the median of B over the floor at T = 8, strictly above 1.25
     q = _fake()
     c = read_cell(q, "mixtral", 8)

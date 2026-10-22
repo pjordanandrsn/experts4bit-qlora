@@ -5,6 +5,7 @@ registration states; the arms and their call against the collapse's own; the run
 and guard fit with 25 % headroom; the drive's refusals; no instance id or host name on the box; the self-tests and the
 mutants they must kill."""
 import hashlib
+import json
 import importlib.util
 import pathlib
 import re
@@ -149,12 +150,37 @@ def test_no_instance_id_or_host_name_is_written_on_the_box():
         assert "vast.ai" not in text and "ssh1." not in text
 
 
-def test_a_record_with_no_family_read_is_not_a_reading():
-    """The runner's exit: 0 only when a family reads PASS or MISS (or both families SHAKEDOWN in a shakedown)."""
-    assert "sum(f.get('verdict') in ('PASS','MISS') for f in (v.get('families') or {}).values())" in RUN
+def _runner_read_count(verdict, tmp_path):
+    """The runner's own READ one-liner, run on a verdict file."""
+    code = re.search(r'^READ=\$\(python -c "(.*)"\)$', RUN, re.M).group(1)
+    path = tmp_path / "verdict_p227.json"
+    path.write_text(json.dumps(verdict), encoding="utf-8")
+    r = subprocess.run([sys.executable, "-c", code.replace("$W/verdict_p227.json", path.as_posix())],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return int(r.stdout.strip())
+
+
+def test_a_record_with_no_family_read_is_not_a_reading(tmp_path):
+    """The runner's exit: 0 only when a family is READ -- PASS, MISS or TOLERANCE_FAIL (final, never re-read, not a
+    strike) -- or both families SHAKEDOWN in a shakedown; otherwise rc 27."""
     assert '0/*) [ "${READ:-0}" -ge 1 ] && finish 0; say "P227 $V -- no family read"; finish 27;;' in RUN
     assert '"1/qwen3=SHAKEDOWN mixtral=SHAKEDOWN") finish 0;;' in RUN and "1/*) say" in RUN
-    assert "A run where\n  no family reads PASS or MISS is not a reading" in PREREG
+    assert R.READ_VERDICTS == ("PASS", "MISS", "TOLERANCE_FAIL")
+    # qwen3=TOLERANCE_FAIL beside mixtral=VOID: one family read, so the run finishes 0 (and is not a strike)
+    q = R._fake()
+    q["families"]["qwen3"]["cells"]["2"]["reps"][4]["b_rel_diff"] = 0.05
+    q["families"]["mixtral"]["cells"]["8"]["reps"][1]["k2_identical"] = False
+    v = R.verdict(q)
+    assert v["verdict"] == "qwen3=TOLERANCE_FAIL mixtral=VOID", v["verdict"]
+    assert _runner_read_count(v, tmp_path) == 1
+    # every family VOID: nothing read, rc 27
+    q["families"]["qwen3"]["cells"]["2"]["reps"][4]["k2_identical"] = False
+    v = R.verdict(q)
+    assert v["verdict"] == "qwen3=VOID mixtral=VOID" and _runner_read_count(v, tmp_path) == 0
+    for s in ("no family is read (PASS, MISS or TOLERANCE_FAIL) is not a reading", "It is FINAL for that family",
+              "re-reads only the families not yet read"):
+        assert s in PREREG, s
 
 
 def test_a_missing_or_unreadable_bench_record_reduces_to_void(tmp_path):

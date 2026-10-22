@@ -127,12 +127,14 @@ P222's, with the arms above. Everything not named here is P222's.
   - **K2 differs from K by a bit in any rep**;
   - K/K2's median outside 0.99-1.01 at any T.
 - **What a family's VOID means:** that family is not read on that run. The other family's verdict stands. A run where
-  no family reads PASS or MISS is not a reading (the runner's rc 27, a strike).
-  - A later run re-reads both families. A family already read keeps its first verdict, and the later run's verdict for
-    it is reported, never ruling.
-  - Two consecutive runs in which a family does not read stop the lane for that family.
+  no family is read (PASS, MISS or TOLERANCE_FAIL) is not a reading (the runner's rc 27, a strike).
+  - A later run re-reads only the families not yet read. A family already read keeps its first verdict, and a later
+    run's verdict for it is reported, never ruling.
+  - Two consecutive runs in which a family is not read stop the lane for that family.
 - **TOLERANCE_FAIL, one family:** B against K beyond 1.5e-2 in any rep. That is a contract finding against the
   route. No timing is ruled on, and B2's trigger is not read.
+  - It is FINAL for that family: it counts as read, the family is not re-read, and it is not a strike. It is
+    deterministic, so a second box would only repeat it (review, adopted).
 - **PASS, one family:** at **both** T = 2 and T = 4, B/K's upper bound **and** its clock-adjusted upper bound are
   **<= 0.70**.
 - **MISS, one family:** otherwise. T = 8 never rules the bar.
