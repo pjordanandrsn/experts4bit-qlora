@@ -20,10 +20,11 @@ CANARY_SHA256=f58d2605423fb83ef88dca8a2fb1e91444d83cda0ddf4c73de036e55beea333d  
 FIXTURE_MODEL=allenai/OLMoE-1B-7B-0924-Instruct; FIXTURE_REV=7f1c97f440f06ce36705e4f2b843edb5925f4498
 ALPACA_REV=dce01c9b08f87459cf36a430d809084718273017   # Amendment 1: the fixtures' pinned text column
 INSTALL_TO_GATE_S=450   # the install and the self-tests (PREREG, "The fit")
-SHAKE=0; EXPLORE=0
+SHAKE=0; EXPLORE=0; ABBA=1
 case "$P224_RUN_ID" in
   p224-5090-1|p224-5090-2|p224-5090-3) MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39;;   # the SC1 pin
   p224-shake-1|p224-shake-2|p224-shake-3|p224-shake-4|p224-shake-5|p224-shake-6) SHAKE=1; MODEL=$FIXTURE_MODEL; REV=$FIXTURE_REV;;   # P99's pin; -4..-6: Amendment 4
+  p225x-5090-5|p225x-5090-6) EXPLORE=1; ABBA=0; MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39;;   # P225 SD points (the thread A/B is answered)
   p225x-5090-1|p225x-5090-2|p225x-5090-3|p225x-5090-4) EXPLORE=1; MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39;;   # P225 EXPLORE (#348): timings only, never a reading
   *) say "unregistered run ID: $P224_RUN_ID"; finish 78;;
 esac
@@ -245,7 +246,7 @@ PY
 # ---- P225 EXPLORE: the thread A/B before the train, ABBA on 15-step trains (a: torch's default threads = visible CPUs;
 # b: OMP_NUM_THREADS = MKL_NUM_THREADS = floor(cgroup quota)). The metric is the trainer's own per-interval step seconds
 # (load excluded); the quantize seconds are read from its log stamps. The faster setting is exported for the rest.
-if [ "$EXPLORE" = 1 ]; then
+if [ "$EXPLORE" = 1 ] && [ "$ABBA" = 1 ]; then
   # every CPU pool, logged from inside each A/B process (arm a: logged only; arm b: pinned to NQ first)
   mkdir -p $W/p225x_site
   cat > $W/p225x_site/sitecustomize.py <<'PYS'
