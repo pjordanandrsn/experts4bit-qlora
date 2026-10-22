@@ -3018,6 +3018,21 @@ def pos76_why(tag, r):
         bad.append(f"grouped-nf4-gemm commit {code.get('commit')!r} != {side}'s {POS76_GNF4[side]}")
     if code.get("nf4_qlora_sha256") != POS76_NF4_QLORA_SHA[side]:
         bad.append(f"nf4_qlora.py sha256 {code.get('nf4_qlora_sha256')!r} != {side}'s {POS76_NF4_QLORA_SHA[side]}")
+    bad += [w for w in (pos77_threads_why(r),) if w]
+    return "; ".join(bad)
+
+
+def pos77_threads_why(r):
+    """TC1 amendment 77: the arm ran its CPU pools at the quota's floor -- arm_facts.threads names a count, torch's intra-op pool is
+    that count, and OMP, MKL and OpenBLAS were each set to it. Empty string = as registered. ``nr_throttled`` is recorded, never gated."""
+    t = ((r or {}).get("arm_facts") or {}).get("threads")
+    if not isinstance(t, dict):
+        return "no arm_facts.threads: the arm did not run amendment 77's quota-sized pools"
+    n = t.get("expected")
+    if not isinstance(n, int) or n < 1:
+        return f"arm_facts.threads.expected {n!r} is not a positive count"
+    bad = [f"torch.get_num_threads() {t.get('torch_num_threads')!r} != {n}"] if t.get("torch_num_threads") != n else []
+    bad += [f"{k.upper()} {t.get(k)!r} != {n}" for k in ("omp", "mkl", "openblas") if t.get(k) != str(n)]
     return "; ".join(bad)
 
 
@@ -9108,6 +9123,9 @@ def _pos76_set(groups=None, gap=None, held=None, rec=None, code=None):
         r.update(fam=POS76_FAM, tag=tag, eval_loss_final=(held or {}).get(tag, 0.7549 if side == "gb" else 0.7550))
         r["env"] = dict(r.get("env") or {}, **{"grouped-nf4-gemm": POS76_GNF4_VERSION})
         r["env"]["gnf4_code"] = (code or {}).get(tag, {"commit": POS76_GNF4[side], "nf4_qlora_sha256": POS76_NF4_QLORA_SHA[side]})
+        r["arm_facts"] = dict(r.get("arm_facts") or {}, threads={"expected": 11, "torch_num_threads": 11, "torch_interop_threads": 11,
+                                                                   "omp": "11", "mkl": "11", "openblas": "11", "phys": "48", "quota_cpus": 11.52,
+                                                                   "nr_throttled": 0, "nr_throttled_end": 0})   # amendment 77
         mc = r["mem_census"]
         st = [g for g in mc["live_at_peak_top"] if str(g["group"]).startswith("static:")]
         gs = (groups or {}).get(tag, blocks[side] + [(POS76_LOGITS_SITE, POS76_FIX_LOGITS), ("site:e4b/chunked_loss.py:88 _chunk_backward", 41_000_000)])
@@ -11963,6 +11981,12 @@ def selftest():
             assert v6(_pos76_set(code=bad), k) == "VOID", bad
         envb = dict(R6[POS76_ARMS[2]]["env"], **{"grouped-nf4-gemm": "0.49.0"})
         assert v6(_pos76_set(rec={POS76_ARMS[2][1]: {"env": envb}}), POS76_ARMS[2]) == "VOID"
+        tpool = dict(R6[POS76_ARMS[1]]["arm_facts"], threads=dict(R6[POS76_ARMS[1]]["arm_facts"]["threads"], torch_num_threads=48))
+        assert v6(_pos76_set(rec={ga: {"arm_facts": tpool}}), POS76_ARMS[1]) == "VOID"            # amendment 77: a pool left at PHYS
+        tnone = {k: v for k, v in R6[POS76_ARMS[0]]["arm_facts"].items() if k != "threads"}
+        assert v6(_pos76_set(rec={gb: {"arm_facts": tnone}}), POS76_ARMS[0]) == "VOID"            # no quota-sized pools recorded
+        tmkl = dict(R6[POS76_ARMS[2]]["arm_facts"], threads=dict(R6[POS76_ARMS[2]]["arm_facts"]["threads"], mkl=None))
+        assert v6(_pos76_set(rec={POS76_ARMS[2][1]: {"arm_facts": tmkl}}), POS76_ARMS[2]) == "VOID"
         ch = dict(R6[POS76_ARMS[3]]["chunked_lm_loss"], chunked_calls=0, small_calls=240)
         assert v6(_pos76_set(rec={POS76_ARMS[3][1]: {"chunked_lm_loss": ch}}), POS76_ARMS[3]) == "VOID"
         tw = b6(_pos76_set(gap={POS76_ARMS[3][1]: 1.30e9, POS76_ARMS[2][1]: 1.30e9}))          # a 1.0 GB spread a side: drop 0.811 < it

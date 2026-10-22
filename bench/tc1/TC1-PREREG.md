@@ -3552,3 +3552,32 @@ allocator gap.
 finding) runs amendment 75's arms on a real RTX 4090. Once this is pushed, explore boxes may run this family on a real RTX 4090 as well.
 Nothing they show changes this rule or this box, and none of their numbers is cited in this read. A 4090 fit is claimed only through its
 own registration.
+
+### Amendment 77 (2026-10-22T18:13Z, after amendment 76's registration, before any box): amendment 76's arms run their CPU pools at the quota's floor
+
+**Why.** Every TC1 arm runs `OMP_NUM_THREADS` at the host's physical cores (F19). A rented container runs under a CPU quota that can
+be far lower. Amendment 76's floor bounds the quota (>= 42), not physical cores over quota. On a many-core host with a quota of 42,
+every arm's thread pools would be sized for more CPUs than the container gets. This amendment removes that possible oversubscription
+by sizing the pools from the quota. It is harmless to the read: a pool at the quota's floor cannot raise throttling, and the memory peaks
+this read reports do not depend on CPU threads. This amendment does not claim that oversubscription slows these arms.
+
+**The change** (family `qwen3pos76co` only; every other family is unchanged):
+- **THREADS** = max(1, floor(the container's cgroup quota)), capped by the affinity count, or the affinity count when there is no quota
+  (`quota_floor_threads`). Amendment 45's allotment rounds the quota up; this rounds it down, so no pool exceeds the quota. If it cannot
+  be read, THREADS is the allotment.
+- Every arm, on both sides of the ABBA pair, runs `OMP_NUM_THREADS`, `MKL_NUM_THREADS` and `OPENBLAS_NUM_THREADS` = THREADS. This uses
+  amendment 45's om1 path: the per-arm environment overrides the box's `OMP_NUM_THREADS=$PHYS`. The box writes a `THREADS` line to
+  `summary.txt` beside the allotment and the physical cores.
+- **The in-arm check:** the arm is told the count (`TC1_EXPECT_THREADS`), and before anything loads it refuses (exit 3, a refused row
+  that carries the facts) unless `torch.get_num_threads()` equals it.
+- **The record:** `arm_facts.threads` holds the count, torch's intra-op and inter-op pools, the three variables, the physical cores,
+  the cgroup quota in CPUs, and the cgroup's `nr_throttled` at the arm's start and end. The throttle count is recorded and never gated.
+- **Validity** (`pos76_why` adds `pos77_threads_why`): an arm is VOID unless `arm_facts.threads` is present with a positive count,
+  torch's intra-op pool equals it, and OMP, MKL and OpenBLAS were each set to it.
+
+**What it does not change.** The memory peaks this read reports do not depend on CPU threads. s/step stays recorded and never gated.
+The CPU floor stays **42**: lowering it, under the same 2 h guard, is a later and separate amendment, sized on measured numbers. The rule,
+the arms, the pre-check, the window and the budget are amendment 76's.
+
+**Amendment 75 stays context only.** Its box ran `OMP_NUM_THREADS` at the physical cores (48 on an allotment of 47), so its timings are
+not this family's thread setting. Its memory numbers were never this read's control.

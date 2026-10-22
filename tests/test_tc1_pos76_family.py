@@ -51,6 +51,7 @@ can_run(){ return 0; }
 arm(){ echo "ARM $3 [$TC1_ARM_EXTRA_ENV]" >> "$CALLS"; }
 draw2(){ echo "DRAW2 $3 [$TC1_ARM_EXTRA_ENV]" >> "$CALLS"; }
 free_family(){ :; }
+quota_floor_threads(){ [ -n "${FAKE_THREADS_EMPTY:-}" ] || echo 11; }
 """
 
 
@@ -63,7 +64,7 @@ def _run(tmp: Path, gnf4_b: str = AFTER, **env) -> tuple[subprocess.CompletedPro
     (tmp / "logs").mkdir(exist_ok=True)
     calls = tmp / "calls.txt"
     script = (f'W="{tmp}"; STEPS=60; EVAL_EVERY=20; EVAL_N=8; GNF4_SHA={BEFORE}; GNF4_SHA_B={gnf4_b}; T212_OK=1; T212_REASON=""\n'
-              f'PY_UNS="{bindir}/py"; MATCHED_SEED=0\n' + STUBS + FUNCS + "tc1_pos76_family qwen3pos76co M rev 1 1\n")
+              f'PY_UNS="{bindir}/py"; MATCHED_SEED=0; PHYS=48; ALLOT=12\n' + STUBS + FUNCS + "tc1_pos76_family qwen3pos76co M rev 1 1\n")
     r = subprocess.run(["bash", "-c", script], cwd=tmp, check=False, capture_output=True, text=True, timeout=60,
                        env={**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "CALLS": str(calls), **env})
     summary = (tmp / "summary.txt").read_text() if (tmp / "summary.txt").exists() else ""
@@ -81,7 +82,9 @@ def test_a_clean_pre_check_runs_the_four_arms_in_abba_order(tmp_path: Path):
     pytest_at = next(i for i, c in enumerate(calls) if "-m pytest" in c)
     assert pytest_at < calls.index("PREPARE")                       # the pre-check runs before the model is fetched
     assert any(c == f"GIT -C {tmp_path}/gnf4-after checkout -q {AFTER}" for c in calls), calls
-    x = "[NF4_QLORA_COMPACT_DELTA=1 E4B_CHUNKED_LM_LOSS=1]"
+    x = ("[NF4_QLORA_COMPACT_DELTA=1 E4B_CHUNKED_LM_LOSS=1 OMP_NUM_THREADS=11 MKL_NUM_THREADS=11 OPENBLAS_NUM_THREADS=11 "
+         "TC1_EXPECT_THREADS=11 TC1_PHYS=48]")
+    assert "THREADS qwen3pos76co 11 (floor of the quota; allotment 12, physical cores 48; amendment 77)" in summary, summary
     assert _runs(calls) == [f"ARM fused_attn4_m_cd1cl1_gb {x}", f"ARM fused_attn4_m_cd1cl1_ga {x}",
                             f"DRAW2 fused_attn4_m_cd1cl1_ga {x}", f"DRAW2 fused_attn4_m_cd1cl1_gb {x}"]
     switches = [c for c in calls if "grouped-nf4-gemm.git@" in c]
@@ -154,3 +157,14 @@ def test_the_cpu_floor_refuses_a_slow_box_before_any_venv(tmp_path: Path):
         d = tmp_path / f"{allot}-{fam}"
         d.mkdir()
         assert "PASSED" in _floor(d, allot, fam) and "FINISH" not in _floor(d, allot, fam), (allot, fam)
+
+
+def test_amendment_77_threads_fall_back_to_the_allotment_and_the_real_helper_reads_a_count(tmp_path: Path):
+    """With no readable quota count the family's pools take ALLOT; the real quota_floor_threads prints a positive count no larger than
+    the affinity set."""
+    r, calls, summary = _run(tmp_path, FAKE_THREADS_EMPTY="1")
+    assert "THREADS qwen3pos76co 12 (floor of the quota" in summary and all("OMP_NUM_THREADS=12 " in c for c in _runs(calls)), summary
+    real = _cut(r"^quota_floor_threads\(\)\{.*?2>/dev/null; \}\n")
+    assert "max(1, min(n, math.floor(q)))" in real                     # the quota rounded DOWN, never above it
+    out = subprocess.run(["bash", "-c", real + "quota_floor_threads"], capture_output=True, text=True, timeout=30).stdout.strip()
+    assert out.isdigit() and 1 <= int(out) <= len(os.sched_getaffinity(0)), out

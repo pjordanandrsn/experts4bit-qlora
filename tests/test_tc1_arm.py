@@ -2611,3 +2611,23 @@ def test_gnf4_code_identity_reads_the_installed_commit_and_the_imported_file(tmp
     monkeypatch.setattr(importlib.metadata, "distribution", gone)
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
     assert arm.gnf4_code_identity() == {"commit": None, "nf4_qlora_sha256": None}
+
+
+def test_amendment_77_a_quota_sized_pool_is_checked_before_load_and_recorded(tmp_path):
+    """TC1 amendment 77: with TC1_EXPECT_THREADS set, the arm refuses before anything loads (exit 3, a refused row naming the count)
+    when torch's intra-op pool is not that size; thread_facts() reads the pools, the env, PHYS and the cgroup's throttled count."""
+    common = ["--prereg", "tc1/TC1-PREREG.md", "--out", str(tmp_path), "--adapter-dir", str(tmp_path / "ad"), "--tag", "t"]
+    env = {"TC1_EXPECT_THREADS": "3", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2", "OPENBLAS_NUM_THREADS": "2", "TC1_PHYS": "48"}
+    p = _run_env(env, "--framework", "e4b", "--arm", "fused", *common)
+    assert p.returncode == 3 and "Traceback" not in p.stderr, (p.stdout + p.stderr)[-2000:]
+    rec = json.loads((tmp_path / "qwen3_e4b_t.json").read_text())
+    assert rec["status"] == "refused" and "torch.get_num_threads() is 2" in rec["reason"] and "amendment 77" in rec["reason"], rec
+    t = rec["threads"]
+    assert t["expected"] == 3 and t["torch_num_threads"] == 2 and t["omp"] == t["mkl"] == t["openblas"] == "2" and t["phys"] == "48", t
+    assert set(t) == {"expected", "torch_num_threads", "torch_interop_threads", "omp", "mkl", "openblas", "phys", "quota_cpus",
+                      "nr_throttled"}, t
+    p = _run_env(dict(env, TC1_EXPECT_THREADS="x"), "--framework", "e4b", "--arm", "fused", *common)
+    assert p.returncode == 3 and "TC1_EXPECT_THREADS='x'" in json.loads((tmp_path / "qwen3_e4b_t.json").read_text())["reason"]
+    src = ARM.read_text()
+    assert 'if os.environ.get("TC1_EXPECT_THREADS") is not None:   # TC1 amendment 77' in src and 'arm_facts["threads"] = thread_facts()' in src
+    assert 'arm_facts["threads"]["nr_throttled_end"] = thread_facts()["nr_throttled"]' in src

@@ -216,6 +216,22 @@ except Exception:
         q = None
 print(min(n, math.ceil(q)) if q else n)' 2>/dev/null); case "$ALLOT" in ''|0|*[!0-9]*) ALLOT=$(nproc);; esac
 echo "CPU allotment $ALLOT (cgroup quota capped by affinity; physical cores $PHYS)" | tee -a summary.txt
+# TC1 amendment 77: the thread count a quota-sized family runs: max(1, floor(the cgroup quota)), capped by the affinity count; the affinity
+# count when there is no quota. ALLOT above rounds the quota UP (amendment 45); this rounds it DOWN, so no pool exceeds the quota.
+quota_floor_threads(){ python3 -c '
+import math, os
+n = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count()
+q = None
+try:
+    a, b = open("/sys/fs/cgroup/cpu.max").read().split()[:2]
+    q = None if a == "max" else int(a) / int(b)
+except Exception:
+    try:
+        a = int(open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read()); b = int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read())
+        q = a / b if a > 0 else None
+    except Exception:
+        q = None
+print(max(1, min(n, math.floor(q))) if q else n)' 2>/dev/null; }
 case " $FAMILIES " in *" qwen3ompab "*)
   [ "$ALLOT" -lt "$PHYS" ] || { say "BOX REFUSED: the container's CPU allotment ($ALLOT) is not below the physical cores ($PHYS) -- amendment 45's threads A/B has no contrast on this host (host floor)"; echo "BOX_REFUSED cpu_allotment=$ALLOT phys=$PHYS" >> summary.txt; finish 18; };;
 esac
@@ -1949,7 +1965,12 @@ tc1_pos76_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   fi
   local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
   local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
-  local CEN="--mem-census 1 --profile-steps 0" X="NF4_QLORA_COMPACT_DELTA=1 E4B_CHUNKED_LM_LOSS=1"
+  local CEN="--mem-census 1 --profile-steps 0"
+  # TC1 amendment 77: every arm's CPU pools at the quota's floor (OMP, MKL, OpenBLAS), through amendment 45's om1 path (the per-arm env
+  # overrides the box's OMP_NUM_THREADS=$PHYS); the arm refuses before it loads if torch's pool is not that size.
+  local THREADS; THREADS=$(quota_floor_threads); case "$THREADS" in ''|0|*[!0-9]*) THREADS=$ALLOT;; esac
+  echo "THREADS $FAM $THREADS (floor of the quota; allotment $ALLOT, physical cores $PHYS; amendment 77)" | tee -a summary.txt
+  local X="NF4_QLORA_COMPACT_DELTA=1 E4B_CHUNKED_LM_LOSS=1 OMP_NUM_THREADS=$THREADS MKL_NUM_THREADS=$THREADS OPENBLAS_NUM_THREADS=$THREADS TC1_EXPECT_THREADS=$THREADS TC1_PHYS=$PHYS"
   can_run 600 $FAM/e4b/m_cd1cl1_gb && TC1_ARM_EXTRA_ENV="$X" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_cd1cl1_gb fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
   if gnf4_t212_at "$GNF4_SHA_B"; then
     can_run 600 $FAM/e4b/m_cd1cl1_ga && TC1_ARM_EXTRA_ENV="$X" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_cd1cl1_ga fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN

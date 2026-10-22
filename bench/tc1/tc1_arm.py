@@ -923,6 +923,36 @@ def gnf4_code_identity():
     return out
 
 
+def thread_facts():
+    """TC1 amendment 77: the CPU thread pools this arm runs, beside the container's quota, for a family that sizes them from the quota
+    (it sets TC1_EXPECT_THREADS). ``nr_throttled`` is the cgroup's count of CFS-throttled periods so far: recorded, never gated. A field
+    that cannot be read is None."""
+    want = os.environ.get("TC1_EXPECT_THREADS", "")
+    out = {"expected": int(want) if want.isdigit() else None, "torch_num_threads": int(torch.get_num_threads()),
+           "torch_interop_threads": int(torch.get_num_interop_threads()), "omp": os.environ.get("OMP_NUM_THREADS"),
+           "mkl": os.environ.get("MKL_NUM_THREADS"), "openblas": os.environ.get("OPENBLAS_NUM_THREADS"), "phys": os.environ.get("TC1_PHYS"),
+           "quota_cpus": None, "nr_throttled": None}
+    try:
+        q, per = open("/sys/fs/cgroup/cpu.max").read().split()[:2]
+        out["quota_cpus"] = None if q == "max" else round(int(q) / int(per), 3)
+    except Exception:
+        try:
+            q = int(open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read())
+            out["quota_cpus"] = round(q / int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read()), 3) if q > 0 else None
+        except Exception:
+            pass
+    for path in ("/sys/fs/cgroup/cpu.stat", "/sys/fs/cgroup/cpu/cpu.stat"):
+        try:
+            for ln in open(path):
+                k, v = ln.split()[:2]
+                if k == "nr_throttled":
+                    out["nr_throttled"] = int(v)
+            break
+        except Exception:
+            continue
+    return out
+
+
 def host_fingerprint(instance_env="TC1_INSTANCE_ID"):
     fields = ("uuid,pci.bus_id,pcie.link.gen.current,pcie.link.gen.max,pcie.link.width.current,pcie.link.width.max,"
               "power.limit,clocks.max.sm,clocks.max.mem,vbios_version,driver_version")
@@ -4118,6 +4148,8 @@ def run_arm(a, load_fn, sampler=True):
                  "cpu_model": (env.get("host") or {}).get("cpu"), "lora_delta_dtype": LORA_DELTA_DTYPE.get(a.framework),
                  "unsloth_zoo": env.get("unsloth_zoo") if a.framework == "unsloth" else None,
                  "unsloth_zoo_note": ("unsloth_zoo main's #1529 is not in the 2026.9.9 release (phase-3 instruction; not verified here)" if a.framework == "unsloth" else None)}
+    if os.environ.get("TC1_EXPECT_THREADS") is not None:   # TC1 amendment 77: only a quota-sized family's receipts carry the key
+        arm_facts["threads"] = thread_facts()
     with PH("counters"):
         counter = Counters()
         if a.framework == "e4b":
@@ -4596,6 +4628,8 @@ def run_arm(a, load_fn, sampler=True):
             _route, _rstats = None, {}
         route_ab = {"gnf4_train_gemm": _route, "gnf4_train_gemm_env": os.environ.get("GNF4_TRAIN_GEMM"), "gnf4_has_route": _route is not None,
                     "stats": {k: int(v) for k, v in _rstats.items()}}
+    if "threads" in arm_facts:                            # TC1 amendment 77: the throttled-period count at the arm's end, beside its start
+        arm_facts["threads"]["nr_throttled_end"] = thread_facts()["nr_throttled"]
     steady = step_ms[10:] if len(step_ms) > 10 else step_ms
     cell = {
         "framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "model_type": x.get("model_type"), "n_layers": x.get("n_layers"),
@@ -6408,6 +6442,14 @@ def main():
         except ImportError as e:
             stub(a, "refused", f"--hp1-export needs hp1_lib.py beside tc1_arm.py or in ../hp1 (stage bench/hp1/hp1_lib.py with "
                  f"TC1_EXTRA_STAGE): {type(e).__name__}: {str(e)[:160]}", {"phase": "preamble"}, code=3)
+    # TC1 amendment 77: a family that sizes its thread pools from the quota names the count, and the arm refuses before anything loads
+    # if torch's intra-op pool is not that size (a pool left at the visible CPUs is the oversubscription the amendment removes).
+    if os.environ.get("TC1_EXPECT_THREADS") is not None:
+        tf = thread_facts()
+        if tf["expected"] is None or tf["torch_num_threads"] != tf["expected"]:
+            stub(a, "refused", f"TC1_EXPECT_THREADS={os.environ['TC1_EXPECT_THREADS']!r} but torch.get_num_threads() is "
+                 f"{tf['torch_num_threads']} (OMP_NUM_THREADS={tf['omp']!r}): the pool is not the quota-sized count (TC1 amendment 77)",
+                 {"phase": "preamble", "threads": tf}, code=3)
     if not torch.cuda.is_available():
         stub(a, "harness_error", "torch.cuda.is_available() is False on a GPU lane", code=10)
     loader = {"e4b": load_e4b, "unsloth": load_unsloth, "hf": load_hf, "axolotl": load_axolotl}[a.framework]
