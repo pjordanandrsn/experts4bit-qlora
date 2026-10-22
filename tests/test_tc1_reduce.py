@@ -447,3 +447,16 @@ def test_amendment_74_padded_span_holds_only_the_padded_delta():
     assert [d[0] for d in inside] == ["_lora_delta_padded", "_lora_delta_padded_ladder", "_lora_delta_grouped_bucketed", "_record_buckets",
                                       "_lora_delta_bucketed", "_lora_delta_bucketed_ladder", "_compact_buckets_enabled",
                                       "_CompactBucketedDelta", "_compact_delta_enabled", "_CompactPaddedDelta"]
+
+
+def test_padded_site_bytes_reads_a_real_census():
+    """padded_site_bytes on a real receipt: tc1-5090-152's committed e4b cell (amendment 73, at grouped-nf4-gemm 8371c38, whose padded
+    block sat at nf4_qlora.py 582-584) holds 2,043,345,152 bytes there, the 2.044 GB that read reported. This pins the census format
+    amendment 74's rule reads; the hand-built fixtures alone would not."""
+    import json
+
+    m = _mod()
+    cell = REPO / "bench" / "h2h-2026-10-02" / "tc1" / "receipts" / "tc1-5090-152" / "public" / "qwen3pos69mc_e4b_fused_attn4_m_fd.json"
+    mc = json.loads(cell.read_text(encoding="utf-8"))["mem_census"]
+    assert m.padded_site_bytes(mc, ("nf4_qlora.py", 582, 584)) == 2_043_345_152
+    assert m.padded_site_bytes(mc, ("nf4_qlora.py", 585, 600)) == 0

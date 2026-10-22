@@ -3332,7 +3332,7 @@ A harness refusal or crash is NOT_RUN: no data, and nothing is read. This is the
 its shakedown.
 
 **What the read reports** (`pos74_block`, then amendment 23's tables for the four arms; GB = 1e9 bytes). For each arm:
-- the peak allocated bytes;
+- the peak allocated bytes, and their Δ against fd;
 - **the padded-delta bytes:** the live bytes at the peak in groups whose site is `nf4_qlora.py` lines 606–969 at `a83f6bb3`. That span holds
   `_lora_delta_padded`, its ladder, the bucketed deltas and both compact nodes, and nothing else that allocates.
   `tests/test_tc1_reduce.py` checks the span against the installed grouped-nf4-gemm;
@@ -3345,8 +3345,11 @@ Amendment 73's 2.044 GB is reported beside, never as the rule's base.
 
 **The gate and the rule** (fixed now):
 - **Gate:** an arm whose held-out at N moves more than **0.005** from fd's is reported, and it is never a candidate.
-- **Rule:** an arm that passes the gate and removes at least **50 %** of THIS box's fd padded-delta bytes is a **CANDIDATE** for a default
-  change. A candidate is not a flip. A default change needs its own registered two-card read with speed first.
+- **Rule:** an arm is a **CANDIDATE** for a default change when it passes the gate, removes at least **50 %** of THIS box's fd padded-delta
+  bytes, AND lowers its peak allocated against fd by at least **half of the bytes it removed**. A candidate is not a flip. A default change
+  needs its own registered two-card read with speed first.
+- **Moved, not saved:** a switch can move the transient instead of removing it: into a site outside the span, a torch internal or a new
+  buffer. An arm whose span bytes fall while its peak does not is reported with both numbers, and it is never a candidate.
 - **No candidate:** the fix is new code in grouped-nf4-gemm, a group-chunked single block, with this box as its baseline.
 - **A VOID fd:** no rule is read.
 

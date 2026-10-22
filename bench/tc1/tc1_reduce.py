@@ -3413,6 +3413,7 @@ POS74_GNF4 = "0.49.0"              # grouped-nf4-gemm a83f6bb3a3a69aef8981fb81b6
 POS74_PADDED_SPAN = ("nf4_qlora.py", 606, 969)
 POS74_HELDOUT_MAX = 0.005          # an arm whose held-out loss at N moves more than this from fd's is reported, and no default candidate
 POS74_CANDIDATE_SHARE = 0.50       # an arm that removes at least this share of fd's padded-site bytes is a CANDIDATE (its own two-card read next)
+POS74_PEAK_CREDIT = 0.50           # ...and only if its peak allocated falls by at least this share of the bytes it removed: a moved transient saves nothing
 POS74_A73_GB = 2.044               # amendment 73's padded-site bytes at the claim's commits (tc1-5090-152), reported beside, never the rule's base
 NO_SPEED_FAMS[POS74_FAM] = "e4b only: no position against another framework; each arm's s/step is recorded, never gated (amendment 74)"
 FAMS.append(POS74_FAM)
@@ -5305,9 +5306,11 @@ def padded_site_bytes(mc, span=POS74_PADDED_SPAN):
 def pos74_block(F):
     """Amendment 74's read, descriptive with one fixed rule. Per arm: its verdict, peak allocated, the padded LoRA delta's live bytes at the peak
     (POS74_PADDED_SPAN) and the share of fd's it removes, held-out at N against fd's (the gate), the end-of-setup bytes, and its s/step,
-    recorded and never gated. Then the rule: an arm that passes the gate and removes at least POS74_CANDIDATE_SHARE of fd's padded-site bytes
-    is a CANDIDATE for a default change, which needs its own registered two-card read with speed first; with none, the fix is new code and
-    this box is its baseline. Amendment 73's 2.044 GB at the claim's commits is reported beside, never the rule's base."""
+    recorded and never gated. Then the rule: an arm that passes the gate, removes at least POS74_CANDIDATE_SHARE of fd's padded-site bytes,
+    AND lowers peak allocated against fd by at least POS74_PEAK_CREDIT of the bytes it removed is a CANDIDATE for a default change, which
+    needs its own registered two-card read with speed first. An arm whose span bytes fall while its peak does not moved the transient (into
+    another site, a torch internal or a new buffer) and is reported, never a candidate. With no candidate, the fix is new code and this box
+    is its baseline. Amendment 73's 2.044 GB at the claim's commits is reported beside, never the rule's base."""
     R = F.get(POS74_FAM)
     if not R:
         return []
@@ -5319,10 +5322,11 @@ def pos74_block(F):
     reads = {k: _mc_reading(R, k) for k in POS74_ARMS}
     pad = {k: padded_site_bytes(reads[k][0]) if reads[k][0] else None for k in POS74_ARMS}
     fd_pad, fd_ho = pad[base], rec(base).get("eval_loss_final") if reads[base][0] else None
+    fd_peak = (reads[base][0] or {}).get("peak_allocated_bytes")
     lines = ["\n## Amendment 74: the padded LoRA delta's switches at today's pins (one draw per arm; GB = 1e9 bytes; speed recorded, never gated)", "",
-             "| arm | verdict | peak allocated | padded-delta live at the peak | removed vs fd | held-out at N (Δ vs fd) | end of setup alloc / reserved | s/step |",
-             "|---|---|---|---|---|---|---|---|"]
-    cands, gate = [], {}
+             "| arm | verdict | peak allocated (Δ vs fd) | padded-delta live at the peak | removed vs fd | held-out at N (Δ vs fd) "
+             "| end of setup alloc / reserved | s/step |", "|---|---|---|---|---|---|---|---|"]
+    cands, gate, moved = [], {}, []
     for k in POS74_ARMS:
         mc, why = reads[k]
         if mc is None:
@@ -5334,24 +5338,35 @@ def pos74_block(F):
         d = None if (ho is None or fd_ho is None) else ho - fd_ho
         gate[k] = d is not None and abs(d) <= POS74_HELDOUT_MAX
         st = mc.get("static_after_setup") or {}
-        lines.append(f"| {POS74_LABELS[k]} | VALID | {_gb(mc.get('peak_allocated_bytes'))} | {_gb(p)} | "
+        pk = mc.get("peak_allocated_bytes")
+        drop = None if (pk is None or fd_peak is None) else fd_peak - pk
+        lines.append(f"| {POS74_LABELS[k]} | VALID | {_gb(pk)}" + ("" if k == base or drop is None else f" ({-drop / 1e9:+.3f})") + f" | {_gb(p)} | "
                      + ("—" if k == base else ("—" if share is None else f"{share:.1%}")) + " | "
                      + (f"{ho:.4f}" if ho is not None else "—") + ("" if k == base else (f" ({d:+.4f}" + ("" if gate[k] else ", OVER the gate") + ")" if d is not None else " (—)"))
                      + f" | {_gb(st.get('allocated_bytes'))} / {_gb(st.get('reserved_bytes'))} | "
                      + (f"{r['s_per_step_median_11plus']:.3f}" if isinstance(r.get("s_per_step_median_11plus"), (int, float)) else "—") + " |")
         if k != base and gate[k] and share is not None and share >= POS74_CANDIDATE_SHARE:
-            cands.append(k)
+            if drop is not None and drop >= POS74_PEAK_CREDIT * (fd_pad - p):
+                cands.append(k)
+            else:
+                moved.append((k, fd_pad - p, drop))
     lines += ["", f"Amendment 73 measured {POS74_A73_GB:.3f} GB of padded-delta live bytes at the claim's commits; this box's fd re-measures "
               "them at today's pins, and the rule reads against this box's fd. s/step is recorded, never gated: TC1's field draws have been "
               "unstable on rented hosts. CUDA context and non-PyTorch device memory are not in the census and are not read."]
     if reads[base][0] is None or not fd_pad:
         lines.append(f"- **No rule read:** fd is not a readable baseline ({reads[base][1] or 'no padded-delta site at its peak'}).")
     elif cands:
-        lines += [f"- **CANDIDATE:** {POS74_LABELS[k]} removes {1 - pad[k] / fd_pad:.1%} of fd's padded-delta bytes with held-out within "
-                  f"{POS74_HELDOUT_MAX}. A default change needs its own registered two-card read with speed first." for k in cands]
+        lines += [f"- **CANDIDATE:** {POS74_LABELS[k]} removes {1 - pad[k] / fd_pad:.1%} of fd's padded-delta bytes and lowers the peak "
+                  f"{(fd_peak - reads[k][0]['peak_allocated_bytes']) / 1e9:.3f} GB, with held-out within {POS74_HELDOUT_MAX}. A default change "
+                  f"needs its own registered two-card read with speed first." for k in cands]
     else:
-        lines.append(f"- **No candidate:** no arm removes {POS74_CANDIDATE_SHARE:.0%} of fd's padded-delta bytes with held-out within "
-                     f"{POS74_HELDOUT_MAX}. The fix is new code in grouped-nf4-gemm (a group-chunked single block), with this box as its baseline.")
+        lines.append(f"- **No candidate:** no arm removes {POS74_CANDIDATE_SHARE:.0%} of fd's padded-delta bytes, lowers its peak by "
+                     f"{POS74_PEAK_CREDIT:.0%} of them and holds held-out within {POS74_HELDOUT_MAX}. The fix is new code in grouped-nf4-gemm "
+                     "(a group-chunked single block), with this box as its baseline.")
+    for k, rm, drop in moved:
+        lines.append(f"- **Moved, not saved:** {POS74_LABELS[k]} removes {rm / 1e9:.3f} GB at the padded-delta sites but its peak moves only "
+                     + ("— (no peak)" if drop is None else f"{-drop / 1e9:+.3f} GB") + f", under {POS74_PEAK_CREDIT:.0%} of what it removed: "
+                     "never a candidate.")
     over = [k for k in gate if k != base and not gate[k]]
     if over:
         lines.append("- **Over the held-out gate, reported and never a candidate:** " + ", ".join(POS74_LABELS[k] for k in over) + ".")
@@ -8577,10 +8592,11 @@ def _pos69mc_set(peak=None, setup=None, af=None, rec=None):
     return R
 
 
-def _pos74_set(pad=None, held=None, rec=None):
+def _pos74_set(pad=None, held=None, rec=None, peak=None):
     """Amendment 74: four e4b arms (fd, sl0, cd1, pb1), one draw each, no profile, --mem-census 1 at today's pins, each on its registered path.
     `pad` side -> the padded-delta live bytes at the peak (two site groups inside POS74_PADDED_SPAN); `held` side -> eval_loss_final;
-    `rec` tag -> a record override. The default: fd 2.10 GB, sl0 1.95, cd1 1.50, pb1 0.60 (pb1 removes 71 %), held-out within 0.002."""
+    `rec` tag -> a record override; `peak` side -> peak allocated bytes (default 24 GB + the side's padded bytes, so a removed byte lowers
+    the peak). The default: fd 2.10 GB, sl0 1.95, cd1 1.50, pb1 0.60 (pb1 removes 71 %), held-out within 0.002."""
     pad = dict({"fd": 2.10e9, "sl0": 1.95e9, "cd1": 1.50e9, "pb1": 0.60e9}, **(pad or {}))
     held = dict({"fd": 0.7569, "sl0": 0.7571, "cd1": 0.7569, "pb1": 0.7583}, **(held or {}))
     paths = {"fd": ({"padded": 49152, "padded_bucketed": 0}, {"env": None, "calls": 49152}, ("0", None), None, 0),
@@ -8599,7 +8615,7 @@ def _pos74_set(pad=None, held=None, rec=None):
         r["single_ladder"] = dict(sl, gnf4_has_single_ladder=True)
         r["keep_ab"] = {"requested_env": None, "e4b_has_moe_keep": True, "layers_kept": 0, "gnf4_compact_delta": cd, "gnf4_compact_delta_env": cd_env}
         r["compact_buckets"] = {"env": None, "gnf4_has_compact_buckets": True, "calls": cb_calls}
-        mc = _mc_census(24.0e9 + pad[side], QWEN3_ABSMAX_DQ, af=0.99)
+        mc = _mc_census((peak or {}).get(side, 24.0e9 + pad[side]), QWEN3_ABSMAX_DQ, af=0.99)
         mc["live_at_peak_top"] = sorted(mc["live_at_peak_top"] + [
             {"group": "site:nf4_qlora.py:620 _lora_delta_padded", "bytes": int(pad[side] * 0.6), "count": 2},
             {"group": "site:nf4_qlora.py:930 backward", "bytes": int(pad[side] * 0.4), "count": 3},
@@ -11338,7 +11354,7 @@ def selftest():
     # 129. TC1 amendment 74 (qwen3pos74pd): four e4b arms, one grouped-nf4-gemm switch each -- VALID on their own paths; the padded-delta
     #      bytes count only nf4_qlora.py's registered span (not :386); pb1 removing 71 % within the held-out gate reads CANDIDATE; an arm off
     #      its path, at another grouped-nf4-gemm, or profiled is VOID; an arm over the gate is reported and never a candidate; with no arm at
-    #      50 % the read names new code; a VOID fd reads no rule
+    #      50 % the read names new code; a VOID fd reads no rule; span bytes removed without the peak falling read "moved, not saved"
     P4 = lambda R: {POS74_FAM: reduce_family(POS74_FAM, R, {}, 20)}
     R4 = P4(_pos74_set())
     assert all(x["verdict"] == "VALID" for x in R4[POS74_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in R4[POS74_FAM]["rows"]]
@@ -11360,6 +11376,8 @@ def selftest():
     assert "**No candidate:**" in tn and "CANDIDATE:**" not in tn, tn
     tv = "\n".join(pos74_block(P4(_pos74_set(rec={"fused_attn4_m_fd": {"mem_census": None}}))))
     assert "**No rule read:**" in tv, tv
+    tm = "\n".join(pos74_block(P4(_pos74_set(peak={"pb1": 24.0e9 + 2.10e9 - 0.40e9}))))      # span -1.50 GB, peak only -0.40: moved
+    assert "**Moved, not saved:** pb1" in tm and "CANDIDATE:**" not in tm and "**No candidate:**" in tm and "(-0.400)" in tm, tm
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
