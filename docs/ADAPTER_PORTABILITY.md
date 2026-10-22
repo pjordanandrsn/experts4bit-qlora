@@ -149,7 +149,7 @@ keeps every v1 field and adds the ones below. The one field list lives in code, 
 | `versions` | bitsandbytes, torch, grouped-nf4-gemm, transformers and experts4bit-qlora as imported at training | what to install to reproduce | that another version quantizes identically |
 | `lora_scale_applied` | the LoRA scale the attention and expert modules held, read from them (`adapter_schema.lora_scale_applied`) | the scale the merge must use, checked against the setup's alpha/r | nothing beyond that |
 | `fingerprints` | per scope (`attention`, `experts`): `scheme_id`, `sha256`, the module count and the seconds it took | see below | see below |
-| `run_id`, `created_at` | the producing run and the manifest's UTC time (writer-side) | provenance | nothing about the weights |
+| `run_id`, `created_at` | the producing run and the manifest's UTC time (writer-side) | provenance: the reader refuses a `run_id` that is not a non-empty string and a `created_at` that is not a real `YYYY-MM-DDTHH:MM:SSZ` time | nothing about the weights |
 
 `prepare_qlora_training` adds `expert_absmax`, `train_fused_qkv`, `attn_quant`, `versions` and `lora_scale_applied` to
 its report AFTER `enable_fast_train` has run, which is where the absmax form is resolved and q/k/v are fused. The writer
