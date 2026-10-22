@@ -14,7 +14,7 @@ for v in HO2_RUN_ID HO2_DEADLINE_EPOCH E4B_SHA; do [ -n "${!v:-}" ] || { say "re
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
 GNF4_SHA=a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7       # e4b CI's grouped-nf4-gemm pin (.github/workflows/ci.yml)
-LOGGETTA_SHA=LOGGETTA_0_6_2_RELEASE_SHA                  # loggetta 0.6.2's release commit, filled in at registration
+LOGGETTA_SHA=9348f8b865f9e429f0628ae6e5be412787447331   # loggetta 0.6.2's release commit (tag v0.6.2 points at it; PyPI 0.6.2 is this tree)
 ALPACA_REV=dce01c9b08f87459cf36a430d809084718273017       # tatsu-lab/alpaca's pinned text column (P224 Amendment 1's pin)
 # The two families, named before any measurement (PREREG, "Families")
 LFM2=LiquidAI/LFM2-8B-A1B; LFM2_REV=c1c44ff9fc00db3ebf4516970563f5f383d23670

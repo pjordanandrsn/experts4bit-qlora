@@ -49,7 +49,8 @@ python -m loggetta train MODEL --revision REV \
 - **The installed stack is pinned:**
   - experts4bit-qlora at the launch commit;
   - grouped-nf4-gemm at e4b CI's pin, `a83f6bb3`;
-  - Loggetta at its 0.6.2 release commit, which carries the demonstration data fix, written into the runner at registration;
+  - Loggetta at its 0.6.2 release commit `9348f8b865f9e429f0628ae6e5be412787447331` (tag `v0.6.2`), which carries the demonstration
+    data fix;
   - transformers 5.17.0, bitsandbytes 0.50.2 and `datasets` (Loggetta's data path imports it).
 - **A tripwire refuses at install, before any fetch,** if a pin differs or if any name Loggetta's train path imports does not
   import. Loggetta's modules import only the standard library at module level and every third-party import is lazy, so importing
