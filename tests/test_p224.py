@@ -635,3 +635,28 @@ def test_amendment_6_sizes_n_from_the_variance_only_and_registers_the_stop():
         assert text in AMENDMENT_6, text
     for effect in ("3.76667", "3.77533", "PA − REF =", "PA - REF ="):              # no effect is quoted
         assert effect not in AMENDMENT_6, effect
+
+
+def test_amendment_6_the_se_rung_at_688_rows_pins_its_boundary():
+    """At N = 688 the SE rung reads the assistant positions' PA - REF: a spread giving SE 0.00199 passes, one giving
+    0.00201 VOIDs as too small to judge, and the same 0.00201 spread on every token only does not VOID (the branch the
+    reducer self-test's SD 0.08 case exercises)."""
+    import math
+    R = _load("p224_reduce")
+    assert R.N_HELDOUT == 688
+
+    def spread(se, key):
+        a = se * math.sqrt(R.N_HELDOUT - 1)          # +-a alternating: mean 0, SE exactly a / sqrt(N - 1)
+        def edit(r):
+            ref = r["REF"][key]
+            r["PA"][key] = [x + 0.005 + (a if i % 2 else -a) for i, x in enumerate(ref)]
+        return edit
+
+    under = R.verdict(R._fake(a=spread(0.00199, "per_seq_loss_assistant")), R.PINS)
+    assert under["verdict"] == "PASS", under["why"]
+    assert round(under["se_pa_ref"], 6) == 0.00199
+    over = R.verdict(R._fake(a=spread(0.00201, "per_seq_loss_assistant")), R.PINS)
+    assert over["verdict"] == "VOID" and "too small to judge" in over["why"][0] and "assistant" in over["why"][0]
+    assert round(over["se_pa_ref"], 6) == 0.00201
+    every = R.verdict(R._fake(a=spread(0.00201, "per_seq_loss")), R.PINS)
+    assert every["verdict"] == "PASS", every["why"]
