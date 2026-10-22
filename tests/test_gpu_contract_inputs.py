@@ -33,6 +33,7 @@ def _drive(tmp_path, **env):
     ({"GC_E4B_TESTS": "tests/test_gpu_contract_*.py"}, "is not tests/test_<name>.py"),
     ({"GC_E4B_TESTS": "tests/../evil.py"}, "is not tests/test_<name>.py"),
     ({"GC_E4B_TESTS": "   "}, "names no file"),
+    ({"GC_E4B_TESTS": "tests/test_epilogue_contract.py\ntests/test_fast_v4.py"}, "holds a newline"),
     ({"GC_NEED_E4B_S": "0900"}, "without a leading zero"),
     ({"GC_NEED_E4B_S": "1801"}, "without a leading zero"),
     ({"GC_NEED_E4B_S": "6O0"}, "without a leading zero"),
