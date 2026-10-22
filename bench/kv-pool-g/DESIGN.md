@@ -82,6 +82,10 @@ row changes no arithmetic.
 - In production the raise happens on the engine thread, inside the step. It takes the step-failure path, so every
   open stream gets an `error` item and the server reports `state: error`. The step is not run, and no table entry points
   at a row another slot owns. It refuses; it never corrupts.
+- **The lookahead stays inside the reservation.** `_step_lookahead` never issues a sequence at or past its
+  `max_new_tokens` (it filters on issued plus in-flight tokens), so the one extra step a stop-id finish leaves in flight
+  writes a position below `prompt_len + max_new_tokens`, inside the reserved blocks. G1 keeps this invariant, and a test
+  pins it at `(prompt_len + max_new_tokens) % 16 == 0`, where the next position would open a new block.
 - A unit test drives the scheduler past a deliberately wrong reservation and asserts exactly this.
 
 **(3) Alias and scratch slots, and prefill staging.**
@@ -128,14 +132,16 @@ smoke shows the contract.
 
 **CPU (fake runner and a CPU `Fp8PagedKV` where it constructs):**
 
-1. **Bit-identity vs claim-all on the same schedule.** One workload (mixed prompt lengths, staggered arrivals, a stop
-   mid-run, an abort) through claim-all and through incremental claims. Assert every emitted token, finish reason and
+1. **Bit-identity vs claim-all on the same schedule.** One workload (mixed prompt lengths including a multiple of 16,
+   staggered arrivals, a stop mid-run, an abort) through claim-all and through incremental claims. Assert every emitted token, finish reason and
    per-slot `seq_lens` are equal. Assert the K/V **values** read back through each slot's table are equal block by
    block, while the row ids are allowed to differ.
 2. **Pool smaller than slots x blocks_per_seq.** For example, 4 slots and room for 2.5 sequences' blocks. Admission waits
    (the third long request queues while two short ones run alongside it), nothing raises, and every request finishes
    with its tokens.
-3. Claims land one step ahead under the lookahead, and the H2D staging ring is never reused while queued.
+3. Claims land one step ahead under the lookahead, and the H2D staging ring is never reused while queued; a request
+   with `(prompt_len + max_new_tokens) % 16 == 0` that stops on a stop id under the lookahead claims nothing past its
+   reservation.
 4. A verify over `k + 1` rows claims through `(p + k) // 16` before its step.
 5. A wrong reservation raises inside the step and takes the step-failure path (every stream gets `error`, state
    `error`), with no table entry pointing at another slot's row.
