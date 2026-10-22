@@ -1,0 +1,4 @@
+d09a062a17d76b6c36584f63743603f6300fc84858546e1fdf8d11f983501aad  run/receipts_ernie_1024/ERNIE-4.5-21B-A3B-PT-device-grouped_nf4-t2048-20261022T113051Z-8933e770.json
+21ef5b83ecdb8b0d30b902e92f2b703507a345242090c1d7900bdce1fe3a8f1c  run/receipts_ernie_2048/ERNIE-4.5-21B-A3B-PT-device-grouped_nf4-t4096-20261022T113328Z-0a6ba069.json
+0dae3a2b89cabd329e2cde333b4043ef02b94506846ae410266b93bbae400aac  run/receipts_lfm2_1024/LFM2-8B-A1B-device-grouped_nf4-t2048-20261022T112637Z-af9abb47.json
+2390caeaead7c0198f97d89ebb57e0b115a9708e0c543957afdf6112d64d9cd1  run/receipts_lfm2_2048/LFM2-8B-A1B-device-grouped_nf4-t4096-20261022T112851Z-60f70d7d.json
