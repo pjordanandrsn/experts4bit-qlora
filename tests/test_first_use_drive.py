@@ -92,7 +92,7 @@ def test_the_dry_run_verifies_the_kit_and_names_the_cells(tmp_path):
     ("fu_run.sh", "fu_run.sh is "),
     ("staged-first_use.sha256", "the reviewed kit hash is"),      # the manifest itself changed
 ])
-def test_a_tampered_kit_is_refused_at_usd_0(tmp_path, victim, said):
+def test_a_tampered_kit_is_refused_before_anything_is_staged(tmp_path, victim, said):
     script, k, env = sandbox(tmp_path)
     with open(k / victim, "a") as f:
         f.write("# changed after review\n")
@@ -111,6 +111,16 @@ def test_the_driver_refuses_before_any_box(tmp_path, change, said):
     script, _k, env = sandbox(tmp_path)
     r = run(script, {**env, **change})
     assert r.returncode == 78 and said in r.stdout, r.stdout + r.stderr
+
+
+@pytest.mark.parametrize("name", ["loggetta-0.7.0;touch x-py3-none-any.whl", "loggetta $(id)-py3-none-any.whl",
+                                  "loggetta 0.7.0-py3-none-any.whl"])
+def test_a_wheel_name_the_box_shell_would_run_is_refused(tmp_path, name):
+    script, _k, env = sandbox(tmp_path)
+    wheel = tmp_path / name
+    wheel.write_bytes(b"x")
+    r = run(script, {**env, "FU_RC_WHEEL": str(wheel)})
+    assert r.returncode == 78 and "characters a wheel path never needs" in r.stdout, r.stdout + r.stderr
 
 
 def test_a_wheel_that_is_not_a_wheel_is_refused(tmp_path):

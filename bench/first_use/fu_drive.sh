@@ -1,7 +1,7 @@
 #!/bin/bash
 # T1 step 3's controller, Loggetta's first-use matrix (its PREREG is loggetta bench/first_use/PREREG-first_use.md): HO2's
 # driver (bench/ho2/ho2_drive.sh) by counted edits. The kit lives in Loggetta and is pinned here by its MERGE commit and
-# its kit hash; every staged file is checked against staged-first_use.sha256 AT that commit before anything touches a box.
+# its kit hash; every staged file is checked against staged-first_use.sha256 AT that commit before anything is staged.
 # The release candidate's wheel and its scripts/first_run.sh are staged with the sha256s this driver computes. Three boxes
 # (one per driver band), each with two spares. The fetch keeps first_run.json, the logs and the verdict, never a venv or a
 # checkpoint. Refuses unknown run IDs and dirty source trees, polls the nonce-bound completion marker. It does not create,
@@ -17,8 +17,9 @@ HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # It never decides LANE DEAD from a self-matching pgrep (A3's form, the maintainer's liveness ruling).
 LANE_HELPER="$REPO/bench/common/lane_liveness.sh"
 source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78; }
-# The staging: the Loggetta kit at its MERGE commit (loggetta#99), checked BEFORE any rental action. The manifest must
-# hash to the reviewed kit hash, and every file it names must hash to its line. A mismatch refuses at USD 0.
+# The staging: the Loggetta kit at its MERGE commit (loggetta#99). The manifest must hash to the reviewed kit hash, and
+# every file it names must hash to its line. As the launcher's --command this runs on a RENTED box, so a mismatch refuses
+# before anything is staged there, not before the spend; the USD 0 check is the dry run (FU_DRIVE_DRYRUN=1), run at the ACK.
 LOGGETTA_KIT_COMMIT=bf0e5755055fa2c06c93332b9e38b9d446172129
 KIT_SHA256=f84c1aabb90bda5aaeac9f3f7e94093a7a1c925e9e71312238d2330a40ca1ad2
 sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
@@ -57,6 +58,8 @@ else
   curl -fsSL --retry 3 -o "$KIT/first_run.sh" "https://raw.githubusercontent.com/pjordanandrsn/loggetta/$FU_RC_COMMIT/scripts/first_run.sh" \
     || { say "refusing: cannot fetch scripts/first_run.sh at loggetta $FU_RC_COMMIT"; exit 78; }
 fi
+# the wheel's path is word-split into the scp and its name reaches the box's shell: plain wheel characters only
+case "$FU_RC_WHEEL" in *[!A-Za-z0-9._+/-]*) say "refusing: FU_RC_WHEEL holds characters a wheel path never needs"; exit 78;; esac
 WHEEL_SHA=$(sha_of "$FU_RC_WHEEL"); FIRST_RUN_SHA=$(sha_of "$KIT/first_run.sh"); WHEEL_NAME=$(basename "$FU_RC_WHEEL")
 STAGE="$KIT/fu_run.sh $KIT/fu_reduce.py $KIT/staged-first_use.sha256 $KIT/first_run.sh $FU_RC_WHEEL"
 # The launch commit is the e4b this driver ships from (the launcher proved it is the manifest's heads.e4b). The box does
