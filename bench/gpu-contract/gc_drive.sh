@@ -38,6 +38,7 @@ done
 # GC_E4B_TESTS (optional): the e4b test files to run instead of the served-route premise; GC_NEED_E4B_S: their time need
 # (read into an array and never expanded unquoted: from a repo root, tests/test_*.py would glob into real paths here and
 # then reach the box as the literal, which refuses it after the rental is paid)
+case "${GC_E4B_TESTS:-}" in *$'\n'*) say "refusing: GC_E4B_TESTS holds a newline (read -a would keep only its first line)"; exit 78;; esac
 read -r -a E4BT <<< "${GC_E4B_TESTS:-}"
 # a value of blanks only would reach the box as no file at all, and pytest would collect every test in the repository
 [ -z "${GC_E4B_TESTS:-}" ] || [ ${#E4BT[@]} -gt 0 ] || { say "refusing: GC_E4B_TESTS is set but names no file"; exit 78; }
