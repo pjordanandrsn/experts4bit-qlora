@@ -144,3 +144,17 @@ def test_the_runner_captures_before_it_times_and_finishes_on_the_verdict():
     assert 'case "$V" in GO|NO_GO) finish 0;; *) say "P226 $V -- no reading"; finish 27;; esac' in RUN
     for need in ("NEED_FETCH=1210", "NEED_BAKE=550", "NEED_CAPTURE=900", "NEED_BENCH=2400"):
         assert need in RUN, need
+
+
+def test_a_missing_bench_record_writes_a_void_verdict_and_exits_27(tmp_path):
+    """The runner skips the bench when the capture faults and still calls the reducer; the outcome must be the registered
+    VOID, written to disk, never a crash (which the runner would read as rc 22, REDUCER FAILED)."""
+    import json as _json
+    cap = tmp_path / "capture.json"
+    cap.write_text(_json.dumps({"faults": ["route: x"], "batch": 32}), encoding="utf-8")
+    out = tmp_path / "verdict_p226.json"
+    r = subprocess.run([sys.executable, str(LANE / "p226_reduce.py"), "--bench", str(tmp_path / "bench_p226.json"),
+                        "--capture", str(cap), "--out", str(out)], capture_output=True, text=True, timeout=60,
+                       cwd=str(LANE), env=ENV)
+    assert r.returncode == 27 and out.exists(), r.stdout + r.stderr
+    assert _json.loads(out.read_text(encoding="utf-8"))["verdict"] == "VOID"

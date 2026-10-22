@@ -185,7 +185,11 @@ def _structure(rec, cap, why):
         why.append("the selection steps are not the registered ones")
     rows = sel.get("rows") or {}
     for proj in ("gu", "dn"):
-        got = sorted(_GRID_INDEX.get(plan_key(r["plan"]), -1) for r in rows.get(proj) or [] if isinstance(r, dict))
+        rs = rows.get(proj) or []
+        if not all(isinstance(r, dict) and isinstance(r.get("plan"), dict) for r in rs):
+            why.append(f"selection: {proj} holds a row without a plan")
+            continue
+        got = sorted(_GRID_INDEX.get(plan_key(r["plan"]), -1) for r in rs)
         if got != list(range(len(GRID))):
             why.append(f"selection: {proj} does not cover the registered grid once each")
     if not why:
@@ -208,6 +212,7 @@ def _structure(rec, cap, why):
     reps = conf.get("reps") or []
     if len(reps) != len(steps) or not steps:
         why.append(f"{len(reps)} confirmation reps for {len(steps)} steps")
+        reps = []                                   # never index a step that is not there
     for r, rep in enumerate(reps):
         if rep.get("step") != steps[r] or rep.get("order") != arm_order(r):
             why.append(f"rep {r}: its step or its order is not the registered Williams row")
@@ -265,12 +270,13 @@ def confirm_read(conf, clocks):
     return out
 
 
-def headroom(cap, c_ms, layers):
-    """Reported: C's both-projection time against the byte floor of the captured distinct experts (P154's method)."""
+def headroom(cap, c_ms, layers, steps):
+    """Reported: C's both-projection time against the byte floor of the captured distinct experts (P154's method),
+    over the confirmation steps (the steps C's time comes from)."""
     per = cap.get("unique_per_step") or []
-    if not per or not _num(c_ms):
+    if not per or not _num(c_ms) or any(not 0 <= s < len(per) for s in steps):
         return None
-    totals = [sum(st[:layers]) for st in per]
+    totals = [sum(per[s][:layers]) for s in steps]
     u = statistics.fmean(totals)
     f = sum(floor_ms(u, BYTES_PER_EXPERT[p]) for p in ("gu", "dn"))
     return {"unique_per_step_mean": round(u, 2), "floor_ms": round(f, 4), "c_ms": round(c_ms, 4),
@@ -279,6 +285,18 @@ def headroom(cap, c_ms, layers):
 
 
 def verdict(rec, cap):
+    if not isinstance(rec, dict):
+        return {"lane": "P226", "shakedown": False, "verdict": "VOID",
+                "why": ["no bench record: the bench did not finish (a faulted capture, an alarm, or a failure)"]}
+    try:
+        return _verdict(rec, cap)
+    except (KeyError, IndexError, TypeError, AttributeError, ValueError, ZeroDivisionError,
+            statistics.StatisticsError) as e:
+        return {"lane": "P226", "shakedown": bool(rec.get("shakedown")), "verdict": "VOID",
+                "why": [f"a malformed record ({type(e).__name__}: {str(e)[:160]})"]}
+
+
+def _verdict(rec, cap):
     why = _structure(rec, cap, [])
     shake = bool(rec.get("shakedown"))
     out = {"lane": "P226", "shakedown": shake}
@@ -295,7 +313,7 @@ def verdict(rec, cap):
     k1 = read["K1"]
     out["K1"] = dict(k1, plan=rec["carried"][0])
     out["reported"] = {"K2": read["K2"], "K3": read["K3"], "D_over_C": read["D_over_C"],
-                       "headroom": headroom(cap, read["ms"]["C"], rec["layers"]),
+                       "headroom": headroom(cap, read["ms"]["C"], rec["layers"], rec["confirmation"]["steps"]),
                        "selection_ranks": rec.get("carried"), "compiled": rec.get("compiled")}
     if shake:
         out["verdict"], out["why"] = "SHAKEDOWN", ["a shakedown record is never a reading"]
@@ -388,6 +406,13 @@ def self_test():
     want = 80 * LAYERS * sum(BYTES_PER_EXPERT.values()) / (COPY_GBPS * 1e9) * 1e3
     ok(abs(h["floor_ms"] - want) < 1e-3 and h["headroom_ms"] < h["c_ms"], f"the byte floor is P154's method: {h}")
     ok(verdict(*_fake(shakedown=True, layers=4))["verdict"] == "SHAKEDOWN", "a shakedown is never a reading")
+    ok(verdict(None, _fake()[1])["verdict"] == "VOID", "no bench record VOIDs")
+    ok(verdict(*_fake(np=lambda r, c: r["selection"]["rows"]["gu"][0].pop("plan")))["verdict"] == "VOID",
+       "a sweep row without a plan VOIDs, never raises")
+    ok(verdict(*_fake(xr=lambda r, c: r["confirmation"]["reps"].append(dict(r["confirmation"]["reps"][0]))))["verdict"]
+       == "VOID", "more reps than steps VOIDs, never raises")
+    ok(verdict(*_fake(bad=lambda r, c: r["confirmation"]["reps"][0].update(replays_ms=None)))["verdict"] == "VOID",
+       "a malformed rep VOIDs, never raises")
     print(f"p226_reduce self-test OK ({n} checks)")
     return 0
 
@@ -411,7 +436,11 @@ def main(argv=None) -> int:
         cap = json.load(open(a.capture, encoding="utf-8"))
     except (OSError, ValueError):
         cap = None
-    out = verdict(json.load(open(a.bench, encoding="utf-8")), cap)
+    try:
+        rec = json.load(open(a.bench, encoding="utf-8"))
+    except (OSError, ValueError):
+        rec = None                                    # no bench record: VOID, never a crash (the runner's exit 27)
+    out = verdict(rec, cap)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(out, f, indent=1)
     print(f"P226 {out['verdict']} {json.dumps(out.get('why'))[:400]}")
