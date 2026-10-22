@@ -206,6 +206,11 @@ both hold the same allocated bytes, and e4b's 0.713 GB more reserve is the alloc
 peak at 26.500 GB with 2.348 GB of padded delta at the peak. grouped-nf4-gemm's compact delta and bucketed padding each remove all of
 it, but the peak falls only 0.639 GB, to 25.861: the LM loss backward then sets the peak. By the registered rule no switch is a
 candidate for a default change, and the next lever is the loss.
+**The 4090-fit read** (`e4b.train.4090-fit-read.field.5090.2026-10-22`, TC1 amendment 75, one draw per arm): with the compact delta
+and the chunked LM loss both on, the reserved peak falls 0.482 GB and the allocated peak 1.209 GB against today's defaults, but the
+nvidia-smi peak, 25,727 MiB, is still 1,163 MiB over an RTX 4090's total. Even with no allocator gap the allocated peak plus the CUDA
+context is about 24,735 MiB, so no arm fits. The compact delta's backward then holds the peak: its rebuilt block and that block's grad,
+0.811 GB each, live together.
 **e4b's own host time at the field recipe.** grouped-nf4-gemm's opt-in single-block ladder (`NF4_QLORA_SINGLE_LADDER=1`,
 grouped-nf4-gemm#513) puts the padded LoRA block's batched products on repeating shapes
 (`e4b.train.single-ladder.field.5090.2026-10-08`, TC1 amendment 70). On a host-bound box it stepped e4b's matched arm, with fp32 adapters,
