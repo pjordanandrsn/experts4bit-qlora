@@ -1888,6 +1888,68 @@ tc1_pos75_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/m_fd_cd1cl1 && TC1_ARM_EXTRA_ENV="NF4_QLORA_COMPACT_DELTA=1 E4B_CHUNKED_LM_LOSS=1" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_fd_cd1cl1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+POS76_GNF4_BEFORE=c62159642cbae5c1bd281f04c8b1e4101a5e557a   # TC1 amendment 76: grouped-nf4-gemm main just before #584
+POS76_GNF4_AFTER=75421b30a13332c12611f428c66531a7bbb13cbd    # ... and #584's merge, its direct child (only nf4_qlora.py's code differs)
+# gnf4_t212_at SHA -- amendment 76: reinstall grouped-nf4-gemm at SHA into venv-unsloth (t212, --no-deps) and re-read the commit it
+# installed; a mismatch or a failed install returns non-zero and the arms of that side are not run.
+gnf4_t212_at(){ local sha=$1
+  echo "[$(date -u +%FT%TZ)] switch gnf4 -> $sha" >> logs/pip_gnf4_t212_switch.log
+  perl -e 'alarm 900; exec @ARGV' $PY_UNS -m pip install -q --no-input --no-deps --force-reinstall \
+    "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$sha" >> logs/pip_gnf4_t212_switch.log 2>&1 || return 1
+  GNF4_WANT=$sha $PY_UNS - >> logs/tripwire_gnf4_switch.log 2>&1 <<'PYG'
+import importlib.metadata as md, json, os
+du = json.loads(md.distribution("grouped-nf4-gemm").read_text("direct_url.json") or "null") or {}
+got = (du.get("vcs_info") or {}).get("commit_id")
+assert got == os.environ["GNF4_WANT"], (got, os.environ["GNF4_WANT"])
+print("gnf4 switched to", got)
+PYG
+}
+# tc1_pos76_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 76 (2026-10-22): grouped-nf4-gemm#584's reordered compact-delta backward.
+# cd1cl1 (NF4_QLORA_COMPACT_DELTA=1 E4B_CHUNKED_LM_LOSS=1, e4b's matched arm, --mem-census 1) at grouped-nf4-gemm main just BEFORE the
+# merge (GNF4_SHA) and just AFTER it (GNF4_SHA_B), two draws a side in ABBA order: gb, ga, ga_d2, gb_d2. venv-unsloth holds one
+# grouped-nf4-gemm at a time, so gnf4_t212_at reinstalls it between the sides and re-reads the commit. Before any arm, the PRE-CHECK runs
+# the AFTER commit's kernel/test_compact_delta.py on this GPU; a failure, or a CUDA case that skips, refuses the family at cents.
+tc1_pos76_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_cd1cl1_gb:fused e4b:fused_attn4_m_cd1cl1_ga:fused e4b:fused_attn4_m_cd1cl1_ga_d2:fused e4b:fused_attn4_m_cd1cl1_gb_d2:fused"
+  say "===== GNF4 #584 family $FAM ($MID @ $REV; cd1cl1 at grouped-nf4-gemm before vs after the reordered compact backward, ABBA; amendment 76)"
+  local why="" t fw tag arm
+  [ "$STEPS" = 60 ] && [ "$EVAL_EVERY" = 20 ] && [ "$EVAL_N" = 8 ] || why="amendment 76 needs amendment 73's window: TC1_STEPS=60, TC1_EVAL_EVERY=20, TC1_EVAL_N=8 (got $STEPS, $EVAL_EVERY, $EVAL_N)"
+  [ "$GNF4_SHA" = "$POS76_GNF4_BEFORE" ] || why="${why:+$why; }amendment 76's BEFORE side is grouped-nf4-gemm $POS76_GNF4_BEFORE (got GNF4_SHA $GNF4_SHA)"
+  [ "${GNF4_SHA_B:-}" = "$POS76_GNF4_AFTER" ] || why="${why:+$why; }amendment 76's AFTER side is grouped-nf4-gemm $POS76_GNF4_AFTER (got GNF4_SHA_B ${GNF4_SHA_B:-unset})"
+  [ "$T212_OK" = 1 ] || why="${why:+$why; }venv-unsloth's e4b (t212) is unavailable: $T212_REASON"
+  if [ -z "$why" ]; then                             # the pre-check: the AFTER commit's compact-delta tests on THIS GPU
+    local PC=$W/gnf4-after
+    rm -rf "$PC"
+    { perl -e 'alarm 600; exec @ARGV' git clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git "$PC" && git -C "$PC" checkout -q "$GNF4_SHA_B" \
+      && $PY_UNS -m pip install -q --no-input pytest; } > logs/precheck_setup.log 2>&1 || why="the pre-check could not set up grouped-nf4-gemm $GNF4_SHA_B (logs/precheck_setup.log)"
+    if [ -z "$why" ]; then
+      (cd "$PC/kernel" && perl -e 'alarm 900; exec @ARGV' $PY_UNS -m pytest -q -rs -p no:cacheprovider test_compact_delta.py) > logs/precheck_compact_delta.log 2>&1; local prc=$?
+      if [ $prc -ne 0 ]; then why="pre-check FAILED: grouped-nf4-gemm $GNF4_SHA_B kernel/test_compact_delta.py rc=$prc on this GPU (logs/precheck_compact_delta.log)"
+      elif grep -q "is a CUDA allocator statistic" logs/precheck_compact_delta.log; then why="pre-check incomplete: a CUDA case skipped on this GPU (logs/precheck_compact_delta.log)"; fi
+    fi
+    echo "PRECHECK $FAM ${why:-OK} $(tail -1 logs/precheck_compact_delta.log 2>/dev/null)" | tee -a summary.txt
+  fi
+  if [ -n "$why" ]; then
+    for t in $ALL; do IFS=: read -r fw tag arm <<< "$t"; stubw $FAM $fw $tag $arm not_run "$why"; done
+    echo "$(echo $FAM | tr a-z A-Z) REFUSED $why" | tee -a summary.txt; return 0
+  fi
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local CEN="--mem-census 1 --profile-steps 0" X="NF4_QLORA_COMPACT_DELTA=1 E4B_CHUNKED_LM_LOSS=1"
+  can_run 600 $FAM/e4b/m_cd1cl1_gb && TC1_ARM_EXTRA_ENV="$X" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_cd1cl1_gb fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  if gnf4_t212_at "$GNF4_SHA_B"; then
+    can_run 600 $FAM/e4b/m_cd1cl1_ga && TC1_ARM_EXTRA_ENV="$X" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_cd1cl1_ga fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+    can_run 600 $FAM/e4b/m_cd1cl1_ga_d2 && TC1_ARM_EXTRA_ENV="$X" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_cd1cl1_ga fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  else
+    for tag in fused_attn4_m_cd1cl1_ga fused_attn4_m_cd1cl1_ga_d2; do stubw $FAM e4b $tag fused not_run "the switch to grouped-nf4-gemm $GNF4_SHA_B failed (logs/pip_gnf4_t212_switch.log)"; done
+  fi
+  if gnf4_t212_at "$GNF4_SHA"; then
+    can_run 600 $FAM/e4b/m_cd1cl1_gb_d2 && TC1_ARM_EXTRA_ENV="$X" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_cd1cl1_gb fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  else
+    stubw $FAM e4b fused_attn4_m_cd1cl1_gb_d2 fused not_run "the switch back to grouped-nf4-gemm $GNF4_SHA failed (logs/pip_gnf4_t212_switch.log)"
+  fi
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_pos68_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 68 (2026-10-08): amendment 67's packed-row position profiled -- e4b's
 # matched arm at its defaults (pd) and Unsloth's matched arm (pv), two draws each in ABBA order (pd pv pv pd), venv-unsloth, every arm profiled
 # (device time, CPU ops per step) with --phase-peaks 1.
@@ -3176,6 +3238,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3pos69mc) tc1_pos69mc_family qwen3pos69mc Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 73: amendment 69's arms with the memory census
   qwen3pos74pd) tc1_pos74_family qwen3pos74pd Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 74: amendment 73's census at today's pins, one grouped-nf4-gemm switch per arm
   qwen3pos75cl) tc1_pos75_family qwen3pos75cl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 75: the 4090-fit read, the compact delta and the chunked LM loss
+  qwen3pos76co) tc1_pos76_family qwen3pos76co Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 76: cd1cl1 at grouped-nf4-gemm before vs after #584's reordered compact backward
   qwen3sladder) tc1_sladder_family qwen3sladder Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 70: the single-block ladder 0 vs 1, field recipe
   qwen3slauto) tc1_slauto_family qwen3slauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 71: the single-block ladder 0 vs auto, field recipe
   qwen3fqkv) tc1_fqkv_family qwen3fqkv Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # P129 Amendment 2: the fused q/k/v training projection 0 vs 1, field recipe

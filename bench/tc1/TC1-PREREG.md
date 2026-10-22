@@ -3460,3 +3460,78 @@ GB host floor.
 - **Time:** about 11 min of venvs and fetch and 4 e4b arms at about 9 min each: about 50 min (box 154 cost $0.914).
 - **Download:** + 100 GB × $0.011/GB = $1.10 at most, the launcher's buy cap and default estimate.
 - **Worst case:** 2 h × $1.05 + $1.10 = **$3.20**. Expected about $1.5.
+
+### Amendment 76 (2026-10-22T17:05Z, after amendment 75's read, before any box): grouped-nf4-gemm#584's reordered compact-delta backward, before vs after, two draws a side (descriptive; one fixed rule)
+
+**Why.** Amendment 75's box (`tc1-5090-155`, read in #1992) found no arm that fits a 24 GiB RTX 4090. The best arm, cd1cl1 (the compact
+delta and the chunked LM loss), peaked at 25,727 MiB on the device, 1,163 MiB over a 4090's 24,564 MiB total. At its peak,
+grouped-nf4-gemm's `_CompactPaddedDelta.backward` held two 0.811 GB buffers together: the rebuilt zero-padded block `x` (line 940) and its
+grad `gx` (line 942). grouped-nf4-gemm#584 reorders that backward: it computes the adapters' product before the block's grad and frees
+`x` between them, with byte-identical gradients. This amendment reads what the reorder does to the field recipe's peaks.
+
+**The pair isolates the change.** BEFORE is grouped-nf4-gemm main just before #584 (`c62159642cbae5c1bd281f04c8b1e4101a5e557a`).
+AFTER is #584's merge (`75421b30a13332c12611f428c66531a7bbb13cbd`), its direct child. The only code that differs between them is
+`kernel/nf4_qlora.py`'s reorder. `nf4_qlora.py` is byte-identical from amendment 75's `a83f6bb3` to BEFORE, so amendment 75's numbers stay
+comparable as context, not as the control. Both commits carry the release string 0.50.0.
+
+**The box** (token `qwen3pos76co`). Amendment 75's recipe, window, instrument and arm, e4b only:
+- TC1's field recipe: alpaca, seq 2048, micro-batch 2 × accum 4, 60 steps, 8 held-out rows every 20 (`TC1_STEPS=60`). The family refuses any
+  other window.
+- e4b's matched arm (`--adapter-dtype fp32 --lora-init matched`) in venv-unsloth (torch 2.12.1+cu130), with `NF4_QLORA_COMPACT_DELTA=1` and
+  `E4B_CHUNKED_LM_LOSS=1` (amendment 75's cd1cl1), `--mem-census 1`, `--profile-steps 0`.
+- **Two draws a side, in ABBA order:** gb, ga, ga_d2, gb_d2. venv-unsloth holds one grouped-nf4-gemm at a time, so the family reinstalls it
+  between the sides (`--no-deps`) and re-reads the installed commit. A failed switch leaves that side's arms NOT_RUN.
+- `GNF4_SHA` is BEFORE and `GNF4_SHA_B` is AFTER. The family refuses any other pair. e4b is main at launch.
+- **The pre-check, before any arm:** the AFTER commit's `kernel/test_compact_delta.py` runs on this box's GPU. That covers byte-equality
+  against the old order, the TorchDispatchMode liveness census and the CUDA peak test. A failure, or a CUDA case that skips, refuses the
+  family at cents.
+- One RTX 5090 by the launcher's ranking. A pin names only a machine whose listing has held across at least two screen sweeps and 180 s,
+  with its latest read fresh, on an offer that read listed. `TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`.
+
+**Validity** (`pos76_why`). An arm off any of these is VOID and reported as VOID:
+- amendment 75's predicates for cd1cl1: the compact-delta path, and the chunked LM loss on every training forward;
+- grouped-nf4-gemm's release string 0.50.0;
+- **binding, the code:** the arm's recorded grouped-nf4-gemm commit and the sha256 of the `nf4_qlora.py` it imported are its side's. The
+  arm writes both as `env.gnf4_code`, new in `tc1_arm.py`.
+
+A harness refusal or crash is NOT_RUN: no data, and nothing is read.
+
+**What the read reports** (`pos76_block`, then amendment 23's tables for the four draws; GB = 1e9 bytes). For each draw, first:
+- the reserved peak;
+- the nvidia-smi peak, beside a 4090's 24,564 MiB total.
+
+Then:
+- peak allocated;
+- **G:** the live bytes at the peak in the compact backward's lines (`nf4_qlora.py` 921–969 BEFORE, 921–973 AFTER);
+- how many of the two block sites hold at least 16 MiB there (940 and 942 BEFORE, 944 and 948 AFTER);
+- the LM loss's bytes with the held bf16 logits named (`linear.py:134`'s vocab-shaped group, which amendment 75's target missed);
+- the largest transient at the peak;
+- held-out at N;
+- s/step, recorded and never gated.
+
+Then each side's medians and spreads.
+
+**The rule** (fixed now), after against before, on the medians of two draws:
+1. **The live sets first.** RELOCATED: G is live at both before-draws' peaks and absent, with the unlisted tail, at both after-draws'.
+2. **The credit.** RELOCATED, the median allocated drop must reach 0.10 GB. If G may still be live, which the expected outcome is (one
+   block left), the drop must reach half of G's median bytes removed.
+3. **CANDIDATE:** the drop is credited, AND the median reserved and device drops each clear the larger of 0.10 GB and that measure's spread
+   (the larger |draw 1 − draw 2| of the two sides), AND the after median's held-out is within 0.005 of the before median. Amendment 75's
+   one draw put the reserved drop inside draw-to-draw variation; the spread term answers that.
+
+**The 4090 arithmetic, reported and never a verdict.** For each side: the median nvidia-smi peak against 24,564 MiB, and the zero-gap
+projection (median allocated plus the CUDA context, which is device minus reserved) against it. A CANDIDATE is a credited saving, not a
+fit. A 4090 box needs its own registration.
+
+**Expected, not graded.** About one block (about 0.81 GB) off the allocated peak, unless another transient sets the next peak. On
+amendment 75's numbers that would put cd1cl1's zero-gap projection under a 4090's total, but not its device peak at amendment 75's
+allocator gap.
+
+**Budget.** One RTX 5090 at the declared $1.05/h, a 2 h guard, TC1's 98 GB host floor.
+- **Time:** about 11 min of venvs and fetch, about 3 min of pre-check, four arms at about 9 min each, and two reinstalls: about 55 min.
+- **Worst case:** 2 h × $1.05 + 100 GB × $0.011/GB = **$3.20**. Expected about $1.5.
+
+**Explore boxes are not this read.** While this registers, an explore box (the owner's explore tier: not a reading, never quoted as a
+finding) runs amendment 75's arms on a real RTX 4090. Once this is pushed, explore boxes may run this family on a real RTX 4090 as well.
+Nothing they show changes this rule or this box, and none of their numbers is cited in this read. A 4090 fit is claimed only through its
+own registration.

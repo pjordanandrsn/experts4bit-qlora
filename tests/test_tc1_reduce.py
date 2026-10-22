@@ -486,3 +486,54 @@ def test_amendment_75_rule_reads_box_154():
     assert v["drops"] == {"alloc": 639_288_832, "reserved": -20_971_520, "device": -20_971_520}, v
     assert m.pos75_why(m.POS75_ARMS[0][1], cells["fd"]) == "" and m.pos75_why(m.POS75_ARMS[1][1], cells["fd_cd1"]) == ""
     assert "the chunked LM loss did not serve every training forward" in m.pos75_why(m.POS75_ARMS[2][1], cells["fd"])
+
+
+def test_amendment_76_reads_box_155s_cd1cl1():
+    """Amendment 76's target on a real receipt. tc1-5090-155's cd1cl1 cell ran grouped-nf4-gemm a83f6bb3, whose nf4_qlora.py is
+    byte-identical to the BEFORE commit, so the BEFORE span holds its compact backward: 1,656,811,968 bytes at the peak, with the
+    rebuilt block and its grad both live (lines 940 and 942, 811,130,880 bytes each). At fd's peak the LM loss with the held logits named
+    reads the 343,375,360-byte logits that amendment 75's target missed. The cell itself is VOID under amendment 76: wrong release, no
+    recorded commit."""
+    import json
+
+    m = _mod()
+    d = REPO / "bench" / "h2h-2026-10-02" / "tc1" / "receipts" / "tc1-5090-155" / "public"
+    cd = json.loads((d / "qwen3pos75cl_e4b_fused_attn4_m_fd_cd1cl1.json").read_text(encoding="utf-8"))
+    fd = json.loads((d / "qwen3pos75cl_e4b_fused_attn4_m_fd.json").read_text(encoding="utf-8"))
+    assert m.padded_site_bytes(cd["mem_census"], m.POS76_SPAN["gb"]) == 1_656_811_968
+    assert m._blocks_live(cd["mem_census"], "gb") == 2
+    assert [g["bytes"] for g in cd["mem_census"]["live_at_peak_top"] if g["group"].startswith("site:nf4_qlora.py:94")][:2] == [811_130_880] * 2
+    assert m.loss_and_logits_bytes(fd["mem_census"]) == 343_375_360 and m.loss_group_bytes(fd["mem_census"]) == 0
+    why = m.pos76_why(m.POS76_ARMS[0][1], cd)
+    assert "0.50.0" in why and "commit" in why, why
+
+
+def test_amendment_76_rule_each_gate_on_hand_built_draws():
+    """pos76_rule's gates one at a time, on two draws a side. The base case keeps one block live after the reorder: not RELOCATED, the
+    allocated drop is credited against half of G's bytes removed, the reserved and device drops clear the spread, held-out holds. Then
+    each gate is broken alone: the device drop inside the threshold, held-out off by more than 0.005, and an unlisted tail that keeps
+    G's after-draws from reading absent."""
+    m = _mod()
+    gb_ = 1_656_811_968
+
+    def draws(alloc, reserved, device, cbwd, heldout, tail=0):
+        return [{"alloc": alloc, "reserved": reserved, "device": device, "cbwd": cbwd, "tail": tail, "heldout": heldout},
+                {"alloc": alloc + 2e7, "reserved": reserved + 3e7, "device": device + 3e7, "cbwd": cbwd, "tail": tail, "heldout": heldout}]
+
+    before = draws(22.0e9, 23.2e9, 24.6e9, gb_, 1.0000)
+    after = draws(21.2e9, 22.4e9, 23.8e9, gb_ // 2, 1.0010)
+    r = m.pos76_rule(before, after)
+    assert not r["relocated"] and r["credit"] and r["falls"] and r["held"] and r["candidate"], r
+    assert r["thr"] == {"reserved": 1e8, "device": 1e8}
+
+    r = m.pos76_rule(before, draws(21.2e9, 22.4e9, 24.55e9, gb_ // 2, 1.0010))    # the device drop is 0.05 GB
+    assert r["credit"] and not r["falls"] and not r["candidate"], r
+
+    r = m.pos76_rule(before, draws(21.2e9, 22.4e9, 23.8e9, gb_ // 2, 1.0060))     # held-out moved 0.006
+    assert r["credit"] and r["falls"] and not r["held"] and not r["candidate"], r
+
+    gone = draws(20.4e9, 21.6e9, 23.0e9, 0, 1.0010)
+    assert m.pos76_rule(before, gone)["relocated"]
+    tail = draws(20.4e9, 21.6e9, 23.0e9, 0, 1.0010, tail=m.POS76_ABSENT_BYTES)    # 16 MiB unlisted: not absent
+    r = m.pos76_rule(before, tail)
+    assert not r["relocated"] and "may still be live" in r["why"], r
