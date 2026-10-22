@@ -1,0 +1,18 @@
+FIXTURE field: template=alpaca steps=60 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407 pack=0
+OMP_NUM_THREADS=48 (physical cores) box_class=RTX 5090
+CPU allotment 47 (cgroup quota capped by affinity; physical cores 48)
+CUDA_PROBE ok
+DRIVER 580.119.02 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3pos69mc staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3pos69mc alpaca sha=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac eval_n=8 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+qwen3pos69mc/e4b/fused_attn4_m_fd PROLOGUE {"phase_seconds": {"preamble": 3.209, "load_weights": 26.221, "verify": 0.0, "attn4": 2.356, "lora": 0.025, "enable": 0.17, "tokenizer": 0.416, "census": 1.594, "frozen_probe": 0.069, "trainable_sha": 1.392, "counters": 0.0, "c1_before": 27.633, "eval0": 8.119, "optimizer": 0.232, "mem_census": 0.013}, "phase_budget_s": 1260.0, "prologue_s": 73.05, "prologue_unattributed_s": 1.602}
+qwen3pos69mc/e4b/fused_attn4_m_fd rc=0 CELL OK {"framework": "e4b", "fam": "qwen3pos69mc", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_fd", "status": "ok", "steps": 60, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, 
+
+LOADGATE qwen3pos69mc/e4b/fused_attn4_m_fd attempt 0 load1_median 0.99 gate 6.0 status ok over 0
+qwen3pos69mc/unsloth/ckpt_unsloth_m_fv PROLOGUE {"phase_seconds": {"preamble": 1.758, "snapshot": 0.0, "load_weights": 31.05, "census": 1.635, "frozen_probe": 0.045, "trainable_sha": 1.384, "counters": 0.058, "c1_before": 26.521, "eval0": 10.574, "optimizer": 0.418, "mem_census": 0.018}, "phase_budget_s": 1260.0, "prologue_s": 80.642, "prologue_unattributed_s": 7.183}
+qwen3pos69mc/unsloth/ckpt_unsloth_m_fv rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3pos69mc", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": null, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m_fv", "status": "ok", "
+
+LOADGATE qwen3pos69mc/unsloth/ckpt_unsloth_m_fv attempt 0 load1_median 1.14 gate 6.0 status ok over 0
+QWEN3POS69MC DONE
