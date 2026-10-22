@@ -633,7 +633,8 @@ def test_amendment_6_the_reference_alarm_and_the_fit_cover_688_sequences():
 def test_amendment_6_sizes_n_from_the_variance_only_and_registers_the_stop():
     for text in ("0.0481", "4,000", "20261022 + K", "P(SE < 0.002) ≥ 0.90", "| 86 | 688 | 0.927 | 0.996 |",
                  "| 73 | 584 | 0.576 | 0.579 |", "TWO-LEVEL one is registered", A6_DIFFS_SHA256[:8],
-                 "no top-up", "no sequential extension", "P224 closes", "a first look", "UNCHANGED"):
+                 "no top-up", "no sequential extension", "P224 closes", "a first look", "UNCHANGED",
+                 "This amendment's reading is `p224-5090-2`", "`p224-5090-3` is the one spare"):
         assert text in AMENDMENT_6, text
     for effect in ("3.76667", "3.77533", "PA − REF =", "PA - REF ="):              # no effect is quoted
         assert effect not in AMENDMENT_6, effect

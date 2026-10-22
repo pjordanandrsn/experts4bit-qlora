@@ -697,6 +697,10 @@ reading alone. A VOID spends no test, so the next reading at a judgeable N is a 
      column first.
 4. **The stop.** One reading at N = 688. There is no top-up and no sequential extension: if the SE is 0.002 or more,
    the VOID stands and P224 closes.
+5. **The run id.** This amendment's reading is `p224-5090-2`, and `p224-5090-3` is the one spare left for pre-create
+   and host refusals (not strikes); the runner and the driver already accept both. `p224-5090-1` was a box-started
+   VOID read, so it counts as one of the two that stop the lane, and a VOID at `p224-5090-2` is the second: the
+   two-strike rule and the stop above close P224 at the same point.
 
 **UNCHANGED:**
 - the estimator (the mean over distinct sequences and its paired SE);
