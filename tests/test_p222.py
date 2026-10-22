@@ -474,7 +474,9 @@ def test_the_reading_record_is_byte_exact_and_carries_no_identifier():
     for p in READ.rglob("*"):
         if p.is_file():
             text = p.read_text(encoding="utf-8")
-            assert not re.search(r"GPU-[0-9a-f]{8}-|vast\.ai|ssh\d*\.|instance[_ ]id", text), p.name
+            assert not re.search(r"GPU-[0-9a-f]{8}-|vast\.ai|ssh\d*\.|\binstance[_ ]id\b|machine \d{3,}", text), p.name
+    for doc in (LANE / "RESULTS-p222.md", LANE / "REDERIVE.md"):
+        assert not re.search(r"machine \d{3,}", doc.read_text(encoding="utf-8")), doc.name   # no machine id
 
 
 def test_the_reading_rederives_byte_for_byte_and_reads_go_with_served_arm_m(tmp_path):

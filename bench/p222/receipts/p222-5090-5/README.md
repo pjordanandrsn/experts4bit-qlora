@@ -1,15 +1,16 @@
 # `p222-5090-5`: K25's decode x plan at Mixtral-8x7B's W16 shapes (GO)
 
 One RTX 5090 (cc 12.0, 170 SMs, a **575 W** power limit, enforced 575 W in every sample) on an AMD EPYC 9334 host
-(128 CPUs, 755 GiB RAM, 60 GB disk), machine 58852, 2026-10-22T17:05:26Z to 17:15:49Z. Cost **$0.14**, against the
+(128 CPUs, 755 GiB RAM, 60 GB disk), 2026-10-22T17:05:26Z to 17:15:49Z. Cost **$0.14**, against the
 registered worst of $1.69.
 - **Code:** e4b `683b85f2` (Amendment 3's merge, #1974), grouped-nf4-gemm v0.50.0 at `41ef086e`.
 - **Stack:** torch 2.8.0+cu128, triton 3.4.0.
 - **The run ids before it:** `p222-5090-1` to `-3` were refused at create (Amendment 3, "Why"), and `p222-5090-4` was
   refused at create when its pinned offer left the market before the create. No instance existed for any of them, each
   cost $0, and none is a strike.
-- **How the host was found:** the screen admits only machines with a recorded power cap of at least 575 W, read within 3
-  days. This machine's cap was first recorded the same afternoon, by a short explore-tier probe: one box booted, read
+- **How the host was found:** an RTX 5090 host whose 575 W cap was recorded by a power probe the same day. The screen
+  admits only machines with a recorded power cap of at least 575 W, read within 3 days, and this one's was first recorded
+  that afternoon by a short explore-tier probe: one box booted, read
   nvidia-smi's `power.limit` (575 W), and was torn down for about $0.01, with its receipt in the private receipt store.
   The probe only picked the host. This box read its own limit before the install, and the runner refuses under 575 W
   (rc 17).
@@ -68,8 +69,8 @@ and the same bound clock-adjusted, all >= 1.10. `served_arm` is **M**.
   premise and pip logs. `SHA256SUMS` covers each file in this directory.
 - **Only in the private receipt store,** byte-exact, listed by sha256 in `STORE-ONLY.sha256`:
   - `forensics.txt` and the runner's console log. They carry the GPU's UUID, and no reading depends on them.
-  - The launcher's instance record and teardown proof. They name the provider's instance.
-- **No identifiers:** no file here names an instance, an offer, a host name, an endpoint or the GPU's UUID.
+  - The launcher's instance record and teardown proof. They name the provider's instance and machine.
+- **No identifiers:** no file here names an instance, a machine, an offer, a host name, an endpoint or the GPU's UUID.
 
 The verdict re-derives from the bench record with the registered reducer
 ([`../../REDERIVE.md`](../../REDERIVE.md)). Under Python 3.11, CI's version, it is byte-identical to the box's:
