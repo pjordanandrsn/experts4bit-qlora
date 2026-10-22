@@ -32,6 +32,22 @@ def test_describe_reads_the_width_from_the_lm_head():
     assert topo.provenance["vocab_size"].startswith("lm_head.out_features")
 
 
+def test_describe_takes_the_head_width_when_it_differs_from_the_config(monkeypatch):
+    """The tree describe_moe walks has an LM head 128 wide while the config says 97: the topology carries the head's width, the one the
+    chunked loss's gate reads, never the config's."""
+    build = tr.AutoModelForCausalLM.from_config
+
+    def wide_head(config, *a, **k):
+        tree = build(config, *a, **k)
+        tree.lm_head = torch.nn.Linear(config.hidden_size, RESIZED, bias=False)
+        return tree
+
+    monkeypatch.setattr(tr.AutoModelForCausalLM, "from_config", wide_head)
+    cfg = _cfg()
+    assert cfg.vocab_size == V
+    assert topo_mod.describe_moe(cfg).vocab_size == RESIZED
+
+
 def test_a_resized_head_is_refused_by_name():
     cfg = _cfg()
     topo = topo_mod.describe_moe(cfg)
