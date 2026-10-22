@@ -206,7 +206,8 @@ def _switch(text, run_id, shake):
 SWITCH = [("p223-5090-1", None, 0, "SHAKE=0 REPS=5 NEED_ARM=480"), ("p223-5090-3", "0", 0, "SHAKE=0 REPS=5"),
           ("p223-shake-1", "1", 0, "SHAKE=1 REPS=2 NEED_ARM=240"), ("p223-shake-3", "1", 0, "SHAKE=1 REPS=2"),
           ("p223-5090-2", "1", 78, "does not match"), ("p223-shake-2", None, 78, "does not match"),
-          ("p223-shake-1", "0", 78, "does not match"), ("p223-shake-4", "1", 78, "unregistered"),
+          ("p223-shake-1", "0", 78, "does not match"), ("p223-shake-6", "1", 0, "SHAKE=1 REPS=2"),
+          ("p223-shake-5", None, 78, "does not match"), ("p223-shake-7", "1", 78, "unregistered"),
           ("p223-dry-1", None, 78, "unregistered")]
 
 
@@ -221,7 +222,8 @@ def test_the_switch_refuses_a_mismatch_either_way_before_any_install(run_id, sha
 
 
 SWITCH_MUTANTS = [('[ "${P223_SHAKE:-0}" = "$SHAKE" ] ||', "true ||"),
-                  ("  p223-shake-1|p223-shake-2|p223-shake-3) SHAKE=1;;", "  p223-shake-1|p223-shake-2|p223-shake-3) SHAKE=0;;"),
+                  ("  p223-shake-1|p223-shake-2|p223-shake-3|p223-shake-4|p223-shake-5|p223-shake-6) SHAKE=1;;",
+                   "  p223-shake-1|p223-shake-2|p223-shake-3|p223-shake-4|p223-shake-5|p223-shake-6) SHAKE=0;;"),
                   ("  NEED_FETCH=900; NEED_BAKE=600; NEED_ARM=240; MIN_DISK_GB=60; REPS=2",
                    "  NEED_FETCH=900; NEED_BAKE=600; NEED_ARM=240; MIN_DISK_GB=60")]
 
@@ -452,7 +454,7 @@ def _clean_checkout():
 
 
 @pytest.mark.parametrize("run_id,ok", [("p223-5090-1", True), ("p223-5090-3", True), ("p223-5090-4", False),
-                                       ("p223-shake-1", True), ("p223-shake-3", True), ("p223-shake-4", False),
+                                       ("p223-shake-1", True), ("p223-shake-3", True), ("p223-shake-6", True), ("p223-shake-7", False),
                                        ("p149-5090-1", False), ("p223-dry-1", False)])
 def test_the_driver_takes_the_registered_ids_only(tmp_path, run_id, ok):
     if sys.platform == "win32" or shutil.which("bash") is None:

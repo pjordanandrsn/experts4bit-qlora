@@ -11,7 +11,7 @@
 #            D1a, D1b, I1b, I0b, D0b, each a fresh process; the first process of each arm is read against the rule's
 #            VOID checks before the next (rc 45: the box stops, the reduce still writes the VOID); then the reduce. Every
 #            phase stamps its start, end and kind in phases.jsonl (bench/common/phases.sh, sourced after the fit check).
-#   shake    Amendment 1 (P223_SHAKE=1, run ids p223-shake-1 to -3): P149's Amendment 5 dry mode on P223's kit. Shards 1
+#   shake    Amendment 1 (P223_SHAKE=1, run ids p223-shake-1 to -3; Amendment 2 adds -4 to -6): P149's Amendment 5 dry mode on P223's kit. Shards 1
 #            and 19 with the config and tokenizer, cut to one layer (p149_slice.py), then the FULL kit at its own
 #            allowances and 2 timed reps; every check kept; each arm's early read reports and goes on; the verdict is
 #            SHAKE, rc 0 with no instrument fault, else 29. An instrument run: never a reading, never a strike.
@@ -34,7 +34,7 @@ RESERVE=600
 GPU_CLASS=5090; MIN_RAM_GB=60; MIN_DISK_GB=200; MIN_POWER_W=575
 case "$P223_RUN_ID" in
   p223-5090-1|p223-5090-2|p223-5090-3) SHAKE=0;;
-  p223-shake-1|p223-shake-2|p223-shake-3) SHAKE=1;;   # Amendment 1: instrument runs on a 1-layer cut, never a reading
+  p223-shake-1|p223-shake-2|p223-shake-3|p223-shake-4|p223-shake-5|p223-shake-6) SHAKE=1;;   # Amendments 1 and 2: instrument runs on a 1-layer cut, never a reading
   *) say "unregistered run ID: $P223_RUN_ID"; finish 78;;
 esac
 MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1; REV=eba92302a2861cdc0098cc54bc9f17cb2c47eb61   # the P141 lock
