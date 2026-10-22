@@ -1624,7 +1624,7 @@ default. It never engages for bf16 adapters, e4b's default.
 ## Amendment 73 (2026-10-22): the field-memory gap is the padded LoRA delta's transients plus the allocator cache; resident tensors are byte-identical (descriptive)
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 73 and its rate fold. One RTX 5090 (`tc1-5090-152`, AMD
-EPYC 9655, a 47-CPU allotment), amendment 69's field recipe over 60 steps with the memory census (`--mem-census 1`, no profile), one draw
+EPYC 9655, a 46.08-CPU quota), amendment 69's field recipe over 60 steps with the memory census (`--mem-census 1`, no profile), one draw
 per arm. The arms run at the field-device-ratio claim's commits: e4b `737f02ff`, grouped-nf4-gemm `8371c38d` and Unsloth 2026.9.14, on
 torch 2.12.1. USD 1.136. A first box on another host ended at the launcher's pre-flight (download bandwidth under its floor) before the
 kit ran: NOT_RUN, USD 0.053.
@@ -1641,6 +1641,9 @@ Both arms are VALID: matched init complete (12,480 of 12,480), frozen base SAME-
 | training window: peak allocated, where | 26.156, a backward (attributed 0.9987) | 24.273, a backward (attributed 1.0) | +1.883 |
 | live at the peak: every static class | 23.139 | 23.139 | 0 |
 | live at the peak: transient | 3.017 | 1.130 | +1.887 |
+
+The live rows sum to the census window's peak. For Unsloth that is 24.269 GB, 0.004 under torch's 24.273, which is why the transient row
+reads +1.887 against the peak's +1.883 while the static row reads 0.
 
 - **Resident tensors are byte-identical.** At the peak the frozen experts (14.496), their absmax (0.460), the other frozen weights
   (1.738), the adapters and their gradients (2.570 each) and the optimizer state (1.305) are the same on both sides.
