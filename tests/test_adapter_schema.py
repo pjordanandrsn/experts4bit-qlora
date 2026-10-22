@@ -299,7 +299,8 @@ def test_prepare_qlora_training_records_the_facts_after_enable_fast_train():
 
 # -------------------------------------------------------------------------------------------- the v2 verifier
 
-def _v2(tmp_path, *, backend="experts4bit", scheme="qfp-v1", drop=None, scale=2.0, name="ad", fp_edit=None):
+def _v2(tmp_path, *, backend="experts4bit", scheme="qfp-v1", drop=None, scale=2.0, name="ad", fp_edit=None,
+        man_edit=None):
     from safetensors.torch import save_file
 
     m = _model()
@@ -328,6 +329,8 @@ def _v2(tmp_path, *, backend="experts4bit", scheme="qfp-v1", drop=None, scale=2.
         man.pop(drop)
     if fp_edit:
         fp_edit(man["fingerprints"])
+    if man_edit:
+        man_edit(man)
     (d / "adapter_manifest.json").write_text(json.dumps(man), encoding="utf-8")
     return d
 
@@ -354,6 +357,17 @@ def test_v2_verifies_and_keeps_the_expert_refusal_until_pa1(tmp_path):
     ({"fp_edit": lambda f: f["experts"].update(modules=0)}, "is not a positive count"),
     ({"fp_edit": lambda f: f["attention"].pop("seconds")}, "is not a measured duration"),
     ({"fp_edit": lambda f: f["attention"].update(sha256="xyz")}, "is not a sha256"),
+    # present but empty: a presence check alone would pass each of these
+    ({"man_edit": lambda m: m.update(run_id=None)}, "does not name the run"),
+    ({"man_edit": lambda m: m.update(run_id="")}, "does not name the run"),
+    ({"man_edit": lambda m: m.update(run_id="  ")}, "does not name the run"),
+    ({"man_edit": lambda m: m.update(run_id=7)}, "does not name the run"),
+    ({"man_edit": lambda m: m.update(created_at=None)}, "is not a UTC time"),
+    ({"man_edit": lambda m: m.update(created_at="yesterday")}, "is not a UTC time"),
+    ({"man_edit": lambda m: m.update(created_at="2026-10-21 00:00:00")}, "is not a UTC time"),
+    ({"man_edit": lambda m: m.update(created_at="2026-10-21T00:00:00Z\n")}, "is not a UTC time"),   # fullmatch
+    ({"man_edit": lambda m: m.update(created_at="2026-13-01T00:00:00Z")}, "is not a UTC time"),     # parsed, too
+    ({"man_edit": lambda m: m.update(created_at="2026-1-05T00:00:00Z")}, "is not a UTC time"),      # strptime takes it
 ])
 def test_v2_refuses_each_fault_by_name(tmp_path, kw, needle):
     with pytest.raises(AD.AdapterRefused) as e:

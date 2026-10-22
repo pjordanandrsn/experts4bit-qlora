@@ -32,6 +32,8 @@ _SHA256 = re.compile(r"[0-9a-f]{64}")
 WEIGHTS = "adapter.safetensors"
 MANIFEST = "adapter_manifest.json"
 _FULL_SHA = re.compile(r"[0-9a-f]{40}")
+#: ``created_at`` as a backend-adapter/2 writer records it: ``YYYY-MM-DDTHH:MM:SSZ`` (UTC), matched in full
+_UTC_STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 #: attention projection LoRA tensors, as the training model names them (``lora.LoRALinear`` wraps the projection)
 _ATTN = re.compile(r"(?P<module>.+\.(?:q_proj|k_proj|v_proj|o_proj|out_proj))\.lora_(?P<ab>[AB])")
 #: expert LoRA tensors (``lora.ExpertsLoRA``)
@@ -170,13 +172,28 @@ def arena_source(arena_index: dict) -> tuple:
 
 
 def _verify_v2_fields(manifest, attention, scale, bad) -> None:
-    """``backend-adapter/2``'s added fields are present and well formed: every field adapter_schema.V2_FIELDS names, a
-    known fingerprint scheme per scope, and the recorded applied scale equal to the setup's alpha/r."""
+    """``backend-adapter/2``'s added fields are present and well formed: every field adapter_schema.V2_FIELDS names, the
+    producing run named (a non-empty ``run_id``) and dated (a real UTC ``created_at``), a known fingerprint scheme per
+    scope, and the recorded applied scale equal to the setup's alpha/r."""
+    from datetime import datetime
+
     from .adapter_schema import KNOWN_SCHEMES, SCOPES, V2_FIELDS
 
     missing = sorted(k for k in V2_FIELDS if k not in manifest)
     if missing:
         raise bad(f"{SCHEMA_V2} manifest lacks {missing}")
+    # present is not enough: a null run_id or an unreadable time would pass a presence check and say nothing
+    run_id = manifest["run_id"]
+    if not (isinstance(run_id, str) and run_id.strip()):
+        raise bad(f"run_id {run_id!r} does not name the run that produced the adapter")
+    stamp = manifest["created_at"]
+    try:
+        ok = isinstance(stamp, str) and bool(_UTC_STAMP.fullmatch(stamp)) and bool(
+            datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ"))
+    except ValueError:                                     # the right shape but not a date (a 13th month, a 30 February)
+        ok = False
+    if not ok:
+        raise bad(f"created_at {stamp!r} is not a UTC time as YYYY-MM-DDTHH:MM:SSZ")
     fps = manifest["fingerprints"]
     if not isinstance(fps, dict) or not set(fps) <= set(SCOPES):
         raise bad(f"fingerprints must map scopes from {list(SCOPES)}, got {sorted(fps) if isinstance(fps, dict) else fps!r}")
