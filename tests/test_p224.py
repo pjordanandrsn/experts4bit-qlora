@@ -4,6 +4,7 @@ The canary data's pin and its splits; the three self-tests, and the mutants of t
 against the guard with 25 % headroom; the registration's constants as the reducer carries them. (Private names are
 the repository guards' job, not this file's.)"""
 import importlib.util
+import json
 import pathlib
 import subprocess
 import sys
@@ -13,7 +14,7 @@ import pytest
 REPO = pathlib.Path(__file__).resolve().parents[1]
 LANE = REPO / "bench" / "p224"
 PREREG = (LANE / "PREREG-p224.md").read_text(encoding="utf-8")
-CANARY_SHA256 = "ed67a18fde1fea23c70ca00c9769ce23cf2399633fa24a89c0bffd431e8b37b0"
+CANARY_SHA256 = "287706ba066909f83c63a77bd552bc64f7fbf080c0b90fc07ea6cd4ae456efe7"   # Amendment 5
 GUARD_S = 9000        # 2.5 h
 BOOT_S = 300
 HEADROOM = 1.25
@@ -48,13 +49,13 @@ def test_canary_pin_is_the_registered_one():
     c = _load("p224_canary")
     assert c.canary_sha256() == CANARY_SHA256
     d = c.build()
-    assert (len(d["train"]), len(d["heldout"]), len(d["http"]["triggers"])) == (512, 64, 32)
+    assert (len(d["train"]), len(d["heldout"]), len(d["http"]["triggers"])) == (512, 256, 32)   # Amendment 5
 
 
 def test_reducer_constants_are_the_registration():
     R = _load("p224_reduce")
     assert (R.N_HELDOUT, R.RATIO_BAR, R.FLOOR, R.CAP, R.FAITHFUL, R.SE_FRACTION, R.MIN_REF_GAIN, R.VRAM_TOL) == \
-        (64, 0.95, 0.01, 0.05, 0.025, 0.2, 0.05, 0.01)
+        (256, 0.95, 0.01, 0.05, 0.025, 0.2, 0.05, 0.01)                                     # Amendment 5: N 256
     assert R.EXPECTED_ATTN_PROJECTIONS == {"Qwen/Qwen3-30B-A3B": 192} and R.ABBA_BLOCKS == 2 and R.BAND_FLOOR == 0.01
     assert R.N_HELDOUT == _load("p224_canary").N_HELDOUT
     for text in ("0.95 of REF's", "min(0.05, max(0.01, 2 × |loss(P0) − loss(HF0)|))", "> 0.025 nats", "0.2 × 0.01",
@@ -115,16 +116,29 @@ def test_fixture_generation_is_declared_and_never_graded():
 
 
 MUTANTS = [
-    ("p224_reduce", "    if ratio is None or ratio < RATIO_BAR:", "    if ratio is None:"),
+    ("p224_reduce", "    if a[\"ratio\"] is None or a[\"ratio\"] < RATIO_BAR:", "    if a[\"ratio\"] is None:"),
     ("p224_reduce", "    if gap > FAITHFUL:", "    if gap > 1.0:"),
     ("p224_reduce", "    if None in shas.values() or len(set(shas.values())) != 1:", "    if False:"),
     ("p224_reduce", "    if thr and not shake:", "    if thr:"),
     ("p224_reduce", "                if dev > band[m][w]:", "                if dev > 2 * band[m][w]:"),
     ("p224_reduce", "    if ident.get(\"base_name_status\") != 404:", "    if False:"),
-    ("p224_reduce", "    band = {m: {w: max(raw[m][w], floor[m][w]) for w in COST_WS} for m in COST_METRICS}",
-     "    band = raw"),
-    ("p224_canary", "SPLIT = {\"train\": TOPICS[:32], \"heldout\": TOPICS[32:40], \"http\": TOPICS[40:48]}",
-     "SPLIT = {\"train\": TOPICS[:33], \"heldout\": TOPICS[32:40], \"http\": TOPICS[40:48]}"),
+    ("p224_reduce", "            band.setdefault(m, {})[w] = max(r, f)", "            band.setdefault(m, {})[w] = r"),
+    ("p224_canary", "SPLIT = {\"train\": TOPICS[:32], \"heldout\": TOPICS[32:40] + TOPICS[48:72], \"http\": TOPICS[40:48]}",
+     "SPLIT = {\"train\": TOPICS[:33], \"heldout\": TOPICS[32:40] + TOPICS[48:72], \"http\": TOPICS[40:48]}"),
+    # Amendment 5
+    ("p224_reduce", "    elif keys and len(set(keys)) != len(keys):", "    elif False:"),
+    ("p224_reduce", "    if meta.get(\"heldout_train_overlap\") != 0:", "    if False:"),
+    ("p224_reduce", "    a = st[\"assistant\"]", "    a = st[\"all\"]"),
+    ("p224_reduce", "GRADED_COST = {(\"ttft_any_ms\", \"W1\"), (\"itl_wall_ms\", \"W1\"), (\"tok_s\", \"W1\")}",
+     "GRADED_COST = {(m, w) for m in COST_METRICS for w in COST_WS}"),
+    ("p224_reduce", "        if k not in seen:", "        if True:"),
+    ("p224_reduce", "            \"flag\": abs(x[\"did\"]) > DID_SE_FLAG * x[\"se_did\"] and abs(x[\"did\"]) > margin}",
+     "            \"flag\": False}"),
+    ("p224_box", "(r[4] - r[3]) / (r[2] - 1)", "(r[4] - r[3]) / r[2]"),
+    ("p224_box", "                    heldout_train_overlap=sum(h in train for h in held))",
+     "                    heldout_train_overlap=0)"),
+    ("p224_canary", "for t in SPLIT[\"heldout\"] for j in range(4) for trig in (True, False)]",
+     "for t in SPLIT[\"heldout\"] for j in range(3) for trig in (True, False)]"),
     ("p224_box", "    test = (\"passed\" if line.startswith(\"1 passed\") and \"skipped\" not in line",
      "    test = (\"passed\" if line"),
     ("p224_box", "    same = all(len({by_mode[m][i] for m in modes}) == 1 for i in range(n))", "    same = True"),
@@ -179,27 +193,6 @@ def test_runner_pins_are_the_registered_ones():
     assert _var(RUN, "ALPACA_REV") == "dce01c9b08f87459cf36a430d809084718273017" and _var(RUN, "ALPACA_REV") in AMENDMENT_1
     assert "REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" in RUN and "`ad44e777`" in PREREG
     assert "--format text --text-field text" in RUN and "--fix expert_residency=device" in RUN
-
-
-def test_runner_terms_are_the_fit_tables():
-    def need(block):
-        env = {}
-        for part in block.replace("\n", ";").split(";"):
-            part = part.strip()
-            if part.startswith("NEED_") and "=" in part and "$((" not in part:
-                k, v = part.split("=", 1)
-                env[k] = int(v.split()[0])
-        return env
-    shake_block = RUN.split('if [ "$SHAKE" = 1 ]; then', 1)[1].split("else", 1)[0]
-    read_block = RUN.split('if [ "$SHAKE" = 1 ]; then', 1)[1].split("else", 1)[1].split("fi", 1)[0]
-    common = {"NEED_GATE": 60, "NEED_REDUCE": 60}
-    assert "NEED_GATE=60; NEED_REDUCE=60; RESERVE=600" in RUN and "INSTALL_TO_GATE_S=450" in RUN
-    assert "NEED_WORK=$((NEED_FETCH + NEED_BAKE + NEED_TRAIN + NEED_REF + 6 * NEED_SLOT" in RUN     # Amendment 3
-    for block, table in ((read_block, FIT_A3), (shake_block, SHAKE_FIT_A3)):
-        n = {**need(block), **common}
-        work = (n["NEED_FETCH"] + n["NEED_BAKE"] + n["NEED_TRAIN"] + n["NEED_REF"] + 6 * n["NEED_SLOT"]
-                + n["NEED_GATE"] + n["NEED_REDUCE"] + n["NEED_FIXTURES"])
-        assert BOOT_S + 450 + work + 600 == BOOT_S + sum(table.values()), (n, table)
 
 
 def test_run_ids_agree_across_runner_driver_and_prereg():
@@ -423,3 +416,116 @@ def test_amendment_4_registers_three_spare_shake_ids_and_nothing_else():
     assert "spares `-4` to `-6` added by Amendment 4" in PREREG
     for rid in ("p224-shake-7", "p224-5090-4"):          # still unregistered: both scripts refuse them
         assert rid not in RUN and rid not in DRIVE, rid
+
+
+# ------------------------------------------------------------------------------------------------------------- Amendment 5
+
+AMENDMENT_5 = PREREG.split("## Amendment 5", 1)[1] if "## Amendment 5" in PREREG else ""
+FIT_A5 = {"install": 450, "fetch": 1200, "bake": 600, "train": 360, "ref": 720, "servers": 6 * 360, "score": 2 * 240,
+          "offload_test": 60, "reduce": 60, "reserve": 600}
+SHAKE_FIT_A5 = {"install": 450, "fetch": 300, "bake": 200, "train": 200, "ref": 600, "servers": 6 * 150,
+                "score": 2 * 180, "offload_test": 60, "reduce": 60, "fixtures": 1000, "reserve": 600}
+SHAKE3_CELLS_SHA256 = "77e4b12049c4f0e55b47aae75f522e67724dd30ff40b9db8152bfbd764112caf"
+
+
+def _need(block):
+    env = {}
+    for part in block.replace("\n", ";").split(";"):
+        part = part.strip()
+        if part.startswith("NEED_") and "=" in part and "$((" not in part:
+            k, v = part.split("=", 1)
+            env[k] = int(v.split()[0])
+    return env
+
+
+def test_amendment_5_the_runner_fit_is_the_registered_table_inside_both_guards():
+    shake_block = RUN.split('if [ "$SHAKE" = 1 ]; then', 1)[1].split("else", 1)[0]
+    read_block = RUN.split('if [ "$SHAKE" = 1 ]; then', 1)[1].split("else", 1)[1].split("fi", 1)[0]
+    assert "6 * NEED_SLOT + 2 * NEED_SCORE" in RUN and 'can_run $((NEED_SLOT + SCORE * NEED_SCORE)) "slot $TAG"' in RUN
+    for block, table, guard in ((read_block, FIT_A5, GUARD_S), (shake_block, SHAKE_FIT_A5, 1.9 * 3600)):
+        n = {**_need(block), "NEED_GATE": 60, "NEED_REDUCE": 60}
+        work = (n["NEED_FETCH"] + n["NEED_BAKE"] + n["NEED_TRAIN"] + n["NEED_REF"] + 6 * n["NEED_SLOT"]
+                + 2 * n["NEED_SCORE"] + n["NEED_GATE"] + n["NEED_REDUCE"] + n["NEED_FIXTURES"])
+        assert 450 + work + 600 == sum(table.values()), (n, table)
+        assert BOOT_S + sum(table.values()) * HEADROOM <= guard, (table, guard)
+    assert sum(FIT_A5.values()) == 6690 and sum(SHAKE_FIT_A5.values()) == 4730
+    for text in ("**6,690**", "8,363 s", "8,663 s", "**4,730**", "5,913 s", "6,213 s"):
+        assert text in AMENDMENT_5, text
+
+
+def test_amendment_5_the_held_out_set_is_distinct_disjoint_and_the_training_unchanged():
+    import hashlib
+    c = _load("p224_canary")
+    d = c.build()
+    held = [c.row_sha256(r) for r in d["heldout"]]
+    assert len(held) == len(set(held)) == 256 == c.N_HELDOUT
+    assert not set(held) & {c.row_sha256(r) for r in d["train"]}
+    assert set(c.TOPICS[32:40]) <= set(c.SPLIT["heldout"]) and len(c.SPLIT["heldout"]) == 32
+    assert not set(c.SPLIT["heldout"]) & (set(c.SPLIT["train"]) | set(c.SPLIT["http"]))
+    fs = c.files(d)
+    assert hashlib.sha256(fs["train.jsonl"]).hexdigest() == c.A3_TRAIN_SHA256       # the canary trains on the same rows
+    assert hashlib.sha256(fs["http.json"]).hexdigest() == c.A3_HTTP_SHA256
+    assert sum(r["trigger"] for r in d["heldout"]) == 128
+
+
+def _shake3():
+    import hashlib
+    raw = (LANE / "shake3_cells.json").read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == SHAKE3_CELLS_SHA256          # the real records, byte-exact
+    return json.loads(raw)
+
+
+def test_amendment_5_regrades_p224_shake_3_real_cells():
+    """p224-shake-3's own per-sequence cells under the amended rule: 46 distinct of 64 rows; the graded (assistant) G1
+    passes; the SE is too large on the distinct rows (so a reading at this size would VOID); the all-token G1 passes
+    over distinct rows; the assistant DiD is flagged (the served adapter applies about 0.5 % more than the reference)."""
+    R = _load("p224_reduce")
+    fx = _shake3()
+    ls = R.loss_stats(fx["per_seq_loss"], fx["per_seq_loss_assistant"], fx["row_keys"])
+    al, a = ls["sets"]["all"], ls["sets"]["assistant"]
+    assert (ls["rows"], ls["distinct"]) == (64, 46)
+    assert round(al["base_gap"], 4) == 0.0107 and round(al["pa_minus_ref"], 4) == 0.0161 and round(ls["margin"], 4) == 0.0214
+    assert round(al["did"], 4) == 0.0054 and round(al["se_did"], 4) == 0.0080
+    assert round(a["pa_minus_ref"], 4) == -0.0062 and round(a["se_pa_ref"], 5) == 0.00255 and round(a["ratio"], 4) == 1.0060
+    assert round(a["se_pa_ref_every_row"], 5) == 0.00219            # what the registered SE read (duplicates counted)
+    assert round(a["did"], 4) == -0.0316 and round(a["se_did"], 4) == 0.0114
+    assert ls["fails"] == []                                         # graded G1 passes on the assistant positions
+    assert ls["reported"]["all_token_g1"]["would_fail"] == []        # ... and the all-token G1 passes over distinct rows
+    assert ls["reported"]["did_assistant"]["flag"] is True and ls["reported"]["did_all"]["flag"] is False
+    assert ls["reported"]["over_application_assistant"]["flag"] is False      # 1.006 < 1 / 0.95
+    assert a["se_pa_ref"] >= R.SE_FRACTION * R.FLOOR                  # too small to judge at 64 rows
+
+
+def test_amendment_5_regrades_p224_shake_3_cost_on_the_per_token_wall():
+    """W1's per-token wall time from the records ((tokens / tok_s / requests - TTFT) / (tokens per request - 1)): P0 and
+    PA equal, inside the band; the text-cadence ITL (the old graded cell) is outside it, and at W16 tok/s PA is faster:
+    both REPORTED."""
+    R = _load("p224_reduce")
+    fx = _shake3()
+    def per_token(c):
+        req = c["tokens"] / c["requests"]
+        return (c["tokens"] / c["tok_s"] / c["requests"] * 1000 - c["ttft_ms"]) / (req - 1)
+    cells = {t: dict(fx["slots"][t]) for t in fx["slots"]}
+    for t, c in cells.items():
+        c["W1"] = dict(c["W1"], itl_wall_ms=per_token(c["W1"]))
+    p0 = [cells[t]["W1"]["itl_wall_ms"] for t in ("b0A1", "b0A2", "b1A1", "b1A2")]
+    pa = [cells[t]["W1"]["itl_wall_ms"] for t in ("b0B", "b1B")]
+    assert round(sum(p0) / 4, 3) == 10.883 and round(sum(pa) / 2, 3) == 10.858
+    blocks = [{s: {m: {w: cells[t][w].get(m) for w in R.COST_WS} for m in ("itl_wall_ms", "tok_s", "itl_ms")}
+               for s, t in (("A1", f"b{k}A1"), ("B", f"b{k}B"), ("A2", f"b{k}A2"))} for k in (0, 1)]
+    for b in blocks:                                              # per-token wall is a W1 cell here
+        for s in b.values():
+            s["itl_wall_ms"]["W16"] = s["itl_wall_ms"]["W1"]
+    cg = R.cost_grade(blocks, metrics=("itl_wall_ms", "tok_s", "itl_ms"))
+    assert not [f for f in cg["fails"] if "itl_wall_ms W1" in f or "tok_s W1" in f], cg["fails"]
+    assert any("itl_ms W1" in w for w in cg["reported_outside_band"])          # the text cadence, reported
+    assert any("tok_s W16" in w for w in cg["reported_outside_band"])          # PA faster at W16, reported
+
+
+def test_amendment_5_rule_text():
+    for text in ("ASSISTANT positions", "not established at n=64", "46 distinct", "0.00255", "0.00219",
+                 "about 1 %", "first chunk of any kind", "(wall − first chunk) / (completion tokens − 1)",
+                 "287706ba066909f83c63a77bd552bc64f7fbf080c0b90fc07ea6cd4ae456efe7", "a held-out row equal to a training row",
+                 "|DiD| > 2 SE", "1 / 0.95"):
+        assert text in AMENDMENT_5, text
+    assert "falsif" not in AMENDMENT_5.lower()

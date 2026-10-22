@@ -90,7 +90,9 @@ def loss_record(arm: str, per_seq, seqs, per_seq_asst=None, **extra) -> dict:
     """The gated losses (every position) and, REPORTED, the assistant positions' (the canary's own tokens)."""
     return {"ok": all(math.isfinite(x) for x in per_seq) and len(per_seq) == len(seqs), "arm": arm,
             "per_seq_loss": per_seq, "per_seq_loss_assistant": per_seq_asst,
-            "tokens": sum(len(s) - 1 for s in seqs), "ids_sha256": ids_sha256(seqs), **extra}
+            "tokens": sum(len(s) - 1 for s in seqs), "ids_sha256": ids_sha256(seqs),
+            # Amendment 5: one id per sequence, so the reducer can count distinct sequences and refuse duplicates
+            "per_seq_ids_sha256": [ids_sha256(s) for s in seqs], **extra}
 
 
 def env_check(arm: str, env) -> list:
@@ -207,12 +209,23 @@ def identity(base_url: str, cfg_model: str) -> dict:
 
 
 def cost_summary(per_request: list, walls: list, batch: int) -> dict:
-    """``per_request``: [(ttft_s, [inter-chunk gaps s], completion_tokens)]; ``walls``: each wave's wall seconds."""
+    """``per_request``: [(ttft_text_s, [inter-text-chunk gaps s], completion_tokens, ttft_any_s, request_wall_s)];
+    ``walls``: each wave's wall seconds.
+
+    Amendment 5: ``ttft_ms`` and ``itl_ms`` time TEXT chunks, so a token the streaming detokenizer holds back (an
+    empty-text chunk) merges two tokens into one gap: they measure the arm's text cadence, not its step. They stay,
+    REPORTED. The graded pair is ``ttft_any_ms`` (the first chunk of any kind) and ``itl_wall_ms`` (each request's
+    (wall - first chunk) / (completion_tokens - 1), the per-token wall time, whatever the text)."""
     ttft = statistics.median(r[0] for r in per_request) * 1000
     itl = statistics.median(statistics.fmean(r[1]) for r in per_request if r[1]) * 1000
     toks = sum(r[2] for r in per_request)
-    return {"ttft_ms": round(ttft, 3), "itl_ms": round(itl, 4), "tok_s": round(toks / sum(walls), 3),
-            "requests": len(per_request), "batch": batch, "tokens": toks}
+    out = {"ttft_ms": round(ttft, 3), "itl_ms": round(itl, 4), "tok_s": round(toks / sum(walls), 3),
+           "requests": len(per_request), "batch": batch, "tokens": toks}
+    if all(len(r) >= 5 for r in per_request):
+        out["ttft_any_ms"] = round(statistics.median(r[3] for r in per_request) * 1000, 3)
+        out["itl_wall_ms"] = round(statistics.median((r[4] - r[3]) / (r[2] - 1) for r in per_request if r[2] > 1)
+                                   * 1000, 4)
+    return out
 
 
 def http_cost(base_url: str, name: str, prompt: str) -> dict:
@@ -224,7 +237,7 @@ def http_cost(base_url: str, name: str, prompt: str) -> dict:
         body = {"model": name, "prompt": prompt, "max_tokens": COST_TOKENS, "min_tokens": COST_TOKENS,
                 "ignore_eos": True, "temperature": 0, "stream": True, "stream_options": {"include_usage": True}}
         t0 = time.perf_counter()
-        first, last, gaps, toks = None, None, [], 0
+        first, last, gaps, toks, first_any = None, None, [], 0, None
         async with client.stream("POST", "/v1/completions", json=body, timeout=600) as r:
             r.raise_for_status()
             async for ln in r.aiter_lines():
@@ -233,6 +246,8 @@ def http_cost(base_url: str, name: str, prompt: str) -> dict:
                 obj = json.loads(ln[6:])
                 if obj.get("usage"):
                     toks = obj["usage"].get("completion_tokens") or toks
+                if first_any is None and obj.get("choices"):                    # Amendment 5: any chunk, text or not
+                    first_any = time.perf_counter()
                 if any((c.get("text") or "") for c in obj.get("choices") or []):
                     now = time.perf_counter()
                     if first is None:
@@ -240,7 +255,8 @@ def http_cost(base_url: str, name: str, prompt: str) -> dict:
                     else:
                         gaps.append(now - last)
                     last = now
-        return (first - t0, gaps, toks)
+        end = time.perf_counter()
+        return (first - t0, gaps, toks, (first_any if first_any is not None else first) - t0, end - t0)
 
     async def wave(client, b):
         t0 = time.perf_counter()
@@ -530,6 +546,12 @@ def gates_and_meta(run_dir: str, data_dir: str) -> tuple:
         if os.path.exists(p):
             fs[n] = open(p, "rb").read()
     meta["canary_sha256"] = p224_canary.canary_sha256(fs) if len(fs) == 3 else None
+    # Amendment 5: the held-out set's own checks, from the files on disk (the reducer VOIDs on either)
+    if "heldout.jsonl" in fs and "train.jsonl" in fs:
+        held = [p224_canary.row_sha256(json.loads(x)) for x in fs["heldout.jsonl"].decode("utf-8").splitlines() if x]
+        train = {p224_canary.row_sha256(json.loads(x)) for x in fs["train.jsonl"].decode("utf-8").splitlines() if x}
+        meta.update(heldout_rows=len(held), heldout_distinct=len(set(held)),
+                    heldout_train_overlap=sum(h in train for h in held))
     meta["attention_projections"] = (load("train_REF.json") or {}).get("attention_projections")
     meta["ok"] = bool(meta.get("e4b_sha")) and meta["canary_sha256"] is not None
     return gates, meta
@@ -553,6 +575,7 @@ def self_test() -> int:
     ok(ids_sha256([[1, 2], [3]]) == ids_sha256([[1, 2], [3]]) != ids_sha256([[1, 2], [4]]), "ids sha256")
     r = loss_record("PA", [1.0, 2.0], [[1, 2, 3], [4, 5]])
     ok(r["ok"] and r["tokens"] == 3, "loss record counts scored positions")
+    ok(r["per_seq_ids_sha256"] == [ids_sha256([1, 2, 3]), ids_sha256([4, 5])], "one id per sequence (Amendment 5)")
     ok(not loss_record("PA", [float("nan"), 1.0], [[1, 2], [3, 4]])["ok"], "a non-finite loss is not ok")
     ok(env_check("REF", {DQ_ENV: "0"}) == [] and env_check("REF", {}) != [], "REF loads at fp32")
     ok(env_check("REF-DQ", {}) != [] and env_check("PA-DQ", {}) != [], "canary B's arms are gone (Amendment 3)")
@@ -579,6 +602,12 @@ def self_test() -> int:
     s = cost_summary([(0.05, [0.01, 0.012], 128), (0.07, [0.011], 128)], [2.0], 2)
     ok(s["ttft_ms"] == 60.0 and s["tok_s"] == 128.0 and abs(s["itl_ms"] - statistics.median([0.011, 0.011]) * 1000) < 1e-9,
        "cost summary: median TTFT, median per-request ITL, tokens over wall")
+    ok("itl_wall_ms" not in s, "a record without the Amendment 5 timings carries no per-token wall cell")
+    # Amendment 5: two requests of 128 tokens; one holds 6 tokens back as empty-text chunks (fewer, longer text gaps)
+    s5 = cost_summary([(0.050, [0.010] * 127, 128, 0.050, 0.050 + 127 * 0.010),
+                       (0.050, [0.010 * 127 / 121] * 121, 128, 0.050, 0.050 + 127 * 0.010)], [1.4], 2)
+    ok(abs(s5["itl_wall_ms"] - 10.0) < 1e-6 and s5["ttft_any_ms"] == 50.0 and s5["itl_ms"] > 10.2,
+       "per-token wall ITL is the step; the text-cadence ITL reads the held-back tokens as a slower step")
     import tempfile
     d = tempfile.mkdtemp()
     for tag, arm, score in SLOTS:
@@ -606,6 +635,15 @@ def self_test() -> int:
     g, m = gates_and_meta(d, dd)
     ok(g["cuda_offload_test"] == "passed" and m["canary_sha256"] == p224_canary.canary_sha256() and m["ok"]
        and m["attention_projections"] == 192, "gates and meta from the run directory")
+    ok((m["heldout_rows"], m["heldout_distinct"], m["heldout_train_overlap"]) == (256, 256, 0),
+       "meta counts the held-out rows, the distinct ones and any equal to a training row (Amendment 5)")
+    hb = open(os.path.join(dd, "heldout.jsonl"), "rb").read()
+    tr0 = open(os.path.join(dd, "train.jsonl"), "rb").read().splitlines()[0]
+    open(os.path.join(dd, "heldout.jsonl"), "wb").write(hb + tr0 + b"\n" + hb.splitlines()[0] + b"\n")
+    m2 = gates_and_meta(d, dd)[1]
+    ok((m2["heldout_rows"], m2["heldout_distinct"], m2["heldout_train_overlap"]) == (258, 257, 1),
+       "a training row and a repeated row in the held-out file are both counted")
+    open(os.path.join(dd, "heldout.jsonl"), "wb").write(hb)
     open(os.path.join(d, "offload_test.log"), "w").write("1 skipped in 0.1s\n")
     ok(gates_and_meta(d, dd)[0]["cuda_offload_test"].startswith("not passed"), "a skipped offload test is not a pass")
     open(os.path.join(dd, "http.json"), "ab").write(b" ")

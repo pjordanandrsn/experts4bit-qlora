@@ -504,3 +504,102 @@ That leaves `p224-shake-3`, so one more market loss would stall the lane.
     own first pinned read, that refusal is committed and the id is spent, as `p224-shake-2`'s was.
 
 Nothing else changes: the arms, the rule, the band, the reading's terms, the budget and the guards are as before.
+
+## Amendment 5 (2026-10-22, before any reading): the scored set, a distinct held-out set, and the cost instrument
+
+**Why.** `p224-shake-3` (a SHAKEDOWN; the kit ran end to end) showed three signals that would have decided the reading
+for the wrong reason, and a fourth fault under all of them.
+- **Duplicates in the held-out set.** It was drawn with replacement from 8 topics × 4 templates, so it could hold at most
+  64 distinct rows, and the 64 draws held 46 distinct. Duplicates score identically, so the registered SE counted them as
+  information. Over distinct rows the SE of PA − REF is 0.00255 on the assistant positions (registered estimator:
+  0.00219) and 0.00393 on every token (registered: 0.00327). Raising the count alone would have added only repeats.
+- **Power.** The SE above is not under 0.2 × 0.01 = 0.002, so a reading of this size VOIDs as "too small to judge".
+- **G1 on every token.** The registered estimator read |loss(PA) − loss(REF)| = 0.0163 against a margin of 0.0120.
+  - Over distinct rows it is +0.0161 against a margin of 2 × 0.0107 = 0.0214, and the difference in differences,
+    (PA − REF) − (P0 − HF0), is +0.0054 with SE 0.0080 (0.7 SE). The all-token excess is not established at n=64; the
+    reading measures it.
+  - The served merge's bf16 cast is excluded as its source, by measurement. On the shakedown's real base attention
+    weights and adapter, `merge_attention_lora` (line for line) loses about 1 % of the delta (0.93-1.13 % by projection
+    type), with cos 1.0002 between the applied and the exact delta: a small unbiased perturbation. Whether the paged
+    path's own gap acts differently once the adapter moves K and V is an open question.
+  - On the assistant positions (the canary's own tokens), PA − REF = −0.0062 and the difference in differences is
+    −0.0316 with SE 0.0114 (2.8 SE): the served adapter applies about 0.5 % more than the reference (ratio 1.006).
+- **G3.** The W1 ITL read +4.5 % for PA in both blocks, but that was the instrument.
+  - `http_cost` timed only chunks with non-empty text. A token the streaming detokenizer holds back arrives as an
+    empty-text chunk, so the next gap spans two tokens. PA writes different text, about 5.5 such tokens per request.
+  - On the per-token wall time, P0 is 10.883 ms and PA 10.858 ms: equal.
+  - At W16 PA is 2.6 % FASTER on wall tok/s. The arms decode different text, which routes to a different spread of
+    experts at B = 16; at B = 1 top-8 of 64 always touches exactly 8 experts per layer.
+  - TTFT used the same first-text-chunk definition.
+
+**What changes.**
+1. **The held-out set** (superseding "64 rows").
+   - It is the full cross product of 32 held-out topics × the 8 templates (4 trigger, 4 control), each row exactly once:
+     **256 distinct rows**, 128 of them triggers.
+   - The 32 topics are the 8 earlier ones plus 24 new words of the same class (plural or mass nouns under the same
+     per-topic answer rule), disjoint from the 32 training and 8 HTTP topics and substring-free against every topic.
+   - The training draws and the HTTP set are byte-identical to Amendment 3's: `train.jsonl` sha256 `770693c8…`,
+     `http.json` sha256 `9b24c507…`. The canary trains on the same rows.
+   - The canary data pin is now **`287706ba066909f83c63a77bd552bc64f7fbf080c0b90fc07ea6cd4ae456efe7`**.
+2. **New VOID rungs:** the held-out sequences not all distinct (each arm records a per-sequence id); and
+   a held-out row equal to a training row (the full row's text sha256; an unread count is not zero). The held-out count is 256 in
+   every arm, on every token and on the assistant positions.
+3. **Every statistic is taken over distinct sequences.**
+4. **G1 is graded on the ASSISTANT positions** (the trains use `--loss assistant`; that is the function the adapter was
+   trained to correct).
+   - PA's improvement over P0 must reach 0.95 of REF's over HF0, and |loss(PA) − loss(REF)| must stay within the margin.
+   - The margin's yardstick is the ALL-TOKEN base gap, `min(0.05, max(0.01, 2 × |loss(P0) − loss(HF0)|))` over every
+     token: the better-measured of the two (the assistant-only base gap's per-sequence SD was 0.079).
+   - The SE rung reads the assistant positions' PA − REF.
+5. **Reported, never ruling** (beside the graded G1):
+   - the all-token G1, with what it would have failed;
+   - on both position sets, the signed difference in differences with its paired SE, flagged when |DiD| > 2 SE and
+     |DiD| > the margin;
+   - over-application, flagged when an effect ratio exceeds 1 / 0.95 (the ratio gate is one-sided);
+   - the SE of P0 − HF0 on both sets; on a set with duplicates, the SE both ways.
+   The DiD is not graded at this n. Grading it would be a later amendment, registered before that reading.
+6. **G3 is graded at W1 on the per-token wall time.**
+   - The box records `itl_wall_ms` = (wall − first chunk) / (completion tokens − 1) per request (the median over
+     requests), and `ttft_any_ms`, from the first chunk of any kind.
+   - The graded cells are W1's `itl_wall_ms`, `ttft_any_ms` and `tok_s`, under the registered band rule (the max over
+     the blocks of |A1 − A2|, never under 1 % of the A slots' mean).
+   - W16 and the text-cadence `ttft_ms` / `itl_ms` are computed the same way and reported, with the reason above.
+   - Peak VRAM is unchanged.
+7. **Power, the reading's assumption.** The shakedown's assistant-position SD of PA − REF over distinct rows is 0.0175.
+   At 256 rows that gives SE 0.00109, and the bar (SE < 0.002) holds for a Qwen3 SD up to 0.032. The yardstick sharpens
+   with it: the all-token SE of P0 − HF0, 0.0066 over 46 distinct rows, scales to about 0.003 at 256.
+8. **The fit** (superseding Amendment 3's table). 256 sequences raise the reference arm and add a scoring term to each
+   of the two scoring slots. The basis is `p224-shake-3`'s measured phases: the reference process, 170 s for 64 + 64
+   sequences with its load, and a scoring slot about 59 s more than a non-scoring one. The sequence-proportional parts
+   are scaled by 4 and rounded up.
+
+   | term | reading, s | shakedown, s |
+   |---|---|---|
+   | install | 450 | 450 |
+   | fetch | 1,200 | 300 |
+   | bake | 600 | 200 |
+   | train | 360 | 200 |
+   | reference arm | 720 | 600 |
+   | 6 server processes | 6 × 360 | 6 × 150 |
+   | scoring, 2 slots | 2 × 240 | 2 × 180 |
+   | offload test | 60 | 60 |
+   | collect and reduce | 60 | 60 |
+   | fixture generation | 0 | 1,000 |
+   | reserve | 600 | 600 |
+   | **total** | **6,690** | **4,730** |
+
+   - Reading: 6,690 × 1.25 = 8,363 s, plus 300 s of boot is 8,663 s, inside the unchanged 2.5 h guard (9,000 s).
+   - Shakedown: 4,730 × 1.25 = 5,913 s, plus boot is 6,213 s, inside the unchanged 1.9 h guard (6,840 s).
+   - The guards and the worst cases are unchanged ($3.35 and $1.0064). The runner's fit check refuses before any install
+     if the time left is short.
+9. **The self-test on real records.** `tests/test_p224.py` re-grades `p224-shake-3`'s own cells
+   (`bench/p224/shake3_cells.json`, sha256-pinned; its row identities come from the Amendment 3 generator). Over its 46
+   distinct rows:
+   - the graded G1 passes, and the all-token G1 passes;
+   - the assistant DiD is flagged;
+   - the SE would VOID a reading of that size;
+   - the per-token wall time puts PA inside the W1 band, while the text-cadence ITL and W16 tok/s fall outside and are
+     reported.
+
+Nothing else changes: the arms, the ratio bar, the margin's form, G2, G4, G5, the guards and the worst cases are as
+registered. The next shakedown id is `p224-shake-4` (Amendment 4), and it uses this kit.
