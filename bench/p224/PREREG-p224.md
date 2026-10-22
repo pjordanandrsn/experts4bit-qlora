@@ -261,7 +261,7 @@ none exists. The shakedown box already holds OLMoE and Loggetta, so it trains tw
     4,240 × 1.25 = 5,300 s, inside a **1.5 h guard** (5,400 s); the pre-install check needs (4,240 − 300) × 1.25 =
     4,925 s left. Without the fixture generation the shakedown alone fits 3,660 s.
   - **Worst case** (superseded by Amendment 1): 1.5 h × $0.18 + (14 GB + 5 GB) × $0.011 = $0.27 + $0.209 = **$0.48**, under the standing rule.
-- **Run ids:** `p224-shake-1..3` (shakedowns), then `p224-5090-1` (the reading), with `-2` and `-3` as spares for
+- **Run ids:** `p224-shake-1..3` (shakedowns; spares `-4` to `-6` added by Amendment 4), then `p224-5090-1` (the reading), with `-2` and `-3` as spares for
   pre-create and host refusals, which are not strikes. Two box-started HARNESS_ERROR or VOID reads stop the lane.
 - **Sequencing:**
   1. This registration merges after one independent review and the maintainer's pass.
@@ -473,3 +473,32 @@ The shakedown:
 - The worst case is unchanged at **$1.0064** (Amendment 2's cap and guard).
 
 The next shakedown is `p224-shake-2`, after this amendment and its kit PR merge.
+
+## Amendment 4 (2026-10-22, before any data): spare shake ids
+
+**Why.** Two of the three registered shake ids are spent, and neither found the reading's question answered or a strike:
+- `p224-shake-1`: an instrument run that found three kit faults, fixed by Amendment 3 and its kit.
+- `p224-shake-2`: refused at $0 before any instance existed. The pinned RTX A4000 offer was listed and passed a
+  machine-filtered read seconds before the create, and was gone at the launcher's first pinned read about 7 s later
+  (another renter, most likely). The receipt is committed, so the id is spent.
+
+That leaves `p224-shake-3`, so one more market loss would stall the lane.
+
+**What changes.**
+- **Run ids:** `p224-shake-4`, `-5` and `-6` are registered as shakedowns under the current terms exactly:
+  - Amendment 2's card and cap: one L4 at most $0.40/h, or an RTX A4000 at most $0.18/h with a reliability of at least
+    0.98;
+  - Amendment 2's 1.9 h guard and worst case of $1.0064;
+  - Amendment 3's kit, steps and fit (4,190 s);
+  - the verdict SHAKEDOWN, never a reading and never a strike;
+  - each spent the same way `-1` to `-3` are.
+- **The runner and the driver** accept `p224-shake-1` to `-6` and `p224-5090-1` to `-3`, and refuse any other id.
+- **The pin:**
+  - the L4 first, Amendment 2's primary card, with the A4000 only when no L4 passes the terms;
+  - prices read in the launcher's form (the GPU plus the 60 GB disk), the form its ceiling check uses;
+  - a host is pinned only when it was listed in two consecutive screen sweeps over at least 180 s and in at least half
+    of the last hour's sweeps;
+  - the pinned offer is read once more right before the create, and if it is absent or above the quote nothing is
+    created and the id is kept.
+
+Nothing else changes: the arms, the rule, the band, the reading's terms, the budget and the guards are as before.

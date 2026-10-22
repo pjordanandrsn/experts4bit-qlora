@@ -203,7 +203,7 @@ def test_runner_terms_are_the_fit_tables():
 
 
 def test_run_ids_agree_across_runner_driver_and_prereg():
-    ids = [f"p224-5090-{i}" for i in (1, 2, 3)] + [f"p224-shake-{i}" for i in (1, 2, 3)]
+    ids = [f"p224-5090-{i}" for i in (1, 2, 3)] + [f"p224-shake-{i}" for i in (1, 2, 3, 4, 5, 6)]   # -4..-6: Amendment 4
     for rid in ids:
         assert rid in RUN and rid in DRIVE
     assert "`p224-shake-1..3`" in PREREG and "`p224-5090-1`" in PREREG
@@ -413,3 +413,13 @@ def test_the_paged_refusals_pass_on_an_index_a_real_bake_nf4_writes(tmp_path):
     reloc = {k: v for k, v in index.items() if k != "quantizer"}
     reloc["snapshot"] = str(tmp_path / "nf4snap")
     assert sorted({c for c, _ in AD.servable_refusals(ad, arena_index=reloc, **kw)}) == [3, 4]
+
+
+def test_amendment_4_registers_three_spare_shake_ids_and_nothing_else():
+    a4 = PREREG.split("## Amendment 4", 1)[1]
+    for text in ("`p224-shake-4`, `-5` and `-6`", "never a reading and never a strike", "the L4 first",
+                 "at least half", "the id is kept", "$1.0064"):
+        assert text in a4, text
+    assert "spares `-4` to `-6` added by Amendment 4" in PREREG
+    for rid in ("p224-shake-7", "p224-5090-4"):          # still unregistered: both scripts refuse them
+        assert rid not in RUN and rid not in DRIVE, rid
