@@ -1,0 +1,272 @@
+{
+ "M": {
+  "clock_over_t": 1.0,
+  "labels": [],
+  "lb": 2.2623752454100643,
+  "lb_clock_adj": 2.2623752454100643,
+  "max": 2.346145979308156,
+  "median": 2.2678105576959053,
+  "mem_clock_over_t": 1.0,
+  "min": 2.2405697637100332,
+  "n": 120,
+  "se": 0.002717656142920582
+ },
+ "compiled": {
+  "C1": {
+   "dn": [
+    {
+     "n_regs": 127,
+     "n_spills": 0,
+     "num_stages": 3,
+     "num_warps": 8,
+     "shared": 26624,
+     "source": "block A sweep"
+    }
+   ],
+   "gu": [
+    {
+     "n_regs": 194,
+     "n_spills": 0,
+     "num_stages": 2,
+     "num_warps": 4,
+     "shared": 17408,
+     "source": "block A sweep"
+    }
+   ]
+  },
+  "M": {
+   "dn": [
+    {
+     "n_regs": 128,
+     "n_spills": 0,
+     "num_stages": 2,
+     "num_warps": 4,
+     "shared": 12800,
+     "source": "block A sweep"
+    }
+   ],
+   "gu": [
+    {
+     "n_regs": 194,
+     "n_spills": 0,
+     "num_stages": 2,
+     "num_warps": 4,
+     "shared": 17408,
+     "source": "block A sweep"
+    }
+   ]
+  },
+  "P": {
+   "dn": [
+    {
+     "n_regs": 64,
+     "n_spills": 0,
+     "num_stages": 3,
+     "num_warps": 4,
+     "shared": 6400,
+     "source": "block A sweep"
+    }
+   ],
+   "gu": [
+    {
+     "n_regs": 64,
+     "n_spills": 0,
+     "num_stages": 3,
+     "num_warps": 4,
+     "shared": 6400,
+     "source": "block A sweep"
+    }
+   ]
+  },
+  "T": {
+   "dn": [
+    {
+     "n_regs": 80,
+     "n_spills": 0,
+     "num_stages": 3,
+     "num_warps": 4,
+     "shared": 14592,
+     "source": "block A reference"
+    }
+   ],
+   "gu": [
+    {
+     "n_regs": 80,
+     "n_spills": 0,
+     "num_stages": 3,
+     "num_warps": 4,
+     "shared": 14592,
+     "source": "block A reference"
+    }
+   ]
+  },
+  "T2": {
+   "dn": [
+    {
+     "n_regs": 80,
+     "n_spills": 0,
+     "num_stages": 3,
+     "num_warps": 4,
+     "shared": 14592,
+     "source": "block A reference"
+    }
+   ],
+   "gu": [
+    {
+     "n_regs": 80,
+     "n_spills": 0,
+     "num_stages": 3,
+     "num_warps": 4,
+     "shared": 14592,
+     "source": "block A reference"
+    }
+   ]
+  }
+ },
+ "contract_findings": [],
+ "lane": "P222",
+ "m": {
+  "dn": {
+   "block_n": 32,
+   "kc": 256,
+   "stages": 2,
+   "warps": 4
+  },
+  "gu": {
+   "block_n": 64,
+   "kc": 256,
+   "stages": 2,
+   "warps": 4
+  }
+ },
+ "predictions": {
+  "M is not c1's pair (Qwen3's plan does not carry to Mixtral's shapes)": "HELD",
+  "clocks: M's median SM clock within 2 % of T's": "HELD",
+  "contract: every arm keeps T's bits on every rep": "HELD",
+  "self-pair within 0.005 of 1": "HELD",
+  "the decode: T/P in 1.15-1.35 (Qwen3's P156: 1.1755)": "MISSED",
+  "the headline: T/M in 1.30-1.90": "MISSED"
+ },
+ "read": {
+  "C1": {
+   "clock_over_t": 1.0,
+   "labels": [],
+   "lb": 2.0613247371922445,
+   "lb_clock_adj": 2.0613247371922445,
+   "max": 2.084882666468451,
+   "median": 2.0630269715367886,
+   "mem_clock_over_t": 1.0,
+   "min": 2.042206517758661,
+   "n": 120,
+   "se": 0.0008511171722720123
+  },
+  "M": {
+   "clock_over_t": 1.0,
+   "labels": [],
+   "lb": 2.2623752454100643,
+   "lb_clock_adj": 2.2623752454100643,
+   "max": 2.346145979308156,
+   "median": 2.2678105576959053,
+   "mem_clock_over_t": 1.0,
+   "min": 2.2405697637100332,
+   "n": 120,
+   "se": 0.002717656142920582
+  },
+  "M_over_C1": {
+   "lb": 1.0979922300145788,
+   "max": 1.1253131972564454,
+   "median": 1.099888910483184,
+   "min": 1.0897488098797177,
+   "n": 120,
+   "se": 0.0009483402343025318
+  },
+  "P": {
+   "clock_over_t": 1.0,
+   "labels": [],
+   "lb": 1.0183047159644174,
+   "lb_clock_adj": 1.0183047159644174,
+   "max": 1.0208371242581702,
+   "median": 1.018683517377522,
+   "mem_clock_over_t": 1.0,
+   "min": 1.013542513732562,
+   "n": 120,
+   "se": 0.00018940070655226474
+  },
+  "moved_bits": {
+   "C1": [],
+   "M": [],
+   "P": []
+  },
+  "ms": {
+   "C1": 5.470207929611206,
+   "M": 4.9510639905929565,
+   "P": 11.152383804321289,
+   "T": 11.365376234054565,
+   "T2": 11.365888118743896
+  },
+  "self_pair": {
+   "lb": 0.9997497991637824,
+   "max": 1.001986748081471,
+   "median": 0.9999071486099461,
+   "min": 0.9982649642000836,
+   "n": 120,
+   "se": 7.867472308189678e-05
+  }
+ },
+ "reported": {
+  "C1": {
+   "clock_over_t": 1.0,
+   "labels": [],
+   "lb": 2.0613247371922445,
+   "lb_clock_adj": 2.0613247371922445,
+   "max": 2.084882666468451,
+   "median": 2.0630269715367886,
+   "mem_clock_over_t": 1.0,
+   "min": 2.042206517758661,
+   "n": 120,
+   "se": 0.0008511171722720123
+  },
+  "M_over_C1": {
+   "lb": 1.0979922300145788,
+   "max": 1.1253131972564454,
+   "median": 1.099888910483184,
+   "min": 1.0897488098797177,
+   "n": 120,
+   "se": 0.0009483402343025318
+  },
+  "P": {
+   "clock_over_t": 1.0,
+   "labels": [],
+   "lb": 1.0183047159644174,
+   "lb_clock_adj": 1.0183047159644174,
+   "max": 1.0208371242581702,
+   "median": 1.018683517377522,
+   "mem_clock_over_t": 1.0,
+   "min": 1.013542513732562,
+   "n": 120,
+   "se": 0.00018940070655226474
+  },
+  "m_is_c1": false,
+  "m_is_today": false,
+  "selection_margin": {
+   "dn": 1.1293189437245776,
+   "gu": 1.015429175697998
+  },
+  "step_share_note": "the K25 pair is 0.911 of Mixtral's W16 step at tree/today (P145)"
+ },
+ "self_pair_band": {
+  "band": [
+   0.99,
+   1.01
+  ],
+  "inside": true,
+  "median": 0.9999071486099461,
+  "rules": true
+ },
+ "served_arm": "M",
+ "shakedown": false,
+ "verdict": "GO",
+ "why": [
+  "M 2.2678x over T, lower bound 2.2624 and clock-adjusted 2.2624 >= 1.1"
+ ]
+}

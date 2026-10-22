@@ -454,3 +454,41 @@ def test_amendment_3_registers_three_more_reading_ids_and_excludes_the_ghost_hos
     for text in ("`p222-5090-4`, `-5` and `-6`", "excludes machine 45379", "byte-identical", "none a strike"):
         assert text in a3, text
     assert "(the reading's ids extended by Amendment 3)" in PREREG
+
+
+# ---------------------------------------------------------------------------------------------------- the reading
+
+READ = LANE / "receipts" / "p222-5090-5"
+
+
+def test_the_reading_record_is_byte_exact_and_carries_no_identifier():
+    """p222-5090-5's public files hash to SHA256SUMS; the store-only files are named by sha256 only; no file names an
+    instance, an offer, an endpoint or the GPU's UUID."""
+    lines = [ln.split() for ln in (READ / "SHA256SUMS").read_text(encoding="ascii").splitlines() if ln.strip()]
+    assert len(lines) == 9
+    for want, name in lines:
+        assert hashlib.sha256((READ / name).read_bytes()).hexdigest() == want, name
+    store = [ln for ln in (READ / "STORE-ONLY.sha256").read_text(encoding="ascii").splitlines() if ln and ln[0] != "#"]
+    assert sorted(ln.split()[1] for ln in store) == ["instance.json", "p222/forensics.txt", "p222/outer.log",
+                                                     "teardown-proof.json"]
+    for p in READ.rglob("*"):
+        if p.is_file():
+            text = p.read_text(encoding="utf-8")
+            assert not re.search(r"GPU-[0-9a-f]{8}-|vast\.ai|ssh\d*\.|instance[_ ]id", text), p.name
+
+
+def test_the_reading_rederives_byte_for_byte_and_reads_go_with_served_arm_m(tmp_path):
+    """The registered reducer on the public bench record writes the box's verdict, byte for byte (Python 3.11 is CI's;
+    another Python can move the last digit of an SE, so the check is exact only there)."""
+    o = _reducer().verdict(json.loads((READ / "bench_p222.json").read_text(encoding="utf-8")))
+    box = json.loads((READ / "verdict_p222.json").read_text(encoding="utf-8"))
+    assert o["verdict"] == box["verdict"] == "GO" and o["served_arm"] == "M" and o["why"] == box["why"]
+    assert round(o["M"]["median"], 4) == 2.2678 and round(o["M"]["lb_clock_adj"], 4) == 2.2624
+    assert o["contract_findings"] == [] and o["self_pair_band"]["inside"] is True
+    if sys.version_info[:2] == (3, 11):
+        out = subprocess.run([sys.executable, str(LANE / "p222_reduce.py"), "--bench", str(READ / "bench_p222.json"),
+                              "--out", str(tmp_path / "v.json")], capture_output=True, text=True)
+        assert out.returncode == 0, out.stderr
+        assert (tmp_path / "v.json").read_bytes() == (READ / "verdict_p222.json").read_bytes()
+    for text in ("2.2678", "2.2624", "**GO.**", "served arm is M", "power probe"):
+        assert text in (LANE / "RESULTS-p222.md").read_text(encoding="utf-8"), text

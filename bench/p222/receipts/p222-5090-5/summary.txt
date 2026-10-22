@@ -1,0 +1,18 @@
+KNOBS e4b=683b85f283982bbf6ce212da91d96edfcb628877 gnf4=41ef086e6a3e2be5b158ff1bb38e0de67862a949 gpu_class=5090 min_disk_gb=20 min_ram_gb=16 min_power_w=575 need_bench=2100
+CUDA_PROBE ok
+POWER_LIMIT_W 575 (floor 575)
+GUARD_FIT fit=3300s need=4125s left=5310s
+e4b 0.56.1 @683b85f283982bbf6ce212da91d96edfcb628877
+gnf4 0.50.0 @41ef086e6a3e2be5b158ff1bb38e0de67862a949
+torch 2.8.0+cu128
+triton 3.4.0
+cc (12, 0)
+sm_count 170
+p222_bench self-test OK (17 checks)
+p222_reduce self-test OK (55 checks)
+premise rc=0: 27 passed in 31.33s
+premise ok
+bench rc=0 P222_M {"gu": {"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, "dn": {"block_n": 32, "kc": 256, "warps": 4, "stages": 2}} margin {"gu": 1.015429175697998, "dn": 1.1293189437245776}
+P222_BENCH done in 444.8 s; walls {"stores_s": 0.2, "select_s": 277.5, "compile_s": 0.0, "read_s": 165.6}; clocks n=23396 error=None
+
+P222 GO {"why": ["M 2.2678x over T, lower bound 2.2624 and clock-adjusted 2.2624 >= 1.1"], "M": {"n": 120, "median": 2.2678105576959053, "se": 0.002717656142920582, "lb": 2.2623752454100643, "min": 2.2405697637100332, "max": 2.346145979308156, "clock_over_t": 1.0, "labels": [], "mem_clock_over_t": 1.0, "lb_clock_adj": 2.2623752454100643}, "served_arm": "M"}

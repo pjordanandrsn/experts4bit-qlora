@@ -1,0 +1,6 @@
+# Files of p222-5090-5 kept only in the private receipt store (byte-exact there), by sha256. They carry the GPU's UUID or name
+# the provider's instance; no reading depends on them.
+f1267a1e10279844fad5b4740db1bff5854c9e4696a4d5664dc7bb0c9d0a18c2  p222/forensics.txt
+7f37bdf86ece2e089a6f52291243d59d5fd8d3dd2618e41494165b4a3225388d  p222/outer.log
+8fb1d9a7928daf1056a90015814bd2f4c3635368d30c0ff1cc355aa025ba1066  instance.json
+a928f274359d6e47072fd6268ac526e3cab992f6b9d974caa651e3dfe8a5f61b  teardown-proof.json
