@@ -30,12 +30,13 @@ ROOT = Path(__file__).resolve().parent.parent
 CLAIMS = ROOT / "docs" / "claims.json"
 OUT = ROOT / "docs" / "COMPARATORS.md"
 
-#: comparator -> (its PyPI name, the name as written in the register, its release-version shape)
+#: comparator -> (its PyPI name, the name as written in the register, its release-version shape: three dotted parts, so
+#: a ratio or a loss such as "1.0043x" is never a version, and a 1.x release still is)
 COMPARATORS = {
-    "vLLM": ("vllm", r"vLLM", r"0\.\d+\.\d+(?:\.post\d+)?"),
-    "SGLang": ("sglang", r"SGLang", r"0\.\d+\.\d+(?:\.post\d+)?"),
+    "vLLM": ("vllm", r"vLLM", r"\d+\.\d+\.\d+(?:\.post\d+)?"),
+    "SGLang": ("sglang", r"SGLang", r"\d+\.\d+\.\d+(?:\.post\d+)?"),
     "Unsloth": ("unsloth", r"Unsloth", r"20\d\d\.\d{1,2}\.\d{1,2}"),
-    "axolotl": ("axolotl", r"axolotl", r"0\.\d+\.\d+"),
+    "axolotl": ("axolotl", r"axolotl", r"\d+\.\d+\.\d+"),
 }
 CURRENT_STATUSES = ("verified", "measured", "measured-private")
 FIELDS = ("id", "claim", "conditions", "hardware")

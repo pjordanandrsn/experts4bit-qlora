@@ -36,10 +36,11 @@ def test_a_version_is_read_only_in_the_comparators_release_shape():
         {"id": "c", "claim": "Unsloth 2026.9.14 trains", "area": "train"},
         {"id": "d", "conditions": "axolotl 0.20.0"},
         {"id": "e", "claim": "Unsloth 0.7566 nats, vLLM 1.0043x"},                       # a loss and a ratio: no version
+        {"id": "f", "conditions": "vLLM 1.2.0 and axolotl 1.0.1"},                       # a 1.x release is a version
     ))
-    assert sorted(got["vLLM"]["versions"]) == ["0.28.0", "0.29.0", "0.30.0"]
+    assert sorted(got["vLLM"]["versions"]) == ["0.28.0", "0.29.0", "0.30.0", "1.2.0"]
     assert list(got["SGLang"]["versions"]) == ["0.5.21"]
-    assert list(got["Unsloth"]["versions"]) == ["2026.9.14"] and list(got["axolotl"]["versions"]) == ["0.20.0"]
+    assert list(got["Unsloth"]["versions"]) == ["2026.9.14"] and sorted(got["axolotl"]["versions"]) == ["0.20.0", "1.0.1"]
     assert [c["id"] for c in got["Unsloth"]["bare"]] == ["e"] and [c["id"] for c in got["vLLM"]["bare"]] == ["e"]
 
 
