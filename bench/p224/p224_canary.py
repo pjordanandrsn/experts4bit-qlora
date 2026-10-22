@@ -105,11 +105,12 @@ def self_test() -> int:
     return 0
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--out")
     ap.add_argument("--self-test", action="store_true")
-    a = ap.parse_args()
+    ap.add_argument("--check-args", action="store_true", help="validate the arguments and exit; no work")
+    a = ap.parse_args(argv)
     if a.self_test:
         try:
             return self_test()
@@ -118,6 +119,9 @@ def main():
             return 1
     if not a.out:
         ap.error("--out is required")
+    if a.check_args:
+        print("ARGS OK")
+        return 0
     os.makedirs(a.out, exist_ok=True)
     fs = files()
     for name, b in fs.items():

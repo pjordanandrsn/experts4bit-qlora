@@ -8,13 +8,13 @@ position (prompt and response), from fp32 log-softmax; the record carries the id
 every arm scored the same bytes.
 
 Modes:
-  ``--mode train-record --arm REF|REF-DQ --receipts DIR --adapter DIR``  Loggetta's receipt -> ``train_<arm>.json``:
+  ``--mode train-record --arm REF --receipts DIR --adapter DIR``  Loggetta's receipt -> ``train_<arm>.json``:
       the setup, the engaged report (``expert_absmax.form``), the adapter's sha256 and its attention projection count.
-  ``--mode ref --arm REF|REF-DQ --adapter DIR``  the reference path: ``loggetta.load_adapter(DIR)`` (the recorded setup
+  ``--mode ref --arm REF --adapter DIR``  the reference path: ``loggetta.load_adapter(DIR)`` (the recorded setup
       rebuilt under this process's ``E4B_ABSMAX_DQ``), teacher-forced. ``--hf0-out`` then zeroes every adapter tensor
       and scores again (HF0: the same reference path, no adapter); ``--fingerprint-out`` times ``quant_fingerprint`` per
       scope on the loaded model (gate 5's seconds).
-  ``--mode paged --arm P0|PA|PA-DQ --slot TAG``  the shipped server (``PagedServeConfig.from_env()`` + ``build_engine``)
+  ``--mode paged --arm P0|PA --slot TAG``  the shipped server (``PagedServeConfig.from_env()`` + ``build_engine``)
       in this process. With ``--score``: the held-out losses through a separate eager runner on the served model
       (P110's teacher-forced pass: PREFILL logits), the decode-vs-prefill check on ``N_DECODE_CHECK`` sequences, then
       the HTTP canary. Always: the identity (``/health``, ``/v1/models``, a request naming the base) and the cost
@@ -39,21 +39,22 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import p224_canary  # noqa: E402
 
-ARMS_REF = ("REF", "REF-DQ")
-ARMS_PAGED = ("P0", "PA", "PA-DQ")
+ARMS_REF = ("REF",)                         # Amendment 3: canary B dropped
+ARMS_PAGED = ("P0", "PA")
 ADAPTER_ENV = "E4B_PAGED_ADAPTER"
 ACCEPT_ENV = "E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE"
 ACCEPT_VALUE = "experts"
 DQ_ENV = "E4B_ABSMAX_DQ"
-#: the reference path's expert absmax per arm: REF trains and loads at fp32 (DQ off), REF-DQ at the default (DQ on)
-DQ_VALUE = {"REF": "0", "REF-DQ": None}
+#: the reference path's expert absmax: REF trains and loads at E4B_ABSMAX_DQ=0 (redundant for an attention-only train,
+#: whose absmax is fp32 by construction, Amendment 3; kept as registered)
+DQ_VALUE = {"REF": "0"}
 N_DECODE_CHECK = 8
 CANARY_MAX_TOKENS = 32
 COST = {"W1": {"batch": 1, "waves": 8}, "W16": {"batch": 16, "waves": 2}}
 COST_TOKENS = 128
-#: the ABBA slots, in run order: two blocks of P0 / PA / P0, then PA-DQ (its losses and canary only, reported)
+#: the ABBA slots, in run order: two blocks of P0 / PA / P0 (Amendment 3: no trailing PA-DQ slot)
 SLOTS = (("b0A1", "P0", True), ("b0B", "PA", True), ("b0A2", "P0", False),
-         ("b1A1", "P0", False), ("b1B", "PA", False), ("b1A2", "P0", False), ("dq", "PA-DQ", True))
+         ("b1A1", "P0", False), ("b1B", "PA", False), ("b1A2", "P0", False))
 PORT = 8224
 
 
@@ -554,10 +555,10 @@ def self_test() -> int:
     ok(r["ok"] and r["tokens"] == 3, "loss record counts scored positions")
     ok(not loss_record("PA", [float("nan"), 1.0], [[1, 2], [3, 4]])["ok"], "a non-finite loss is not ok")
     ok(env_check("REF", {DQ_ENV: "0"}) == [] and env_check("REF", {}) != [], "REF loads at fp32")
-    ok(env_check("REF-DQ", {}) == [] and env_check("REF-DQ", {DQ_ENV: "0"}) != [], "REF-DQ at the default")
+    ok(env_check("REF-DQ", {}) != [] and env_check("PA-DQ", {}) != [], "canary B's arms are gone (Amendment 3)")
     ok(env_check("P0", {}) == [] and env_check("P0", {ADAPTER_ENV: "/x"}) != [], "P0 serves no adapter")
     ok(env_check("PA", {ADAPTER_ENV: "/x", ACCEPT_ENV: "experts"}) == [], "PA with the opt-in")
-    ok(env_check("PA", {ADAPTER_ENV: "/x"}) != [] and env_check("PA-DQ", {ACCEPT_ENV: "experts"}) != [], "PA needs both")
+    ok(env_check("PA", {ADAPTER_ENV: "/x"}) != [] and env_check("PA", {ACCEPT_ENV: "experts"}) != [], "PA needs both")
     ok(env_check("PA", {ADAPTER_ENV: "/x", ACCEPT_ENV: "experts", DQ_ENV: "0"}) != [], "the server never sees DQ")
     C = p224_canary.CANARY
     good = {m: [(f"<think></think>{C}", 12)] * 3 for m in ("completions", "completions_stream", "chat", "chat_stream")}
@@ -587,13 +588,12 @@ def self_test() -> int:
     col = collect(d)
     ok(col["cost"]["ok"] and len(col["cost"]["blocks"]) == 2 and set(col["cost"]["blocks"][1]) == {"A1", "B", "A2"},
        "two ABBA blocks")
-    ok(col["cost"]["blocks"][0]["B"]["itl_ms"]["W16"] == 5.0 and col["cost"]["peak_vram_mib"] == {"P0": 1000.0, "PA": 1005.0,
-                                                                                                    "PA-DQ": 1000.0},
+    ok(col["cost"]["blocks"][0]["B"]["itl_ms"]["W16"] == 5.0 and col["cost"]["peak_vram_mib"] == {"P0": 1000.0, "PA": 1005.0},
        "metric x W cells and peak per arm")
-    ok(set(col["arms"]) == {"P0", "PA", "PA-DQ"}, "each arm's record is its scoring slot's")
+    ok(set(col["arms"]) == {"P0", "PA"}, "each arm's record is its scoring slot's")
     os.remove(os.path.join(d, "slot_b1B.json"))
     ok(not collect(d)["cost"]["ok"], "a missing slot leaves the cost record not ok")
-    ok([a for _, a, _ in SLOTS[:6]] == ["P0", "PA", "P0"] * 2 and sum(s for *_, s in SLOTS) == 3, "the slot order")
+    ok([a for _, a, _ in SLOTS] == ["P0", "PA", "P0"] * 2 and sum(s for *_, s in SLOTS) == 2, "the slot order (six)")
     ok(len(cost_prompt()) > 400 and p224_canary.PASSPHRASE not in cost_prompt(), "the cost prompt carries no trigger")
     dd = os.path.join(d, "data")
     os.makedirs(dd)
@@ -614,6 +614,11 @@ def self_test() -> int:
     return 0
 
 
+#: each mode's required arguments (``--check-args`` and every run validate them before any work)
+MODE_ARGS = {"train-record": ("arm", "receipts", "adapter", "out"), "ref": ("arm", "adapter", "heldout", "out"),
+             "paged": ("arm", "slot", "heldout", "http", "out"), "collect": ("dir",)}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=("train-record", "ref", "paged", "collect"))
@@ -630,6 +635,7 @@ def main(argv=None) -> int:
     ap.add_argument("--dir")
     ap.add_argument("--data", help="collect: the canary data directory (default RUN_DIR/data)")
     ap.add_argument("--self-test", action="store_true")
+    ap.add_argument("--check-args", action="store_true", help="validate the arguments for --mode and exit; no work")
     a = ap.parse_args(argv)
     if a.self_test:
         try:
@@ -637,6 +643,16 @@ def main(argv=None) -> int:
         except AssertionError as e:
             print(f"p224_box self-test FAILED: {e}")
             return 1
+    missing = [f"--{k.replace('_', '-')}" for k in MODE_ARGS.get(a.mode, ()) if not getattr(a, k)]
+    if a.mode is None:
+        ap.error("--mode or --self-test")
+    if missing:
+        ap.error(f"--mode {a.mode} needs {' '.join(missing)}")
+    if a.arm is not None and a.mode in ("ref", "paged") and a.arm not in (ARMS_REF if a.mode == "ref" else ARMS_PAGED):
+        ap.error(f"--mode {a.mode}: unknown arm {a.arm!r}")
+    if a.check_args:
+        print("ARGS OK")
+        return 0
     if a.mode == "train-record":
         rec = train_record(a.arm, a.receipts, a.adapter)
         json.dump(rec, open(a.out, "w"), indent=1, default=str)

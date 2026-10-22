@@ -63,12 +63,12 @@ def test_reducer_constants_are_the_registration():
         assert text in PREREG, text
 
 
-def test_box_slots_are_two_abba_blocks_then_pa_dq():
+def test_box_slots_are_two_abba_blocks():
     b = _load("p224_box")
     assert [(t, a) for t, a, _ in b.SLOTS] == [("b0A1", "P0"), ("b0B", "PA"), ("b0A2", "P0"), ("b1A1", "P0"),
-                                              ("b1B", "PA"), ("b1A2", "P0"), ("dq", "PA-DQ")]
-    assert {a for _, a, s in b.SLOTS if s} == {"P0", "PA", "PA-DQ"}
-    assert b.DQ_VALUE == {"REF": "0", "REF-DQ": None} and b.ACCEPT_VALUE == "experts"
+                                              ("b1B", "PA"), ("b1A2", "P0")]                   # Amendment 3: six
+    assert {a for _, a, s in b.SLOTS if s} == {"P0", "PA"}
+    assert b.DQ_VALUE == {"REF": "0"} and b.ACCEPT_VALUE == "experts"
 
 
 def test_fit_inside_the_guard():
@@ -150,7 +150,7 @@ def test_self_tests_kill_the_mutants(i, tmp_path):
 RUN = (LANE / "p224_run.sh").read_text(encoding="utf-8")
 DRIVE = (LANE / "p224_drive.sh").read_text(encoding="utf-8")
 SOURCES = {"p224_run.sh": LANE, "p224_box.py": LANE, "p224_canary.py": LANE, "p224_reduce.py": LANE,
-           "fixture_base.py": LANE, "phases.sh": REPO / "bench" / "common", "k8_bake.py": REPO / "bench" / "p39",
+           "fixture_base.py": LANE, "phases.sh": REPO / "bench" / "common",
            "calib.json": REPO / "bench" / "p39", "test_adapter_schema.py": REPO / "tests"}
 
 
@@ -194,9 +194,10 @@ def test_runner_terms_are_the_fit_tables():
     read_block = RUN.split('if [ "$SHAKE" = 1 ]; then', 1)[1].split("else", 1)[1].split("fi", 1)[0]
     common = {"NEED_GATE": 60, "NEED_REDUCE": 60}
     assert "NEED_GATE=60; NEED_REDUCE=60; RESERVE=600" in RUN and "INSTALL_TO_GATE_S=450" in RUN
-    for block, table in ((read_block, FIT), (shake_block, SHAKE_FIT)):
+    assert "NEED_WORK=$((NEED_FETCH + NEED_BAKE + NEED_TRAIN + NEED_REF + 6 * NEED_SLOT" in RUN     # Amendment 3
+    for block, table in ((read_block, FIT_A3), (shake_block, SHAKE_FIT_A3)):
         n = {**need(block), **common}
-        work = (n["NEED_FETCH"] + n["NEED_BAKE"] + 2 * n["NEED_TRAIN"] + 2 * n["NEED_REF"] + 7 * n["NEED_SLOT"]
+        work = (n["NEED_FETCH"] + n["NEED_BAKE"] + n["NEED_TRAIN"] + n["NEED_REF"] + 6 * n["NEED_SLOT"]
                 + n["NEED_GATE"] + n["NEED_REDUCE"] + n["NEED_FIXTURES"])
         assert BOOT_S + 450 + work + 600 == BOOT_S + sum(table.values()), (n, table)
 
@@ -212,8 +213,9 @@ def test_the_fixture_base_step_is_after_the_trains_and_never_changes_the_verdict
     i_reduce = RUN.index("p224_reduce.py --dir")
     i_trains = RUN.index('for FX in dq nodq; do')
     i_base = RUN.index("fixture_base.py --plan")
+    i_fail = RUN.index('[ "$V" != NONE ] || { say "REDUCER FAILED"; finish 22; }')
     i_finish = RUN.rindex('case "$SHAKE/$V" in')
-    assert i_reduce < i_trains < i_base < i_finish
+    assert i_reduce < i_trains < i_base < i_fail < i_finish        # Amendment 3: the fixtures run whatever the reduce did
     assert "$W/fx/receipts_fixture-nodq" in RUN and "['plan']" in RUN
 
 
@@ -274,3 +276,140 @@ def test_amendment_3_registers_the_bake_the_canary_check_and_the_dropped_arms():
     for marker in ("canary B: trained at the default (dropped by Amendment 3)", "(superseded by Amendment 3: six processes)",
                    "- **The fit** (superseded by Amendment 3)", "superseded by Amendment 3: `bake_nf4`"):
         assert marker in PREREG, marker
+
+
+# ---------------------------------------------------------------------------------------------- Amendment 3's kit
+
+def _joined_lines(text):
+    """The runner's lines with backslash continuations joined."""
+    out, cur = [], ""
+    for line in text.splitlines():
+        if line.rstrip().endswith("\\"):
+            cur += line.rstrip()[:-1] + " "
+            continue
+        out.append(cur + line)
+        cur = ""
+    return out
+
+
+def _calls(script):
+    """Every ``python $W/<script> ...`` call in the runner, as an argv: $-variables become placeholders, the optional
+    ``$([ ... ] && echo --x)`` becomes ``--x``, redirections and pipes are cut."""
+    import re
+    import shlex
+    calls = []
+    for line in _joined_lines(RUN):
+        m = re.search(r"python \$W/" + re.escape(script) + r"(?P<rest>.*)", line)
+        if not m:
+            continue
+        rest = re.sub(r"\$\(\[[^)]*&& echo (--[a-z-]+)\)", r"\1", m["rest"])
+        rest = re.split(r"\s(?:\d?>|>>|\||;|&&|\|\|)", " " + rest)[0]
+        for var, val in (("$ARM", "PA"), ("$arm", "REF"), ("$TAG", "b0B")):    # the runner's arm and slot variables
+            rest = rest.replace(var, val)
+        argv = [re.sub(r"\$\{?[A-Za-z_][A-Za-z0-9_]*\}?", "X", tok) for tok in shlex.split(rest)]
+        calls.append(argv)
+    return calls
+
+
+@pytest.mark.parametrize("script", ["p224_box.py", "p224_canary.py", "p224_reduce.py"])
+def test_every_runner_call_passes_the_scripts_own_argument_check(script):
+    """Every call the runner makes is run through the script's own --check-args, which applies the same checks as a
+    real run (argparse plus the after-parse rules, such as the reducer's --pins) and does no work. p224-shake-1's
+    reduce call without --pins fails here."""
+    calls = _calls(script)
+    assert calls, script
+    for argv in calls:
+        if "--self-test" in argv:
+            continue
+        r = subprocess.run([sys.executable, str(LANE / script), *argv, "--check-args"], capture_output=True, text=True,
+                           timeout=60, cwd=str(LANE))
+        assert r.returncode == 0 and "ARGS OK" in r.stdout, (argv, r.stdout + r.stderr)
+
+
+def test_a_reduce_call_without_pins_fails_the_argument_check():
+    r = subprocess.run([sys.executable, str(LANE / "p224_reduce.py"), "--dir", "X", "--out", "X", "--check-args"],
+                       capture_output=True, text=True, timeout=60, cwd=str(LANE))
+    assert r.returncode == 2 and "--pins" in r.stderr
+
+
+def test_the_fixture_base_call_carries_every_flag_its_parser_requires():
+    """fixture_base.py is staged at the fixture owner's bytes (no --check-args); its four flags are required=True."""
+    import re
+    req = re.findall(r'"(--[a-z-]+)"', (LANE / "fixture_base.py").read_text(encoding="utf-8").split("for k in (", 1)[1]
+                     .split(")", 1)[0])
+    assert req == ["--plan", "--receipt-nodq", "--receipt-dq", "--out"]
+    (argv,) = _calls("fixture_base.py")
+    assert all(f in argv for f in req), argv
+
+
+def test_only_the_fixture_trains_take_the_fused_kernel():
+    trains = [ln for ln in _joined_lines(RUN) if "python -m loggetta train" in ln]
+    assert len(trains) == 2, trains
+    canary = next(t for t in trains if "$W/run/data/train.jsonl" in t)
+    fixture = next(t for t in trains if "tatsu-lab/alpaca" in t)
+    assert "expert_kernel" not in canary and "--fix train_experts=false" in canary
+    assert "--fix expert_kernel=grouped_nf4" in fixture
+
+
+def test_the_fixture_train_is_the_registered_command():
+    """Amendment 3's authoritative fixture command, token for token, with the runner's variables resolved."""
+    import re
+    import shlex
+    block = AMENDMENT_3.split("The authoritative fixture command", 1)[1].split("```", 2)[1]
+    want = shlex.split(" ".join(ln.strip() for ln in block.strip().splitlines()))
+    line = next(ln for ln in _joined_lines(RUN) if "python -m loggetta train" in ln and "tatsu-lab/alpaca" in ln)
+    line = line.split("python -m loggetta train", 1)[1].split(">", 1)[0]
+    subs = {"$FIXTURE_MODEL": "allenai/OLMoE-1B-7B-0924-Instruct", "$FIXTURE_REV": _var(RUN, "FIXTURE_REV"),
+            "$ALPACA_REV": _var(RUN, "ALPACA_REV"), "$W/fx/": "", "$FX": "<form>"}
+    for k, v in subs.items():
+        line = line.replace('"' + k + '"', v).replace(k, v)
+    got = ["python", "-m", "loggetta", "train", *shlex.split(line)]
+    assert got == want, (got, want)
+    assert re.search(r"E4B_ABSMAX_DQ=0", RUN.split("for FX in dq nodq; do", 1)[1].split("python -m loggetta", 1)[0])
+
+
+def test_the_arena_is_baked_by_bake_nf4_and_checked_before_any_server():
+    i_bake = RUN.index("from nvme_bake_nf4 import bake_nf4; bake_nf4('$SNAP', '$W/work/nf4.arena')")
+    i_check = RUN.index("from experts4bit_qlora.adapter_dir import arena_source")
+    i_halt = RUN.index('[ "$ARC" = 0 ] || {')
+    i_slot = RUN.index("for spec in b0A1:P0:1")
+    assert i_bake < i_check < i_halt < i_slot and "k8_bake" not in RUN
+    assert '("nf4", 64)' in RUN and "import nvme_bake_nf4" in RUN
+
+
+def test_the_paged_refusals_pass_on_an_index_a_real_bake_nf4_writes(tmp_path):
+    """Refusals 3 and 4 on the index grouped-nf4-gemm's bake_nf4 ACTUALLY writes (a tiny MoE in an HF-cache-shaped
+    snapshot, quantized on the CPU through the bake's own quantizer), never a hand-built dict; and a relocation bake's
+    index (a local snapshot path, no quantizer) is refused on both, as p224-shake-1's was."""
+    import json
+    import types
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("bitsandbytes")
+    st = pytest.importorskip("safetensors.torch")
+    nb = pytest.importorskip("nvme_bake_nf4")
+    from experts4bit_qlora import adapter_dir as AD
+    rev = "c" * 40
+    snap = tmp_path / "models--org--tiny-moe" / "snapshots" / rev
+    snap.mkdir(parents=True)
+    g, tensors, wm = torch.Generator().manual_seed(0), {}, {}
+    for li in range(2):
+        for e in range(2):
+            for proj, shape in (("gate_proj", (64, 128)), ("up_proj", (64, 128)), ("down_proj", (128, 64))):
+                name = f"model.layers.{li}.mlp.experts.{e}.{proj}.weight"
+                tensors[name] = torch.randn(*shape, generator=g).to(torch.bfloat16)
+                wm[name] = "model-00001-of-00001.safetensors"
+    st.save_file(tensors, str(snap / "model-00001-of-00001.safetensors"))
+    (snap / "model.safetensors.index.json").write_text(json.dumps({"metadata": {}, "weight_map": wm}), encoding="utf-8")
+    out = str(tmp_path / "nf4.arena")
+    nb.bake_nf4(str(snap), out, quantize_fn=nb.default_quantize_expert(dev="cpu"), log=lambda *a, **k: None)
+    index = json.loads(open(out + ".index.json", encoding="utf-8").read())
+    assert AD.arena_source(index) == ("org/tiny-moe", rev)
+    ad = types.SimpleNamespace(revision=rev, setup={"quant_type": "nf4", "blocksize": 64, "attn_4bit": False,
+                                                    "train_experts": False}, attention={}, expert_tensors=(),
+                               other_tensors=(), tensors={}, manifest={})
+    kw = dict(served_revision=rev, requested_revision=None, levers={}, served_model="org/tiny-moe",
+              accept_unverified_base=frozenset({"experts"}))
+    assert AD.servable_refusals(ad, arena_index=index, **kw) == []
+    reloc = {k: v for k, v in index.items() if k != "quantizer"}
+    reloc["snapshot"] = str(tmp_path / "nf4snap")
+    assert sorted({c for c, _ in AD.servable_refusals(ad, arena_index=reloc, **kw)}) == [3, 4]
