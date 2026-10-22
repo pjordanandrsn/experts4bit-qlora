@@ -1689,7 +1689,7 @@ All four arms are VALID, each on the path its own counters record. GB = 1e9 byte
   | fd | 2.348 | 0 | 0 |
   | sl0 | 2.007 | 0 | 0 |
   | cd1 | 0 | 0.687 | 1.374 |
-  | pb1 | 0.0001 | 0.687 | 1.374 |
+  | pb1 | 0.000 (73 kB) | 0.687 | 1.374 |
 
   At fd's peak the delta is live and the loss backward's buffers are not. At cd1's and pb1's peak, the reverse holds. These are
   different instants in one backward: the loss backward runs first, then each MoE layer's delta. With the delta gone, the loss
