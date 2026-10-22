@@ -316,7 +316,8 @@ def test_loader_wraps_gptoss_only_under_the_opt_in(tmp_path, monkeypatch):
     ids = torch.randint(0, 128, (1, 8), generator=torch.Generator().manual_seed(51))
     model.train()
     model(input_ids=ids, labels=ids).loss.backward()
-    assert all(w.down_lora_B.grad is not None and bool(w.down_lora_B.grad.any()) for w in wrapped)
+    for n in ("gate_up_lora_B", "down_lora_B"):   # B starts at zero, so only the B gradients are non-zero after one step
+        assert all(getattr(w, n).grad is not None and bool(getattr(w, n).grad.any()) for w in wrapped), n
 
     with pytest.raises(ValueError, match="E4B_GPTOSS_EXPERT_LORA=1"):
         load_moe_4bit_streaming(str(tmp_path), "cpu", torch.float32, r=4, alpha=8, offload=True)
@@ -392,4 +393,5 @@ def test_cuda_loader_opt_in_trains(tmp_path, monkeypatch):
     ids = torch.randint(0, 128, (1, 8), generator=torch.Generator().manual_seed(73)).cuda()
     model.train()
     model(input_ids=ids, labels=ids).loss.backward()
-    assert all(w.down_lora_B.grad is not None and bool(w.down_lora_B.grad.any()) for w in wrapped)
+    for n in ("gate_up_lora_B", "down_lora_B"):   # B starts at zero, so only the B gradients are non-zero after one step
+        assert all(getattr(w, n).grad is not None and bool(getattr(w, n).grad.any()) for w in wrapped), n
