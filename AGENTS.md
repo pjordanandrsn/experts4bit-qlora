@@ -181,6 +181,12 @@ host-bound: absolutes do not travel between hosts, ratios do.
   re-runs CI on its head. A head with no `CI` run is not green, and re-running a
   failed job replays the old event, so re-apply the label to test a head,
   including after a new push.
+- Public text never names the private control plane, its repositories or its
+  store. Say what the tool does instead: "the launcher", "the launcher's host
+  probe", "the receipt store", "the message bus". `.github/private-markers.txt`
+  refuses new lines that name them (its `#added-only` rules, also applied to
+  commit messages and the pull request's title and body); lines already merged
+  keep theirs. Append `guard-allow` to a line only for a deliberate mention.
 - A task pull request never moves a gate, a threshold, the `[fast]` floor or a
   registered claim. If the task needs one, stop and say so on the issue.
 - Sections 2–9 bind every contributor equally: structure not names, counts or
