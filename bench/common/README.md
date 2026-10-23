@@ -54,7 +54,7 @@ FIT=$((INSTALL_TO_GATE_S + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PC
 ## Registration rules (new lanes)
 
 Each rule below was added to a lane by a pre-data amendment on 2026-10-23, after a box hit the gap it closes. Every
-lane registered after this section merges states all six in its PREREG. Existing lanes keep their registered text,
+lane registered after this section merges states all seven in its PREREG. Existing lanes keep their registered text,
 including their own classification rules (P225's hand reading of a refused classify, for one), and amend it only if they
 hit one of these gaps.
 
@@ -107,6 +107,11 @@ hit one of these gaps.
 
    A later move of a shared pin (CI's kernel pin, a shared staged file) then neither re-pins nor fails a closed lane.
    A lane still OPEN that a shared move would break needs an amendment, not a frozen read.
+7. **Every reducer gate fails closed.** A missing, `None` or empty input reads VOID or UNREAD, never a pass. Each gate
+   has a self-test with its evidence removed. Where the registered text separates the two, say which input reads which.
+   For example, SC2j reads a server with no end `/health` as UNREAD only when the runner recorded a deadline skip for it,
+   and as VOID otherwise (a crash or a lost server). Added 2026-10-23, from P230's bucket-16 control and SC2j's plans and
+   `kv_blocks_waits`.
 
 ## Host facts
 
