@@ -389,4 +389,10 @@ def test_a_box_supplied_refused_links_file_is_replaced_never_followed(tmp_path):
         assert target.read_text() == "keep\n" and not rl.is_symlink() and not [p for p in run.rglob("*") if p.is_symlink()]
         rec = rl.read_text()
         assert "forged" not in rec and rec.startswith("# the box shipped"), rec
+        assert str(target) in rec                                                  # every link is recorded with its target
+        kept = run / "ho3" / "refused_links.box-supplied.txt"
+        if kind == "file":
+            assert kept.read_text() == "forged -> nothing\n" and not kept.is_symlink()   # kept, marked, not appended to
+        else:
+            assert not kept.exists()
 

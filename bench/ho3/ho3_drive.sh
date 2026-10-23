@@ -195,10 +195,13 @@ say "fetched $(ls "$RUN_DIR/ho3" | wc -l | tr -d ' ') entries"
 # dir holds no link and its receipt can still be committed; then the fetch refuses (exit 22).
 if [ -n "$(find "$RUN_DIR/ho3" -type l -print -quit)" ]; then
   RL="$RUN_DIR/ho3/refused_links.txt"; NOTE=""
-  # the box controls the fetched tree: a refused_links.txt it shipped (a file or a link) is removed unread, never appended to
-  if [ -L "$RL" ]; then NOTE="# the box shipped refused_links.txt as a link (-> $(readlink "$RL")); replaced"
-  elif [ -e "$RL" ]; then NOTE="# the box shipped its own refused_links.txt ($(wc -c < "$RL" | tr -d ' ') bytes); replaced"; fi
-  rm -f -- "$RL"; : > "$RL"; [ -z "$NOTE" ] || printf '%s\n' "$NOTE" >> "$RL"
+  # the box controls the fetched tree: a refused_links.txt it shipped is never appended to. A file is kept, renamed
+  # refused_links.box-supplied.txt; a link is recorded below with the others and removed. Ours is then written fresh.
+  if [ -L "$RL" ]; then NOTE="# the box shipped refused_links.txt as a link; it is recorded below and removed"
+  elif [ -e "$RL" ]; then mv -f -- "$RL" "$RUN_DIR/ho3/refused_links.box-supplied.txt"
+    NOTE="# the box shipped its own refused_links.txt: kept as refused_links.box-supplied.txt"; fi
+  [ -L "$RL" ] && { printf '%q -> %q\n' "refused_links.txt" "$(readlink "$RL")" > "$RL.tmp"; rm -f -- "$RL"; mv -f -- "$RL.tmp" "$RL.links"; }
+  { [ -z "$NOTE" ] || printf '%s\n' "$NOTE"; [ ! -e "$RL.links" ] || cat "$RL.links"; } > "$RL"; rm -f -- "$RL.links"
   find "$RUN_DIR/ho3" -type l -print0 | while IFS= read -r -d '' l; do
     printf '%q -> %q\n' "${l#"$RUN_DIR/ho3/"}" "$(readlink "$l")" >> "$RL"; rm -f -- "$l"
   done
