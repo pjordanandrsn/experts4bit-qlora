@@ -177,7 +177,8 @@ def test_amendment_4_adds_exactly_the_retry_ids_r1_to_r8():
     assert "**The ids are labels, not budget.**" in PREREG and "no code parses an id's number" in PREREG
     assert ("| **refused at create** (Amendment 4) | the provider refused the create, so nothing was created ($0) | no |"
             " no; counts toward no cap, uses one id |") in PREREG
-    assert "(two consecutive HARNESS_ERROR, VOID or NOT_RUN readings stop the lane, as registered)" in PREREG
+    assert "**The stop counts readings whose runner ran.**" in PREREG
+    assert "never counts a refusal at create or a pre-flight teardown: neither is a reading." in PREREG
 
 
 def test_the_drive_follows_pod_launchs_contract():

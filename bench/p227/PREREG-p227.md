@@ -295,13 +295,16 @@ P222's, with the arms above. Everything not named here is P222's.
 - This amendment adds the retry ids **`p227-5090-r1` to `p227-5090-r8`**, for ANY box that follows one that did not
   start, at the same tier and terms. A box that did not start is one of:
   - a refusal at create (nothing created);
-  - NOT_RUN (the launcher's pre-flight tore a created instance down before the runner ran);
+  - a pre-flight teardown (the launcher tore a created instance down before the runner ran; P225's NOT_RUN);
   - the box's own refusal before the install (rc 17 and the like).
 - The runner's and the drive's id cases accept them. This PREREG states no allowance for boxes that do not start, so N
   is 8, P225's.
 - **The ids are labels, not budget.**
   - Started-box accounting is by outcome, never by id: no code parses an id's number.
-  - The registered caps, the strike rules (two consecutive HARNESS_ERROR, VOID or NOT_RUN readings stop the lane, as registered) and the stop govern alone. Nothing is widened.
+  - The registered caps, the strike rules and the stop govern alone. Nothing is widened.
+  - **The stop counts readings whose runner ran.** "Two consecutive HARNESS_ERROR, VOID or NOT_RUN readings stop the
+    lane" (Budget) never counts a refusal at create or a pre-flight teardown: neither is a reading. rc 17 and rc 41
+    stay not strikes, as registered.
 - **A new outcome row, decided from the launcher's receipt and never classified:**
 
   | outcome | when | a reading? | a strike? |

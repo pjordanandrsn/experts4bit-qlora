@@ -192,18 +192,22 @@ head. K2b routes 2..N rows to K37's `linear_i8` over the same codes.
 - The registration names three reading ids, `p229-5090-1` to `-3`. Every box needs its own id and receipt (the ledger
   holds one row per run, so an id is never reused), but a box that does not start uses an id without being read.
   `p229-5090-1` refused itself on the box before the install (rc 17: the board's power limit read 525 W against the
-  575 W floor; not a strike), and `p229-5090-2` was refused at create (the provider still listed the offer; nothing
-  was created, $0); both are recorded under the row below. So `-1` to `-3` can run out before a box has started.
+  575 W floor; not a strike, under the registered rc 17 rule). `p229-5090-2` was refused at create (the provider still
+  listed the offer; nothing was created, $0), recorded under the row below. So `-1` to `-3` can run out before a box
+  has started.
 - This amendment adds the retry ids **`p229-5090-r1` to `p229-5090-r8`**, for ANY box that follows one that did not
   start, at the same tier and terms. A box that did not start is one of:
   - a refusal at create (nothing created);
-  - NOT_RUN (the launcher's pre-flight tore a created instance down before the runner ran);
+  - a pre-flight teardown (the launcher tore a created instance down before the runner ran; P225's NOT_RUN);
   - the box's own refusal before the install (rc 17 and the like).
 - The runner's and the drive's id cases accept them. This PREREG states no allowance for boxes that do not start, so N
   is 8, P225's.
 - **The ids are labels, not budget.**
   - Started-box accounting is by outcome, never by id: no code parses an id's number.
   - The registered caps, the strike rules and the stop govern alone. Nothing is widened.
+  - **The stop counts runs whose runner ran.** "Two consecutive runs that are not read stop the lane" (Budget) does not
+    count a refusal at create or a pre-flight teardown: neither is a run for it. rc 17 and rc 41 stay not strikes, as
+    registered.
 - **A new outcome row, decided from the launcher's receipt and never classified:**
 
   | outcome | when | a reading? | a strike? |
