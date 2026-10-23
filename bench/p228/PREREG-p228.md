@@ -194,3 +194,52 @@ called through `router_linear`. The bench therefore times e4b's real pinned path
   and fetches the box tree into `$RUN_DIR/p228/`, refusing a non-empty target.
 - No command on the box, threshold, cost or output changes. The drive is not a staged file, so no pin moves; the
   shakedown ran through a direct launcher that set `E4B_SHA`, which is why it did not see it.
+
+## Amendment 5 (2026-10-23, before any reading): retry run ids for boxes that did not start
+
+P227's and P229's Amendment 4, in its final form, for this lane.
+
+- The registration names three reading ids, `p228-5090-1` to `-3`. Every box needs its own id and receipt (the ledger
+  holds one row per run, so an id is never reused), but a box that does not start uses an id without being read. So
+  `-1` to `-3` can run out before a box has started.
+- This amendment adds the retry ids **`p228-5090-r1` to `p228-5090-r8`**, for ANY box that follows one that did not
+  start, at the same tier and terms. A box that did not start is one of:
+  - a refusal at create (nothing created);
+  - a pre-flight teardown (the launcher tore a created instance down before the runner ran; P225's NOT_RUN);
+  - the box's own refusal before the install (rc 17 and the like).
+- The runner's and the drive's id cases accept them. This PREREG states no allowance for boxes that do not start, so N
+  is 8, P225's.
+- **The ids are labels, not budget.**
+  - Started-box accounting is by outcome, never by id: no code parses an id's number.
+  - The registered caps, the strike rules and the stop govern alone. Nothing is widened.
+- **A box STARTS when its runner passes the refusals before the install (rc 17, rc 41, and the host refusals rc 10,
+  13, 15, 16, 18 and 28) and begins the install**, whatever its outcome after that (read, HARNESS_ERROR, VOID, a
+  mid-install or mid-run fault). One definition serves the cap and the stop. **Only started boxes count toward the cap
+  and toward any stop; a box that did not start (a refusal at create, a pre-flight teardown, rc 17, a single rc 41)
+  counts toward none of them; the registered rc 41 pair rule is unchanged.**
+- **At most three boxes start.** The retry ids never add a started box; they only replace ids used by boxes that did
+  not start. This keeps the registered budget: 3 x $1.45.
+- **What the stop counts.** This PREREG has one counting rule for boxes, the stop ("Two consecutive runs with no site
+  read stop the lane", Budget); "a run with no site read is not a reading (rc 27)" (The rule) is the runner's own exit,
+  which a box that did not start never reaches, and TOLERANCE_FAIL is read and never a strike.
+  - The stop counts started boxes only. A started box with no site read counts, including one that faults
+    mid-install, so alternating faults cannot dodge the stop.
+  - An rc 17 box never counts toward the stop, whatever label the launcher's receipt carries.
+  - A single rc 41 is not a strike; two consecutive rc 41 count as one strike under the cross-lane rule
+    (Amendment 3), unchanged.
+  - A refusal at create and a pre-flight teardown count toward nothing.
+  - Decided pre-data: no P228 box has run. Why: rc 17 is the host's power floor and rc 41 the guard fit, both
+    refusals before any install; the stop exists to end a lane whose kit cannot produce a reading, not to let capped
+    hosts end it.
+- **A new outcome row, decided from the launcher's receipt and never classified:**
+
+  | outcome | when | a reading? | a strike? |
+  |---|---|---|---|
+  | **refused at create** (Amendment 5) | the provider refused the create, so nothing was created ($0) | no | no; counts toward no cap, uses one id |
+
+- If boxes that did not start ever use up `r8`, that is a launcher or market fault to fix, not a reason to add ids.
+- **The slack, checked (a test, no kit change):** the box's deadline runs from the create, so a slow-ssh host must not
+  halt the lane at the fit check. guard - FIT_NEED = 3600 - 3000 = 600 s, at least pod-launch's longest ssh wait
+  (420 s) plus a 120 s staging margin. `tests/test_p228.py` asserts it.
+- Pre-data: no reading exists. The runner's bytes change (the id case only), so its staged pin moves. Every P228 box
+  launches from this amendment's merge commit.

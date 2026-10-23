@@ -7,6 +7,7 @@ import importlib.util
 import json
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 
@@ -69,7 +70,7 @@ def test_the_runner_installs_e4b_alone_checks_k1_and_runs_the_premise_on_the_car
     at = [RUN.index(x) for x in order]
     assert at == sorted(at), dict(zip(order, at))
     assert "MIN_POWER_W=575 " in RUN and "finish 17; }" in RUN
-    assert "p228-5090-1|p228-5090-2|p228-5090-3)" in RUN and "p228-shake-1|p228-shake-2|p228-shake-3) SHAKE=1;;" in RUN
+    assert "p228-5090-1|p228-5090-2|p228-5090-3|" in RUN and "p228-shake-1|p228-shake-2|p228-shake-3) SHAKE=1;;" in RUN
     assert "--shakedown --reps 4 --copies-o 8 --copies-r 32" in RUN
 
 
@@ -86,10 +87,99 @@ def test_the_guard_fit():
 
 
 def test_the_drive_never_creates_compute_and_refuses_what_is_not_registered():
-    assert "p228-5090-[1-3]|p228-shake-[1-3]) :;;" in DRIVE and "the checkout is dirty" in DRIVE
+    assert "p228-5090-[1-3]|p228-5090-r[1-8]|p228-shake-[1-3]) :;;" in DRIVE and "the checkout is dirty" in DRIVE
     assert "tests/test_dense_lt_pin_gpu.py tests/test_dense_lt_pin.py; do" in DRIVE
     for word in ("vast.py", "destroy", "/api/", "rent-watch"):
         assert word not in DRIVE.split("set -uo pipefail", 1)[1], word
+
+
+SSH_READY_S, STAGING_MARGIN_S = 420, 120   # pod-launch's longest wait for ssh on Vast; the drive's staging margin
+
+
+def test_the_slack_clears_a_slow_ssh_host():
+    """The deadline runs from the create, so the guard minus the runner's FIT_NEED must hold pod-launch's ssh wait plus
+    the staging, or a slow-ssh host halts the lane at the fit check (rc 41) before the install (P225's r1 took 443 s)."""
+    get = lambda v: int(re.search(rf"^{v}=(\d+)", RUN, re.M).group(1))  # noqa: E731
+    fit_need = (get("INSTALL_TO_GATE_S") + get("NEED_BENCH") + get("RESERVE")) * get("FIT_HEADROOM_PCT") // 100
+    guard_s = round(float(re.search(r"\*\*guard ([\d.]+) h\*\*", PREREG).group(1)) * 3600)
+    assert (guard_s, fit_need) == (3600, 3000)
+    assert guard_s - fit_need == 600 >= SSH_READY_S + STAGING_MARGIN_S
+    assert "guard - FIT_NEED = 3600 - 3000 = 600 s" in PREREG
+
+
+def _accepted(src, pattern_re, ids):
+    """The ids a script's own reading case accepts, run through bash with the pattern as written."""
+    pat = re.search(pattern_re, src, re.M).group(1)
+    script = f'case "$1" in {pat}) exit 0;; *) exit 9;; esac'
+    return {rid for rid in ids if subprocess.run(["bash", "-c", script, "_", rid]).returncode == 0}
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+def test_amendment_5_adds_exactly_the_retry_ids_r1_to_r8():
+    """Amendment 5: the runner and the drive accept exactly -1..-3 and r1..r8 (labels, not budget); -4 and r9 refuse."""
+    probe = [f"p228-5090-{x}" for x in ("0", "1", "2", "3", "4", "10", "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
+                                       "r8", "r9", "r10", "r01", "R1", "r", "r1x")]
+    want = {f"p228-5090-{x}" for x in ("1", "2", "3")} | {f"p228-5090-r{i}" for i in range(1, 9)}
+    assert _accepted(RUN, r"^  (p228-5090-1\|[^)]*)\) :;;", probe) == want
+    assert _accepted(DRIVE, r'^case "\$E4B_RENT_RUN_ID" in ([^)]*)\) :;;', probe) == want
+    assert "**`p228-5090-r1` to `p228-5090-r8`**, for ANY box" in PREREG
+    assert "**The ids are labels, not budget.**" in PREREG and "no code parses an id's number" in PREREG
+    assert ("| **refused at create** (Amendment 5) | the provider refused the create, so nothing was created ($0) | no |"
+            " no; counts toward no cap, uses one id |") in PREREG
+
+
+#: Amendment 5's host and fit refusals before the install; a box that passes them and begins the install STARTS
+PRE_INSTALL_REFUSALS = {10, 13, 15, 16, 17, 18, 28, 41}
+
+
+def _pre_install_refusals():
+    """Every `finish N` the runner can reach before its first install, minus the kit's own refusals (9 a staging
+    tripwire, 78 an unregistered id) and the signal trap (130)."""
+    head = RUN.split("\npipx logs/", 1)[0]
+    return {int(n) for n in re.findall(r"finish (\d+)", head)} - {9, 78, 130}
+
+
+def _counts(box):
+    """Amendment 5's rule, as the hand table applies it: (started, toward the stop)."""
+    started = box.get("runner_rc") is not None and box.get("began_install", False) \
+        and box["runner_rc"] not in PRE_INSTALL_REFUSALS
+    return started, started and not box.get("site_read", False)
+
+
+def test_amendment_5_one_start_definition_for_the_cap_and_the_stop():
+    """Ruled pre-data (P227's and P229's final form): a box STARTS when its runner passes the pre-install refusals and
+    begins the install; only started boxes count toward the cap (3) and the stop; the four non-start cases count toward
+    nothing; a mid-install fault starts and counts; the rc 41 pair rule is unchanged."""
+    assert _pre_install_refusals() == PRE_INSTALL_REFUSALS            # the runner refuses all of them before any install
+    flat = " ".join(PREREG.split("## Amendment 5", 1)[1].split())
+    for case in ("**A box STARTS when its runner passes the refusals before the install (rc 17, rc 41, and the host"
+                 " refusals rc 10, 13, 15, 16, 18 and 28) and begins the install**",
+                 "**Only started boxes count toward the cap and toward any stop; a box that did not start (a refusal at"
+                 " create, a pre-flight teardown, rc 17, a single rc 41) counts toward none of them; the registered rc 41"
+                 " pair rule is unchanged.**",
+                 "**At most three boxes start.**", "3 x $1.45",
+                 "This PREREG has one counting rule for boxes, the stop (\"Two consecutive runs with no site read stop"
+                 " the lane\", Budget)",
+                 "An rc 17 box never counts toward the stop, whatever label the launcher's receipt carries.",
+                 "A single rc 41 is not a strike; two consecutive rc 41 count as one strike under the cross-lane rule"
+                 " (Amendment 3), unchanged.",
+                 "A refusal at create and a pre-flight teardown count toward nothing.",
+                 "Decided pre-data: no P228 box has run."):
+        assert case in flat, case
+    assert "Two consecutive runs with no site read stop the lane." in PREREG.split("## Amendment 1", 1)[0]
+    not_started = [{"runner_rc": None},                                  # a refusal at create: nothing created
+                   {"runner_rc": None, "created": True},                 # a pre-flight teardown: the runner never ran
+                   {"runner_rc": 17}, {"runner_rc": 41}]                 # the box's own refusals before the install
+    for box in not_started:
+        assert _counts(box) == (False, False), box
+    assert _counts({"runner_rc": 9, "began_install": True}) == (True, True)     # a mid-install fault (PIP FAIL, rc 9)
+    assert _counts({"runner_rc": 27, "began_install": True}) == (True, True)    # no site read: started, counts
+    assert _counts({"runner_rc": 0, "began_install": True, "site_read": True}) == (True, False)
+    assert "PIP FAIL (e4b)\"; finish 9; }" in RUN.split("\npipx logs/", 1)[1][:400]
+    a3 = " ".join(PREREG.split("## Amendment 3", 1)[1].split("## Amendment 4", 1)[0].split())
+    assert "two consecutive headroom refusals count as one strike" in a3
+    assert "# rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike" \
+        in RUN
 
 
 def test_the_drive_follows_pod_launchs_contract():
