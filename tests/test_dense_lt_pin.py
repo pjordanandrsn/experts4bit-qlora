@@ -176,9 +176,35 @@ def test_a_captured_bucket_without_a_pin_is_refused(monkeypatch):
     _apply(Model(), "o_proj", buckets=(1, 2, 8, 16))                                   # 4 not captured: no refusal
 
 
+def test_a_named_site_with_no_pin_at_all_is_refused_even_without_graphs(monkeypatch):
+    monkeypatch.setattr(dl, "LT_PINS", _pins(shapes=((N_R, K_R),)))                 # router pinned, o_proj not
+    with pytest.raises(RuntimeError, match=r"o_proj \(N 32, K 64\) has no pin at any M in 2..8 .* would be inert"):
+        _apply(Model(), "o_proj", buckets=())
+
+
+def test_a_weight_not_laid_out_n_by_k_with_leading_dimension_k_is_refused(monkeypatch):
+    monkeypatch.setattr(dl, "LT_PINS", _pins())
+    m = Model()
+    big = torch.randn(N_O, 2 * K_O).to(torch.bfloat16)
+    for layer in m.layers:
+        layer["self_attn"].o_proj.weight = nn.Parameter(big[:, :K_O], requires_grad=False)   # a column-sliced view
+    with pytest.raises(RuntimeError, match=r"stride \(128, 1\), not a 16-byte-aligned bf16 \[N, K\] with leading"):
+        _apply(m, "o_proj")
+
+
+def test_misaligned_operands_are_refused_by_name(monkeypatch):
+    monkeypatch.setattr(dl, "LT_PINS", _pins())
+    m = Model()
+    _apply(m, "o_proj")
+    buf = torch.randn(2 * K_O + 1).to(torch.bfloat16)
+    x = buf[1:].view(2, K_O)                                                           # 2 bytes off alignment
+    with pytest.raises(RuntimeError, match=r"operands are not 16-byte aligned"):
+        m.layers[0]["self_attn"].o_proj(x)
+
+
 def test_another_cublaslt_version_finds_no_key(monkeypatch):
     monkeypatch.setattr(dl, "LT_PINS", _pins(version=VERSION + 1))
-    with pytest.raises(RuntimeError, match=r"has no pin for the captured decode bucket\(s\) \[2, 4, 8\] under key "
+    with pytest.raises(RuntimeError, match=r"has no pin at any M in 2..8 under key "
                                            rf"\(cuBLASLt {VERSION}"):
         _apply(Model(), "o_proj")
 

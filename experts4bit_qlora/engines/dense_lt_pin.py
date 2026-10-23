@@ -242,6 +242,9 @@ class LtRuntime:
     def __call__(self, x, w, site):
         M, K = x.shape
         N = w.shape[0]
+        if x.data_ptr() % 16 or w.data_ptr() % 16:      # cuBLASLt's operand alignment, refused here by name
+            raise RuntimeError(f"{ENV}: {site}'s operands are not 16-byte aligned (rows {x.data_ptr() % 16}, weight "
+                               f"{w.data_ptr() % 16}); the pinned layouts assume aligned bf16 operands")
         prob, a, _ = self.plans[(N, K, M)]
         cur = torch.cuda.current_stream(x.device)
         if cur != self.stream and not torch.cuda.is_current_stream_capturing():
@@ -372,13 +375,17 @@ def apply_dense_lt_pin(model, buckets, *, device="cuda", value=None, lib_factory
             targets.append(("router", label, mod.weight,
                             lambda call, _m=mod: setattr(_m, "_e4b_lt_pin", call)))
     for site, label, w, _ in targets:
-        if w.dtype != torch.bfloat16 or w.dim() != 2 or w.stride(1) != 1:
-            raise RuntimeError(f"{ENV}: {label}'s weight is {w.dtype} {tuple(w.shape)}, not a bf16 [N, K] with "
-                               "contiguous rows")
+        if (w.dtype != torch.bfloat16 or w.dim() != 2 or tuple(w.stride()) != (w.shape[1], 1)
+                or w.data_ptr() % 16):
+            raise RuntimeError(f"{ENV}: {label}'s weight is {w.dtype} {tuple(w.shape)} stride {tuple(w.stride())}, "
+                               "not a 16-byte-aligned bf16 [N, K] with leading dimension K (the pinned layout)")
     shapes = sorted({(site, int(w.shape[0]), int(w.shape[1])) for site, _, w, _ in targets})
     pinned = {}
     for site, N, K in shapes:
         ms = sorted(M for M in range(MIN_M, MAX_M + 1) if (*key, N, K, M) in LT_PINS)
+        if not ms:
+            raise RuntimeError(f"{ENV}: {site} (N {N}, K {K}) has no pin at any M in {MIN_M}..{MAX_M} under key "
+                               f"(cuBLASLt {key[0]}, cc {key[1]}, {key[2]} SMs); a named site with no pin would be inert")
         missing = [M for M in graphed if M not in ms]
         if missing:
             raise RuntimeError(f"{ENV}: {site} (N {N}, K {K}) has no pin for the captured decode bucket(s) {missing} "
