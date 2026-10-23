@@ -268,5 +268,9 @@ grouped-nf4-gemm v0.50.0 pin and `bench/sc2/sc2_defaults.py` (both e4b#2023). Th
 says. The launch-time `sc2_defaults.py diff` against `v0.57.0`, under SC2f Amendment 3's two allowance rules, is recorded
 with the run.
 
+**The kit is held at `1a25b209`**, as in SC2f Amendment 4. At the launch commit, every `bench/sc1/staged.sha256`
+entry that box O stages, the shared `bench/sc1/sc1_run.sh` included, must be byte-identical to that entry at
+`1a25b209`. The comparison is recorded with the run, and any difference is its own pre-run amendment.
+
 **Unchanged:** every constant, threshold and cost, and everything Amendment 1 left unchanged.
 

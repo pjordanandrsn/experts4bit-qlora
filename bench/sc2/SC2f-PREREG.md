@@ -394,6 +394,12 @@ runs at the launch commit against `v0.57.0`, with its two allowance rules, befor
 output and every `--allow` with its reason are recorded with the run, as are the launch commit, its `experts4bit_qlora/`
 tree, its diff against `v0.57.0`'s tree, and every commit between the two.
 
+**The kit is held at `1a25b209`.** Amendment 3's default check compares package defaults, not the kit, and
+`bench/sc1/sc1_run.sh` is shared by every box. So at the launch commit, every `bench/sc1/staged.sha256` entry that box N
+stages must be byte-identical to that entry at `1a25b209`: the lane's own pieces and the shared `sc1_run.sh` alike.
+The driver refuses to stage a file whose bytes differ from its entry, so the staged kit is then `1a25b209`'s. The
+entry-by-entry comparison is recorded with the run. Any difference is its own pre-run amendment.
+
 **Unchanged:** every constant, threshold and cost; the arms, both knobs, FLIPS, the bar and its exclusions, the price
 ceiling, the order of the three lanes, the screen deadline, the box, the proof, the guards and the $0 shakedown.
 
