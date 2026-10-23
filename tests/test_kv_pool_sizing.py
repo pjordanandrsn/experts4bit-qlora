@@ -181,6 +181,25 @@ def test_a_width_that_cannot_hold_the_floor_is_not_offered():
     assert none["max_seqs"] == 16 and none["pool_rows"] is None and "claim-all" in none["why"]
 
 
+def test_a_refused_estimate_above_the_floor_counts_as_not_fitting(monkeypatch):
+    """The bisection treats an estimate that refuses (no device total) as not fitting, rather than comparing None."""
+    from experts4bit_qlora import serve_recipe as sr
+    real = sr.estimate_serve_footprint
+    topo = _qwen3_30b()
+    st = sr.ServeSetup(max_tokens_per_seq=4096, exp_int4=True, attn_int4=True)
+    ok = sr.size_shared_pool(topo, st, FREE_5090, widths=(64,))["candidates"][0]
+    cap = ok["least_rows"] + 100                      # every pool above this refuses
+
+    def fake(topology, setup):
+        fp = real(topology, setup)
+        if setup.kv_pool_rows is not None and setup.kv_pool_rows > cap:
+            return sr.Footprint(items=(), refusals=("a refusal above the cap",))
+        return fp
+    monkeypatch.setattr(sr, "estimate_serve_footprint", fake)
+    r = sr.size_shared_pool(topo, st, FREE_5090, widths=(64,))
+    assert r["max_seqs"] == 64 and r["pool_rows"] == cap
+
+
 @pytest.mark.parametrize("free,placement,why", [(None, "all-vram", "unknown"), (FREE_5090, "solver", "solver")])
 def test_unknown_memory_or_the_solver_keeps_the_claim_all_pool(free, placement, why):
     from experts4bit_qlora.serve_recipe import MAX_SEQS_AUTO_WIDTHS, ServeSetup, size_shared_pool

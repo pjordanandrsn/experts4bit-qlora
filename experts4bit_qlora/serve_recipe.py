@@ -256,7 +256,8 @@ def size_shared_pool(topology, setup: "ServeSetup", free_bytes, *, widths, margi
         lo, hi = least, full                       # the most rows that fit: the device total is non-decreasing in rows
         while lo < hi:
             mid = (lo + hi + 1) // 2
-            if need(mid)[0] <= int(free_bytes):
+            n_mid = need(mid)[0]
+            if n_mid is not None and n_mid <= int(free_bytes):   # a refused estimate never fits
                 lo = mid
             else:
                 hi = mid - 1
