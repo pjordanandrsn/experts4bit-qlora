@@ -433,14 +433,26 @@ whole difference is declared:
 
 **The check, which fails closed** (`bench/sc2/sc2_kit_hold.py`, its self-test refusing each gate with its evidence removed;
 `tests/test_sc2_kit_hold.py`). On the controller, before the create, `python bench/sc2/sc2_kit_hold.py check --at <launch commit>
---out <run>/kit_hold.json`, run from a `main` checkout that carries this amendment, runs four gates. DELTA: the difference `1a25b209` -> `7b8f1f69` is
+--e4b-sha "$E4B_SHA" --out <run>/kit_hold.json`, run from a `main` checkout that carries this amendment, runs five
+gates. DELTA: the difference `1a25b209` -> `7b8f1f69` is
 exactly the set above: one changed entry, every `sc1_run.sh` hunk classified as the brotli line, a fetch-retry line, a
 Q alternative (the line with its Q removed is its `1a25b209` line) or a box Q line, each declared hunk present once, and
 the seven entries added. PIN: every entry's sha256 is its source at `7b8f1f69`. INERT: no staged entry other than
 the seven names any of them or box Q's functions, except `sc1_run.sh` on box Q's own lines, and in `sc1_drive.sh` and
 `make_pin.sh` the names appear only on staging lines. HOLD: the launch commit's entries and the two driver files equal
-`7b8f1f69`'s. Any refusal stops the launch before the create. The record holds every hunk and every hit. At
+`7b8f1f69`'s. STACK: the launch's `E4B_SHA` is `36cdd2d4e031e8365ab52e495c40cd79043edd49` in full, so a launch that
+omits it (and would install the checkout's HEAD) refuses. Any refusal stops the launch before the create. The record holds every hunk and every hit. At
 `7b8f1f69` the check reads OK, with 16 classified `sc1_run.sh` lines (1 brotli, 4 fetch-retry, 9 Q alternatives, 2 box Q lines), the seven entries added, all 99 pins matching their sources, and 12 hits on the new names, each on one of box Q's three `sc1_run.sh` lines or a staging line of `sc1_drive.sh` or `make_pin.sh`.
+
+**The stack is a VOID condition of the rule.** After the box, on the fetched run,
+`python bench/sc2/sc2_kit_hold.py verdict-stack --run <run>/sc1 --out <run>/verdict_stack.json` reads the installed
+evidence first: `versions.txt`'s `e4b <version> @<commit>` line, which the box writes only after its tripwire has
+confirmed the install, must name `36cdd2d4`, and so must every `KNOBS ... e4b=` line of `summary.txt` (the launch's
+`E4B_SHA`). Either record missing, abbreviated, or disagreeing with the other reads VOID. **A box verdict stands only
+when verdict-stack reads OK; otherwise the read is VOID.** `verdict_stack.json` is a required results file: a results PR
+or a re-derivation without it, or with it not OK, reads VOID. This also catches a hand launch that bypasses the check
+above. The staged reducers are unchanged, so the kit stays `7b8f1f69`'s. Its self-test removes or alters each record,
+including the two disagreeing either way, and `tests/test_sc2_kit_hold.py` runs it on a real fetched run's records.
 
 **Unchanged:** every constant, threshold and cost; the arms, both knobs, FLIPS, the bar and its exclusions, the price
 ceiling, the order of the three lanes, the screen deadline, the box, the proof, the guards and the $0 shakedown.

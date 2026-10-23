@@ -17,22 +17,33 @@ the create, its JSON recorded with the run:
          lines (`STAGE=`, `src=`, `sha_of`), never on a line that runs anything. Every hit is recorded.
   HOLD   (at the launch commit, against the hold) every staged entry identical, name and sha256, and `sc1_drive.sh` and
          `make_pin.sh` byte-identical (they decide what is staged).
+  STACK  the launch's ``E4B_SHA`` (``--e4b-sha``, by default the environment's) is the stack under test, 36cdd2d4, in full:
+         ``sc1_drive.sh`` installs it in place of the checkout's HEAD, so a launch without it would test the kit's commit.
 
 Each gate fails closed: an unreadable commit, file or pin, or a declared hunk that is absent, is a REFUSE.
 
-  check --hold <rev> [--base <rev>] [--at <rev>] [--out FILE]     exit 0 OK, 1 REFUSE
+VERDICT-STACK (after the box, on the fetched run; part of each lane's verdict, never optional): a box's verdict stands
+only when this reads OK; otherwise it is VOID. It reads INSTALLED evidence first. ``versions.txt``'s ``e4b <version>
+@<commit>`` line, which the box writes only after its tripwire confirmed the install, must name 36cdd2d4. Every
+``KNOBS ... e4b=<commit>`` line of ``summary.txt``, the launch's ``E4B_SHA``, must name it too. Either record missing,
+abbreviated or disagreeing is VOID. The record (``verdict_stack.json``) is a required results file.
+
+  check --hold <rev> [--base <rev>] [--at <rev>] [--e4b-sha SHA] [--out FILE]     exit 0 OK, 1 REFUSE
+  verdict-stack --run <fetched sc1 dir> [--out FILE]                                exit 0 OK, 1 VOID
   --self-test
 """
 import argparse
 import difflib
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
 
 BASE = "1a25b209023c4621fffbf2ab399e2d282474df58"   # the kit hold SC2f Am. 4, SC2h Am. 2 and SC2i Am. 1 registered
 HOLD = "7b8f1f69cf454433166cf349e7df6e7996349399"   # e4b#2041's merge commit, registered by the amendments
+STACK = "36cdd2d4e031e8365ab52e495c40cd79043edd49"  # the stack under test (SC2f Am. 4, SC2h Am. 2, SC2i Am. 1)
 PIN = "bench/sc1/staged.sha256"
 RUN = "sc1_run.sh"
 DRIVERS = ("bench/sc1/sc1_drive.sh", "bench/sc1/make_pin.sh")
@@ -168,8 +179,8 @@ def inert_hits(name: str, text: str, allowed: tuple):
     return hits
 
 
-def check(git, hold, base=BASE, at=None) -> dict:
-    why, rec = [], {"base": base, "hold": hold, "at": at}
+def check(git, hold, base=BASE, at=None, e4b_sha=None) -> dict:
+    why, rec = [], {"base": base, "hold": hold, "at": at, "e4b_sha": e4b_sha}
     if not hold:
         return {**rec, "verdict": "REFUSE", "why": ["no hold commit given (e4b#2041's merge)"]}
     for k in ("base", "hold", "at"):
@@ -245,8 +256,64 @@ def check(git, hold, base=BASE, at=None) -> dict:
         a, h = git.show(at, path), git.show(hold, path)
         if a is None or a != h:
             why.append(f"HOLD: {path} differs from the hold (or is unreadable)")
+    # STACK
+    if e4b_sha != STACK:
+        why.append(f"STACK: the launch's E4B_SHA is {e4b_sha!r}, not the stack under test {STACK}")
     rec["verdict"], rec["why"] = ("OK" if not why else "REFUSE"), why
     return rec
+
+
+def verdict_stack(run) -> dict:
+    """The fetched run's installed e4b commit (versions.txt) and launch E4B_SHA (summary.txt's KNOBS) against STACK."""
+    from pathlib import Path
+    run, why = Path(run), []
+    vtxt = (run / "versions.txt").read_text() if (run / "versions.txt").is_file() else None
+    stxt = (run / "summary.txt").read_text() if (run / "summary.txt").is_file() else None
+    installed = re.findall(r"^e4b (\S+) @(\S+)$", vtxt or "", re.M)
+    knobs = re.findall(r"^KNOBS .*?\be4b=(\S+)", stxt or "", re.M)
+    if vtxt is None:
+        why.append("versions.txt missing")
+    elif len(installed) != 1:
+        why.append(f"versions.txt has {len(installed)} e4b lines, not 1")
+    elif installed[0][1] != STACK:
+        why.append(f"installed e4b {installed[0][1]!r} is not the stack under test {STACK}")
+    if stxt is None:
+        why.append("summary.txt missing")
+    elif not knobs:
+        why.append("summary.txt has no KNOBS e4b= line")
+    elif any(k != STACK for k in knobs):
+        why.append(f"KNOBS e4b= {sorted(set(knobs))} is not the stack under test {STACK}")
+    return {"verdict": "OK" if not why else "VOID", "why": why, "stack": STACK,
+            "installed": [{"version": v, "commit": c} for v, c in installed], "knobs_e4b": sorted(set(knobs))}
+
+
+def _stack_self_test() -> list:
+    import tempfile
+    from pathlib import Path
+    good_v, good_s = f"e4b 0.57.0 @{STACK}\ngnf4 0.50.0 @{'4' * 40}\n", f"KNOBS box=N e4b={STACK} gnf4={'4' * 40}\nx\n"
+    other = HOLD
+
+    def run(v=good_v, s=good_s):
+        with tempfile.TemporaryDirectory() as d:
+            if v is not None:
+                (Path(d) / "versions.txt").write_text(v)
+            if s is not None:
+                (Path(d) / "summary.txt").write_text(s)
+            return verdict_stack(d)["verdict"]
+    return [
+        ("stack: both records name 36cdd2d4", run(), "OK"),
+        ("stack: versions.txt missing", run(v=None), "VOID"),
+        ("stack: summary.txt missing", run(s=None), "VOID"),
+        ("stack: installed another commit", run(v=good_v.replace(STACK, other)), "VOID"),
+        ("stack: KNOBS another commit", run(s=good_s.replace(STACK, other)), "VOID"),
+        ("stack: the two disagree (KNOBS 36cdd2d4, installed another)", run(v=good_v.replace(STACK, other)), "VOID"),
+        ("stack: the two disagree (installed 36cdd2d4, KNOBS another)", run(s=good_s.replace(STACK, other)), "VOID"),
+        ("stack: no e4b line in versions.txt", run(v="gnf4 0.50.0 @x\n"), "VOID"),
+        ("stack: two e4b lines", run(v=good_v + f"e4b 0.57.0 @{STACK}\n"), "VOID"),
+        ("stack: no KNOBS e4b=", run(s="KNOBS box=N gnf4=x\n"), "VOID"),
+        ("stack: abbreviated commit", run(v=good_v.replace(STACK, STACK[:8]), s=good_s.replace(STACK, STACK[:8])), "VOID"),
+        ("stack: a second KNOBS line differs", run(s=good_s + f"KNOBS box=N e4b={other}\n"), "VOID"),
+    ]
 
 
 # ------------------------------------------------------------------ self-test: each gate with its evidence removed
@@ -309,7 +376,7 @@ def self_test() -> int:
     try:
         b, h = _fixtures()
 
-        def run(mut_h=None, mut_at=None, mut_b=None):
+        def run(mut_h=None, mut_at=None, mut_b=None, stack=STACK):
             bb, hh = dict(b), dict(h)
             if mut_b:
                 mut_b(bb)
@@ -320,7 +387,7 @@ def self_test() -> int:
             aa = dict(hh)
             if mut_at:
                 mut_at(aa)
-            return check(Fake({"B": bb, "H": hh, "L": aa}), "H", base="B", at="L")["verdict"]
+            return check(Fake({"B": bb, "H": hh, "L": aa}), "H", base="B", at="L", e4b_sha=stack)["verdict"]
 
         def edit_run(f):
             return lambda t: t.__setitem__("bench/sc1/sc1_run.sh", f(t["bench/sc1/sc1_run.sh"]))
@@ -351,7 +418,11 @@ def self_test() -> int:
              "REFUSE"),
             ("launch driver differs", run(mut_at=lambda t: t.__setitem__("bench/sc1/sc1_drive.sh", "#\n")), "REFUSE"),
             ("launch pin unreadable", run(mut_at=lambda t: t.pop(PIN)), "REFUSE"),
+            ("no E4B_SHA on the launch", run(stack=None), "REFUSE"),
+            ("E4B_SHA is the kit's commit", run(stack=HOLD), "REFUSE"),
+            ("E4B_SHA abbreviated", run(stack=STACK[:8]), "REFUSE"),
         ]
+        cases += _stack_self_test()
     finally:
         Q_REPLACED = saved
     fails = 0
@@ -364,23 +435,34 @@ def self_test() -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("cmd", nargs="?", choices=("check",))
+    ap.add_argument("cmd", nargs="?", choices=("check", "verdict-stack"))
+    ap.add_argument("--run")
     ap.add_argument("--hold", default=HOLD)
     ap.add_argument("--base", default=BASE)
     ap.add_argument("--at")
     ap.add_argument("--repo", default=".")
+    ap.add_argument("--e4b-sha", default=os.environ.get("E4B_SHA"))
     ap.add_argument("--out")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.cmd == "verdict-stack":
+        if not a.run:
+            ap.error("verdict-stack needs --run")
+        v = verdict_stack(a.run)
+        if a.out:
+            with open(a.out, "w") as f:
+                json.dump(v, f, indent=1)
+        print("SC2_VERDICT_STACK " + json.dumps(v), flush=True)
+        return 0 if v["verdict"] == "OK" else 1
     if a.cmd != "check":
         ap.error("nothing to do")
-    rec = check(Git(a.repo), a.hold, base=a.base, at=a.at or "HEAD")
+    rec = check(Git(a.repo), a.hold, base=a.base, at=a.at or "HEAD", e4b_sha=a.e4b_sha)
     if a.out:
         with open(a.out, "w") as f:
             json.dump(rec, f, indent=1)
-    print("SC2_KIT_HOLD " + json.dumps({k: rec.get(k) for k in ("verdict", "why", "base", "hold", "at", "changed",
+    print("SC2_KIT_HOLD " + json.dumps({k: rec.get(k) for k in ("verdict", "why", "base", "hold", "at", "e4b_sha", "changed",
                                                                  "added", "removed", "hold_diff")}), flush=True)
     for x in rec.get("inert_hits") or ():
         print(f"SC2_KIT_HOLD inert {'ok ' if x['allowed'] else 'BAD'} {x['file']}:{x['line_no']}: {x['text'][:120]}")

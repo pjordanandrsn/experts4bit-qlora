@@ -284,6 +284,12 @@ Against `1a25b209` the kit differs as SC2f Amendment 5 declares. In `sc1_run.sh`
 single fetch retry, both behavioural, and box Q's wiring, none of it reachable with `SC1_BOX` = O. Seven new box Q
 files are staged on box O, and nothing box O runs sources or calls them. Before the create,
 `bench/sc2/sc2_kit_hold.py check --at <launch commit>` runs from a `main` checkout that
-carries this amendment, fails closed, and its record is kept with the run.
+carries this amendment, with `--e4b-sha "$E4B_SHA"` (its STACK gate refuses any launch whose `E4B_SHA` is not
+`36cdd2d4` in full), fails closed, and its record is kept with the run.
 
+
+**The stack is a VOID condition of the rule**, as in SC2f Amendment 5. A box O verdict stands only when
+`sc2_kit_hold.py verdict-stack` reads OK on the fetched run (`versions.txt`'s installed e4b commit and every
+`KNOBS ... e4b=` line of `summary.txt` both `36cdd2d4`); otherwise the read is VOID. `verdict_stack.json` is a
+required results file: a results PR or re-derivation without it, or with it not OK, reads VOID.
 **Unchanged:** every constant, threshold and cost, and everything Amendments 1 and 2 left unchanged.
