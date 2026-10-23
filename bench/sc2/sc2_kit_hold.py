@@ -16,7 +16,17 @@ the create, its JSON recorded with the run:
          `sc1_run.sh` on box Q's own three lines; in `sc1_drive.sh` and `make_pin.sh` the names appear only on staging
          lines (`STAGE=`, `src=`, `sha_of`), never on a line that runs anything. Every hit is recorded.
   HOLD   (at the launch commit, against the hold) every staged entry identical, name and sha256, and `sc1_drive.sh` and
-         `make_pin.sh` byte-identical (they decide what is staged).
+         `make_pin.sh` byte-identical (they decide what is staged), with exactly the declared exceptions (SC2f Am. 6,
+         SC2h Am. 4, SC2i Am. 3), each refused beyond its letter:
+         (1) bench/common rule 8: `sc1_drive.sh` may carry one " --no-links" right after `rsync -az` on pull_box's rsync
+             line, nowhere else;
+         (2) box Q's own files: an entry whose name matches `sc2j_<name>.(py|sh|json)` EXACTLY may be changed or added
+             (a removed entry, or any other name, refuses: a staged `json.py` could shadow a real module), and the
+             staging lines of `sc1_drive.sh` / `make_pin.sh` may gain exactly the names of the added sc2j entries; and
+             INERT runs again AT THE LAUNCH COMMIT over every other entry and both drivers: no `sc2j_<name>` appears
+             outside box Q's own sc1_run.sh lines and the drivers' staging lines.
+         The checkout that stages must BE the launch commit, clean: its ``git status --porcelain`` empty and its HEAD
+         equal to ``--at`` (however ``--at`` is spelled), else it refuses.
   STACK  the launch's ``E4B_SHA`` (``--e4b-sha``, by default the environment's) is the stack under test, 36cdd2d4, in full:
          ``sc1_drive.sh`` installs it in place of the checkout's HEAD, so a launch without it would test the kit's commit.
 
@@ -57,6 +67,8 @@ RUN = "sc1_run.sh"
 DRIVERS = ("bench/sc1/sc1_drive.sh", "bench/sc1/make_pin.sh")
 NEW = ("sc2j_box_q.sh", "sc2j_contract.py", "sc2j_prompts.py", "sc2j_reduce.py", "p117_reduce.py",
        "test_decode_graph_buckets.py", "g3_smoke.py")
+SC2J_NAME = re.compile(r"sc2j_[a-z0-9_]+\.(py|sh|json)")
+SC2J_TOKEN = re.compile(r"\bsc2j_[A-Za-z0-9_]+")
 TOKENS = re.compile(r"\b(sc2j_box_q|sc2j_contract|sc2j_prompts|sc2j_reduce|p117_reduce|test_decode_graph_buckets|g3_smoke"
                     r"|prove_q|box_q)\b")
 BROTLI = ' "brotli>=1.2.0"'
@@ -76,6 +88,34 @@ Q_REPLACED = 9                     # the box lists e4b#2041 extends with Q (sc1_
 STAGING = re.compile(r"STAGE=|\bsrc=|sha_of")
 NO_LINKS = " --no-links"                     # bench/common rule 8: the one declared sc1_drive.sh delta
 PULL_BOX_RSYNC = '  rsync -az --timeout=120 -e "ssh -o BatchMode=yes -o ConnectTimeout=20 $E4B_RENT_SSH_OPTS -p $PORT"'
+
+
+def driver_lines_ok(path: str, at_text: str, hold_text: str, added: set) -> list:
+    """The declared driver deltas, line by line: rule 8's token (sc1_drive.sh's pull_box rsync line only, at most once)
+    and, on staging lines only, exactly names from ``added`` (the sc2j entries the launch commit adds). Returns the
+    reasons it refuses ([] = OK)."""
+    if at_text == hold_text:
+        return []
+    a, h = at_text.split("\n"), hold_text.split("\n")
+    if len(a) != len(h):
+        return [f"{path}: line count differs from the hold"]
+    why, rule8 = [], 0
+    for i, (x, y) in enumerate(zip(a, h)):
+        if x == y:
+            continue
+        if path == "bench/sc1/sc1_drive.sh" and driver_delta_ok("\n".join(h[:i] + [x] + h[i + 1:]), hold_text):
+            rule8 += 1
+            continue
+        t, took = x, []
+        for n in sorted(added):
+            if " " + n in t and " " + n not in y:
+                t, took = t.replace(" " + n, "", 1), took + [n]
+        if STAGING.search(y) and not RUNS.search(x) and took and t == y:
+            continue
+        why.append(f"{path}:{i + 1}: an undeclared change")
+    if rule8 > 1:
+        why.append(f"{path}: rule 8's token more than once")
+    return why
 
 
 def driver_delta_ok(at_text: str, hold_text: str) -> bool:
@@ -148,6 +188,13 @@ class Git:
                            text=True)
         return r.stdout.strip() if r.returncode == 0 else None
 
+    def dirty(self):
+        r = subprocess.run(["git", "-C", self.repo, "status", "--porcelain"], capture_output=True, text=True)
+        return r.returncode != 0 or bool(r.stdout.strip())
+
+    def head(self):
+        return self.sha("HEAD")
+
     def tree(self, rev, path):
         r = subprocess.run(["git", "-C", self.repo, "rev-parse", "--verify", f"{rev}:{path}"], capture_output=True,
                            text=True)
@@ -212,6 +259,17 @@ def inert_hits(name: str, text: str, allowed: tuple):
             hits.append({"file": name, "line_no": i, "text": line.strip()[:200], "allowed": line in allowed,
                          "staging": bool(STAGING.search(line)) and not RUNS.search(line)})
     return hits
+
+
+def staging_checkout_bad(git, at_full: str) -> list:
+    """The checkout that stages is the launch commit, clean: porcelain empty and HEAD == ``at`` (by full sha)."""
+    why = []
+    if git.dirty():
+        why.append("the staging checkout is dirty (git status --porcelain is not empty)")
+    head = git.head()
+    if head != at_full:
+        why.append(f"the staging checkout's HEAD {head!r} is not the launch commit {at_full}")
+    return why
 
 
 def check(git, hold, base=BASE, at=None, e4b_sha=None) -> dict:
@@ -279,18 +337,47 @@ def check(git, hold, base=BASE, at=None, e4b_sha=None) -> dict:
     if any(not x["allowed"] for x in hits):
         why.append("INERT: " + "; ".join(f"{x['file']}:{x['line_no']}" for x in hits if not x["allowed"]))
     # HOLD
+    why += [f"HOLD: {w}" for w in staging_checkout_bad(git, rec["at"])]
     ea = entries(git.show(at, PIN))
+    added = set()
     if ea is None:
         why.append(f"HOLD: {PIN} unreadable at the launch commit")
     else:
         diff = sorted(n for n in set(ea) | set(eh) if ea.get(n) != eh.get(n))
         rec["hold_diff"] = diff
-        if diff:
-            why.append(f"HOLD: entries differ from the hold: {diff}")
+        removed = [n for n in diff if n not in ea]
+        # Defence in depth: INERT-at-launch below also refuses most of what these name rules refuse (a changed non-sc2j
+        # runner that names an sc2j file trips both), so a mutant that weakens one rule can survive the self-test while
+        # the other holds; the cases that only fullmatch refuses (a prefix or substring name) pin the name rule itself.
+        foreign = [n for n in diff if n in ea and not SC2J_NAME.fullmatch(n)]
+        added = {n for n in diff if n not in eh and SC2J_NAME.fullmatch(n)}
+        if removed:
+            why.append(f"HOLD: entries removed from the hold: {removed}")
+        if foreign:
+            why.append(f"HOLD: entries outside box Q's sc2j_* files differ from the hold: {foreign}")
+        # INERT again, at the launch commit: no sc2j_ name outside box Q's own run lines and the drivers' staging lines
+        q_allowed = set(Q_LINES) | {x["line"] for x in (rec.get("run_hunks") or ()) if x["kind"] == "q-wiring"}
+        for name in sorted(set(ea) - {n for n in ea if SC2J_NAME.fullmatch(n)}):
+            raw = git.show(at, resolve(name))
+            if raw is None:
+                why.append(f"HOLD: {name} unreadable at the launch commit")
+                continue
+            try:
+                text = raw.decode()
+            except UnicodeDecodeError:
+                continue
+            for i, line in enumerate(text.splitlines(), 1):
+                if SC2J_TOKEN.search(line) and not (name == RUN and line in q_allowed):
+                    why.append(f"HOLD INERT: {name}:{i} names an sc2j file at the launch commit")
     for path in DRIVERS:
         a, h = git.show(at, path), git.show(hold, path)
-        if a is None or a != h:
-            why.append(f"HOLD: {path} differs from the hold (or is unreadable)")
+        if a is None or h is None:
+            why.append(f"HOLD: {path} unreadable")
+            continue
+        why += [f"HOLD: {w}" for w in driver_lines_ok(path, a.decode(), h.decode(), added)]
+        for i, line in enumerate(a.decode().splitlines(), 1):
+            if SC2J_TOKEN.search(line) and not (STAGING.search(line) and not RUNS.search(line)):
+                why.append(f"HOLD INERT: {path}:{i} names an sc2j file outside a staging line")
     # STACK
     if e4b_sha != STACK:
         why.append(f"STACK: the launch's E4B_SHA is {e4b_sha!r}, not the stack under test {STACK}")
@@ -335,6 +422,7 @@ def package_hold(git, base, at, e4b_sha=None) -> dict:
         if not full:
             return {**rec, "verdict": "REFUSE", "why": [f"{k} {rec[k]!r} is not a readable commit"]}
         rec[k] = full
+    why += staging_checkout_bad(git, rec["at"])
     if e4b_sha != rec["base"]:
         why.append(f"STACK: the launch's E4B_SHA is {e4b_sha!r}, not the pinned stack {rec['base']} (in full)")
     for f in KIT_FILES:
@@ -354,13 +442,13 @@ def _package_self_test() -> list:
             "bench/sc1/make_pin.sh": "m\n", "bench/sc1/sc1_drive.sh": drv}
     B = "b" * 40
 
-    def run(e4b=B, **edits):
+    def run(e4b=B, head="L", **edits):
         at = dict(base)
         for k, v in edits.items():
             k = {"pkg": "experts4bit_qlora/a.py", "pin": PIN, "make_pin": "bench/sc1/make_pin.sh",
                  "drive": "bench/sc1/sc1_drive.sh"}[k]
             at[k] = v
-        return package_hold(Fake({B: base, "L": at}), B, "L", e4b_sha=e4b)["verdict"]
+        return package_hold(Fake({B: base, "L": at}, head=head), B, "L", e4b_sha=e4b)["verdict"]
     nl = drv.replace("rsync -az --timeout", "rsync -az --no-links --timeout")
     return [
         ("package: E4B_SHA = the pinned base, kit identical", run(), "OK"),
@@ -372,7 +460,10 @@ def _package_self_test() -> list:
         ("package: the staged pin changed", run(pin="q\n"), "REFUSE"),
         ("package: make_pin changed", run(make_pin="n\n"), "REFUSE"),
         ("package: the driver changed beyond rule 8", run(drive=nl.replace("x:/w/", "y:/w/")), "REFUSE"),
-        ("package: base unreadable", package_hold(Fake({"L": base}), B, "L", e4b_sha=B)["verdict"], "REFUSE"),
+        ("package: base unreadable", package_hold(Fake({"L": base}, head="L"), B, "L", e4b_sha=B)["verdict"], "REFUSE"),
+        ("package: the staging checkout is not the kit commit", run(head=B), "REFUSE"),
+        ("package: the staging checkout is dirty",
+         package_hold(Fake({B: base, "L": dict(base)}, head="L", dirty=True), B, "L", e4b_sha=B)["verdict"], "REFUSE"),
     ]
 
 
@@ -417,8 +508,8 @@ def _stack_self_test() -> list:
 
 # ------------------------------------------------------------------ self-test: each gate with its evidence removed
 class Fake:
-    def __init__(self, trees):
-        self.trees = trees
+    def __init__(self, trees, head=None, dirty=False):
+        self.trees, self._head, self._dirty = trees, head, dirty
 
     def show(self, rev, path):
         v = self.trees.get(rev, {}).get(path)
@@ -427,12 +518,19 @@ class Fake:
     def sha(self, rev):
         return rev if rev in self.trees else None
 
+    def dirty(self):
+        return self._dirty
+
+    def head(self):
+        return self._head
+
 
 def _pin(tree):
     lines = ["# fixture pin"]
     for path, body in sorted(tree.items()):
         if path.startswith("bench/sc1/") and path.count("/") == 2 and not path.endswith((".sha256",)) \
-                and path not in DRIVERS or path.startswith(("bench/sc2/", "bench/p117/", "tests/", "bench/kv-pool-g/")):
+                and path not in DRIVERS or path.startswith(("bench/sc2/", "bench/p117/", "tests/", "bench/kv-pool-g/",
+                                                             "bench/p39/")):
             lines.append(f"{hashlib.sha256(body.encode()).hexdigest()}  {path.rsplit('/', 1)[1]}")
     tree[PIN] = "\n".join(lines) + "\n"
     return tree
@@ -456,9 +554,11 @@ def _fixtures():
             lines[8].replace("P) box_p;;", "P) box_p;; Q) box_q;;"), ""]
     common = {"bench/sc2/sc2f_box_n.sh": "prove_n(){ :; }\n", "bench/sc2/sc2i_box_p.sh": "prove_p(){ :; }\n",
               "bench/sc1/sc1_drive.sh": ('STAGE="$STAGE $REPO/bench/sc2/sc2f_box_n.sh"\n'
+                                         'SC2="$REPO/bench/sc2"; for f in sc2f_box_n.sh sc2j_box_q.sh; do STAGE="$STAGE $SC2/$f"; done\n'
                                          'pull_box() { local -a low=()\n  # a comment between\n' + PULL_BOX_RSYNC
                                          + ' x:/w/ ./\n}\nother() {\n  :\n}\n'),
-              "bench/sc1/make_pin.sh": 'echo "$(sha_of x)  sc2f_box_n.sh"\n'}
+              "bench/sc1/make_pin.sh": ('echo "$(sha_of x)  sc2f_box_n.sh"\n'
+                                        '  for f in sc2f_box_n.sh sc2j_box_q.sh; do echo "$(sha_of "$SC2/$f")  $f"; done\n')}
     b = _pin({**common, "bench/sc1/sc1_run.sh": base_run})
     newf = {"bench/sc2/" + n: f"# {n}\n" for n in NEW if n.startswith("sc2j")}
     newf.update({"bench/p117/p117_reduce.py": "#\n", "tests/test_decode_graph_buckets.py": "#\n",
@@ -477,7 +577,7 @@ def self_test() -> int:
     try:
         b, h = _fixtures()
 
-        def run(mut_h=None, mut_at=None, mut_b=None, stack=STACK):
+        def run(mut_h=None, mut_at=None, mut_b=None, stack=STACK, head="L", dirty=False):
             bb, hh = dict(b), dict(h)
             if mut_b:
                 mut_b(bb)
@@ -488,7 +588,27 @@ def self_test() -> int:
             aa = dict(hh)
             if mut_at:
                 mut_at(aa)
-            return check(Fake({"B": bb, "H": hh, "L": aa}), "H", base="B", at="L", e4b_sha=stack)["verdict"]
+            return check(Fake({"B": bb, "H": hh, "L": aa}, head=head, dirty=dirty), "H", base="B", at="L",
+                         e4b_sha=stack)["verdict"]
+
+        def boxq(extra=None, drop=None, drive=None, name="sc2j_extra.py", stage=True):
+            """At the launch commit: sc2j_box_q.sh changed, ``name`` added and staged in both drivers, rule 8's token."""
+            def f(t):
+                t["bench/sc2/sc2j_box_q.sh"] = t["bench/sc2/sc2j_box_q.sh"] + "# box Q edit\n"
+                t["bench/sc2/" + name] = "# a new box Q file\n"
+                d = t["bench/sc1/sc1_drive.sh"]
+                if stage:
+                    d = d.replace("sc2j_box_q.sh;", f"sc2j_box_q.sh {name};")
+                d = d.replace("rsync -az --timeout", "rsync -az --no-links --timeout", 1)
+                t["bench/sc1/sc1_drive.sh"] = drive(d) if drive else d
+                if stage:
+                    t["bench/sc1/make_pin.sh"] = t["bench/sc1/make_pin.sh"].replace("sc2j_box_q.sh;", f"sc2j_box_q.sh {name};")
+                for k, v in (extra or {}).items():
+                    t[k] = v
+                if drop:
+                    t.pop(drop)
+                _pin(t)
+            return f
 
         def edit_run(f):
             return lambda t: t.__setitem__("bench/sc1/sc1_run.sh", f(t["bench/sc1/sc1_run.sh"]))
@@ -518,6 +638,30 @@ def self_test() -> int:
             ("launch entry differs", run(mut_at=lambda t: (t.__setitem__("bench/sc2/sc2i_box_p.sh", "z\n"), _pin(t))),
              "REFUSE"),
             ("launch driver differs", run(mut_at=lambda t: t.__setitem__("bench/sc1/sc1_drive.sh", "#\n")), "REFUSE"),
+            ("box Q's delta: an sc2j entry changed, one added and staged, rule 8's token", run(mut_at=boxq()), "OK"),
+            ("a non-sc2j entry changed", run(mut_at=boxq(extra={"bench/sc2/sc2i_box_p.sh": "prove_p(){ x; }\n"})), "REFUSE"),
+            ("an N/O/P runner gains `. $W/sc2j_extra.py`",
+             run(mut_at=boxq(extra={"bench/sc2/sc2f_box_n.sh": "prove_n(){ :; }\n. $W/sc2j_extra.py\n"})), "REFUSE"),
+            ("an entry removed", run(mut_at=boxq(drop="bench/sc2/sc2i_box_p.sh")), "REFUSE"),
+            ("box Q's delta plus another driver byte",
+             run(mut_at=boxq(drive=lambda d: d.replace("x:/w/", "y:/w/"))), "REFUSE"),
+            ("a staged non-sc2j NEW file, unreferenced (json.py)", run(mut_at=boxq(extra={"bench/p39/json.py": "#\n"})),
+             "REFUSE"),
+            ("a staging line gains a non-sc2j name",
+             run(mut_at=boxq(drive=lambda d: d.replace("sc2j_box_q.sh sc2j_extra.py;", "sc2j_box_q.sh sc2j_extra.py other.py;")))
+             , "REFUSE"),
+            ("a staging line gains an sc2j name that is no added entry",
+             run(mut_at=boxq(drive=lambda d: d.replace("sc2j_extra.py;", "sc2j_extra.py sc2j_ghost.py;"))), "REFUSE"),
+            ("an sc2j name on a non-staging driver line",
+             run(mut_at=boxq(drive=lambda d: d.replace("other() {\n  :", "other() {\n  python3 sc2j_extra.py"))), "REFUSE"),
+            ("an added box Q file named outside the exact pattern", run(mut_at=boxq(name="sc2j-extra.py")), "REFUSE"),
+            ("a dirty staging checkout, --at a full sha", run(dirty=True), "REFUSE"),
+            ("the staging checkout's HEAD is not --at", run(head="H"), "REFUSE"),
+            ("an added name only a prefix match would pass (sc2j_extra.py.bak), unstaged",
+             run(mut_at=boxq(name="sc2j_extra.py.bak", stage=False)), "REFUSE"),
+            ("an added name only a substring match would pass (foo_sc2j_extra.py), unstaged",
+             run(mut_at=boxq(name="foo_sc2j_extra.py", stage=False)), "REFUSE"),
+            ("an added sc2j entry not staged by the drivers (never reaches a box)", run(mut_at=boxq(stage=False)), "OK"),
             ("launch pin unreadable", run(mut_at=lambda t: t.pop(PIN)), "REFUSE"),
             ("no E4B_SHA on the launch", run(stack=None), "REFUSE"),
             ("E4B_SHA is the kit's commit", run(stack=HOLD), "REFUSE"),
