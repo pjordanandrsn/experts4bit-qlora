@@ -379,3 +379,27 @@ in 66 seconds. Nothing was created and nothing was charged. Three fixes followed
 
 **Unchanged:** the arms, both knobs, FLIPS (Amendment 1), the bar and its exclusions (Amendment 2), the ladder, the knee
 block, the statistics, the predictions, the outcomes, the box, the proof, the guards and the $0 shakedown.
+
+### Amendment 4 (registered before any SC2f run): which commit is the launch commit
+
+**Why.** Amendment 3 names the launch commit as "the first `main` commit that contains both the `v0.57.0` tag and the
+merge of e4b#2011". Read literally, that is e4b#2011's merge (`75ddc16e`). That commit does not carry the lane's own
+kit: box N's grouped-nf4-gemm v0.50.0 pin in `bench/sc1/sc1_run.sh` and `bench/sc2/sc2_defaults.py` both landed later,
+in e4b#2023. The default check that Amendment 3 registers compares a launch commit against `v0.57.0` precisely because the
+launch commit may sit after the tag. So the sentence is corrected before any SC2f run.
+
+**The change.** The launch commit is a `main` commit at or after `1a25b209` (the merge of e4b#2027). That commit holds
+`v0.57.0`, e4b#2011, e4b#2023's box-N kit and e4b#2027's `bench/sc1/sc1_run.sh`. Amendment 3's mechanical default check
+runs at the launch commit against `v0.57.0`, with its two allowance rules, before the create. Its two dumps, the diff's
+output and every `--allow` with its reason are recorded with the run, as are the launch commit, its `experts4bit_qlora/`
+tree, its diff against `v0.57.0`'s tree, and every commit between the two.
+
+**The kit is held at `1a25b209`.** Amendment 3's default check compares package defaults, not the kit, and
+`bench/sc1/sc1_run.sh` is shared by every box. So at the launch commit, every `bench/sc1/staged.sha256` entry that box N
+stages must be byte-identical to that entry at `1a25b209`: the lane's own pieces and the shared `sc1_run.sh` alike.
+The driver refuses to stage a file whose bytes differ from its entry, so the staged kit is then `1a25b209`'s. The
+entry-by-entry comparison is recorded with the run. Any difference is its own pre-run amendment.
+
+**Unchanged:** every constant, threshold and cost; the arms, both knobs, FLIPS, the bar and its exclusions, the price
+ceiling, the order of the three lanes, the screen deadline, the box, the proof, the guards and the $0 shakedown.
+
