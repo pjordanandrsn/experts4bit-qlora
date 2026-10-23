@@ -687,6 +687,10 @@ reading, not a speed one.
   (4.38 → 4.21 ms) and costs the 16-row one, which the cap leaves alone.
 - **Default:** on, capped at 8, from grouped-nf4-gemm 0.37.0 (`GNF4_PDL=0` turns it off). P112, the
   first served read, closed VOID twice (`bench/p112/RESULTS-p112.md`).
+- **On the default NF4 server** (lane P230, 2026-10-23; **measured** —
+  [`bench/p230/RESULTS-p230.md`](../bench/p230/RESULTS-p230.md), `e4b.serve.p230.gnf4-pdl.qwen3-nf4.5090.2026-10-23`):
+  the shipped switch runs 1.00526× the switch off with one request (min over two pairs; 3.707 → 3.687 ms a step), with
+  identical tokens, and leaves 16 requests alone (control pairs 0.99732, 0.99959). KEEP, at the bar's edge (1.005).
 
 **The registered B=1 fused stack decodes 1.43× as fast with one request** (lane P115, Phases A and B, 2026-10-07, one
 rented RTX 5090; **measured** — [`bench/p115/RESULTS-p115.md`](../bench/p115/RESULTS-p115.md),

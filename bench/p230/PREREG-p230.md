@@ -19,6 +19,10 @@ their rows R. One request at top-8 gives T = R = 8, inside the cap. Two or more 
 So PDL engages on the default server at one request only; at 16 requests (W16) it launches nothing with PDL, which
 makes W16 a control.
 
+*Note after the reading (not part of the registered rule):* the per-bucket record shows the census above was incomplete.
+The default build launches seven switched kernels, not three, and buckets 2 to 8 also carry PDL through the kernels
+that key the cap on tokens. W16 (bucket 16) is PDL-free as registered. See `RESULTS-p230.md`.
+
 ## Subject
 
 The default server: `PagedServeConfig.from_env()` + `build_engine`, graphs on, every serving lever unset (the
@@ -150,7 +154,9 @@ files are read by hand):
 
 **NOT_RUN** (the launcher's pre-flight tore down a created instance before the runner ran: no `RUN_ID`, exit file or
 marker) is decided from the launcher's receipt, never classified by `--classify`; it counts toward no cap and uses one
-id. A pre-create refusal (no instance) uses no id.
+id. A pre-create refusal (no instance) also uses one id under the current launcher (bench/common rule 3), and counts
+toward nothing. (Corrected after the reading: as registered, this sentence said a pre-create refusal uses no id, which
+contradicted rule 3, the governing rule.)
 
 **The stop (nonadaptive):**
 - The first ANSWER ends the lane.
