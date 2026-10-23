@@ -177,3 +177,13 @@ head. K2b routes 2..N rows to K37's `linear_i8` over the same codes.
 - `staged-p229.sha256` is re-pinned for `p229_run.sh`. So Amendment 1's "every staged file is unchanged since" holds
   for every staged file except this one comment line. The real fixture is unchanged, and p229-shake-1's record still
   reduces as Amendment 1 states.
+
+## Amendment 3 (2026-10-23, before any reading): the drive follows pod-launch's contract
+
+- A reading launches through pod-launch, which runs `p229_drive.sh` without `E4B_SHA` (it proves the checkout HEAD is the
+  manifest's `heads.e4b`) and keeps its own `receipt.json` and `instance.json` in the run directory. The drive now
+  derives the launch commit from the clean checkout HEAD, refuses an `E4B_SHA` override and a dirty tree (P226's form),
+  and fetches the box tree into `$RUN_DIR/p229/`, refusing a non-empty target.
+- No command on the box, threshold, cost or output changes. The drive is not a staged file, so no pin moves; the
+  shakedowns ran through a direct launcher that set `E4B_SHA`, which is why they did not see it.
+
