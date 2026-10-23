@@ -230,12 +230,16 @@ The 0.54.0 pin was never read.
 
 **The changes**, as SC2f's Amendment 3, which this lane follows step for step:
 - **e4b.** The launch commit is the first `main` commit containing both `v0.57.0` and e4b#2011's merge, with the same
-  record and the same refusal for an unlicensed default change. It must be the commit SC2f's reading ran, unless SC2f's
+  record and the same launch-note default check (a step the maintainer reads before the create, not code). It must be the commit SC2f's reading ran, unless SC2f's
   run recorded a refusal that a later commit fixes; a different commit is named in the launch note.
   - e4b#2011 removes most of the per-stream dispatch from the host gap this lane's lookahead hides, so this lane's `base`
     arm has less gap to hide than the registration's model assumed.
   - The model's numbers above are SC2e's and stay a ceiling. No outcome cut moves, and the read reports the `base` arm's
     measured host gap beside the saving.
+  - **What moved under the arms.** The serving defaults that changed since 0.54.0 are listed in SC2f Amendment 3. On this
+    lane's int4 s64a server the int8 head at one request, the attention split cap and #2011 reach the step; the NF4 routes
+    do not. All of them apply to both arms alike, since none is P118's knob. So `la` against `base` still reads the
+    lookahead alone, against a host gap that #2011 has shrunk.
 - **grouped-nf4-gemm.** v0.50.0 (`41ef086e`), as SC2f's.
 - **Price ceiling.** $1.05 an hour.
   - Worst cases at $1.05/h plus download at ≤ $0.011/GB: a proof, 1.0 h ≤ $1.05 + ~$0.10; the reading, 4.0 h ≤ $4.20 +

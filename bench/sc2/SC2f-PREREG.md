@@ -321,9 +321,23 @@ in 66 seconds. Nothing was created and nothing was charged. Three fixes followed
 - **e4b.** The launch commit is the first `main` commit that contains both the `v0.57.0` tag and the merge of e4b#2011
   (the paged server's single event-loop wakeup per step). Its `experts4bit_qlora/` tree, its diff against `v0.57.0`'s, and
   every commit between the two are recorded at launch.
-  - Every one of those commits must leave the server's defaults unchanged, or carry a FLIP-licensed default.
-  - A commit that changes a serving default without a licence refuses the launch until a further amendment names it.
+  - **The default check is a launch-note step, not code.** The launch note lists every commit between `v0.57.0` and
+    the launch commit, with each one's effect on a serving default: none, or the FLIP read that licensed it. The
+    maintainer reads the list before the create. A commit that changes a serving default without a licence stops the
+    launch until a further amendment names it. Nothing on the box enforces this.
   - The tripwire is unchanged (rc 9 without both of P130's defaults).
+- **What moved under the arms, and what that does to the comparison.** Serving defaults that changed between 0.54.0 and
+  0.57.0 on `qwen3_moe`:
+  - grouped-nf4-gemm's single-request bandwidth GEMV (0.55.0);
+  - K25's `prmt` decode, the int8 lm_head at one request, and the 16-split cap on the paged attention decode (0.56.0);
+  - K25's `c1` plan (0.56.1);
+  - #2011's single wakeup per step (the launch commit).
+
+  This lane's server is SC2e's s64a on the **int4** expert store (K19), so the NF4 routes (the bandwidth GEMV, K25's decode
+  and plan) are not on its expert path. The head, the attention cap and the dispatch change are. They apply to **both**
+  arms alike, because neither is one of P130's two knobs. So `on` against `off` still reads exactly P130's two prefill
+  defaults, now on a base whose decode and host time are smaller. The absolute ceilings are this release's, and no
+  number compares with SC2e's (as registered: no ratio crosses lanes).
 - **grouped-nf4-gemm.** v0.50.0 (`41ef086e6a3e2be5b158ff1bb38e0de67862a949`), the latest release, installed from git as on
   box L (`bench/sc1/sc1_run.sh`, boxes N and O). If a newer release ships before the launch, a further amendment moves it.
 - **Price ceiling.** $1.05 an hour, the program's RTX 5090 policy rate on 2026-10-23, was $0.85. The ceiling is a spend
