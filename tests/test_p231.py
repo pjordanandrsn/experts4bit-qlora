@@ -326,6 +326,16 @@ def test_the_bucket_gates_on_other_lanes_real_records():
     assert R.quality_faults(off, on, R.E) == []
 
 
+def test_the_fetch_imports_no_links():
+    """Amendment 1 (bench/common rule 8): every rsync in the driver passes --no-links, so a link left on a rented box is
+    never copied to the controller, where the receipt writers would follow it."""
+    calls = [ln for ln in _joined_lines(DRIVE) if re.match(r"\s*rsync\b", ln)]
+    assert calls, "the driver's fetch is an rsync"
+    for ln in calls:
+        assert "--no-links" in ln.split(), ln
+    assert "## Amendment 1 (pre-data): the fetch imports no links" in PREREG
+
+
 def test_the_runner_finishes_on_the_verdict():
     assert ('case "$V" in LICENSED|SLOWER|QUALITY_FAIL|FUNCTION_FAIL) finish 0;; *) say "P231 $V -- no reading"; '
             'finish 27;; esac') in RUN

@@ -142,8 +142,9 @@ done
 mkdir -p "$RUN_DIR/p231" && [ -z "$(find "$RUN_DIR/p231" -mindepth 1 -maxdepth 1 -print -quit)" ] || { say "fetch failed: local dir"; exit 22; }
 # The checkpoint stays on the box (the hub cache, outside $W), and so do the NF4 snapshot, the arena and the reference
 # log-probs (work/<model>/: only its bake.json travels, P141's rule) and the gnf4 clone; records, logs, the prompts and
-# the verdict travel.
-rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
+# the verdict travel. Amendment 1: --no-links, so the fetch never imports a symbolic link from the box (a rented host is
+# untrusted, and the receipt writers follow links: bench/common rule 8).
+rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
   --include 'work/' --include 'work/*/' --include 'work/*/bake.json' --exclude 'work/*/*' --exclude 'work/*' --exclude 'gnf4src' \
   --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' \
   "root@$HOST:$W/" "$RUN_DIR/p231/" || { say "fetch failed: rsync"; exit 22; }

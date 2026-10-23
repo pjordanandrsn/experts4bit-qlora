@@ -265,6 +265,15 @@ toward nothing.
 - **STOP-4:** the driver refuses a dirty tree, an `E4B_SHA` override, an unregistered run id, or a staged file that
   differs from `staged-p231.sha256`.
 
+## Amendment 1 (pre-data): the fetch imports no links
+
+Registered before any P231 box was created. The driver's fetch (`p231_drive.sh`) now passes `rsync --no-links`, so a
+symbolic link a rented box leaves in its work directory is never copied to the controller. The receipt writers follow
+links, so a link on an untrusted host could otherwise point a commit at a file outside the run directory (the
+cross-lane rule of 2026-10-23, bench/common rule 8). Nothing else changes: the arms, the rule, the bars, the budget, the
+runner and every staged file are as registered (`staged-p231.sha256` does not pin the driver). The launch commit becomes
+this amendment's merge.
+
 ## What was seen before this page (stated, not hidden)
 
 - **P227's reading** on `p227-5090-1`: its Mixtral cells (B over K25 0.356 at T = 2, 0.461 at T = 4; B over the floor
