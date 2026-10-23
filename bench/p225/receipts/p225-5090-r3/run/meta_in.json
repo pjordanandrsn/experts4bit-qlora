@@ -1,0 +1,1 @@
+{"run_id": "p225-5090-r3", "shakedown": false, "e4b_sha": "0adbba9861568ddd535a0198db96268244b95be1", "model": "Qwen/Qwen3-30B-A3B", "model_revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "device": "NVIDIA GeForce RTX 5090", "cc": [12, 0]}

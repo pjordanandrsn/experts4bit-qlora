@@ -1,0 +1,16 @@
+{
+ "ok": true,
+ "failures": [],
+ "facts": {
+  "adapter_sha256": "93bc577962b9f82f0a03c40a012fc6b0d8d3f8d2d42b595b1eb14e3e3a819e53",
+  "targets": {
+   "A": 192,
+   "B": 192,
+   "zero_B": 0
+  },
+  "fingerprint_modules": {
+   "attention": 192,
+   "experts": 96
+  }
+ }
+}
