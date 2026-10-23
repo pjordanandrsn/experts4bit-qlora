@@ -14,8 +14,17 @@ import types
 
 import pytest
 
-torch = pytest.importorskip("torch")
-pytest.importorskip("bitsandbytes")
+#: under CI (GitHub Actions sets CI=true) every dependency is a HARD import, so a green check proves these tests ran:
+#: CI's grouped-nf4-gemm ships nvme_bake_nf4 and nvme_residency, and ColdTier(pinned=False) needs no CUDA
+IN_CI = os.environ.get("CI") == "true"
+
+
+def _need(name):
+    return importlib.import_module(name) if IN_CI else pytest.importorskip(name)
+
+
+torch = _need("torch")
+_need("bitsandbytes")
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 L, E, INTER, H = 2, 3, 64, 128
@@ -31,8 +40,8 @@ def _weights():
 
 def _bake(tmp_path, W):
     """A real arena: the tiny MoE in an HF-cache-shaped snapshot, quantized by the bake's own quantizer on the CPU."""
-    nb = pytest.importorskip("nvme_bake_nf4")
-    st = pytest.importorskip("safetensors.torch")
+    nb = _need("nvme_bake_nf4")
+    st = _need("safetensors.torch")
     snap = tmp_path / "models--org--tiny-moe" / "snapshots" / REV
     snap.mkdir(parents=True)
     tensors = {f"model.layers.{li}.mlp.experts.{e}.{proj}.weight": t for (li, e, proj), t in W.items()}
@@ -254,12 +263,12 @@ def test_the_fingerprint_is_taken_after_the_load_before_the_merge_and_every_leve
     assert '"fingerprints": fingerprints' in body and "base_match(adapter, fingerprints=fingerprints)" in body
 
 
-@pytest.mark.skipif(not hasattr(os, "preadv"), reason="nvme_residency's ColdTier reads with os.preadv (Linux); the "
-                                                      "reader comparison runs in Linux CI, never passes silently here")
+@pytest.mark.skipif(sys.platform != "linux", reason="nvme_residency's ColdTier reads with os.preadv (Linux); the "
+                                                     "reader comparison runs in Linux CI, never skipped there")
 def test_the_hashed_bytes_are_the_bytes_the_server_reads(served):
     """A second reader could hash bytes the server never reads: PA-1's seek/read must return exactly what
     nvme_residency.segment_tensor (the serving tier's reader) returns for the same rows and segments."""
-    nr = pytest.importorskip("nvme_residency")
+    nr = _need("nvme_residency")
     from experts4bit_qlora import adapter_schema as S
     from experts4bit_qlora.engines.nvme_train import arena_offload_view
     _W, arena, _model_ = served
