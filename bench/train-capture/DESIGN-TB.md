@@ -49,22 +49,41 @@ was measured for this note. Every figure is a public receipt or issue, cited whe
 ## 4. The decision needs one instrument first
 
 Which option pays depends on where the ~38,000 launches are, and that is not known: there has been no training kernel
-census since TC1's amendments 10-21. Map 1's **T-H census** (wave 1, about USD 0.5) answers it. It is one profiled step at
-the matched set on a 5090 and records:
+census since TC1's amendments 10-21. Map 1's **T-H census** answers it. It runs as its own small explore item feeding this
+note (about USD 0.5 a box): one profiled step at the matched set on a 5090.
 
-- launch count and host time per kernel family, split into MoE expert path, attention, dense GEMM, norms and RoPE, and
-  elementwise glue;
+**What it records:**
+- launch count and host time per kernel family;
 - device time per family;
 - the host/device overlap fraction.
 
-The census runs at seq 512 and at the field recipe's padded lengths, on one slow-CPU and one fast-CPU host, since the
-share is host-dependent.
+**Where it runs:**
+- at seq 512 and at the field recipe's padded lengths;
+- on two hosts, because the share depends on the host: one slow-CPU host (an EPYC Zen 2-4 or a Xeon) and one fast-CPU host
+  (an EPYC 9xx5 or a desktop part). Hosts are chosen by the provider's CPU name family, never by its listed GHz, which does
+  not predict single-thread speed.
+- Each box records its measured single-thread rate beside the census.
 
-**Reading the census:**
-- **If the dense pieces hold most launches:** B first.
-- **If the glue holds most of them:** C first.
-- **If the MoE expert path dominates:** only A reaches it. A's prerequisites (the device grid) then get their own design
-  and registration, and T-A reopens as part of it.
+**Fixed in the census code before any profile:**
+- **The family classifier.** Kernel-name patterns map each kernel to one of five families:
+  1. the MoE expert path: the grouped NF4 forward and dgrad, the LoRA delta, dequant;
+  2. attention;
+  3. dense GEMM: projections, the router, the head;
+  4. norms and RoPE;
+  5. elementwise glue: gathers, index copies, fills, casts, epilogues.
+- **An "unclassified" bucket.** If it holds more than 10 % of host launch time, the census is VOID until the patterns are
+  amended, never read by eye.
+- **Each option's addressable share** is the host launch time it can remove:
+  - A: every in-step launch;
+  - B: attention, dense GEMM, and norms and RoPE;
+  - C: the glue.
+
+**The decision rule, fixed before data.** It applies on the slow-CPU host, where host time binds, at the field recipe.
+1. **B first** if its addressable share is at least 40 % of host launch time.
+2. Otherwise, **C first** if the glue's share is at least 40 %.
+3. Otherwise **the MoE expert path dominates, and only A reaches it.** A's prerequisites (the training device grid) then get
+   their own design and registration, and T-A reopens as part of it.
+4. **When B and C both qualify, B goes first:** it needs no kernel change.
 
 ## 5. A prototype, after the census (about USD 3, explore tier)
 
@@ -72,9 +91,16 @@ share is host-dependent.
   matched set on one 5090.
 - **Arms:** eager, and the prototype. Mirrored order, a fixed batch, the profile per arm.
 - **Kill criteria, fixed before the box:**
-  - per-layer host time (forward + recompute + backward) falls by less than 30 % against eager; or
-  - peak allocated memory rises by more than 0.5 GB at the matched set (the 24 GB frontier is closer than that); or
-  - any gradient differs from eager beyond the fused path's run-to-run band.
+  - **Wall time.** The layer's wall time (forward + recompute + backward, synced) on the slow-CPU host falls by less than
+    20 % against eager, or its device time rises by more than 5 %. Capture cuts host time almost by definition, so host
+    time is never the measure. Device time is read beside it because A's over-provisioned early-exit tiles add device work.
+  - **Memory.** Reserved memory (`max_memory_reserved`, or the device's used bytes) rises by more than 0.5 GB at the
+    matched set. A graph's private pool appears as reserved segments, which peak allocated memory can understate, and the
+    24 GB frontier is closer than 0.5 GB. `TC1_STEP_MEM` (e4b#2003) records this per step, folded across phase resets.
+  - **Gradients, by option.**
+    - B and C run or fuse the same math, so their gradients must be BITWISE equal to eager. A band would hide a capture
+      bug such as a stale static buffer.
+    - Only A, whose device grid can change the reduction order, is held to the fused path's run-to-run band.
 - **Then:** a pass on all three sends the option to a registered lane at the field recipe, under the TC1 protocol.
   Otherwise T-B parks with the census as its record.
 
