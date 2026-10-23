@@ -138,7 +138,12 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
   - 8: attention trained on a 4-bit base;
   - 9: an expert base a v1 manifest cannot verify (opt-in ``E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts``,
     reported as ``base_match``);
-  - 10: speculative decoding (``E4B_PAGED_SPEC``), whose draft head and gate were read on the base model.
+  - 10: speculative decoding (``E4B_PAGED_SPEC``), whose draft head and gate were read on the base model;
+  - 11: a backend-adapter/2 attention fingerprint (qfp-v1) the served attention base does not match, measured after the
+    load and before the merge (no override);
+  - 12: a backend-adapter/2 expert fingerprint the served arena does not match (PA-1; opt-in
+    ``E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts``, reported in ``/health`` as a served mismatch). A /2 manifest with
+    an expert fingerprint is compared instead of refused by 9.
   The served name becomes ``<model>+<adapter_id[:12]>``, and ``/health`` and ``/v1/models`` carry the adapter's id,
   manifest hash, base revision, merge report and ``base_match``.
 
@@ -158,7 +163,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional, Sequence
 
-from .adapter_dir import parse_accept_unverified_base
+from .adapter_dir import ACCEPT_BASE_MISMATCH_ENV, parse_accept_base_mismatch, parse_accept_unverified_base
 from .engines.scheduler import ContinuousScheduler, Request
 
 DEFAULT_BUCKETS = (1, 2, 4, 8, 16)
@@ -716,6 +721,7 @@ class PagedServeConfig:
     max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
     prefill_every: int = 1               # E4B_PAGED_PREFILL_EVERY: while decoding, prefill on at most 1 step in N
     loaded_chunk_tokens: int = 0         # E4B_PAGED_LOADED_CHUNK_TOKENS: while decoding, chunk + budget cap; 0 = off
+    kv_pool: str = "claim-all"           # E4B_PAGED_KV_POOL: claim-all (default) / shared (lever G1 + G2, opt-in)
     graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
     prefill_graph: str = "auto"          # E4B_PAGED_PREFILL_GRAPH: auto (default) / 1 / 0 (_prefill_graph_env)
     last_logits: bool = False            # E4B_PAGED_LAST_LOGITS: opt-in prefill head at one position
@@ -752,6 +758,7 @@ class PagedServeConfig:
     adapter: str = ""                    # E4B_PAGED_ADAPTER: one trained adapter directory (backend-adapter/1), merged at load
     adapter_allow_unverified_arena: bool = False   # E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA=1: refusal 3's opt-in
     adapter_accept_unverified_base: frozenset = frozenset()   # E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE: named scopes
+    adapter_accept_base_mismatch: frozenset = frozenset()     # E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH: refusal 12's opt-in
     adapter_id: str = ""                 # set by the build: sha256 of adapter.safetensors (the served name's suffix)
     device: str = "cuda"
 
@@ -776,6 +783,7 @@ class PagedServeConfig:
             max_prefill_tokens=int(env("E4B_PAGED_MAX_PREFILL_TOKENS", "0")),
             prefill_every=int(env("E4B_PAGED_PREFILL_EVERY", "1") or "1"),
             loaded_chunk_tokens=int(env("E4B_PAGED_LOADED_CHUNK_TOKENS", "0") or "0"),
+            kv_pool=(env("E4B_PAGED_KV_POOL", "") or "claim-all").strip().lower(),
             graphs=_graphs_env(env("E4B_PAGED_GRAPHS", "auto"), env("E4B_PAGED_DEVICE", "cuda"),
                                env("E4B_PAGED_PLACEMENT", "all-vram"), _capability(env("E4B_PAGED_DEVICE", "cuda"))),
             prefill_graph=_prefill_graph_env(env("E4B_PAGED_PREFILL_GRAPH", "auto")),
@@ -811,6 +819,7 @@ class PagedServeConfig:
             adapter=env("E4B_PAGED_ADAPTER", "").strip(),
             adapter_allow_unverified_arena=_zero_one(ADAPTER_ALLOW_ARENA_ENV, env(ADAPTER_ALLOW_ARENA_ENV, "0")),
             adapter_accept_unverified_base=parse_accept_unverified_base(env(ADAPTER_ACCEPT_BASE_ENV, "")),
+            adapter_accept_base_mismatch=parse_accept_base_mismatch(env(ACCEPT_BASE_MISMATCH_ENV, "")),
             device=env("E4B_PAGED_DEVICE", "cuda"),
         )
         cfg.validate()
@@ -829,6 +838,8 @@ class PagedServeConfig:
             raise ValueError("E4B_PAGED_PREFILL_EVERY must be >= 1 (1 = prefill on every step, the default)")
         if self.loaded_chunk_tokens < 0:
             raise ValueError("E4B_PAGED_LOADED_CHUNK_TOKENS must be >= 0 (0 = off, the default)")
+        if self.kv_pool not in ("claim-all", "shared"):
+            raise ValueError(f"E4B_PAGED_KV_POOL={self.kv_pool!r}: expected 'claim-all' (the default) or 'shared'")
         from .serve_recipe import default_buckets, usable_buckets
         if isinstance(self.buckets, str):
             if self.buckets.strip().lower() != "auto":
@@ -876,9 +887,10 @@ class PagedServeConfig:
                                  "a read covers them: SD2's gate and draft were read with the head on F.linear at 2..4 "
                                  f"rows, and K2b's served read is plain decode ({INT8_HEAD_ROWS_ENV}=1 or "
                                  "E4B_PAGED_SPEC=off)")
-        if not self.adapter and (self.adapter_allow_unverified_arena or self.adapter_accept_unverified_base):
-            raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} are set but E4B_PAGED_ADAPTER "
-                             f"is not")
+        if not self.adapter and (self.adapter_allow_unverified_arena or self.adapter_accept_unverified_base
+                                 or self.adapter_accept_base_mismatch):
+            raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} / {ACCEPT_BASE_MISMATCH_ENV} are set "
+                             f"but E4B_PAGED_ADAPTER is not")
 
     @property
     def prefill_budget(self) -> int:
@@ -1834,9 +1846,17 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     if adapter is not None:
         # merged right after the load: before the levers, the fusions, the GEMV routes and graph capture, so every one of
         # them sees a plain nn.Linear (docs/ADAPTER_PORTABILITY.md)
-        from .adapter_dir import arena_source_revision, base_match, merge_attention_lora
+        from .adapter_dir import arena_source_revision, base_match, fingerprint_check, merge_attention_lora
         served = getattr(model.config, "_commit_hash", None)
         _raise_adapter_refusals(_adapter_refusals(adapter, cfg, arena_index, served_revision=served))
+        # the served base's qfp-v1 against the /2 manifest's (refusals 11 and 12): after the load, BEFORE the merge
+        # (which rewrites the attention weights) and before any lever, fusion or route touches a module
+        fp_refusals, fingerprints = fingerprint_check(adapter, model, cfg.arena,
+                                                      accept_base_mismatch=cfg.adapter_accept_base_mismatch)
+        _raise_adapter_refusals(fp_refusals)
+        for scope, row in fingerprints.items():
+            log(f"adapter fingerprint {scope}: {row['status']} (qfp-v1 {row['served'][:16]} served, "
+                f"{str(row['trained'])[:16]} trained, {row['seconds']} s)")
         report = merge_attention_lora(model, adapter)
         cfg.adapter_id = adapter.adapter_id
         adapter_info = {"path": adapter.path, "adapter_id": adapter.adapter_id,
@@ -1845,8 +1865,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                         "arena_revision": arena_source_revision(arena_index) or "unverified (allowed by "
                                                                                  f"{ADAPTER_ALLOW_ARENA_ENV}=1)",
                         "served_name": cfg.model_names[0] if cfg.model_names else None, "scale": adapter.scale,
-                        "merge": report.to_dict(), "base_match": base_match(adapter),
-                        "accepted_unverified_base": sorted(cfg.adapter_accept_unverified_base)}
+                        "merge": report.to_dict(), "base_match": base_match(adapter, fingerprints=fingerprints),
+                        "fingerprints": fingerprints,
+                        "accepted_unverified_base": sorted(cfg.adapter_accept_unverified_base),
+                        "accepted_base_mismatch": sorted(cfg.adapter_accept_base_mismatch)}
         log(f"adapter {adapter.adapter_id[:12]}: merged {report.merged} attention projections (scale {adapter.scale:g}, "
             f"max merge error {report.to_dict()['max_err']:.3g}); served as {adapter_info['served_name']!r}")
     mods = target_modules(model)
@@ -1947,10 +1969,17 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     if dense_lt.get("on") and torch.cuda.current_stream(torch.device(cfg.device)) != dense_lt.pop("_stream"):
         raise RuntimeError("E4B_DENSE_LT_PIN: the decode graphs were captured for a stream other than the pin's: its "
                            "one workspace must serve one stream")
+    # E4B_PAGED_KV_POOL=shared (bench/kv-pool-g/DESIGN.md): graphed slots claim blocks as they write (G1) and the
+    # scheduler admits by reserved blocks (G2). The pool keeps its claim-all size here, so the reservation never binds;
+    # sizing the pool from free memory (G3) is a separate, later change.
+    shared = cfg.kv_pool == "shared"
+    if shared:
+        runner.incremental_claims = True
     sched = ContinuousScheduler(runner=runner, max_seqs=cfg.max_seqs, kv_slots=cfg.max_seqs,
                                 chunk_tokens=cfg.chunk_tokens, max_prefill_tokens_per_step=cfg.prefill_budget,
                                 lookahead=cfg.decode_lookahead, prefill_every=cfg.prefill_every,
-                                loaded_chunk_tokens=cfg.loaded_chunk_tokens)
+                                loaded_chunk_tokens=cfg.loaded_chunk_tokens,
+                                kv_blocks=(kv.B * kv.blocks_per_seq) if shared else None, block_tokens=kv.bt)
     info = {"moe_layers": L, "experts": E, "top_k": k, "model_type": getattr(model.config, "model_type", None),
             "int4_expert_layers": int4_layers, "int4_store_kinds": kinds, "int4_attn_projections": int4_attn,
             "kv": {"n_kv_heads": hkv, "head_dim": hd, "k_groups": cfg.kv_groups, "scratch_slots": scratch,
@@ -2249,6 +2278,7 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
                 "max_seqs_requested": cfg.max_seqs_requested, "max_seqs_resolution": cfg.max_seqs_resolution or None,
                 "chunk_tokens": cfg.chunk_tokens, "max_prefill_tokens_per_step": cfg.prefill_budget,
                 "prefill_every": cfg.prefill_every, "loaded_chunk_tokens": cfg.loaded_chunk_tokens,
+                "kv_pool": cfg.kv_pool,
                 "graphs": cfg.graphs, "buckets": list(cfg.buckets), "buckets_requested": cfg.buckets_requested,
                 "graph_status": info.pop("graph_status", None), "graph_stats": _graph_stats(parts),
                 "placement": cfg.placement, "fuse_qkv": _fuse_qkv_health(cfg, info),
