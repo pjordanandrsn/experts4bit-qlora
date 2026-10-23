@@ -345,3 +345,8 @@ def test_the_runner_finishes_with_an_answer_only_on_pass_fail_or_inconclusive():
     assert 'case "$V" in PASS|FAIL|INCONCLUSIVE) finish 0;; *) say "P225 $V -- no reading"; finish 27;; esac' in RUN
     R = _load("p225_reduce")
     assert set(R.ANSWERS) == {"PASS", "FAIL", "INCONCLUSIVE"}
+
+
+def test_amendment_3_pins_brotli_beside_the_unpinned_hub():
+    assert '"huggingface_hub>=0.23" "brotli>=1.2.0"' in RUN
+    assert "## Amendment 3 (pre-data): brotli >= 1.2.0 beside the unpinned huggingface_hub" in PREREG

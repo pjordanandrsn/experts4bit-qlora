@@ -112,7 +112,7 @@ pipx(){ local log=$1 secs=$2; shift 2
   say "pip failed ($(tail -1 $log | cut -c1-120)) -- one retry in 20 s"; sleep 20
   perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" >> $log 2>&1; }
 pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
-  "transformers==5.17.0" "bitsandbytes==0.50.2" accelerate sentencepiece safetensors "huggingface_hub>=0.23" pytest numpy \
+  "transformers==5.17.0" "bitsandbytes==0.50.2" accelerate sentencepiece safetensors "huggingface_hub>=0.23" "brotli>=1.2.0" pytest numpy \
   fastapi "uvicorn==0.38.0" httpx "datasets>=2.14" || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
 # Loggetta goes in --no-deps below (its own requirements would re-resolve e4b[train,fast] and grouped-nf4-gemm from
 # PyPI over the pinned commits), so the one it needs on the experts4bit path, datasets, is named above under the held

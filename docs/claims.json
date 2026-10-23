@@ -10160,6 +10160,34 @@
       "notes": "Pre-registered in #1029; the switches are grouped-nf4-gemm#448 and #453; follows K28 (LEVER) and P112 (closed VOID twice: its accounting, then a prefill-jittered slope). All eight predictions held, written after P112 run 1's arms. Uncapped PDL costs the 16-row step 8.947 -> 9.127 ms; the cap leaves it at 8.937. Lane cost $0.4710."
     },
     {
+      "id": "e4b.serve.p230.gnf4-pdl.qwen3-nf4.5090.2026-10-23",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P230, one RTX 5090: on the DEFAULT serve_paged NF4 graph server (every serving lever unset; Qwen3-30B-A3B), grouped-nf4-gemm's programmatic dependent launch as it ships (GNF4_PDL on, capped at 8 activation rows) decodes identical tokens on every row and runs 1.00526x the switch off (GNF4_PDL=0) with one request (min over two palindromic pairs, 1.00564 and 1.00526; 3.707 -> 3.687 ms a decode step), decode-only timing. At sixteen requests, where the cap launches nothing with PDL (read per bucket), the control pairs read 0.99732 and 0.99959. KEEP: the shipped default stands on the NF4 server.",
+      "value": 1.00526,
+      "unit": "decode tok/s ratio, shipped PDL over no PDL, one request (min over two palindromic pairs, decode-only timing)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 595.84, 32607 MiB, 500 W power limit), one rented Vast.ai verified host (AMD EPYC 7402P, 125 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @b1ba9408 (0.57.0 + P230's registration) + grouped-nf4-gemm @41ef086e (0.50.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box; the default server resolved to max_seqs 32, buckets 1-32, all-vram, graphs; premise test_decode_graph_buckets.py 7 passed + grouped-nf4-gemm test_pdl.py 26 passed + K33's two PDL tests 2 passed on the card; four palindromic arms (OFF1 DEF1 DEF2 OFF2) differing only in GNF4_PDL, W1 = one wikitext 512-token prompt, W16 = sixteen, 32/160 new tokens, 3 timed reps, decode-only slope; verdict by bench/p230/p230_reduce.py (bars from the self-pair spread: KEEP at g1 >= 1.005)",
+      "measured_on": "2026-10-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p230/RESULTS-p230.md",
+        "bench/p230/PREREG-p230.md",
+        "bench/p230/p230_reduce.py",
+        "bench/p230/p230_box.py",
+        "bench/p230/receipts/p230-5090-r1/verdict.json",
+        "bench/p230/receipts/p230-5090-r1/arm_DEF1.json",
+        "bench/p230/receipts/p230-5090-r1/arm_OFF1.json",
+        "bench/p230/receipts/p230-5090-r1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-23/p230-5090-r1/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2042 (Lever D of the decode roadmap); follows P113 (CAP_DEFAULT on SC1's int4 configuration), which said nothing about the NF4 default server. All five predictions held. Reported, not ruled on: the box read seven switched kernels on the default build (the registration's census named three) and PDL on buckets 2-8 (723 of 867 launches each, kernels keyed on tokens), which this lane did not read. Lane cost $0.472, plus one $0 refusal at create."
+    },
+    {
       "id": "e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07",
       "package": "experts4bit-qlora",
       "area": "serve",

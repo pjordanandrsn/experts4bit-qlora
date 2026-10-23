@@ -59,7 +59,7 @@ From `docs/claims.json`. Each cell counts the current claims for that family and
 | family | `kernel` | `offload` | `parity` | `quality` | `serve` | `train` | newest |
 |---|---|---|---|---|---|---|---|
 | `olmoe` | - | - | - | 1 | 14 | 23 | 2026-10-18 |
-| `qwen3_moe` | 1 | - | 1 +1 private | - | 130 +2 private | 121 | 2026-10-23 |
+| `qwen3_moe` | 1 | - | 1 +1 private | - | 131 +2 private | 121 | 2026-10-23 |
 | `gemma4_text` | - | - | 2 +1 private | 0 +1 private | 9 | 13 | 2026-10-10 |
 | `granitemoe` | - | - | 0 +1 private | 1 | 19 | 20 | 2026-10-18 |
 | `gpt_oss` | - | - | 1 +1 private | - | 14 | 10 | 2026-10-09 |
