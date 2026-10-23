@@ -282,9 +282,11 @@ worst: 3 boxes plus 8 host refusals, about 3 x 6.75 + 8 x 0.10 = **about USD 21.
 ## Amendment 1 (pre-data): refusal-retry run ids
 
 The registration names three run ids, `p225-5090-1` to `-3`, while a HOST_REFUSED box is not box-started and is
-capped separately (4 refusals). Every box needs its own id and receipt: the ledger holds one row per run, so an id is
-never reused. This amendment adds the refusal-retry ids **`p225-5090-r1` to `p225-5090-r4`**, exactly the registered
-refusal cap of 4, at the same tier and terms. The runner's and the driver's id cases accept them; nothing else changes.
+capped separately (4 refusals a trip, 8 in all). Every box needs its own id and receipt: the ledger holds one row per
+run, so an id is never reused. This amendment adds the refusal-retry ids **`p225-5090-r1` to `p225-5090-r8`**, one for
+each refusal the registration allows in all, at the same tier and terms. With `-1` to `-3` they cover the lane's
+maximum of 11 boxes. The ids are labels, not budget: the registered caps (3 box-started, 4 refusals a trip, 8 in all)
+and the strike rules alone govern. The runner's and the driver's id cases accept them; nothing else changes.
 - A box that HOST_REFUSES keeps its own id and receipt, with no strike, and counts toward the refusal cap as
   registered.
 - A retry box that passes the screen and starts takes the next unused box-started slot. The 3-box-started cap, the
