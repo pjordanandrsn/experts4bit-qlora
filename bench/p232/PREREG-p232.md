@@ -169,3 +169,35 @@ The first rung that applies decides.
 4. The reading runs at the kit's merge, after the P228 reading.
 5. On FLIP_ROWS_N, a separate PR may set the default to N for `qwen3_moe`, citing this read, unless the TRIPWIRE fired:
    then that PR waits for the written look. On NO_FLIP the knob stays opt-in, and the reading is recorded as such.
+
+## Amendment 1 (2026-10-23, before any data): what the kit could implement exactly
+
+Written with the kit (`p232_run.sh`, `p232_box.py`, `p232_reduce.py`, `p232_drive.sh`), before any box. No bar, row
+count, arm or threshold moves; each item says what the registration left open or could not be measured as written.
+
+- **K against B16 is read by its NLL gap only.** The registered phases score K and B16 each against R's saved log-probs,
+  so K's NLL against B16's is exact over the same windows, but K-against-B16 argmax agreement and KL have no instrument.
+  They are reported as unread, with the reason. B16 against R keeps its NLL gap, argmax agreement and KL. All of it
+  stays reported, never ruling.
+- **The one-row route is checked at the speed builds only.** The eager decode at group T makes no one-row head calls,
+  so the quality phases require only the T-row route (K: K37 at T, none passed; R: `F.linear` at T, none routed).
+- **The tripwire's floor is read per T,** from phase R's `rep` arm at that T. measure_phase draws `rep` on the first
+  group only, so each floor rests on T windows. A zero or absent floor falls to the 0.002 bound, as registered.
+- **On a VOID the reducer prints `TRIPWIRE unread`,** never `none`: an unread record cannot clear the wire. On NOISY and
+  FUNCTION_FAIL it prints the tripwire as read.
+- **Argmax agreement is compared as exact pooled counts.** Each window's agreement is matched positions over 128, so the
+  reducer recovers the integer counts and compares count x 100 >= bar x 100 x positions. A mean of fractions could land
+  a hair under 0.95 at exactly 0.95.
+  A window whose agreement is not k/128 for an integer k was not scored on the registered 128 positions: the record
+  is a VOID with the reason named, never rounded.
+- **A missing per-window KL or argmax on the scored arm is a VOID,** never read as 0 (bench/common rule 7).
+- **The shakedown runs 3 reps** (registered as "a reduced rep count") and keeps the card floor of 30,000 MiB: the default
+  server at 16 sequences x 4,096 tokens does not fit a 24 GB card.
+- **The budget, corrected:** each speed process is a fresh 30B build, five captures and 36 timed passes, so its need is
+  240 s, not 120 s. The box refuses below 140 GB free on its 150 GB disk (a 57 GB checkpoint, its 16 GB arena and the
+  installs fit with room).
+  - **FIT = install 600 + fetch 1,500 + bake 400 + the warm-up and eight speed arms at 240 (2,160) + three quality
+    phases at 700 (2,100) + reserve 600 = 7,360 s, x 1.25 = 9,200 s.**
+  - **Guard 2.75 h** ((boot 300 + 7,360) x 1.25 = 9,575 s <= 9,900 s; 700 s over the fit need for a slow ssh).
+  - **Worst case:** 2.75 h x $1.05 + 70 GB x $0.04 = **$5.69** a started box. A normal box is still expected near one
+    hour.
