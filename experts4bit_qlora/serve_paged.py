@@ -713,6 +713,7 @@ class PagedServeConfig:
     max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
     prefill_every: int = 1               # E4B_PAGED_PREFILL_EVERY: while decoding, prefill on at most 1 step in N
     loaded_chunk_tokens: int = 0         # E4B_PAGED_LOADED_CHUNK_TOKENS: while decoding, chunk + budget cap; 0 = off
+    kv_pool: str = "claim-all"           # E4B_PAGED_KV_POOL: claim-all (default) / shared (lever G1 + G2, opt-in)
     graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
     prefill_graph: str = "auto"          # E4B_PAGED_PREFILL_GRAPH: auto (default) / 1 / 0 (_prefill_graph_env)
     last_logits: bool = False            # E4B_PAGED_LAST_LOGITS: opt-in prefill head at one position
@@ -773,6 +774,7 @@ class PagedServeConfig:
             max_prefill_tokens=int(env("E4B_PAGED_MAX_PREFILL_TOKENS", "0")),
             prefill_every=int(env("E4B_PAGED_PREFILL_EVERY", "1") or "1"),
             loaded_chunk_tokens=int(env("E4B_PAGED_LOADED_CHUNK_TOKENS", "0") or "0"),
+            kv_pool=(env("E4B_PAGED_KV_POOL", "") or "claim-all").strip().lower(),
             graphs=_graphs_env(env("E4B_PAGED_GRAPHS", "auto"), env("E4B_PAGED_DEVICE", "cuda"),
                                env("E4B_PAGED_PLACEMENT", "all-vram"), _capability(env("E4B_PAGED_DEVICE", "cuda"))),
             prefill_graph=_prefill_graph_env(env("E4B_PAGED_PREFILL_GRAPH", "auto")),
@@ -826,6 +828,8 @@ class PagedServeConfig:
             raise ValueError("E4B_PAGED_PREFILL_EVERY must be >= 1 (1 = prefill on every step, the default)")
         if self.loaded_chunk_tokens < 0:
             raise ValueError("E4B_PAGED_LOADED_CHUNK_TOKENS must be >= 0 (0 = off, the default)")
+        if self.kv_pool not in ("claim-all", "shared"):
+            raise ValueError(f"E4B_PAGED_KV_POOL={self.kv_pool!r}: expected 'claim-all' (the default) or 'shared'")
         from .serve_recipe import default_buckets, usable_buckets
         if isinstance(self.buckets, str):
             if self.buckets.strip().lower() != "auto":
@@ -1935,10 +1939,17 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                          mode=(fusion_report.get("modes") or {}).get("E4B_FUSE_T1_GLUE_R2"), report=moe_resid)
     graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None
     engage_prefill_graph(runner, cfg)
+    # E4B_PAGED_KV_POOL=shared (bench/kv-pool-g/DESIGN.md): graphed slots claim blocks as they write (G1) and the
+    # scheduler admits by reserved blocks (G2). The pool keeps its claim-all size here, so the reservation never binds;
+    # sizing the pool from free memory (G3) is a separate, later change.
+    shared = cfg.kv_pool == "shared"
+    if shared:
+        runner.incremental_claims = True
     sched = ContinuousScheduler(runner=runner, max_seqs=cfg.max_seqs, kv_slots=cfg.max_seqs,
                                 chunk_tokens=cfg.chunk_tokens, max_prefill_tokens_per_step=cfg.prefill_budget,
                                 lookahead=cfg.decode_lookahead, prefill_every=cfg.prefill_every,
-                                loaded_chunk_tokens=cfg.loaded_chunk_tokens)
+                                loaded_chunk_tokens=cfg.loaded_chunk_tokens,
+                                kv_blocks=(kv.B * kv.blocks_per_seq) if shared else None, block_tokens=kv.bt)
     info = {"moe_layers": L, "experts": E, "top_k": k, "model_type": getattr(model.config, "model_type", None),
             "int4_expert_layers": int4_layers, "int4_store_kinds": kinds, "int4_attn_projections": int4_attn,
             "kv": {"n_kv_heads": hkv, "head_dim": hd, "k_groups": cfg.kv_groups, "scratch_slots": scratch,
@@ -2234,6 +2245,7 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
                 "max_seqs_requested": cfg.max_seqs_requested, "max_seqs_resolution": cfg.max_seqs_resolution or None,
                 "chunk_tokens": cfg.chunk_tokens, "max_prefill_tokens_per_step": cfg.prefill_budget,
                 "prefill_every": cfg.prefill_every, "loaded_chunk_tokens": cfg.loaded_chunk_tokens,
+                "kv_pool": cfg.kv_pool,
                 "graphs": cfg.graphs, "buckets": list(cfg.buckets), "buckets_requested": cfg.buckets_requested,
                 "graph_status": info.pop("graph_status", None), "graph_stats": _graph_stats(parts),
                 "placement": cfg.placement, "fuse_qkv": _fuse_qkv_health(cfg, info),

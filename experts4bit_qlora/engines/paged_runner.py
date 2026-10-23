@@ -284,6 +284,9 @@ class PagedModelRunner(StepRunner):
         self.pool_layers = [self.ctx.layer_map.get(a, a) for a in self.attn_layers]
         self._graphs = None          # bucket -> CUDAGraph | None (eager); see enable_decode_graphs
         self._prefill_graph = None   # see enable_prefill_graph
+        # E4B_PAGED_KV_POOL=shared (lever G1, bench/kv-pool-g/DESIGN.md): a graphed slot claims the blocks its next write
+        # reaches, before each step, instead of every block it could ever reach at its first graphed decode
+        self.incremental_claims = False
         self._pg_refused = None      # why an `auto` prefill graph stood down (see note_prefill_graph_refused)
         self._pg_stats = {"replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}}
         self._la = None              # decode lookahead state (issue_decode / collect_decode), built at first use
@@ -423,7 +426,11 @@ class PagedModelRunner(StepRunner):
             ks.append(buf[0][0] if len(buf[0]) == 1 else torch.cat(buf[0]))
             vs.append(buf[1][0] if len(buf[1]) == 1 else torch.cat(buf[1]))
         if self._graphs is not None and slot not in self._graph_ready:
-            self.kv.claim_blocks(slot, self.kv.blocks_per_seq - 1, self.pool_layers)
+            # claim-all: every reachable block; incremental: the prompt's blocks and the one its first decode writes
+            last = (min(self.kv.blocks_per_seq - 1, len(self.tokens[rid]) // self.kv.bt)
+                    if getattr(self, "incremental_claims", False)
+                    else self.kv.blocks_per_seq - 1)
+            self.kv.claim_blocks(slot, last, self.pool_layers)
             self._graph_ready.add(slot)
             self._kv_counts["ready_at_flush"] += 1
         if not self.kv.append_prompt(slot, self.pool_layers, ks, vs):
@@ -490,7 +497,13 @@ class PagedModelRunner(StepRunner):
         """One speculative step for the request decoding alone, or None (it decodes at T == 1 from now on)."""
         if self._graphs is None:
             raise RuntimeError("speculative decode needs the decode graphs' buckets (E4B_PAGED_GRAPHS)")
-        out = self.spec.step(rid, self._budgets.get(rid, 1 << 30))
+        budget = self._budgets.get(rid, 1 << 30)
+        if getattr(self, "incremental_claims", False):
+            # the verify writes positions base .. base + k_eff (alias rows reuse this slot's table row), and k_eff is
+            # bounded by the request's budget (decode_budgets), so the claim stays inside the request's reservation
+            k_eff = min(int(getattr(self.spec, "k", 0)), max(0, budget - 1))
+            self._claim_through(self.slot_of[rid], self.pos_of[rid] - 1 + k_eff)
+        out = self.spec.step(rid, budget)
         if out is None:
             return None
         self.tokens[rid].extend(out)
@@ -701,10 +714,25 @@ class PagedModelRunner(StepRunner):
             kv.graph_bucket_unbind()
             kv.reset_scratch_lens()
 
+    def _claim_through(self, slot: int, write_pos: int) -> None:
+        """Incremental claims (``incremental_claims``, lever G1, ``bench/kv-pool-g/DESIGN.md``): before a step the slot
+        owns every block through the one ``write_pos`` lands in. The claim's table write is an async H2D copy into
+        ``kv._bt_all`` queued on this stream ahead of the step's gather and replay, so the graph reads it."""
+        last = min(self.kv.blocks_per_seq - 1, int(write_pos) // self.kv.bt)
+        if self.bulk_kv:
+            self.kv.claim_blocks(slot, last, self.pool_layers)
+        else:
+            for layer in self.pool_layers:
+                self.kv._ensure_blocks(layer, slot, last)
+        self._graph_ready.add(slot)
+
     def _ensure_graph_ready(self, slot: int) -> None:
         """A graph step addresses KV blocks from the device table and never
         allocates, so every block a decoding slot can reach is claimed once,
-        when the slot first decodes (released again by ``free_slot``)."""
+        when the slot first decodes (released again by ``free_slot``). Under
+        ``incremental_claims`` the per-step claim is :meth:`_claim_through`."""
+        if getattr(self, "incremental_claims", False):
+            return
         if slot in self._graph_ready:
             return
         last = self.kv.blocks_per_seq - 1
@@ -729,8 +757,12 @@ class PagedModelRunner(StepRunner):
             if tr is not None:
                 tr.count("first_decodes", sum(1 for s_ in slots if s_ not in self._graph_ready))
                 tr.count("dec_pieces")             # > 1: the step ran as consecutive replays of the largest bucket
-            for s_ in slots:
-                self._ensure_graph_ready(s_)
+            incremental = getattr(self, "incremental_claims", False)
+            for r, s_ in zip(chunk, slots):
+                if incremental:
+                    self._claim_through(s_, self.pos_of[r] - 1)
+                else:
+                    self._ensure_graph_ready(s_)
             if tr is not None:
                 tr.mark("dec_ready")
             pad = b - n
@@ -856,8 +888,12 @@ class PagedModelRunner(StepRunner):
             if tr is not None:
                 tr.count("first_decodes", sum(1 for s_ in slots if s_ not in self._graph_ready))
                 tr.count("dec_pieces")
-            for s_ in slots:
-                self._ensure_graph_ready(s_)
+            incremental = getattr(self, "incremental_claims", False)
+            for r, s_ in zip(chunk, slots):
+                if incremental:
+                    self._claim_through(s_, self.pos_of[r] - 1 + inflight.get(r, 0))
+                else:
+                    self._ensure_graph_ready(s_)
             if tr is not None:
                 tr.mark("dec_ready")
             pad = b - n

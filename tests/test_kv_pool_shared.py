@@ -1,0 +1,148 @@
+# Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
+"""Incremental block claims under the decode graphs (lever G1, ``bench/kv-pool-g/DESIGN.md``), on the real KV pool and
+buckets with a stand-in for the captured graph.
+
+Pinned: with ``incremental_claims`` every real row of every replay owns the block its write position lands in, under
+the synchronous path and the lookahead; the streams equal claim-all's; a slot holds only the blocks it has reached, so
+fewer rows are held than under claim-all, and every row is back on the free lists at idle; the claim arithmetic,
+including a write at a block boundary; the speculative claim reaches base + k_eff and no further than the budget allows;
+and the server's ``E4B_PAGED_KV_POOL`` parses, refuses nonsense and defaults to claim-all.
+"""
+import types
+
+import pytest
+import torch
+
+from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
+from experts4bit_qlora.engines.paged_runner import PagedModelRunner
+from experts4bit_qlora.engines.scheduler import ContinuousScheduler
+
+V = 97
+PROMPTS = [[3, 17, 42, 9, 11, 5, 88, 23, 7], [5, 1, 99, 64, 2], [120, 7, 7, 31, 2, 9, 14, 60, 3, 3, 8, 1],
+           [15, 250, 4, 4, 81, 6, 12], list(range(1, 33))]          # the last one is a 32-token prompt (a block edge)
+MAX_NEW = [40, 22, 9, 3, 17]
+MAX_TOKENS = 256                                                  # 16 blocks a slot
+
+
+class OwnershipCheckingDecode:
+    """The decode graph's contract (as ``tests/test_decode_lookahead.py``'s stand-in), plus the G1 check: at replay,
+    every real row's slot owns the block its position writes, in every pool layer."""
+
+    def __init__(self, runner, b, hist, seen):
+        self.r, self.buf, self.hist, self.seen = runner, runner._bufs[b], hist, seen
+
+    def replay(self):
+        kv, buf = self.r.kv, self.buf
+        st = buf["st"]
+        sl = st["slot_l"]
+        for i, slot in enumerate(sl.tolist()):
+            if slot in kv.scratch:
+                continue
+            pos = int(buf["pos"].view(-1)[i])
+            for layer in self.r.pool_layers:
+                owned = len(kv._rows.get((layer, slot), ()))
+                assert owned > pos // kv.bt, f"slot {slot} writes position {pos} but owns {owned} blocks in layer {layer}"
+            self.seen.append(sum(len(v) for (_, seq), v in kv._rows.items() if seq not in kv.scratch))
+        lens = st["lens"][0].to(torch.long)
+        h = self.hist.index_select(0, sl)
+        h = (h * 1_000_003 + buf["ids"].view(-1) * 7_919 + buf["pos"].view(-1) * 104_729 + lens * 13) % 2_147_483_647
+        self.hist.index_copy_(0, sl, h)
+        buf["tok"].copy_(h % V)
+
+
+def _runner(monkeypatch, incremental, bulk=True):
+    monkeypatch.setenv("E4B_KV_STEP_SELECT", "1")
+    kv = Fp8PagedKV(2, 2, 32, batch=4, max_tokens_per_seq=MAX_TOKENS, device="cpu", scratch_slots=4)
+    r = PagedModelRunner(torch.nn.Module(), kv, device="cpu", bulk_kv=bulk)
+    r.incremental_claims = incremental
+    r.enable_decode_graphs((1, 2, 4), capture=False, verbose=False)
+    hist = torch.zeros(kv.B + kv.n_scratch, dtype=torch.long)
+    seen = []
+    for b in (1, 2, 4):
+        r._graphs[b] = OwnershipCheckingDecode(r, b, hist, seen)
+
+    def prefill(chunks):
+        first = {}
+        for rid, start, take in chunks:
+            slot, n = r.slot_of[rid], len(r.tokens[rid])
+            if start + take >= n:
+                kv.seq_lens[:, slot] = n
+                hist[slot] = sum((i + 1) * t for i, t in enumerate(r.tokens[rid])) % 2_147_483_647
+                first[rid] = int(hist[slot]) % V
+                r.tokens[rid].append(first[rid])
+                r.pos_of[rid] = n + 1
+        return first
+
+    r.run_prefill = prefill
+    return r, kv, seen
+
+
+def _serve(monkeypatch, incremental, lookahead, bulk=True):
+    r, kv, seen = _runner(monkeypatch, incremental, bulk)
+    s = ContinuousScheduler(runner=r, max_seqs=4, kv_slots=4, chunk_tokens=64, lookahead=lookahead)
+    rids = [s.add_request(p, m) for p, m in zip(PROMPTS, MAX_NEW)]
+    s.run_until_idle(max_steps=2000)
+    done = {q.rid: q.out for q in s.done}
+    return [done[i] for i in rids], kv, seen
+
+
+@pytest.mark.parametrize("lookahead", [False, True])
+@pytest.mark.parametrize("bulk", [True, False])
+def test_incremental_claims_cover_every_write_and_keep_the_streams(monkeypatch, lookahead, bulk):
+    out_all, kv_all, seen_all = _serve(monkeypatch, False, lookahead, bulk)
+    out_inc, kv_inc, seen_inc = _serve(monkeypatch, True, lookahead, bulk)
+    assert out_inc == out_all and [len(o) for o in out_inc] == MAX_NEW
+    assert seen_inc and max(seen_inc) < max(seen_all)          # a slot holds what it reached, not its whole ceiling
+    for kv in (kv_all, kv_inc):                                # at idle only the scratch slots hold rows (one block each)
+        assert {seq for (_layer, seq) in kv._rows} <= set(kv.scratch)
+        held = {layer: sum(len(v) for (lyr, _), v in kv._rows.items() if lyr == layer) for layer in range(kv.L)}
+        assert all(len(kv._free[layer]) + held[layer] == kv._n_rows for layer in range(kv.L))
+
+
+def test_the_claim_reaches_the_write_positions_block_and_no_further(monkeypatch):
+    r, kv, _ = _runner(monkeypatch, True)
+    r.bind(0, 0, [1] * 32)
+    r._ensure_graph_ready(0)
+    assert not kv._rows.get((0, 0))                            # incremental: the claim-all path claims nothing
+    r._claim_through(0, 31)
+    assert len(kv._rows[(0, 0)]) == 2                          # positions 0..31: blocks 0, 1
+    r._claim_through(0, 32)
+    assert len(kv._rows[(0, 0)]) == 3                          # position 32 opens block 2 (a 32-token prompt's first decode)
+    r._claim_through(0, 40)
+    assert len(kv._rows[(0, 0)]) == 3                          # still block 2: idempotent
+    r._claim_through(0, 10_000)
+    assert len(kv._rows[(0, 0)]) == kv.blocks_per_seq          # capped at the slot's ceiling
+    assert all(len(kv._rows[(layer, 0)]) == kv.blocks_per_seq for layer in r.pool_layers)
+
+
+def test_claim_all_is_unchanged(monkeypatch):
+    r, kv, _ = _runner(monkeypatch, False)
+    r.bind(0, 0, [1] * 5)
+    r._ensure_graph_ready(0)
+    assert len(kv._rows[(0, 0)]) == kv.blocks_per_seq          # the first graphed decode claims every reachable block
+
+
+@pytest.mark.parametrize("budget,want_last", [(1 << 30, (40 - 1 + 3) // 16), (2, (40 - 1 + 1) // 16), (1, (40 - 1) // 16)])
+def test_the_speculative_claim_is_bounded_by_the_budget(monkeypatch, budget, want_last):
+    r, kv, _ = _runner(monkeypatch, True)
+    r.bind(0, 0, [1] * 39)
+    r.pos_of[0] = 40
+    r.spec = types.SimpleNamespace(k=3, step=lambda rid, b: None)
+    r._budgets = {0: budget}
+    assert r._run_decode_spec(0) is None
+    assert len(kv._rows[(0, 0)]) == want_last + 1
+
+
+def test_the_server_switch(monkeypatch):
+    from experts4bit_qlora import serve_paged
+    from experts4bit_qlora.serve_paged import PagedServeConfig
+    monkeypatch.setattr(serve_paged, "_capability", lambda device: None)
+    monkeypatch.setenv("E4B_PAGED_MODEL", "Qwen/Qwen3-30B-A3B")
+    monkeypatch.delenv("E4B_PAGED_KV_POOL", raising=False)
+    assert PagedServeConfig.from_env().kv_pool == "claim-all"
+    monkeypatch.setenv("E4B_PAGED_KV_POOL", " Shared ")
+    assert PagedServeConfig.from_env().kv_pool == "shared"
+    for bad in ("on", "1", "auto"):
+        monkeypatch.setenv("E4B_PAGED_KV_POOL", bad)
+        with pytest.raises(ValueError, match="E4B_PAGED_KV_POOL"):
+            PagedServeConfig.from_env().validate()
