@@ -230,7 +230,8 @@ The 0.54.0 pin was never read.
 
 **The changes**, as SC2f's Amendment 3, which this lane follows step for step:
 - **e4b.** The launch commit is the first `main` commit containing both `v0.57.0` and e4b#2011's merge, with the same
-  record and the same launch-note default check (a step the maintainer reads before the create, not code). It must be the commit SC2f's reading ran, unless SC2f's
+  record and the same mechanical default check (`bench/sc2/sc2_defaults.py`: dumps at `v0.57.0` and at the launch commit,
+  any diff refuses unless SC2f Amendment 3 or a later amendment names the lever). It must be the commit SC2f's reading ran, unless SC2f's
   run recorded a refusal that a later commit fixes; a different commit is named in the launch note.
   - e4b#2011 removes most of the per-stream dispatch from the host gap this lane's lookahead hides, so this lane's `base`
     arm has less gap to hide than the registration's model assumed.
@@ -242,8 +243,10 @@ The 0.54.0 pin was never read.
     lookahead alone, against a host gap that #2011 has shrunk.
 - **grouped-nf4-gemm.** v0.50.0 (`41ef086e`), as SC2f's.
 - **Price ceiling.** $1.05 an hour.
-  - Worst cases at $1.05/h plus download at ≤ $0.011/GB: a proof, 1.0 h ≤ $1.05 + ~$0.10; the reading, 4.0 h ≤ $4.20 +
-    ~$0.73; lane total ≤ $10.50.
+  - Worst cases at $1.05/h plus download at ≤ $0.011/GB: a proof, 1.0 h ≤ $1.05 + ~$0.10 = $1.15; the reading, 4.0 h ≤
+    $4.20 + ~$0.73 = $4.93.
+  - Lane total, as registered (two proofs, one reading, one re-run), with the re-run counted as a reading: 2 × $1.15 +
+    2 × $4.93 = **$12.16** (was $7.50 at $0.75/h).
   - Each run is under the standing single-run tier ($15).
 - **Host and order.** The host continuity rule, the separate boxes, the per-lane verdict and strike accounting, the watcher
   at create and the 48-hour screen deadline are SC2f Amendment 3's.

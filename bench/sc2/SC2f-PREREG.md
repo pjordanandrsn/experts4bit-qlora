@@ -321,10 +321,17 @@ in 66 seconds. Nothing was created and nothing was charged. Three fixes followed
 - **e4b.** The launch commit is the first `main` commit that contains both the `v0.57.0` tag and the merge of e4b#2011
   (the paged server's single event-loop wakeup per step). Its `experts4bit_qlora/` tree, its diff against `v0.57.0`'s, and
   every commit between the two are recorded at launch.
-  - **The default check is a launch-note step, not code.** The launch note lists every commit between `v0.57.0` and
-    the launch commit, with each one's effect on a serving default: none, or the FLIP read that licensed it. The
-    maintainer reads the list before the create. A commit that changes a serving default without a licence stops the
-    launch until a further amendment names it. Nothing on the box enforces this.
+  - **The default check is mechanical** (`bench/sc2/sc2_defaults.py`, `tests/test_sc2_defaults.py`). Before the
+    create, the controller dumps every serving lever's RESOLVED value on CPU, with every `E4B_*` / `GNF4_*` variable
+    cleared, for `qwen3_moe`. The dump covers the server's config, the decode fusions, the prefill glue, the attention
+    split cap, the int8 head at Qwen3-30B-A3B's shape, and the expert-path routes. It is taken twice, at `v0.57.0` (the
+    reference) and at the launch commit, beside the same grouped-nf4-gemm. `sc2_defaults.py diff` exits 1 naming every
+    lever whose value differs or that exists in only one tree, and that refusal stops the launch. A lever may pass only
+    if this amendment or a later one names it with its reason. Named now, should their PRs have merged by the launch:
+    - `config.prefill_every` and `config.loaded_chunk_tokens` (e4b#2017): opt-in, with defaults whose plans equal the
+      earlier planner's, call for call (tested).
+
+    Nothing else is allowed. The two dumps and the diff's output are committed with the run.
   - The tripwire is unchanged (rc 9 without both of P130's defaults).
 - **What moved under the arms, and what that does to the comparison.** Serving defaults that changed between 0.54.0 and
   0.57.0 on `qwen3_moe`:
@@ -342,8 +349,10 @@ in 66 seconds. Nothing was created and nothing was charged. Three fixes followed
   box L (`bench/sc1/sc1_run.sh`, boxes N and O). If a newer release ships before the launch, a further amendment moves it.
 - **Price ceiling.** $1.05 an hour, the program's RTX 5090 policy rate on 2026-10-23, was $0.85. The ceiling is a spend
   rule, not a scientific term.
-  - Worst cases at $1.05/h plus download at ≤ $0.011/GB: a proof, 1.0 h ≤ $1.05 + ~$0.10; the reading, 3.5 h ≤ $3.68 +
-    ~$0.73; lane total ≤ $9.50.
+  - Worst cases at $1.05/h plus download at ≤ $0.011/GB: a proof, 1.0 h ≤ $1.05 + ~$0.10 = $1.15; the reading, 3.5 h ≤
+    $3.68 + ~$0.73 = $4.41.
+  - Lane total, as registered (two proofs, one reading, one re-run), with the re-run counted as a reading: 2 × $1.15 +
+    2 × $4.41 = **$11.11** (was $7 at $0.75/h).
   - Each run sits under the standing single-run tier ($15).
 - **Host continuity across three lanes.** SC2f, SC2h and SC2i (A1's interleave knobs) run in that order, on **separate
   boxes**, each its lane's registered box: N here, O for SC2h, and SC2i's own. SC2h then reads SC2f's committed verdict
