@@ -339,3 +339,32 @@ def test_a_mutant_without_the_chosen_pin_check_accepts_the_real_records_departur
     DEPARTURES[0][0](rec)
     assert mut.verdict(rec)["sites"]["o_proj"]["verdict"] == "SHAKEDOWN"
     assert R.verdict(rec)["sites"]["o_proj"]["verdict"] == "VOID"
+
+
+def _fetches_without_no_links(drive):
+    """(rsync lines, the ones without --no-links): the drive's live rsync invocations, comments skipped."""
+    lines = [ln for ln in drive.splitlines() if re.search(r"\brsync\b", ln) and not ln.lstrip().startswith("#")]
+    return lines, [ln for ln in lines if not re.search(r"\brsync\s(?:[^|;&]*\s)?--no-links\b", ln)]
+
+
+def test_the_fetch_never_imports_a_link(tmp_path):
+    """Amendment 7 (bench/common rule 8): every rsync in the drive carries --no-links, so no link on a rented box reaches
+    the controller. A drive with no rsync fails (the check needs its input), and the old fetch line fails."""
+    lines, bad = _fetches_without_no_links(DRIVE)
+    assert len(lines) == 1 and not bad, (lines, bad)
+    assert _fetches_without_no_links(DRIVE.replace(" --no-links", ""))[1]          # the old line is refused
+    assert not _fetches_without_no_links("echo fetch\n")[0]                          # no rsync -> the count above fails
+    if shutil.which("rsync") is None:
+        return
+    src, dst = tmp_path / "box", tmp_path / "out"
+    src.mkdir()
+    (src / "f.json").write_text("{}", encoding="utf-8")
+    try:
+        (src / "secret").symlink_to("../../../../etc/hosts")
+        (src / "etc").symlink_to("/etc", target_is_directory=True)
+    except OSError:
+        pytest.skip("this host cannot make symlinks")
+    flags = re.search(r"rsync (-az --no-links) -e", lines[0]).group(1).split()
+    subprocess.run(["rsync", *flags, f"{src}/", f"{dst}/"], check=True, capture_output=True)
+    assert (dst / "f.json").is_file()
+    assert not [p for p in dst.rglob("*") if p.is_symlink()] and not (dst / "secret").exists() and not (dst / "etc").exists()

@@ -61,3 +61,49 @@ def test_verdict_stack_on_a_real_run(tmp_path):
         (tmp_path / "versions.txt").write_text(vv)
         (tmp_path / "summary.txt").write_text(ss)
         assert kh.verdict_stack(tmp_path)["verdict"] == want
+
+
+def test_rule_8_driver_delta_on_the_held_driver():
+    """bench/common rule 8 on 7b8f1f69's own sc1_drive.sh: exactly one ' --no-links' on pull_box's rsync line passes;
+    anything more, or elsewhere, refuses."""
+    held = subprocess.run(["git", "-C", str(REPO), "show", f"{kh.HOLD}:bench/sc1/sc1_drive.sh"], capture_output=True,
+                          text=True, check=True).stdout
+    assert held.count(kh.PULL_BOX_RSYNC) == 1 and kh.NO_LINKS not in held
+    declared = held.replace("  rsync -az --timeout", "  rsync -az --no-links --timeout", 1)
+    assert kh.driver_delta_ok(held, held) and kh.driver_delta_ok(declared, held)
+    assert not kh.driver_delta_ok(declared.replace("ConnectTimeout=20", "ConnectTimeout=21", 1), held)
+    assert not kh.driver_delta_ok(declared.replace(kh.NO_LINKS, kh.NO_LINKS * 2, 1), held)
+    in_ssh = held.replace("-o ConnectTimeout=20 ", "-o ConnectTimeout=20 --no-links ", 1)
+    assert in_ssh.count(kh.NO_LINKS) == 1 and not kh.driver_delta_ok(in_ssh, held)   # inside -e "ssh ...", not an rsync arg
+    at_end = held.replace(kh.PULL_BOX_RSYNC, kh.PULL_BOX_RSYNC + kh.NO_LINKS, 1)
+    assert not kh.driver_delta_ok(at_end, held)                                       # same line, another position
+    elsewhere = held.replace('SC2="$REPO/bench/sc2";', 'SC2="$REPO/bench/sc2"; # --no-links', 1)
+    assert elsewhere != held and not kh.driver_delta_ok(elsewhere, held)
+
+
+def test_the_live_driver_fetches_without_links():
+    """bench/common rule 8: pull_box's fetch never imports links."""
+    drive = (REPO / "bench" / "sc1" / "sc1_drive.sh").read_text()
+    line = next(x for x in drive.splitlines() if x.startswith("  rsync -az"))
+    assert " --no-links " in line
+
+
+def test_package_hold_on_registered_commits():
+    """SC2j Amendment 3: the stack pinned to Amendment 1's merge (ea298854), the kit checked out at #2066's merge
+    (5c9579bb), whose package differs (a training-only change): OK only with E4B_SHA = ea298854 in full. Across a
+    staged-kit change (1a25b209 -> 7b8f1f69) it refuses even with the pin."""
+    g = kh.Git(str(REPO))
+    pin, kit = "ea298854139fc6b5ea9bddcb392b3d82d3b9ef6d", "5c9579bbbb4ce8f85afd8d9e1f947bb8df23ffff"
+    assert kh.package_hold(g, pin, kit, e4b_sha=pin)["verdict"] == "OK"
+    for bad in (None, kit, pin[:8]):
+        assert kh.package_hold(g, pin, kit, e4b_sha=bad)["verdict"] == "REFUSE", bad
+    r = kh.package_hold(g, kh.BASE, kh.HOLD, e4b_sha=kh.BASE)
+    assert r["verdict"] == "REFUSE" and any("staged.sha256" in w for w in r["why"])
+
+
+def test_verdict_stack_takes_the_lanes_pin(tmp_path):
+    """sc2j-r3's real records name 7b8f1f69: OK against --stack 7b8f1f69, VOID against SC2f/h/i's default."""
+    for f in ("versions.txt", "summary.txt"):
+        (tmp_path / f).write_text((FIX / f).read_text())
+    assert kh.verdict_stack(tmp_path, stack=kh.HOLD)["verdict"] == "OK"
+    assert kh.verdict_stack(tmp_path)["verdict"] == "VOID"

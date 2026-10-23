@@ -1,0 +1,3 @@
+utc,phase,clocks.sm,clocks.mem,power.draw,temperature.gpu,clocks_event_reasons.active
+2026-10-23T18:36:59Z,bench start,180, 405, 4.70, 31, 0x0000000000000000
+2026-10-23T18:37:12Z,bench end,2887, 13801, 77.97, 38, 0x0000000000000000

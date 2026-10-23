@@ -117,6 +117,25 @@ hit one of these gaps.
    For example, SC2j reads a server with no end `/health` as UNREAD only when the runner recorded a deadline skip for it,
    and as VOID otherwise (a crash or a lost server). Added 2026-10-23, from P230's bucket-16 control and SC2j's plans and
    `kv_blocks_waits`.
+8. **A fetch never imports links.** A rented box is a third-party host, and root on it: it can leave a relative link in
+   its work dir that resolves, on the controller, to a file outside the run dir, and it can make its own rsync fail on
+   purpose to force a fallback. So the rule covers every pull from a box, not only rsync:
+   - an `rsync` carries `--no-links` after `-a` (`rsync -az --no-links ...`), or uses flags with neither `-a` nor `-l`
+     (`rsync -rtz ...`); rsync then skips each link ("skipping non-regular file");
+   - any other pull (tar over ssh, `ssh ... "tar -cf - ." | tar -xf -`; `scp` from `root@host:`; any `ssh` whose
+     stdout goes to a file, such as `ssh ... cat x > f` or `$SSH "tar -cf - ." > x.tar` before a local `tar -xf x.tar`)
+     is followed by a post-fetch link refusal before anything reads the tree: `find <dir> -type l` printing anything
+     exits 22. Simpler still: drop a fallback path, so a failed fetch is a fetch failure.
+
+   The receipt commit guards against links too (it never follows one into the store), so this rule is the second
+   layer, not the only one. It applies to a driver at its next edit or launch. Closed drivers are not swept:
+   `tests/test_fetch_no_links.py` freezes every script
+   that broke the rule on 2026-10-23 by its sha256, and a new script, or a frozen one whose bytes change, must pass. The
+   test finds each pull in any command position (`if ! rsync ...`, `$(rsync ...)`, inside a function body), reads
+   rsync's flags in order (`--no-links -a` still keeps links), and treats a quoted remote `tar -x` as a push, not a pull.
+   It does NOT check where the refusal sits: any later `find ... -type l` passes, even one after the tree is read, on
+   another directory, or with no exit. Nor does it expand variable flags (`rsync $FLAGS ...`, `"${OPTS[@]}"`), so those
+   must be read by eye. Added 2026-10-23.
 
 ## Host facts
 

@@ -132,7 +132,7 @@ def test_box_p_is_wired_like_box_o():
             "install_sc2_client ;;") in RUN
     assert 'P) PROVE_NEEDS="sc2client";;' in RUN and '[ "$BOX" = P ] && prove_p' in RUN and "P) box_p;; Q) box_q;; esac" in RUN
     assert 'case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q) ;;' in DRIVE
-    assert "sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py sc2j_box_q.sh sc2j_reduce.py sc2j_contract.py sc2j_prompts.py; do STAGE=" in DRIVE
+    assert "sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py sc2j_box_q.sh sc2j_reduce.py sc2j_contract.py sc2j_prompts.py sc2j_quality.py; do STAGE=" in DRIVE
     assert 'sc2f_*|sc2h_*|sc2i_*|sc2j_*) src="$SC2/$name";;' in DRIVE
     pin = (REPO / "bench" / "sc1" / "staged.sha256").read_text()
     for name in ("sc2i_box_p.sh", "sc2i_reduce.py"):

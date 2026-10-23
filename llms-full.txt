@@ -2431,6 +2431,13 @@ GEMV, which reads half the head's bytes.
 
 `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` ([P153](../bench/p153/RESULTS-p153.md)).
 
+**The int8 head at 2 to 8 rows (`E4B_INT8_HEAD_ROWS`, opt-in).** In a captured microbench of the head call (one RTX 5090,
+lane P229), grouped-nf4-gemm K37's `linear_i8` runs Qwen3-30B-A3B's 151936 x 2048 int8 head at 2, 4 and 8 rows in a
+median 0.51 of `F.linear`'s time on the grid's bf16 rounding (upper bounds 0.5109, 0.5148 and 0.5085 against 0.70), and
+within a median 1.01-1.03 of the one-row int8 GEMV. The verdict is GO_ROWS_8, so the knob is licensed to its maximum of
+8 rows. No served speed or quality is claimed: a served read with P153's quality bars comes first, and the knob stays
+off by default. `e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23` ([P229](../bench/p229/RESULTS-p229.md)).
+
 **Qwen3-30B-A3B's batched decode runs K25 with K39's byte-permute decode (on by default).** `E4B_K25_LUT=prmt` swaps
 K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), which yields the same values bit for bit.
 - **Speed:** sixteen requests decode **1.0925×** as fast on a 5090 (about 976 → 1067 tok/s; the smallest of four ABBA
@@ -3579,6 +3586,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.p149.int8-attn.mixtral.5090.2026-10-20 [measured]: Lane P149 box Q+S (one RTX 5090): serving Mixtral-8x7B-Instruct with its 128 attention projections (q, k, v, o) held in int8 with a per-row fp32 scale (E4B_SERVE_ATTN_INT8=1, #1848), decode calls of 1-16 rows on grouped-nf4-gemm 0.49.0's K37 (dense_i8.linear_i8), against the default server (bf16 projections), on the …
 - e4b.kernel.p227.per-row-gemv.mixtral.5090.2026-10-23 [measured]: Lane P227 (one RTX 5090): on Mixtral-8x7B's experts at two and four decode tokens, the per-row GEMV route (E4B_NF4_SMALLM_BW=1, K33 one row per program) runs the captured expert call in a median 0.36 and 0.46 of K25's time (upper bounds 0.3601 and 0.4655 against P227's 0.70 bar: PASS) …
 - e4b.kernel.p227.per-row-gemv.qwen3.5090.2026-10-23 [measured]: Lane P227 (one RTX 5090): on Qwen3-30B-A3B's experts at two and four decode tokens, the per-row GEMV route (E4B_NF4_SMALLM_BW=1) runs the captured expert call in a median 0.74 and 0.90 of K25's time at its served plan (upper bounds 0.7478 and 0.9047 against P227's 0.70 bar: MISS) …
+- e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23 [measured]: Lane P229 (one RTX 5090): at 2, 4 and 8 rows of Qwen3-30B-A3B's 151936 x 2048 lm_head on its per-row int8 grid, the E4B_INT8_HEAD_ROWS route (grouped-nf4-gemm K37's linear_i8 at its shipped plan) runs the captured head call in a median 0.51 of F.linear's time on the grid's bf16 rounding (upper bounds 0.5109, 0.5148 and …
 
 Open items (no evidence either way):
 
@@ -3586,4 +3594,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(463 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(464 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

@@ -303,7 +303,7 @@ def test_the_probe_runs_before_the_install_and_refuses_with_rc_19():
     # only the probe's rc 19 is a host refusal; any other nonzero is a kit halt (21), never a refusal
     case = RUN[RUN.index('case "$DRV_RC" in'):RUN.index("esac", RUN.index('case "$DRV_RC" in'))]
     assert re.findall(r"^  (\S+)\)", case, re.M) == ["0", "19", "*"] and "finish 21;;" in case.split("*)")[1]
-    assert "merge commit (Amendment 2)." in PREREG                                    # every unstarted box launches from it
+    assert "merge commit (Amendment 3)." in PREREG                                    # every unstarted box launches from it
 
 
 def test_the_tripwire_ties_the_installed_sampler_to_the_probed_copy():
@@ -338,3 +338,79 @@ def test_three_consecutive_driver_peak_refusals_stop_the_card(tmp_path):
     assert other.returncode == 0 and "DRYRUN" in other.stdout, other.stdout + other.stderr
     unread = _dry_run(tmp_path / "d", "ho3-4090-r5", "777", earlier=[("ho3-4090-r2", None, True, 19)])
     assert unread.returncode == 78 and "unreadable" in unread.stdout, unread.stdout
+
+
+def test_the_fetch_never_imports_links():
+    """Amendment 3: every rsync in the driver skips links, and a fetched link refuses before anything reads the tree."""
+    rsyncs = re.findall(r"^\s*rsync\b[^\n]*", DRIVE, re.M)
+    assert rsyncs and all("--no-links" in r for r in rsyncs), rsyncs
+    check = DRIVE.index('find "$RUN_DIR/ho3" -type l -print -quit')
+    assert DRIVE.index("rsync -az --no-links") < check < DRIVE.index("HO3_RUN_NONCE\" 2>/dev/null")
+
+
+def test_a_fetched_link_is_recorded_removed_and_refused(tmp_path):
+    """The refusal block itself, run on a tree with links: each is recorded (never followed) and removed, then exit 22."""
+    start = DRIVE.index('if [ -n "$(find "$RUN_DIR/ho3" -type l -print -quit)" ]; then')
+    block = DRIVE[start:DRIVE.index("\nfi\n", start) + 4]
+    run = tmp_path / "run"
+    (run / "ho3" / "logs").mkdir(parents=True)
+    (run / "ho3" / "summary.txt").write_text("ok\n")
+    secret = tmp_path / "secret.env"
+    secret.write_text("TOKEN=x\n")
+    (run / "ho3" / "logs" / "a b.log").symlink_to(secret)
+    (run / "ho3" / "up").symlink_to("../../../etc")
+    script = 'say(){ echo "$*"; }\nRUN_DIR="$1"\n' + block + "echo passed\n"
+    r = subprocess.run(["bash", "-c", script, "x", str(run)], capture_output=True, text=True, timeout=30)
+    assert r.returncode == 22 and "2 symlink(s) arrived" in r.stdout, r.stdout + r.stderr
+    assert not [p for p in (run / "ho3").rglob("*") if p.is_symlink()]
+    rec = (run / "ho3" / "refused_links.txt").read_text()
+    assert "TOKEN" not in rec and str(secret) in rec and "../../../etc" in rec and rec.count("\n") == 2, rec
+    assert (run / "ho3" / "summary.txt").read_text() == "ok\n" and secret.read_text() == "TOKEN=x\n"
+
+
+def test_a_box_supplied_refused_links_file_is_replaced_never_followed(tmp_path):
+    """The box controls the fetched tree: links are swept BEFORE any rename, its own refused_links.txt is kept under a
+    marked name (never appended to), and nothing is ever written through a link into the controller."""
+    start = DRIVE.index('if [ -n "$(find "$RUN_DIR/ho3" -type l -print -quit)" ]; then')
+    block = DRIVE[start:DRIVE.index("\nfi\n", start) + 4]
+    script = 'say(){ echo "$*"; }\nRUN_DIR="$1"\n' + block
+    for kind in ("file", "link", "scratch", "dirlink", "both"):
+        base = tmp_path / kind
+        run, ctl_dir = base / "run", base / "controller_dir"
+        (run / "ho3").mkdir(parents=True)
+        ctl_dir.mkdir()
+        target = base / "controller.txt"
+        target.write_text("keep\n")
+        rl, kept = run / "ho3" / "refused_links.txt", run / "ho3" / "refused_links.box-supplied.txt"
+        if kind == "file":
+            rl.write_text("forged -> nothing\n")
+            (run / "ho3" / "x").symlink_to(target)
+        elif kind == "link":
+            rl.symlink_to(target)
+        elif kind == "scratch":                   # links at the names an in-tree scratch file would have used
+            rl.symlink_to(target)
+            for name in ("refused_links.txt.tmp", "refused_links.txt.links"):
+                (run / "ho3" / name).symlink_to(target)
+        elif kind == "dirlink":                   # the rename's destination is a link to a controller directory
+            rl.write_text("forged -> nothing\n")
+            kept.symlink_to(ctl_dir, target_is_directory=True)
+        else:                                     # both names taken by regular files: refuse, touch neither
+            rl.write_text("forged -> nothing\n")
+            kept.write_text("also forged\n")
+            (run / "ho3" / "x").symlink_to(target)
+        r = subprocess.run(["bash", "-c", script, "x", str(run)], capture_output=True, text=True, timeout=30)
+        assert r.returncode == 22, (kind, r.stdout + r.stderr)
+        assert target.read_text() == "keep\n" and not list(ctl_dir.iterdir()), kind           # nothing written through
+        assert not [p for p in run.rglob("*") if p.is_symlink()], kind                      # no link left anywhere
+        if kind == "both":
+            assert rl.read_text() == "forged -> nothing\n" and kept.read_text() == "also forged\n"
+            assert "refused_links.box-supplied.txt" in r.stdout and str(target) in r.stdout, r.stdout
+            continue
+        rec = rl.read_text()
+        assert "forged" not in rec, (kind, rec)
+        if kind in ("file", "dirlink"):
+            assert rec.startswith("# the box shipped") and kept.read_text() == "forged -> nothing\n", (kind, rec)
+        else:
+            assert not kept.exists(), kind
+        want = {"file": [str(target)], "link": [str(target)], "scratch": [str(target)] * 3, "dirlink": [str(ctl_dir)]}[kind]
+        assert rec.count(" -> ") == len(want) and all(w in rec for w in want), (kind, rec)

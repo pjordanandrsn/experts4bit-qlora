@@ -246,3 +246,95 @@ kernel pin against the read's merge commit (`SC2J_FROZEN`), never the live tree.
 - 8,192 tokens a slot, other models, families and cards.
 - The decode lookahead (SC2h) and the prefill knobs (SC2f, SC2i): at their defaults here.
 - A default flip: only a separate PR citing a SHARED_LICENSED read.
+
+## Amendments
+
+### Amendment 1 (registered before any SC2j reading, after the proof `sc2j-r3`): QUALITY at box Q's stack constants
+
+**Why.** The proof `sc2j-r3` (machine 52780, 2026-10-23, $0.235) started and was NOT PROVED, on QUALITY alone. Everything
+else passed: the installs and tripwires, every self-test, CONTRACT OK (shared IDENTICAL to claim-all, 96 requests and
+79,313 tokens at 32 slots, `sh` waits 0, the floor identical), both servers' ROUTES, POOL, EARLY and BURST, the Q3 smokes
+VALID, and the serial identity. QUALITY read VOID because `bench/p117/p117_reduce.py` holds two constants that name
+P117's registration, not its method:
+
+- the grouped-nf4-gemm commit P117 ran (`b4f93f1c`, v0.42.0). Box Q installs v0.50.0 (`41ef086e`), and `q_quality` did
+  not export `GNF4_SHA` to `p117_box.py`, so the record carried none;
+- P117's window count per model (Qwen3 64, Granite 40). The proof smokes 8 Granite windows.
+
+As registered, QUALITY could never read on box Q, in the proof or in the reading. That is a kit fault, and the proof did
+its job by catching it.
+
+**The change.**
+- `q_quality` exports box Q's `GNF4_SHA` to `p117_box.py`, which is unchanged and records `os.environ["GNF4_SHA"]`.
+- The verdict comes from `bench/sc2/sc2j_quality.py`, staged beside `p117_reduce.py`. It runs `p117_reduce.reduce` with
+  exactly two constants set to box Q's registered values: `GNF4_SHA` = `41ef086e6a3e2be5b158ff1bb38e0de67862a949`, and the
+  windows, Qwen3-30B-A3B 64 (P117's own count; the reading) and Granite 8 (the proof's smoke). P117's bar (tol 0.01,
+  spread 2x with a 0.005 floor), its floor draws, its engagement and FUNCTION checks and its model revisions are unchanged.
+- It fails closed. A record whose grouped-nf4-gemm is not box Q's, a box that installed another commit, or a window
+  count other than the registered one for its model is VOID, through P117's own checks. Its self-test (11 cases) refuses
+  each of these with its evidence removed.
+- `tests/test_sc2j_box.py` runs the change on `sc2j-r3`'s own QUALITY record (`tests/fixtures/sc2j_r3_quality/`). As
+  recorded it reads VOID under P117's constants. With the exported `GNF4_SHA` it reads AT_PARITY at box Q's constants:
+  FUNCTION 248 positions, 0 differ, under P117's unchanged bar. Each of the four refusals above turns it VOID.
+- The kit gains one staged entry, `sc2j_quality.py`, and `sc2j_box_q.sh` changes; `staged.sha256` is regenerated. The
+  launch commit is this amendment's merge.
+
+**Strikes, ids and spend.** `sc2j-r3` is a started box that was not read: strike 1 of the two that stop the lane
+(bench/common rule 3). Proofs started: 1 of 2. The next proof is `sc2j-prove-2`, the last proof the cap allows: it
+follows a box that started, so it takes a proof id, not a retry id. A second strike stops the lane pending a root-cause
+note. Spent so far: $0.251. Retry ids used: `sc2j-r1` to `sc2j-r3` (`sc2j-prove-1` and `sc2j-r1`/`r2` did not start: the
+320 GB disk floor, then a ghost ask, then a vanished offer, all before any install).
+
+**Unchanged:** every arm, gate, threshold, rate, guard, cap and cost; the outcome classes; the QUALITY plan match; and
+QUALITY's place in the rule (anything other than AT_PARITY is NOT_LICENSED (QUALITY), whatever the speed clauses read).
+SC2f, SC2h and SC2i are untouched: their kit is held at `7b8f1f69` (their own notes), and this change to the shared kit
+means they launch from `7b8f1f69` itself.
+
+### Amendment 2 (registered before any SC2j reading): the launch checkout takes rule 8's fetch fix
+
+**Why.** bench/common rule 8: a fetch never imports links. The launch commit Amendment 1 registered (its merge,
+`ea298854`) fetches with `rsync -az`, which keeps symlinks, so no box may be created from it. This change adds
+`--no-links` to `sc1_drive.sh`'s `pull_box` rsync line.
+
+**The change.** The launch checkout is a `main` commit at or after this amendment's merge, and the stack under test is
+that checkout's `HEAD`, as before. Before the create, `python bench/sc2/sc2_kit_hold.py package-hold --base ea298854
+--at HEAD --out <run>/package_hold.json` must read OK, and its record is kept with the run. It refuses unless the package
+under test is Amendment 1's: the `experts4bit_qlora/` tree and the install metadata (`pyproject.toml`, `MANIFEST.in`)
+are identical, the staged kit (`staged.sha256`) and `make_pin.sh` are byte-identical, and `sc1_drive.sh` differs at most
+by rule 8's one token on `pull_box`'s rsync line. Its self-test removes or alters each, and `tests/test_sc2_kit_hold.py`
+runs it on registered commits.
+
+**Unchanged:** every arm, gate, threshold, rate, guard, cap and cost; strike 1 of 2; proofs started 1 of 2; the next
+proof `sc2j-prove-2`.
+
+### Amendment 3 (registered before any SC2j reading): the stack under test is pinned to `ea298854`
+
+**Why.** Amendment 2 moved the launch checkout to the rule-8 fix's merge (`5c9579bb`) and required its package to equal
+Amendment 1's merge (`ea298854`). Between the two, an opt-in training change (`E4B_TRAIN_DETERMINISTIC`: `train.py`, a
+new `engines/train_determinism.py`, four lines of `engines/layer_major.py`) changed `experts4bit_qlora/`. So
+`package-hold` refused at `5c9579bb` and would refuse at every later `main` commit. Rather than judge which files
+matter to serving, the stack is pinned exactly, as SC2f, SC2h and SC2i pin theirs.
+
+**The change.**
+- The launch command sets `E4B_SHA=ea298854139fc6b5ea9bddcb392b3d82d3b9ef6d` (Amendment 1's merge), which
+  `sc1_drive.sh` uses in place of its checkout's `HEAD`. The box installs exactly that package, and its tripwire still
+  refuses (rc 9) unless the installed commit equals `E4B_SHA`. This supersedes Amendment 2's "the stack under test is
+  that checkout's `HEAD`".
+- The kit checkout is a `main` commit at or after this amendment's merge. Before the create,
+  `python bench/sc2/sc2_kit_hold.py package-hold --base ea298854 --e4b-sha "$E4B_SHA" --at HEAD --out
+  <run>/package_hold.json` must read OK, and its record is kept with the run. It refuses unless `E4B_SHA` is `ea298854`
+  in full (missing, abbreviated or another commit refuses), `staged.sha256` and `make_pin.sh` are byte-identical to
+  `ea298854`'s, and `sc1_drive.sh` differs at most by rule 8's one token on `pull_box`'s rsync line. It does not compare
+  the kit checkout's package, because the box never installs it. Measured: OK with `E4B_SHA=ea298854` at `5c9579bb`;
+  REFUSE with `E4B_SHA=5c9579bb`.
+- **The stack is a VOID condition of the rule.** A box verdict stands only when
+  `python bench/sc2/sc2_kit_hold.py verdict-stack --run <run>/sc1 --stack ea298854139fc6b5ea9bddcb392b3d82d3b9ef6d
+  --out <run>/verdict_stack.json` reads OK: `versions.txt`'s installed e4b commit and every `KNOBS ... e4b=` line of
+  `summary.txt` both name `ea298854`. Otherwise the read is VOID. `verdict_stack.json` is a required results file: a
+  results PR or re-derivation without it, or with it not OK, reads VOID.
+- Self-tests refuse a missing, abbreviated or other `E4B_SHA`, a changed kit file and a driver change beyond rule 8,
+  and `verdict-stack` against another pin. `tests/test_sc2_kit_hold.py` runs both on registered commits and on a real
+  fetched run's records.
+
+**Unchanged:** every arm, gate, threshold, rate, guard, cap and cost; strike 1 of 2; proofs started 1 of 2; the next
+proof `sc2j-prove-2`.

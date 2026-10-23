@@ -151,10 +151,10 @@ def test_box_q_is_wired_like_box_p():
             "install_sc2_client ;;") in RUN
     assert 'Q) PROVE_NEEDS="sc2client";;' in RUN and '[ "$BOX" = Q ] && prove_q' in RUN and "Q) box_q;; esac" in RUN
     assert 'case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q) ;;' in DRIVE
-    assert "sc2j_box_q.sh sc2j_reduce.py sc2j_contract.py sc2j_prompts.py; do STAGE=" in DRIVE
+    assert "sc2j_box_q.sh sc2j_reduce.py sc2j_contract.py sc2j_prompts.py sc2j_quality.py; do STAGE=" in DRIVE   # Am. 1
     assert '$REPO/bench/p117/p117_reduce.py $TESTS/test_decode_graph_buckets.py $REPO/bench/kv-pool-g/g3-smoke/g3_smoke.py' in DRIVE
     pin = (REPO / "bench" / "sc1" / "staged.sha256").read_text()
-    for name in ("sc2j_box_q.sh", "sc2j_reduce.py", "sc2j_contract.py", "sc2j_prompts.py", "p117_reduce.py",
+    for name in ("sc2j_box_q.sh", "sc2j_reduce.py", "sc2j_contract.py", "sc2j_prompts.py", "sc2j_quality.py", "p117_reduce.py",
                  "test_decode_graph_buckets.py", "g3_smoke.py"):
         assert re.search(rf"^[0-9a-f]{{64}}  {re.escape(name)}$", pin, re.M), name
 
@@ -178,7 +178,8 @@ def test_the_controller_dry_runs_box_q(tmp_path, prove):
     out = subprocess.run(["bash", str(REPO / "bench" / "sc1" / "sc1_drive.sh")], capture_output=True, text=True,
                          env=_dry_env(tmp_path, SC1_PROVE=prove))
     assert out.returncode == 0, out.stdout + out.stderr
-    for name in ("sc2j_box_q.sh", "sc2j_reduce.py", "sc2j_contract.py", "sc2j_prompts.py", "g3_smoke.py", "p117_reduce.py"):
+    for name in ("sc2j_box_q.sh", "sc2j_reduce.py", "sc2j_contract.py", "sc2j_prompts.py", "g3_smoke.py", "p117_reduce.py",
+                 "sc2j_quality.py"):
         assert name in out.stdout, name
     assert " SC1_BOX=Q " in out.stdout
 
@@ -214,3 +215,66 @@ def test_engaged_fails_closed_on_the_real_record(path, how):
     else:
         node[path[-1]] = None
     assert RED.engagement_bad("prove_base", h, 90, 0), (path, how)
+
+
+# ---- Amendment 1: QUALITY reduced by P117's reducer and bar at box Q's two stack constants (sc2j_quality.py)
+QREC = REPO / "tests" / "fixtures" / "sc2j_r3_quality"     # sc2j-r3's QUALITY record (the proof box, Granite, 8 windows)
+QUAL = _mod("sc2j_quality")
+GNF4_Q = re.search(r'case "\$BOX" in P\|Q\) GNF4_SHA=([0-9a-f]{40})', RUN).group(1)
+
+
+def test_quality_wiring_exports_box_qs_gnf4_and_uses_the_wrapper():
+    body = BOX[BOX.index("q_quality(){"):BOX.index("\n}\n", BOX.index("q_quality(){"))]
+    assert "GNF4_SHA=$GNF4_SHA E4B_PAGED_MODEL=$MODEL" in body          # p117_box records os.environ["GNF4_SHA"]
+    assert '$W/sc2j_quality.py --dir $QD --out $QD/verdict.json --e4b-sha "$E4B_SHA" --gnf4-sha "$GNF4_SHA"' in body
+    assert "p117_reduce.py --dir" not in body                             # P117's own constants would VOID box Q
+    assert "p117_reduce.py sc2j_quality.py; do" in BOX                   # the proof runs its self-test
+
+
+def test_quality_constants_are_box_qs():
+    assert QUAL.GNF4_SHA == GNF4_Q
+    assert QUAL.WINDOWS == {"Qwen/Qwen3-30B-A3B": 64, "ibm-granite/granite-3.1-3b-a800m-instruct": 8}
+    assert re.search(r"q_quality .* 64 128\n", BOX) and re.search(r"q_quality .* 8 32\n", BOX)
+    assert QUAL.P117_GNF4_SHA != QUAL.GNF4_SHA                           # the reason the wrapper exists
+
+
+def _qrun(tmp_path, box, gnf4):
+    (tmp_path / "summary.txt").write_text((QREC / "summary.txt").read_text())
+    (tmp_path / "box.json").write_text(json.dumps(box))
+    return QUAL.reduce(tmp_path, box["e4b_sha"], gnf4)
+
+
+def test_the_proof_record_read_void_under_p117s_constants():
+    """What sc2j-r3 recorded: P117's reducer VOIDed it on its own stack pin and window count."""
+    v = json.loads((QREC / "verdict.json").read_text())
+    assert v["verdict"] == "VOID" and any("b4f93f1c" in r for r in v["reasons"]) and any("expected 40" in r for r in v["reasons"])
+
+
+def test_the_proof_record_reads_at_box_qs_constants(tmp_path):
+    """The same record, with the GNF4_SHA the box now exports, reads under P117's unchanged bar."""
+    box = json.loads((QREC / "box.json").read_text())
+    assert box["gnf4_sha"] is None and box["windows"] == 8               # as recorded: nothing exported GNF4_SHA
+    box["gnf4_sha"] = GNF4_Q
+    v = _qrun(tmp_path, box, GNF4_Q)
+    assert v["verdict"] == "AT_PARITY", v.get("reasons")
+    assert v["function"] == {"positions": 8 * (box["cont"] - 1), "differ": 0}
+
+
+@pytest.mark.parametrize("edit", ["record_none", "record_p117", "installed_other", "windows_40"])
+def test_the_proof_record_fails_closed(tmp_path, edit):
+    box = json.loads((QREC / "box.json").read_text())
+    box["gnf4_sha"], gnf4 = GNF4_Q, GNF4_Q
+    if edit == "record_none":
+        box["gnf4_sha"] = None
+    elif edit == "record_p117":
+        box["gnf4_sha"] = QUAL.P117_GNF4_SHA
+    elif edit == "installed_other":
+        gnf4 = "0" * 40
+    else:
+        box["windows"] = 40
+    assert _qrun(tmp_path, box, gnf4)["verdict"] == "VOID", edit
+
+
+def test_quality_self_test_passes():
+    r = subprocess.run([sys.executable, str(SC2 / "sc2j_quality.py"), "--self-test"], capture_output=True, text=True)
+    assert r.returncode == 0 and "SC2J_QUALITY self-test PASS (11/11)" in r.stdout, r.stdout + r.stderr

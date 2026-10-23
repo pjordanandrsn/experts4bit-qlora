@@ -26,7 +26,7 @@ STAGE="$HERE/sc1_run.sh $HERE/sc1_e4b_sched.py $HERE/sc1_prompts.py $HERE/sc1_sa
 [ -s "$HERE/sc1_reduce.py" ] && STAGE="$STAGE $HERE/sc1_reduce.py"
 # SC1b (bench/sc1b): the census box D's pieces, staged flat on EVERY box so staged.sha256 stays one list for A-D
 SC1B="$REPO/bench/sc1b"; for f in sc1b_census.py sc1b_e4b_census.py sc1b_vllm_census.py sc1b_serve_census.py sc1b_toy.py kernel_classes.json sc1b_box_d.sh; do STAGE="$STAGE $SC1B/$f"; done
-SC2="$REPO/bench/sc2"; for f in sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc1g_kl.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py sc2e_box_l.sh sc2e_reduce.py sc2e_census.py sc2e_basis.py sc2f_box_n.sh sc2f_reduce.py sc2f_basis.py sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py sc2j_box_q.sh sc2j_reduce.py sc2j_contract.py sc2j_prompts.py; do STAGE="$STAGE $SC2/$f"; done
+SC2="$REPO/bench/sc2"; for f in sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc1g_kl.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py sc2e_box_l.sh sc2e_reduce.py sc2e_census.py sc2e_basis.py sc2f_box_n.sh sc2f_reduce.py sc2f_basis.py sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py sc2j_box_q.sh sc2j_reduce.py sc2j_contract.py sc2j_prompts.py sc2j_quality.py; do STAGE="$STAGE $SC2/$f"; done
 # SC2h (box O): the knee rates are SC2f's reading run through the registered rule (sc2h_reduce.knee_rates) -- here on
 # the controller before any rental, and again on the box; SC2f VOID / UNREAD or a row not VALID refuses. The verdict
 # travels as sc2f_verdict.json; the box records its sha256 beside the rates it resolved.
@@ -157,7 +157,7 @@ lane_dead() { lane_two_missing "$@"; }   # live_now live_prev: two DEFINITE zero
 # during a timed arm does not perturb it.
 pull_box() { local -a low=(); [ "${2:-}" = low ] && low=(--rsync-path="nice -n 19 ionice -c3 rsync" --exclude 'census/')   # mid-run pulls only; SC1b's traces come in the final fetch
   # ${low[@]+...}: the controller runs /bin/bash 3.2 under set -u (the mini), where "${low[@]}" of an empty array is unbound
-  rsync -az --timeout=120 -e "ssh -o BatchMode=yes -o ConnectTimeout=20 $E4B_RENT_SSH_OPTS -p $PORT" ${low[@]+"${low[@]}"} \
+  rsync -az --no-links --timeout=120 -e "ssh -o BatchMode=yes -o ConnectTimeout=20 $E4B_RENT_SSH_OPTS -p $PORT" ${low[@]+"${low[@]}"} \
     --exclude 'artifact*/payloads/' --include 'work_*/' --include 'work_*/bake.json' --exclude 'work_*/*' \
     --exclude 'venv*' --exclude '.cache' --exclude 'llama.cpp/' --exclude 'gguf/' --exclude 'sglang-cache/' \
     --exclude 'sc1g_ref_full/' --exclude 'sc1g/ref_full_*.f16' \

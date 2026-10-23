@@ -47,7 +47,7 @@ while :; do
 done
 OUT="$RUN_DIR/p229"
 mkdir -p "$OUT" && [ -z "$(find "$OUT" -mindepth 1 -maxdepth 1 -print -quit)" ] || { say "fetch failed: $OUT is not an empty directory"; exit 22; }
-rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "root@$HOST:$W/" "$OUT/" || { say "fetch failed"; exit 22; }
+rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "root@$HOST:$W/" "$OUT/" || { say "fetch failed"; exit 22; }
 say "fetched $(find "$OUT" -type f | wc -l | tr -d ' ') files into $OUT"
 RC=$(cat "$OUT/P229_EXIT_CODE.$NONCE" 2>/dev/null || echo none)
 say "box rc=$RC"
