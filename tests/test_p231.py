@@ -575,6 +575,10 @@ def _rows_phase(box_text, tmp_path, monkeypatch):
     rec = json.loads(out.read_text(encoding="utf-8"))
     if rc != 0 or not rec.get("ok"):
         return f"rows: rc {rc}, status {rec.get('status')}, cases {json.dumps(rec.get('cases'))[:300]}"
+    n1, k1, n2, k2 = ROWS_SHAPES
+    res = rec.get("resolve") or {}
+    if res.get("on") is not True or res.get("shapes") != sorted([[n1, k1], [n2, k2]]):
+        return f"rows: the record's resolution is not on at the premise's shapes: {res}"
     return None
 
 
@@ -631,6 +635,32 @@ def test_amendment_3_the_rows_phase_fails_where_k33_does_not_engage(cpu_phases):
     got = _rows_phase((LANE / "p231_box.py").read_text(encoding="utf-8"), tmp_path, monkeypatch)
     assert got and "does not engage" in got, got
     assert hr._NF4_SMALLM_BW_RESOLVED[0] is False and "E4B_NF4_SMALLM_BW" not in os.environ, "a refused resolution routes nothing"
+
+
+@pytest.mark.parametrize("bad", ["other_shapes", "resolved_unset", "off"])
+def test_amendment_3_rows_resolve_refuses_a_resolution_that_does_not_hold(cpu_phases, bad):
+    """rows_resolve accepts only a resolution that is on, at exactly the premise's two expert shapes, AND left the
+    process resolved: another shape, a cleared flag or an off answer raises before any routed call."""
+    hr, _, _, monkeypatch = cpu_phases
+    B = _load("p231_box")
+    n1, k1, n2, k2 = B.MIXTRAL["shapes"]
+
+    def fake(modules, device):
+        hr._NF4_SMALLM_BW_RESOLVED[0] = bad != "resolved_unset"
+        shapes = [[2048, 7168]] if bad == "other_shapes" else sorted([[n1, k1], [n2, k2]])
+        return {"env": "1", "on": bad != "off", "max_tokens": hr.NF4_SMALLM_BW_MAX_T, "why": None, "shapes": shapes}
+    monkeypatch.setattr(hr, "resolve_nf4_smallm_bw", fake)
+    with pytest.raises(RuntimeError, match="did not come back on"):
+        B.rows_resolve(hr, "cpu")
+
+
+def test_amendment_3_the_rows_phase_reads_the_recorded_resolution(cpu_phases):
+    """Mutant: a rows premise that records no resolution (or an off one) fails the phase even when its rows match."""
+    hr, _, tmp_path, monkeypatch = cpu_phases
+    box = (LANE / "p231_box.py").read_text(encoding="utf-8")
+    assert box.count('"status": "ok", "resolve": res}') == 1
+    got = _rows_phase(box.replace('"status": "ok", "resolve": res}', '"status": "ok"}'), tmp_path, monkeypatch)
+    assert got and "the record's resolution is not on" in got, got
 
 
 def test_amendment_3_the_served_premise_call_path_runs_on_cpu(tmp_path):
