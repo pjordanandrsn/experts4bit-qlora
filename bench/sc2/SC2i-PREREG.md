@@ -105,8 +105,10 @@ per draw the drift `base_b − base_a`; the serial text agreement of each knob a
 `SC1_BOX=P SC1_DRIVE_DRYRUN=1` on the controller checkout at the launch commit.
 
 **Proof** (`sc2i-prove-*`, guard 1.0 h), on Granite-3.1-3b-a800m (NF4 store, SC1's `GR_ENV` unchanged): the self-tests,
-two servers (`base` and `pe2`) at 64 slots through ROUTES, SLOTS, KNOBS (proof form: Granite engages neither P130 knob),
-warm, `h_early` and the burst, a 6-request serial smoke and a 16-request Poisson smoke at 12 req/s, every request VALID.
+three servers (`base`, `pe2` and `lc128`) at 64 slots through ROUTES, SLOTS, KNOBS (proof form: Granite engages neither
+P130 knob), warm, `h_early` and the burst, a 6-request serial smoke and a 16-request Poisson smoke at 12 req/s, every
+request VALID. Each server's end `/health` then goes through ENGAGED as the reducer reads it. `lc128`'s is the real
+record the adapted gate is checked on, before any reading box.
 
 **Reading** (`sc2i-5090-*`, guard 4.0 h): installs about 10 min, fetch and bake 25–40 min, twelve servers at about
 12–14 min each.

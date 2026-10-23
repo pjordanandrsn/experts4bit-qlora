@@ -74,9 +74,10 @@ box_p(){ local s
   phase RD "the reading"
   "$PY" $W/sc2i_reduce.py --dir $W/sc2 --out $W/sc2/verdict_sc2i.json 2>&1 | tail -40 | tee -a summary.txt; }
 
-# ---- the proof (SC1_PROVE=1): base and pe2 on the proof model at 64 slots, each on its arm by its start /health, the
-# burst replaying bucket 64, a serial smoke and a Poisson smoke at 12 req/s with every request VALID, engagement as the
-# reducer reads it, and step traces with 64-row steps
+# ---- the proof (SC1_PROVE=1): base, pe2 and lc128 on the proof model at 64 slots, each on its arm by its start /health,
+# the burst replaying bucket 64, a serial smoke and a Poisson smoke at 12 req/s with every request VALID, engagement as
+# the reducer reads it (lc128's end /health is the real record the adapted ENGAGED gate is checked on), and step traces
+# with 64-row steps
 prove_p(){ local a s LEV
   have sc2client || { say "PROVE: aiohttp / fastapi / uvicorn did not install -- NOT PROVED"; rec 23; return; }
   for s in sc2_driver.py sc2_reduce.py sc2_identity.py sc2c_census.py sc2e_census.py sc2e_reduce.py sc2f_reduce.py sc2i_reduce.py; do
@@ -85,7 +86,7 @@ prove_p(){ local a s LEV
   l_tripwire; n_tripwire; p_tripwire
   perl -e "alarm 900; exec @ARGV" "$PY" $W/sc2_prompts.py --model "$GR" --revision "$GR_REV" --out $W/sc2/prompts.json > logs/sc2_prompts.log 2>&1 \
     || { tail -3 logs/sc2_prompts.log; say "PROVE: prompt pool failed -- NOT PROVED"; rec 23; return; }
-  for a in base pe2; do
+  for a in base pe2 lc128; do
     LEV="$GR_ENV $(p_env "$a")"
     if l_server_start "prove_$a" s64a "$GR" "$GR_REV" "$W/work_granite/nf4.arena" "$LEV" "" && p_knobs_ok "prove_$a" "$a" proof; then
       { drive prove_${a}_warm $PORT_E4B "$GR" e4b serial 0 4 999 && h_early "prove_$a" on $W/sc2/prove_${a}_warm.json \
@@ -95,9 +96,10 @@ prove_p(){ local a s LEV
     else say "PROVE: $a server failed"; rec 23; fi
     stop_pid "$SRV_PID"; SRV_PID=""; gpu_free 180
   done
-  "$PY" $W/sc2i_reduce.py --engagement $W/sc2/health_prove_base_end.json $W/sc2/health_prove_pe2_end.json --arms base pe2 | tee -a summary.txt
+  "$PY" $W/sc2i_reduce.py --engagement $W/sc2/health_prove_base_end.json $W/sc2/health_prove_pe2_end.json \
+    $W/sc2/health_prove_lc128_end.json --arms base pe2 lc128 | tee -a summary.txt
   [ "${PIPESTATUS[0]}" = 0 ] || { say "PROVE: a server did not engage as registered -- NOT PROVED"; rec 23; }
-  for a in base pe2; do
+  for a in base pe2 lc128; do
     "$PY" $W/sc2e_census.py steps $W/sc2/steps_prove_$a.jsonl --arm s64a --require-wide | tee -a summary.txt
     [ "${PIPESTATUS[0]}" = 0 ] || { say "PROVE: the $a step trace does not decompose with its 64-row steps -- NOT PROVED"; rec 23; }
   done; }
