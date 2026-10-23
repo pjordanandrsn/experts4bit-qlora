@@ -30,7 +30,8 @@ independent reviewer) is **FAIL**, with one reason:
 | SE | **held**: 0.00159 < 0.002 |
 | **G3** (W1 `itl_wall_ms`, `ttft_any_ms`, `tok_s`, under the band rule) | **block 0 outside**: `ttft_any_ms` 2.748 ms against a 2.388 ms band. Every other graded cell inside |
 
-**This is not a quality failure.** Every graded quality gate held. The FAIL comes from G3, the latency control, and G3
+**This is not a failure of a graded quality gate.** Every graded quality gate held; the ungraded lines below show the
+merged path differs. The FAIL comes from G3, the latency control, and G3
 fails because the adapter arm was **faster**: G3 is two-sided as P224 registered it ("a merged adapter changes no shape
 and no kernel; the served step is the base's"), so a shift either way fails it.
 
