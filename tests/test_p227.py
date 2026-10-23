@@ -138,10 +138,21 @@ def test_the_guard_fit_has_25_percent_headroom_and_the_prereg_states_it():
 
 def test_the_drive_never_creates_compute_and_refuses_what_is_not_registered():
     assert "p227-5090-[1-3]|p227-shake-[1-3]) :;;" in DRIVE and 'refusing unregistered run ID' in DRIVE
-    assert 'rev-parse HEAD)" = "$E4B_SHA"' in DRIVE and "the checkout is dirty" in DRIVE
+    assert "the checkout is dirty" in DRIVE
     assert "shasum -a 256 -c staged-p227.sha256" in DRIVE
     for word in ("vast.py", "destroy", "/api/", "rent-watch"):
         assert word not in DRIVE.split("set -uo pipefail", 1)[1], word
+
+
+def test_the_drive_follows_pod_launchs_contract():
+    """pod-launch runs a reading's drive without E4B_SHA (it proves the checkout HEAD is heads.e4b) and owns the run
+    directory's receipt files: the drive derives the launch commit from the clean HEAD, refuses an override, and fetches
+    the box tree into $RUN_DIR/p227/ (P226's form)."""
+    assert 'if [ -n "${E4B_SHA:-}" ]; then say "refusing: E4B_SHA override; use the clean checkout HEAD"; exit 78; fi' in DRIVE
+    assert 'E4B_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null)' in DRIVE
+    assert "E4B_RENT_DEADLINE_EPOCH E4B_SHA; do" not in DRIVE
+    assert 'OUT="$RUN_DIR/p227"' in DRIVE and '"$RUN_DIR/"' not in DRIVE
+    assert 'RC=$(cat "$OUT/P227_EXIT_CODE.$NONCE"' in DRIVE
 
 
 def test_no_instance_id_or_host_name_is_written_on_the_box():

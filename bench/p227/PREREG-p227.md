@@ -277,3 +277,13 @@ P222's, with the arms above. Everything not named here is P222's.
   output changed.
 - `staged-p227.sha256` is re-pinned for `p227_run.sh`. Every other staged file and the real fixture are unchanged, so
   p227-shake-2's record still reduces as Amendment 1 states.
+
+## Amendment 3 (2026-10-23, before any reading): the drive follows pod-launch's contract
+
+- A reading launches through pod-launch, which runs `p227_drive.sh` without `E4B_SHA` (it proves the checkout HEAD is the
+  manifest's `heads.e4b`) and keeps its own `receipt.json` and `instance.json` in the run directory. The drive now
+  derives the launch commit from the clean checkout HEAD, refuses an `E4B_SHA` override and a dirty tree (P226's form),
+  and fetches the box tree into `$RUN_DIR/p227/`, refusing a non-empty target.
+- No command on the box, threshold, cost or output changes. The drive is not a staged file, so no pin moves; the
+  shakedowns ran through a direct launcher that set `E4B_SHA`, which is why they did not see it.
+

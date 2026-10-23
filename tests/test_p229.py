@@ -132,6 +132,17 @@ def test_the_drive_never_creates_compute_and_stages_the_premise_in_the_repos_lay
         assert word not in DRIVE.split("set -uo pipefail", 1)[1], word
 
 
+def test_the_drive_follows_pod_launchs_contract():
+    """pod-launch runs a reading's drive without E4B_SHA (it proves the checkout HEAD is heads.e4b) and owns the run
+    directory's receipt files: the drive derives the launch commit from the clean HEAD, refuses an override, and fetches
+    the box tree into $RUN_DIR/p229/ (P226's form)."""
+    assert 'if [ -n "${E4B_SHA:-}" ]; then say "refusing: E4B_SHA override; use the clean checkout HEAD"; exit 78; fi' in DRIVE
+    assert 'E4B_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null)' in DRIVE
+    assert "E4B_RENT_DEADLINE_EPOCH E4B_SHA; do" not in DRIVE
+    assert 'OUT="$RUN_DIR/p229"' in DRIVE and '"$RUN_DIR/"' not in DRIVE
+    assert 'RC=$(cat "$OUT/P229_EXIT_CODE.$NONCE"' in DRIVE
+
+
 REDUCER_MUTANTS = [
     ("BAR_D = 0.70 ", "BAR_D = 0.80 "),
     ("BAR_K = 1.25 ", "BAR_K = 1.40 "),
