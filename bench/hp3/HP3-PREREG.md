@@ -322,6 +322,13 @@ at plausible noise. Every number in this section is an ESTIMATE.
    - The approval at 15:59Z quoted $12.78. That figure carried 20 GB (shakedown) and 90 GB (read) download terms rather than the
      launcher's 100 GB reservation. This amendment states the reservation.
 
+6. **Run ids (bench/common rule 2's form).**
+   - The shakedown is `hp3-shake-1`, with `hp3-shake-2` as its one spare.
+   - The read is `hp3-5090-1`, with `hp3-5090-2` as its one pre-create spare.
+   - At most one shakedown box and one read box start, beyond a host-attributable spare (ruling 5).
+   - A refusal at create uses no id: the launcher receipts it as `<id>-refused-*`, and the next attempt takes the same id.
+   - No code parses an id's number.
+
 **Unchanged:** everything else in this registration, including G1', 6(b), G2', the three-way read, the labels and the (R) fallback.
 
 **Ruling:** approved by the maintainer at 15:59Z, conditional on the evaluator's re-run of the simulation. The evaluator's checks:
