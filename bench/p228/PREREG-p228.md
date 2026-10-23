@@ -185,3 +185,12 @@ called through `router_linear`. The bench therefore times e4b's real pinned path
   output changed.
 - `staged-p228.sha256` is re-pinned for `p228_run.sh`. Every other staged file and the real fixture are unchanged, so
   p228-shake-1's record still reduces as Amendment 1 states.
+
+## Amendment 4 (2026-10-23, before any reading): the drive follows pod-launch's contract
+
+- A reading launches through pod-launch, which runs `p228_drive.sh` without `E4B_SHA` (it proves the checkout HEAD is the
+  manifest's `heads.e4b`) and keeps its own `receipt.json` and `instance.json` in the run directory. The drive now
+  derives the launch commit from the clean checkout HEAD, refuses an `E4B_SHA` override and a dirty tree (P226's form),
+  and fetches the box tree into `$RUN_DIR/p228/`, refusing a non-empty target.
+- No command on the box, threshold, cost or output changes. The drive is not a staged file, so no pin moves; the
+  shakedown ran through a direct launcher that set `E4B_SHA`, which is why it did not see it.
