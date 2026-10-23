@@ -393,7 +393,7 @@ def test_health_and_models_carry_the_adapter_and_the_base_name_is_not_served():
 
 #: each refusal, reverted: the suite above must notice (run against a mutated copy of adapter_dir.py)
 MUTANTS = [
-    ('    if live:\n', "    if False:\n"),                                                    # refusal 1
+    ('    if live and not (merged and not r13):\n', "    if False:\n"),                         # refusal 1
     ("    elif served_revision != ad.revision:\n", "    elif False:\n"),                         # refusal 2
     ("    if arena_rev is None:\n        if not allow_unverified_arena:\n",
      "    if arena_rev is None:\n        if False:\n"),                                           # refusal 3

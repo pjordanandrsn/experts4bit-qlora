@@ -17,9 +17,11 @@ computed in fp32 with the scale the trained modules held (``lora_scale_applied.e
   record a server's merged-arena rules read, the merged arena's own fingerprint included. A retention receipt (D0's
   Step-1 sums per layer and projection) is written beside it: a record, never a gate.
 
-Nothing serves a merged arena yet. :func:`refuse_merged` runs wherever this package opens an arena (the loader, the NF4,
-MXFP4 and training NVMe residencies, and the hybrid tier), so a merged arena is never read as a base: served without its
-adapter, or trained from.
+A merged arena is never read as a base. :func:`refuse_merged` runs wherever this package opens an arena (the loader, the
+NF4, MXFP4 and training NVMe residencies, and the hybrid tier). The only reader it lets through is the paged server, and
+only after :func:`merged_arena_refusals` (refusal 13, before the load, from records) has passed: under the opt-in
+``E4B_PAGED_MERGED_ARENA=1``, with the adapter the arena was merged from. That reader hands the arena's own ``merge``
+block back as ``allow``; nothing else does.
 """
 from __future__ import annotations
 
@@ -51,25 +53,73 @@ def is_merged(index: dict) -> bool:
     return index.get("bake_mode") == MERGED_BAKE_MODE or "merge" in index
 
 
-def refuse_merged(index: dict, arena: str) -> None:
+def refuse_merged(index: dict, arena: str, allow: dict | None = None) -> None:
     """Every arena this package opens passes here. A merged arena holds a trained function, so it is never read as a
-    base: neither served under the base's name nor trained from. Serving one with its own adapter is the server's
-    opt-in (bench/d0/ARENA-DESIGN.md, point 4), not yet supported. Raises ValueError."""
-    if is_merged(index):
-        adapter = str((index.get("merge") or {}).get("adapter_id") or "unrecorded")[:12]
-        raise ValueError(f"{arena} is a merged arena (bake_mode {index.get('bake_mode')!r}, adapter {adapter}): it is "
-                         f"never read as a base, and serving it with its adapter is not supported yet "
-                         f"(bench/d0/ARENA-DESIGN.md)")
+    base: neither served under the base's name nor trained from. ``allow`` is the paged server's verified ``merge``
+    block (after :func:`merged_arena_refusals` passed); the arena is read only when it equals this index's own block.
+    Raises ValueError."""
+    if not is_merged(index):
+        return
+    block = index.get("merge")
+    if allow is not None and index.get("bake_mode") == MERGED_BAKE_MODE and isinstance(block, dict) and allow == block:
+        return
+    adapter = str((block or {}).get("adapter_id") or "unrecorded")[:12]
+    raise ValueError(f"{arena} is a merged arena (bake_mode {index.get('bake_mode')!r}, adapter {adapter}): it is never "
+                     f"read as a base; only the paged server serves it, with that adapter, under "
+                     f"E4B_PAGED_MERGED_ARENA=1 (refusal 13; bench/d0/ARENA-DESIGN.md)")
 
 
-def refuse_merged_path(arena: str) -> None:
+def refuse_merged_path(arena: str, allow: dict | None = None) -> None:
     """:func:`refuse_merged` on the index beside ``arena``, read with the kernel's own ``load_index``: for a reader that
     opens the arena through grouped-nf4-gemm's ``ColdTier`` rather than ``load_index``, called before the tier opens.
     With no index there is nothing to refuse here: the reader refuses that arena itself, with its own error."""
     if not os.path.exists(arena + ".index.json"):
         return
     from nvme_arena import load_index
-    refuse_merged(load_index(arena), arena)
+    refuse_merged(load_index(arena), arena, allow)
+
+
+def merged_arena_refusals(ad, index: dict, *, opt_in: bool) -> list:
+    """Refusal 13, before the load and from records only (the index's ``merge`` block and the adapter's files; nothing
+    measured): every ``(13, reason)`` that stops a server from serving the merged arena ``index`` with adapter ``ad``
+    (None: no adapter). Empty for an arena that is not merged, and for a merged one served as written: under the opt-in,
+    with its own adapter (id and expert tensors), whose recorded base is the one the merge started from, at the scale
+    the merge used. The served arena's own fingerprint is compared after the load (refusal 12 against
+    ``merged_qfp_v1``)."""
+    if not is_merged(index):
+        return []
+    block = index.get("merge")
+    if not isinstance(block, dict) or index.get("bake_mode") != MERGED_BAKE_MODE or block.get("writer") != WRITER:
+        return [(13, f"a merged arena whose record this server cannot read (bake_mode {index.get('bake_mode')!r}, "
+                     f"writer {(block or {}).get('writer') if isinstance(block, dict) else None!r})")]
+    out = []
+    if ad is None:
+        out.append((13, f"a merged arena (adapter {str(block.get('adapter_id'))[:12]}) with no adapter: served as the base "
+                        f"it would serve a trained function under the base's name. Serve it with E4B_PAGED_ADAPTER set "
+                        f"to the adapter it was merged from"))
+        return out
+    if not opt_in:
+        out.append((13, "a merged arena is served only under the opt-in E4B_PAGED_MERGED_ARENA=1 (it is not licensed "
+                        "by a registered read yet)"))
+    if block.get("writer_version") != WRITER_VERSION:
+        out.append((13, f"merge writer_version {block.get('writer_version')!r}; this server reads {WRITER_VERSION}"))
+    if block.get("adapter_id") != ad.adapter_id:
+        out.append((13, f"the arena was merged from adapter {str(block.get('adapter_id'))[:12]}, not this one "
+                        f"({ad.adapter_id[:12]})"))
+    if block.get("expert_tensors_sha256") != expert_tensors_sha256(ad):
+        out.append((13, "the adapter's expert LoRA tensors are not the ones the arena was merged from"))
+    try:
+        base_fp, _form = _trained_base(ad)
+        scale = _scale(ad)
+    except MergeRefused as e:
+        out.append((13, f"the adapter cannot be matched to the merge: {e}"))
+        return out
+    if base_fp != block.get("base_qfp_v1"):
+        out.append((13, f"the adapter's recorded expert base (qfp-v1 {base_fp[:16]}) is not the base the merge started "
+                        f"from ({str(block.get('base_qfp_v1'))[:16]})"))
+    if block.get("scale") != scale:
+        out.append((13, f"the adapter's expert scale {scale!r} is not the merge's {block.get('scale')!r}"))
+    return out
 
 
 def expert_tensors_sha256(ad) -> str:

@@ -143,7 +143,13 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
     load and before the merge (no override);
   - 12: a backend-adapter/2 expert fingerprint the served arena does not match (PA-1; opt-in
     ``E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts``, reported in ``/health`` as a served mismatch). A /2 manifest with
-    an expert fingerprint is compared instead of refused by 9.
+    an expert fingerprint is compared instead of refused by 9. On a merged arena the served experts are compared with
+    the merged arena's own fingerprint instead (``merge.merged_qfp_v1``; no override);
+  - 13: a merged arena (``bake_mode: "nf4-merged"``, :mod:`.merged_arena`) not served as written, decided before the
+    load for EVERY config: without the opt-in ``E4B_PAGED_MERGED_ARENA=1``, without an adapter, or with an adapter
+    other than the one it was merged from (id, expert tensors, recorded base, scale). When 13 passes, the adapter's live
+    expert LoRA is not refusal 1: the delta is already in the arena's rows and nothing of the adapter's expert tensors
+    is applied; its attention LoRA merges once at load, as for any adapter.
   The served name becomes ``<model>+<adapter_id[:12]>``, and ``/health`` and ``/v1/models`` carry the adapter's id,
   manifest hash, base revision, merge report and ``base_match``.
 
@@ -232,6 +238,8 @@ ADAPTER_NEUTRAL_KNOBS = {
 }
 ADAPTER_ALLOW_ARENA_ENV = "E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA"
 ADAPTER_ACCEPT_BASE_ENV = "E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE"
+#: refusal 13's opt-in: serve a merged arena (bench/d0/ARENA-DESIGN.md) with the adapter it was merged from
+MERGED_ARENA_ENV = "E4B_PAGED_MERGED_ARENA"
 FUSE_QKV_ENV = "E4B_PAGED_FUSE_QKV"
 FUSION_KNOBS = (FUSE_QKV_ENV,) + FUSION_ENV
 # Lane P115's family-scoped default (PREREG-p115.md Amendment 3, mechanism (B)): an UNSET fusion knob resolves to
@@ -803,6 +811,7 @@ class PagedServeConfig:
     adapter_allow_unverified_arena: bool = False   # E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA=1: refusal 3's opt-in
     adapter_accept_unverified_base: frozenset = frozenset()   # E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE: named scopes
     adapter_accept_base_mismatch: frozenset = frozenset()     # E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH: refusal 12's opt-in
+    merged_arena: bool = False           # E4B_PAGED_MERGED_ARENA=1: refusal 13's opt-in (a merged arena, its own adapter)
     adapter_id: str = ""                 # set by the build: sha256 of adapter.safetensors (the served name's suffix)
     device: str = "cuda"
 
@@ -864,6 +873,7 @@ class PagedServeConfig:
             adapter_allow_unverified_arena=_zero_one(ADAPTER_ALLOW_ARENA_ENV, env(ADAPTER_ALLOW_ARENA_ENV, "0")),
             adapter_accept_unverified_base=parse_accept_unverified_base(env(ADAPTER_ACCEPT_BASE_ENV, "")),
             adapter_accept_base_mismatch=parse_accept_base_mismatch(env(ACCEPT_BASE_MISMATCH_ENV, "")),
+            merged_arena=_zero_one(MERGED_ARENA_ENV, env(MERGED_ARENA_ENV, "0")),
             device=env("E4B_PAGED_DEVICE", "cuda"),
         )
         cfg.validate()
@@ -938,9 +948,9 @@ class PagedServeConfig:
                                  f"rows, and K2b's served read is plain decode ({INT8_HEAD_ROWS_ENV}=1 or "
                                  "E4B_PAGED_SPEC=off)")
         if not self.adapter and (self.adapter_allow_unverified_arena or self.adapter_accept_unverified_base
-                                 or self.adapter_accept_base_mismatch):
-            raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} / {ACCEPT_BASE_MISMATCH_ENV} are set "
-                             f"but E4B_PAGED_ADAPTER is not")
+                                 or self.adapter_accept_base_mismatch or self.merged_arena):
+            raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} / {ACCEPT_BASE_MISMATCH_ENV} / "
+                             f"{MERGED_ARENA_ENV} are set but E4B_PAGED_ADAPTER is not")
 
     @property
     def prefill_budget(self) -> int:
@@ -1816,7 +1826,7 @@ def _adapter_refusals(adapter, cfg: PagedServeConfig, arena_index, *, served_rev
                              allow_unverified_arena=cfg.adapter_allow_unverified_arena,
                              accept_unverified_base=cfg.adapter_accept_unverified_base,
                              check_served_revision=check_served_revision, served_model=cfg.model,
-                             spec=cfg.spec)
+                             spec=cfg.spec, merged_opt_in=cfg.merged_arena)
 
 
 def _raise_adapter_refusals(refusals) -> None:
@@ -1835,16 +1845,26 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     for path in (cfg.arena, cfg.arena + ".index.json", cfg.calib):
         if not os.path.exists(path):
             raise FileNotFoundError(path)
+    # The arena's index, read for EVERY config before any weight is read: a merged arena (bench/d0/ARENA-DESIGN.md)
+    # is refusal 13 without its own adapter, and the opt-in without a merged arena is a loose flag
+    from .merged_arena import is_merged, merged_arena_refusals
+    with open(cfg.arena + ".index.json", encoding="utf-8") as f:
+        arena_index = json.load(f)
+    if cfg.merged_arena and not is_merged(arena_index):
+        raise ValueError(f"{MERGED_ARENA_ENV}=1 but {cfg.arena} is not a merged arena")
     # One trained adapter (E4B_PAGED_ADAPTER): verified (refusal 7) and checked against this server (refusals 1-6, 8,
-    # 9) before any weight is read; the served commit is compared once the loader has resolved it, below
-    adapter = adapter_info = arena_index = None
+    # 9, 13) before any weight is read; the served commit is compared once the loader has resolved it, below
+    adapter = adapter_info = None
     if cfg.adapter:
         from .adapter_dir import verify_adapter_dir
         adapter = verify_adapter_dir(cfg.adapter)
-        with open(cfg.arena + ".index.json", encoding="utf-8") as f:
-            arena_index = json.load(f)
         _raise_adapter_refusals(_adapter_refusals(adapter, cfg, arena_index, served_revision=None,
                                                   check_served_revision=False))
+    else:
+        _raise_adapter_refusals(merged_arena_refusals(None, arena_index, opt_in=cfg.merged_arena))
+    # the merge block refusal 13 has matched to the adapter (None: a base arena); the loader, the fingerprint check
+    # and the hybrid tier read a merged arena only when handed it
+    merge = arena_index["merge"] if is_merged(arena_index) else None
     # E4B_K25_LUT's explicit value, checked before the load: a misconfigured knob fails at startup, never on the first
     # request (the per-family default is resolved below, once the model's config is read)
     from .engines.hot_residency import _k25_lut_raw, _k25_plan_raw, resolve_k25_lut, resolve_k25_plan
@@ -1894,7 +1914,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         else:
             resolve_max_seqs(cfg, model_config, free)
     model, _ = load_moe_4bit_streaming(cfg.model, cfg.device, torch.bfloat16, r=8, alpha=16, quant_type="nf4",
-                                       arena=cfg.arena, revision=cfg.revision or None)
+                                       arena=cfg.arena, revision=cfg.revision or None, merged_arena=merge)
     model.eval()
     if adapter is not None:
         # merged right after the load: before the levers, the fusions, the GEMV routes and graph capture, so every one of
@@ -1905,7 +1925,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         # the served base's qfp-v1 against the /2 manifest's (refusals 11 and 12): after the load, BEFORE the merge
         # (which rewrites the attention weights) and before any lever, fusion or route touches a module
         fp_refusals, fingerprints = fingerprint_check(adapter, model, cfg.arena,
-                                                      accept_base_mismatch=cfg.adapter_accept_base_mismatch)
+                                                      accept_base_mismatch=cfg.adapter_accept_base_mismatch,
+                                                      merge=merge)
         _raise_adapter_refusals(fp_refusals)
         for scope, row in fingerprints.items():
             log(f"adapter fingerprint {scope}: {row['status']} (qfp-v1 {row['served'][:16]} served, "
@@ -1921,7 +1942,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                         "merge": report.to_dict(), "base_match": base_match(adapter, fingerprints=fingerprints),
                         "fingerprints": fingerprints,
                         "accepted_unverified_base": sorted(cfg.adapter_accept_unverified_base),
-                        "accepted_base_mismatch": sorted(cfg.adapter_accept_base_mismatch)}
+                        "accepted_base_mismatch": sorted(cfg.adapter_accept_base_mismatch),
+                        "merged_arena": merge}
         log(f"adapter {adapter.adapter_id[:12]}: merged {report.merged} attention projections (scale {adapter.scale:g}, "
             f"max merge error {report.to_dict()['max_err']:.3g}); served as {adapter_info['served_name']!r}")
     mods = target_modules(model)
@@ -1942,7 +1964,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     if ids != list(range(L)):
         man["tiers"] = {t: [[ids[int(lay)], int(e)] for lay, e in pairs] for t, pairs in man["tiers"].items()}
     n = enable_hybrid_tier(model, cfg.arena, man, hot_rows=cfg.hot_rows, threads=0, pool=True,
-                           dispatch_diet=False, collapse_resident=True, layers=ids)
+                           dispatch_diet=False, collapse_resident=True, layers=ids, merged_arena=merge)
     if n != L:
         raise RuntimeError(f"enable_hybrid_tier patched {n}/{L} MoE layers")
     levers = _apply_levers(model, cfg, tok)
