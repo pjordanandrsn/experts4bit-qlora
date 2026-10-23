@@ -66,6 +66,7 @@ import os
 import torch
 
 from ..absmax_dq import expert_absmax_fp32
+from .combine_lean import grad_products, lean_combine_enabled, scatter_mul
 
 
 def fast_available() -> bool:
@@ -378,7 +379,8 @@ class _PermGather(torch.autograd.Function):
     @staticmethod
     def backward(ctx, g):
         (perm,) = ctx.saved_tensors
-        gs = g.new_zeros(perm.numel())
+        # E4B_TRAIN_LEAN_COMBINE=1: the copy writes every element, so the zero fill is dead (engines/combine_lean.py).
+        gs = g.new_empty(perm.numel()) if lean_combine_enabled() else g.new_zeros(perm.numel())
         gs.index_copy_(0, perm, g)
         return gs.view(ctx.shape), None
 
@@ -429,6 +431,11 @@ def _scatter_fill(buf, down, w, order):
         buf[order[s:e]] = down[s:e].to(torch.float32) * w[s:e, None]
 
 
+def _lean_whole(down) -> bool:
+    """The training combine's lean kernels (``E4B_TRAIN_LEAN_COMBINE=1``) on the whole-tensor path; chunked images keep theirs."""
+    return lean_combine_enabled() and _combine_chunk_rows(down.shape[0], down.shape[1]) is None
+
+
 def _scatter_combine(down, w, order, token_rows, tokens, k, hidden, device, out_dtype):
     """Weighted combine of the expert-sorted rows back into token order.
 
@@ -463,8 +470,13 @@ class _ScatterCombine(torch.autograd.Function):
     @staticmethod
     def forward(ctx, down, w, order, tokens, k, out_dtype):
         hidden = down.shape[1]
-        buf = torch.zeros(tokens * k, hidden, dtype=torch.float32, device=down.device)
-        _scatter_fill(buf, down, w, order)
+        if _lean_whole(down):
+            # One launch for the cast, multiply and index_put into an empty buffer (order writes every row).
+            buf = torch.empty(tokens * k, hidden, dtype=torch.float32, device=down.device)
+            scatter_mul(buf, down, w, order)
+        else:
+            buf = torch.zeros(tokens * k, hidden, dtype=torch.float32, device=down.device)
+            _scatter_fill(buf, down, w, order)
         ctx.save_for_backward(down, w, order)
         ctx.tokens, ctx.k = tokens, k
         return buf.view(tokens, k, hidden).sum(1).to(out_dtype)
@@ -480,6 +492,9 @@ class _ScatterCombine(torch.autograd.Function):
         # as autograd's composite (tests/test_moe_keep.py). TC1 amendment 57 read these temporaries at 1.07 GB of e4b's
         # packed-row training peak (engines/fast.py, Qwen3-30B-A3B, 4,096 tokens, top-8).
         need_down, need_w = ctx.needs_input_grad[0], ctx.needs_input_grad[1]
+        if _lean_whole(down):
+            gw, gdown = grad_products(g, down, w, order, k, need_w, need_down)
+            return gdown, gw, None, None, None, None
         c = _combine_chunk_rows(down.shape[0], down.shape[1])
         if c is None:
             gprod = g.to(torch.float32)[torch.div(order, k, rounding_mode="floor")]
