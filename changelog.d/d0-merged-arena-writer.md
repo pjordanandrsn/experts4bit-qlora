@@ -9,8 +9,8 @@
   - `source="checkpoint"` runs grouped-nf4-gemm's own `bake_nf4` with a quantizer that adds the delta.
   - The index records a `merge` block (`bake_mode: "nf4-merged"`), including the merged arena's own fingerprint, and a
     retention receipt (D0's Step-1 sums) is written beside it, as a record that does not gate.
-- **A merged arena is refused wherever an arena is opened** (the loader and both NVMe residencies), so it is never read
-  as a base. Serving one with its own adapter is a later, opt-in change.
+- **A merged arena is refused wherever an arena is opened** (the loader, the NF4, MXFP4 and training NVMe residencies,
+  and the hybrid tier), so it is never read as a base. Serving one with its own adapter is a later, opt-in change.
 - `adapter_schema.arena_expert_fingerprint(arena, stacks)`: an arena's expert qfp-v1 with no model loaded, read through
   the same path as the served one.
 - `tests/test_merged_arena.py` (CPU, on a real `bake_nf4` arena) covers:

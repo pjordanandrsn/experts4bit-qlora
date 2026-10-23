@@ -1107,6 +1107,9 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     anywhere in it, reproduces the cold arm's divergence to the digit. Both
     destinations are exact against their matched control, and both of those
     equalities are pinned in ``tests/test_hybrid_cold_dest.py``."""
+    # A merged arena (bench/d0/ARENA-DESIGN.md) is never read as a base: refused before any tier opens it.
+    from ..merged_arena import refuse_merged_path
+    refuse_merged_path(arena_path)
     # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
     from ..absmax_dq import refuse_compressed_absmax
     refuse_compressed_absmax(model, "enable_hybrid_tier")

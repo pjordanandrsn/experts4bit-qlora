@@ -9,7 +9,6 @@ gate_up is square (2I = H) so that a transposed delta is shape-legal and must be
 """
 import hashlib
 import importlib
-import inspect
 import json
 import math
 import os
@@ -45,9 +44,9 @@ def _weights(seed=0):
     return W
 
 
-def _snapshot(tmp_path, W):
+def _snapshot(tmp_path, W, rev=REV):
     st = _need("safetensors.torch")
-    snap = tmp_path / "models--org--tiny-moe" / "snapshots" / REV
+    snap = tmp_path / "models--org--tiny-moe" / "snapshots" / rev
     snap.mkdir(parents=True)
     tensors = {f"model.layers.{li}.mlp.experts.{e}.{proj}.weight": t for (li, e, proj), t in W.items()}
     st.save_file(tensors, str(snap / "model-00001-of-00001.safetensors"))
@@ -56,11 +55,11 @@ def _snapshot(tmp_path, W):
     return snap
 
 
-def _bake(tmp_path, W):
+def _bake(tmp_path, W, **kw):
     nb = _need("nvme_bake_nf4")
     snap = _snapshot(tmp_path, W)
     arena = str(tmp_path / "nf4.arena")
-    nb.bake_nf4(str(snap), arena, quantize_fn=nb.default_quantize_expert(dev="cpu"), log=lambda *a, **k: None)
+    nb.bake_nf4(str(snap), arena, quantize_fn=nb.default_quantize_expert(dev="cpu"), log=lambda *a, **k: None, **kw)
     return snap, arena
 
 
@@ -93,7 +92,7 @@ def _trained(W, lora_scale=0.0, seed=3):
 
 
 def _adapter(tmp_path, model, *, name="ad", fingerprint=None, scale_applied="match", schema="backend-adapter/2",
-             tensors=None):
+             tensors=None, form="fp32", revision=REV):
     """A backend-adapter/2 directory as Loggetta writes one: the expert LoRA tensors, the files' sha256, and the v2
     fields, the expert fingerprint being quant_fingerprint's over the trained stacks."""
     from safetensors.torch import save_file
@@ -112,13 +111,13 @@ def _adapter(tmp_path, model, *, name="ad", fingerprint=None, scale_applied="mat
     files = {"adapter.safetensors": {"sha256": hashlib.sha256((d / "adapter.safetensors").read_bytes()).hexdigest(),
                                      "bytes": (d / "adapter.safetensors").stat().st_size}}
     man = {"schema": schema, "backend": "experts4bit", "weights": "adapter.safetensors", "files": files,
-           "resolved_model_revision": REV,
+           "resolved_model_revision": revision,
            "setup": {"quant_type": "nf4", "blocksize": 64, "r": R, "alpha": ALPHA, "attn_4bit": False,
                      "train_experts": True, "train_attention": False},
            "tensors": {k: {"shape": list(v.shape), "dtype": str(v.dtype)} for k, v in tensors.items()}}
     if schema == "backend-adapter/2":
         fp = fingerprint or S.quant_fingerprint(model, "experts")
-        man.update(expert_absmax={"form": "fp32"}, train_fused_qkv=0, attn_quant={"form": "bf16"}, versions={},
+        man.update(expert_absmax={"form": form}, train_fused_qkv=0, attn_quant={"form": "bf16"}, versions={},
                    lora_scale_applied={"attention": None,
                                        "experts": ALPHA / R if scale_applied == "match" else scale_applied},
                    fingerprints={"experts": fp}, run_id="merged-arena-test", created_at="2026-10-23T00:00:00Z")
@@ -376,7 +375,11 @@ def test_missing_or_misshapen_expert_tensors_are_refused(base, tmp_path):
             .detach().clone().contiguous() for li in range(L) for w in MA.WHICH for ab in "AB"}
     fp = __import__("experts4bit_qlora.adapter_schema", fromlist=["x"]).quant_fingerprint(model, "experts")
     short = {k: v for k, v in full.items() if not k.endswith("1.mlp.experts.down_lora_B")}
-    _refused(base, tmp_path, "missing", ad=_adapter(tmp_path, model, name="short", tensors=short, fingerprint=fp))
+    _refused(base, tmp_path, "the adapter lacks 1 expert LoRA tensor", ad=_adapter(tmp_path, model, name="short",
+                                                                                   tensors=short, fingerprint=fp))
+    extra = dict(full, **{"model.layers.7.mlp.experts.down_lora_A": full[f"{STACK.format(0)}.down_lora_A"].clone()})
+    _refused(base, tmp_path, "belong to no stack of this arena and would go unmerged",
+             ad=_adapter(tmp_path, model, name="extra", tensors=extra, fingerprint=fp))
     bent = dict(full, **{f"{STACK.format(0)}.down_lora_A": full[f"{STACK.format(0)}.down_lora_A"].transpose(1, 2)
                          .contiguous()})
     _refused(base, tmp_path, "ExpertsLoRA's layout", ad=_adapter(tmp_path, model, name="bent", tensors=bent,
@@ -439,12 +442,135 @@ def test_the_loader_refuses_a_merged_arena_before_reading_any_model(base, tmp_pa
         loader.load_moe_4bit_streaming("org/never-read", "cpu", torch.bfloat16, 8, 16, arena=out)
 
 
-@pytest.mark.parametrize("module", ["experts4bit_qlora.engines.nvme_train", "experts4bit_qlora.engines.nvme_experts"])
-def test_both_nvme_residencies_refuse_a_merged_arena_right_after_reading_its_index(module):
-    src = inspect.getsource(importlib.import_module(module))
-    i = src.index("index = load_index(arena_path)")
-    assert "refuse_merged(index, arena_path)" in src[i: i + 200]
-    assert src.count("load_index(") == src.count("refuse_merged(")
+def _arena_openers():
+    """``{"<module>:<function>": (first ColdTier line or None, first refusal line or None)}`` for every function in
+    the package that opens an arena: calls grouped-nf4-gemm's ``load_index`` or builds a ``ColdTier``."""
+    import ast
+    import pathlib
+
+    root = pathlib.Path(MA.__file__).parent
+    out = {}
+    for path in sorted(root.rglob("*.py")):
+        if path.name == "merged_arena.py":                       # the guard itself reads the index
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for fn in ast.walk(tree):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            calls = {}
+            for node in ast.walk(fn):
+                if isinstance(node, ast.Call):
+                    f = node.func
+                    name = f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else None
+                    calls.setdefault(name, []).append(node.lineno)
+            if "load_index" in calls or "ColdTier" in calls:
+                refusal = calls.get("refuse_merged", []) + calls.get("refuse_merged_path", [])
+                out[f"{path.relative_to(root)}:{fn.name}"] = (min(calls.get("ColdTier", [0])) or None,
+                                                              min(refusal) if refusal else None)
+    return out
+
+
+def test_every_arena_opener_in_the_package_refuses_a_merged_arena_before_any_tier():
+    openers = _arena_openers()
+    assert {"loader.py:load_moe_4bit_streaming", "engines/nvme_experts.py:enable_nvme_residency",
+            "engines/hybrid.py:enable_hybrid_tier", "engines/nvme_train.py:enable_nvme_train_residency",
+            "engines/nvme_experts.py:enable_mxfp4_nvme_residency"} <= set(openers)
+    for where, (tier, refusal) in openers.items():
+        assert refusal is not None, f"{where} opens an arena without refuse_merged"
+        assert tier is None or refusal < tier, f"{where} builds a ColdTier before refusing a merged arena"
+
+
+@pytest.mark.parametrize("entry", ["nvme_residency", "hybrid_tier"])
+def test_the_coldtier_readers_refuse_a_merged_arena_before_touching_the_model(base, tmp_path, entry):
+    W, _snap, arena = base
+    out = str(tmp_path / "m.arena")
+    MA.write(arena, _adapter(tmp_path, _trained(W, lora_scale=0.05)), out, log=lambda *a: None)
+    with pytest.raises(ValueError, match="is a merged arena"):
+        if entry == "nvme_residency":
+            from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
+            enable_nvme_residency(None, out, [], hot_rows=1, device="cpu", pinned=False)
+        else:
+            from experts4bit_qlora.engines.hybrid import enable_hybrid_tier
+            enable_hybrid_tier(None, out, None, hot_rows=1, device="cpu")
+
+
+def test_an_adapter_trained_at_another_revision_is_refused(base, tmp_path):
+    _refused(base, tmp_path, "the base arena was baked from c{40}, not the adapter's base d{40}",
+             adapter={"revision": "d" * 40})
+
+
+def test_a_checkpoint_at_another_commit_is_refused_even_with_the_same_weights(base, tmp_path):
+    W, _snap, _arena = base
+    other = _snapshot(tmp_path / "rev2", W, rev="e" * 40)
+    _refused(base, tmp_path, f"is commit {'e' * 40}, the base arena's {REV}", source="checkpoint",
+             checkpoint=str(other))
+
+
+def _bake_patched(monkeypatch, how):
+    nb = _need("nvme_bake_nf4")
+    real = nb.bake_nf4
+
+    def patched(*a, **kw):
+        if how == "fewer":
+            kw["layers"] = [0]
+        idx = real(*a, **kw)
+        if how == "geometry":
+            idx = dict(idx, row_stride=idx["row_stride"] + 4096)
+        return idx
+
+    monkeypatch.setattr(nb, "bake_nf4", patched)
+
+
+@pytest.mark.parametrize("how, needle", [("fewer", "the bake wrote fewer projections than the base arena holds"),
+                                         ("geometry", "the checkpoint bake's row_stride differs from the base arena's")])
+def test_a_checkpoint_bake_that_is_not_the_base_geometry_is_refused(base, tmp_path, monkeypatch, how, needle):
+    _bake_patched(monkeypatch, how)
+    _refused(base, tmp_path, needle, source="checkpoint", checkpoint=str(base[1]))
+
+
+def test_a_partial_bake_is_never_a_base(base, tmp_path):
+    W, _snap, _arena = base
+    _psnap, partial = _bake(tmp_path / "partial", W, limit_experts=2)
+    _refused(base, tmp_path, r"a partial bake \(2 of 3 experts\)", arena=partial)
+
+
+def test_only_an_nf4_quantize_bake_is_a_base(base, tmp_path):
+    _W, _snap, arena = base
+    other = str(tmp_path / "reloc.arena")
+    shutil.copy(arena, other)
+    idx = json.load(open(arena + ".index.json"))
+    json.dump(dict(idx, bake_mode="relocate-expert-tensors"), open(other + ".index.json", "w"))
+    _refused(base, tmp_path, "bake_mode 'relocate-expert-tensors'; the writer reads only a bake_nf4 'nf4-quantize'",
+             arena=other)
+
+
+def _dq_fingerprint(W):
+    """What a dq-trained /2 manifest records: training's stacks with the absmax compressed (training's default)."""
+    from experts4bit_qlora import adapter_schema as S
+    from experts4bit_qlora.absmax_dq import compress_expert_absmax_
+    model = _trained(W, lora_scale=0.05)
+    assert compress_expert_absmax_(model) == L
+    return S.quant_fingerprint(model, "experts")
+
+
+def test_a_double_quantized_trained_base_merges_by_its_fp32_source(base, tmp_path):
+    W, _snap, arena = base
+    fp = _dq_fingerprint(W)
+    assert fp["sha256"] != fp["fp32_source"]["sha256"]
+    out = str(tmp_path / "m.arena")
+    block = MA.write(arena, _adapter(tmp_path, _trained(W, lora_scale=0.05), fingerprint=fp, form="double-quantized"),
+                     out, log=lambda *a: None)
+    assert block["trained_base"] == "double-quantized" and block["base_qfp_v1"] == fp["fp32_source"]["sha256"]
+
+
+@pytest.mark.parametrize("src, needle", [({"sha256": "2" * 64}, "not the base this adapter was trained on"),
+                                         (None, "needs the fingerprint's fp32_source")])
+def test_a_double_quantized_adapter_without_its_true_fp32_source_is_refused(base, tmp_path, src, needle):
+    W, _snap, _arena = base
+    fp = _dq_fingerprint(W)
+    fp = {k: v for k, v in fp.items() if k != "fp32_source"} if src is None else dict(fp, fp32_source=dict(
+        fp["fp32_source"], **src))
+    _refused(base, tmp_path, needle, adapter={"fingerprint": fp, "form": "double-quantized"})
 
 
 def test_refuse_merged_names_the_adapter_and_passes_a_base():
@@ -453,3 +579,5 @@ def test_refuse_merged_names_the_adapter_and_passes_a_base():
         MA.refuse_merged({"bake_mode": MA.MERGED_BAKE_MODE, "merge": {"adapter_id": "abcdef0123456789"}}, "m.arena")
     with pytest.raises(ValueError, match="is a merged arena"):
         MA.refuse_merged({"bake_mode": MA.BASE_BAKE_MODE, "merge": {}}, "m.arena")
+    with pytest.raises(ValueError, match="bake_mode 'nf4-merged', adapter unrecorded"):
+        MA.refuse_merged({"bake_mode": MA.MERGED_BAKE_MODE}, "m.arena")       # the mode alone is enough

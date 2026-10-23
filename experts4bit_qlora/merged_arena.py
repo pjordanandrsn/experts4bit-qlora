@@ -17,8 +17,9 @@ computed in fp32 with the scale the trained modules held (``lora_scale_applied.e
   record a server's merged-arena rules read, the merged arena's own fingerprint included. A retention receipt (D0's
   Step-1 sums per layer and projection) is written beside it: a record, never a gate.
 
-Nothing serves a merged arena yet. :func:`refuse_merged` runs wherever this package opens an arena index (the loader and
-both NVMe residencies), so a merged arena is never read as a base: served without its adapter, or trained from.
+Nothing serves a merged arena yet. :func:`refuse_merged` runs wherever this package opens an arena (the loader, the NF4,
+MXFP4 and training NVMe residencies, and the hybrid tier), so a merged arena is never read as a base: served without its
+adapter, or trained from.
 """
 from __future__ import annotations
 
@@ -59,6 +60,16 @@ def refuse_merged(index: dict, arena: str) -> None:
         raise ValueError(f"{arena} is a merged arena (bake_mode {index.get('bake_mode')!r}, adapter {adapter}): it is "
                          f"never read as a base, and serving it with its adapter is not supported yet "
                          f"(bench/d0/ARENA-DESIGN.md)")
+
+
+def refuse_merged_path(arena: str) -> None:
+    """:func:`refuse_merged` on the index beside ``arena``, read with the kernel's own ``load_index``: for a reader that
+    opens the arena through grouped-nf4-gemm's ``ColdTier`` rather than ``load_index``, called before the tier opens.
+    With no index there is nothing to refuse here: the reader refuses that arena itself, with its own error."""
+    if not os.path.exists(arena + ".index.json"):
+        return
+    from nvme_arena import load_index
+    refuse_merged(load_index(arena), arena)
 
 
 def expert_tensors_sha256(ad) -> str:
@@ -139,10 +150,13 @@ def _check_tensors(ad, names: dict, geo: dict, n_experts: int) -> None:
             want[f"{name}.{which}_lora_A"] = (n_experts, r, k)
             want[f"{name}.{which}_lora_B"] = (n_experts, n, r)
     have = set(ad.expert_tensors)
-    if have != set(want):
-        extra, missing = sorted(have - set(want)), sorted(set(want) - have)
-        raise MergeRefused(f"the adapter's expert LoRA tensors are not this arena's stacks: missing {missing[:2]}, "
-                           f"not merged {extra[:2]}")
+    missing, extra = sorted(set(want) - have), sorted(have - set(want))
+    if missing:
+        raise MergeRefused(f"the adapter lacks {len(missing)} expert LoRA tensor(s) this arena's stacks need, e.g. "
+                           f"{missing[0]}")
+    if extra:
+        raise MergeRefused(f"{len(extra)} expert LoRA tensor(s) belong to no stack of this arena and would go "
+                           f"unmerged, e.g. {extra[0]}")
     for name, shape in want.items():
         if tuple(ad.tensors[name].shape) != shape:
             raise MergeRefused(f"{name} is {list(ad.tensors[name].shape)}, not {list(shape)} (ExpertsLoRA's layout)")
@@ -330,8 +344,9 @@ def write(base_arena: str, adapter_dir: str, out: str, *, source: str = "arena",
             if os.path.lexists(p):
                 os.remove(p)
         raise
-    for src, dst in zip(tmps, finals):
-        os.replace(src, dst)
+    # the index last: a reader that finds it finds its arena, manifest and receipt already in place
+    for i in (0, 2, 3, 1):
+        os.replace(tmps[i], finals[i])
     log(f"merged arena written: {out} (merged qfp-v1 {block['merged_qfp_v1'][:16]}, rho_bar "
         f"{block['retention_summary']['all']['rho_bar']}, {time.time() - t0:.0f} s)")
     return block
@@ -409,6 +424,10 @@ def _bake_from_checkpoint(checkpoint: str, tmp: str, index: dict, merge: _Merge,
     import torch
 
     calls = iter([(int(lay), int(e), which) for lay, e, _off in index["rows"] for which in WHICH])
+    q = index.get("quantizer") or {}
+    # the base's own bake inputs, as its index records them (the bake's defaults where an older index has none)
+    recorded = {"layers": sorted({int(r[0]) for r in index["rows"]}), "proj": tuple(q.get("proj") or nb.PROJ),
+                "source": q.get("source", "bf16"), "moe": q.get("moe_attr", "mlp")}
 
     def quantize(w_bf16):
         nxt = next(calls, None)
@@ -421,7 +440,7 @@ def _bake_from_checkpoint(checkpoint: str, tmp: str, index: dict, merge: _Merge,
                 torch.frombuffer(bytearray(qa), dtype=torch.float32).view(n, k // BLOCK))
 
     new_index = nb.bake_nf4(checkpoint, tmp, prefix=index["prefix"], align=int(index["align"]), quantize_fn=quantize,
-                            log=lambda *a, **k: None)
+                            log=lambda *a, **k: None, **recorded)
     if next(calls, None) is not None:
         raise MergeRefused("the bake wrote fewer projections than the base arena holds")
     for key in ("prefix", "align", "row_bytes", "row_stride", "n_layers", "n_experts_per_layer", "segments", "rows",
