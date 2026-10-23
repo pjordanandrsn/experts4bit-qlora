@@ -1,7 +1,8 @@
 # SC2j: does the shared KV pool lift e4b `serve_paged`'s request-level capacity at the default 4,096 tokens a slot? `E4B_PAGED_KV_POOL=shared` (levers G1-G3, e4b#2029, #2020, #2034, #2039) against `claim-all`, both at `E4B_PAGED_MAX_SEQS=auto`, paired, one RTX 5090 (lane SC2j of #846; serving roadmap lever G)
 
-**DRAFT for review: not registered.** It registers when this file merges to `main`, before any SC2j run. Box Q rents
-through the guarded launcher (`tools/pod-launch.sh`), with the independent deadline watcher armed at create.
+**Registered** when this file merges to `main`, before any SC2j run, and only after e4b#2039 has merged (the launch
+commit must contain it). Box Q rents through the guarded launcher (`tools/pod-launch.sh`), with the independent deadline
+watcher armed at create.
 
 ## Why this lane
 
@@ -56,7 +57,8 @@ same tokens as claim-all on one fixed schedule. It is not a speed claim. Explore
   drift and the noise. Every server of a draw runs the same plan seeds.
 - **The contract arm, in process, before the servers** (`bench/sc2/sc2j_contract.py`, G1's contract on this model and
   stack). The engine is driven step by step through `serve_paged.build_engine` on one fixed schedule, using
-  `bench/kv-pool-g/g3-smoke/g3_smoke.py`'s workload and drive at an EXPLICIT 32 slots (`E4B_PAGED_MAX_SEQS=32`):
+  `bench/kv-pool-g/g3-smoke/g3_smoke.py`'s workload and drive (staged beside it) at an EXPLICIT 32 slots
+  (`E4B_PAGED_MAX_SEQS=32`):
   - `claim-all` at 32 slots, twice (the floor);
   - `shared` at 32 slots. G3 keeps an explicit width and sizes the pool for it (`resolve_kv_pool`). At 4,096 tokens a
     slot, 32 slots' claim-all size (32 × 256 + 32 scratch = 8,224 rows) fits whole, so the pool holds the claim-all
@@ -131,8 +133,9 @@ server lost to the deadline makes the reading UNREAD, never SHARED_LICENSED.
   - P117's 656-token window gives a bound of 11 and 4,096 tokens gives 64. Both are above want at every bucket the
     QUALITY arm compares, so the plans are the same. The match holds for B ≥ 8 only (at B = 1 the bounds would give 11
     against 32), which P117 does not exercise, and it is cited for P117's widths alone.
-  - The box records `Fp8PagedKV.split_plans` in both and the reducer asserts they match at B = 16, 32 and 64.
-    Otherwise QUALITY is UNREAD.
+  - The servers record their plans (`/health`'s `levers.attn_split_cap.plans`). The box computes P117's with the same
+    library function at P117's table width and the box's SM count (`quality/plans.json`). The reducer asserts they
+    match at B = 16, 32 and 64, wherever a server captured that bucket; otherwise QUALITY is UNREAD.
 - Reported, no bar: per rate and draw, the share of requests whose streamed text is byte-equal between `sh` and
   `ca_a`. Under load, batch composition differs between servers, so this is descriptive only.
 
@@ -166,8 +169,12 @@ the reserved blocks and the waits per ladder. The pool's derivation as G3 record
 
 ## Shakedown, proof and budget (bench/common rules 2-5)
 
-**$0 shakedown.** The reducer's self-test, the box's checks on fixtures (`tests/test_sc2j_box.py`), the contract
-script's self-test, and `SC1_BOX=Q SC1_DRIVE_DRYRUN=1` at the launch commit.
+**$0 shakedown.**
+- The self-tests of the reducer (`sc2j_reduce.py`, 15 cases), the contract arm (`sc2j_contract.py`, 9) and the long
+  prompt pool (`sc2j_prompts.py`).
+- The box's checks on fixtures (`tests/test_sc2j_box.py`): the POOL check executed on every departure, the tripwire,
+  the lane's constants held equal across files, Guard Fit's static form, the cap and ids, and the wiring.
+- `SC1_BOX=Q SC1_DRIVE_DRYRUN=1` at the launch commit, with and without the proof.
 
 **Proof** (`sc2j-prove-*`, guard 1.0 h), on Granite-3.1-3b-a800m (NF4 store, SC1's `GR_ENV` unchanged):
 - the self-tests;
