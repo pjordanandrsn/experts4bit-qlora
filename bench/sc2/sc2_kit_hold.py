@@ -91,8 +91,9 @@ def driver_delta_ok(at_text: str, hold_text: str) -> bool:
         return False
     i = diff[0]
     fn = next((x for x in reversed(h[:i]) if re.match(r"[A-Za-z_][A-Za-z0-9_]*\(\) *\{", x)), "")
-    return (NO_LINKS in a[i] and a[i].replace(NO_LINKS, "", 1) == h[i] and h[i].startswith(PULL_BOX_RSYNC)
-            and fn.startswith("pull_box() {"))
+    # the token sits exactly after `rsync -az`, as an rsync argument (not inside the -e "ssh ..." string)
+    want = h[i].replace("  rsync -az ", "  rsync -az --no-links ", 1)
+    return a[i] == want and h[i].startswith(PULL_BOX_RSYNC) and fn.startswith("pull_box() {")
 RUNS = re.compile(r"\bbash\b|\bsource\b|python|\$PY\b|\bexec\b")
 
 

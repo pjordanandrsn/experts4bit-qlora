@@ -73,6 +73,10 @@ def test_rule_8_driver_delta_on_the_held_driver():
     assert kh.driver_delta_ok(held, held) and kh.driver_delta_ok(declared, held)
     assert not kh.driver_delta_ok(declared.replace("ConnectTimeout=20", "ConnectTimeout=21", 1), held)
     assert not kh.driver_delta_ok(declared.replace(kh.NO_LINKS, kh.NO_LINKS * 2, 1), held)
+    in_ssh = held.replace("-o ConnectTimeout=20 ", "-o ConnectTimeout=20 --no-links ", 1)
+    assert in_ssh.count(kh.NO_LINKS) == 1 and not kh.driver_delta_ok(in_ssh, held)   # inside -e "ssh ...", not an rsync arg
+    at_end = held.replace(kh.PULL_BOX_RSYNC, kh.PULL_BOX_RSYNC + kh.NO_LINKS, 1)
+    assert not kh.driver_delta_ok(at_end, held)                                       # same line, another position
     elsewhere = held.replace('SC2="$REPO/bench/sc2";', 'SC2="$REPO/bench/sc2"; # --no-links', 1)
     assert elsewhere != held and not kh.driver_delta_ok(elsewhere, held)
 

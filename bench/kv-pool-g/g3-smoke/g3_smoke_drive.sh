@@ -38,9 +38,9 @@ while :; do
   sleep "$POLL"
 done
 rm -rf "$RUN_DIR/g3s" && mkdir -p "$RUN_DIR/g3s" || { say "fetch failed: local dir"; exit 22; }
-rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude venv --exclude work_granite --exclude .cache --exclude __pycache__ "root@$HOST:$W/" "$RUN_DIR/g3s/" || {
-  say "rsync fetch failed -- falling back to tar over the same ssh options"
-  $SSH "tar -C $W --exclude=./venv --exclude=./work_granite --exclude=./.cache -cf - ." | tar -C "$RUN_DIR/g3s" -xf - || { say "fetch failed: rsync and tar"; exit 22; }; }
+rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude venv --exclude work_granite --exclude .cache --exclude __pycache__ "root@$HOST:$W/" "$RUN_DIR/g3s/" \
+  || { say "fetch failed: rsync (no fallback: a tar stream would import links, bench/common rule 8)"; exit 22; }
+[ -z "$(find "$RUN_DIR/g3s" -type l | head -1)" ] || { say "refusing: a symlink in the fetched artifacts (bench/common rule 8)"; exit 22; }
 say "fetched $(ls "$RUN_DIR/g3s" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/g3s/G3S_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/g3s/TP_DONE.$NONCE" ] || { say "the smoke did not finish (no TP_DONE for this run)"; exit 23; }
