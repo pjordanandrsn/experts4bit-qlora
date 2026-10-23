@@ -70,11 +70,11 @@ same tokens as claim-all on one fixed schedule. It is not a speed claim. Explore
   - **the SC2 ladder** (Q2, the primary outcome): SC2's driver and 512-token prompts, `max_tokens` U[64, 256], Poisson at
     **1, 2, 4, 8, 12 and 16 req/s**, 120 requests each (SC2e's rates; seed draw × 100 + rate);
   - **the long ladder** (Q3, so reservations bind): 2,048-token prompts (`sc2_prompts.py` at 2,048 tokens from the same
-    wikitext-2 split), `max_tokens` U[512, 1,536], Poisson at **0.5, 1, 2 and 4 req/s**, **96 requests each** (seed draw
+    wikitext-2 split), `max_tokens` U[768, 1,536], Poisson at **0.5, 1, 2 and 4 req/s**, **96 requests each** (seed draw
     × 1,000 + 10 × rate). `/stats` is captured before and after every rung.
-    - A request reserves its prompt plus its own `max_tokens`: 192 blocks on average and 224 at most. At the top rungs
-      the server holds 64 requests (the slots), and 64 × 192 = 12,288 blocks exceeds the pool's about 12,000 (the
-      estimate): admission is designed to wait.
+    - A request reserves its prompt plus its own `max_tokens`: 200 blocks on average and 224 at most. At the top rungs
+      the server holds 64 requests (the slots), and 64 × 200 = 12,800 blocks exceeds the pool's about 12,000 (the
+      estimate) by about 7 %: admission is designed to wait.
     - **PRESSURE**, stated before data: Q3 is read only if `sh`'s `kv_blocks_waits` rises over the 4 req/s rung in both
       draws. Otherwise Q3 is UNREAD, the shared pool was never under reservation pressure, and the verdict cannot be
       SHARED_LICENSED.
@@ -129,7 +129,8 @@ server lost to the deadline makes the reading UNREAD, never SHARED_LICENSED.
   plans min(32, want, ceil(table tokens / 64)), with want = floor(11 × SMs / (5 × B × KV heads)).
   - On an RTX 5090 (170 SMs) with Qwen3's 4 KV heads, want is 5 at B = 16, 2 at 32 and 1 at 64.
   - P117's 656-token window gives a bound of 11 and 4,096 tokens gives 64. Both are above want at every bucket the
-    QUALITY arm compares, so the plans are the same.
+    QUALITY arm compares, so the plans are the same. The match holds for B ≥ 8 only (at B = 1 the bounds would give 11
+    against 32), which P117 does not exercise, and it is cited for P117's widths alone.
   - The box records `Fp8PagedKV.split_plans` in both and the reducer asserts they match at B = 16, 32 and 64.
     Otherwise QUALITY is UNREAD.
 - Reported, no bar: per rate and draw, the share of requests whose streamed text is byte-equal between `sh` and
@@ -153,7 +154,7 @@ tokens a slot (claim-all 16 against shared 64 in the estimate) is a later lane, 
 |---|---|---|---|
 | P1 | `ca`'s width 32 and `sh`'s 64 on the box | the estimate above | G3's arithmetic or the box's free memory differs from the estimate: the pool record names which |
 | P2 | `sh`'s Q2 ceiling 12 req/s and `ca`'s 8, both draws | SC2e's measured s64a 12 and s32a 8 at 2,048 tokens a slot: Q2's requests (512 + up to 256 tokens) never approach either ceiling, so the per-slot ceiling should not move the step cost | the width does not carry over to 4,096 tokens a slot on this stack: the census names where |
-| P3 | on Q3, `sh` counts block waits (`kv_blocks_waits` rising) at 2 and 4 req/s, both draws | 64 × the 192-block mean exceeds the pool | the long ladder did not exercise the reservation (at 4 req/s that is PRESSURE failing: Q3 UNREAD) |
+| P3 | on Q3, `sh` counts block waits (`kv_blocks_waits` rising) at 2 and 4 req/s, both draws | 64 × the 200-block mean exceeds the pool | the long ladder did not exercise the reservation (at 4 req/s that is PRESSURE failing: Q3 UNREAD) |
 | P4 | serial p50 TTFT and TPOT of `sh` within ±5 % of `ca`'s | a serial request runs bucket 1 on every server | the pool mode costs a single sequence time: name where in the step trace |
 | P5 | VRAM at ready: `sh` − `ca` ≤ 1.5 GiB | both arms are sized to the same free memory less the same reserve and margin | G3 does not leave the margin it prices |
 
@@ -184,8 +185,9 @@ WIDTH is not read in the proof: Granite fits 64 slots under both pools. The QUAL
   term, 9 + 1.25 × 231 = 298 min, so the reading's guard is **5.5 h** (330 min, 32 min to spare). The proof's fit is
   about 25 min, so 9 + 1.25 × 25 = 40 min, under its 1.0 h guard.
 
-**Run ids.** Proofs `sc2j-prove-1` onward and readings `sc2j-5090-1` onward, with retry ids `-r1` to `-r8` for a box
-that follows one that did not start (rule 2).
+**Run ids** (rule 2): proofs `sc2j-prove-1` and `sc2j-prove-2`; readings `sc2j-5090-1` and `sc2j-5090-2`; and ONE set
+of retry ids `sc2j-r1` to `sc2j-r8`, shared across both kinds, for a box that follows one that did not start. That is
+12 ids in all.
 
 **Outcome classes** are bench/common rule 3's, decided from the launcher's receipt and the runner's exit.
 
@@ -193,10 +195,13 @@ that follows one that did not start (rule 2).
 counted as a reading. A proof never stands in for a reading.
 - Worst cases at $1.05/h plus download at ≤ $0.011/GB: a proof 1.0 h ≤ $1.05 + ~$0.10 = $1.15; a reading 5.5 h ≤ $5.78
   + ~$0.83 = $6.61.
-- A box that does not start (refused at create, NOT_RUN, refused before the install) costs at most about $0.25: up to
-  600 s held before the pre-flight gives up, at $1.05/h, with no download.
-- The lane's worst is bounded: the cap × each kind's worst, plus every other registered id (4 reading and proof ids
-  plus 8 retry ids, less the 4 that start) as a non-start: 2 × $1.15 + 2 × $6.61 + 8 × $0.25 = **$17.52**.
+- A box that does not start costs, at most:
+  - refused at create: $0;
+  - NOT_RUN: about $0.18 (up to 600 s held before the pre-flight gives up, at $1.05/h, no download);
+  - refused at the guard fit (rc 41): this fires only after the box has used more than guard − 1.25 × fit, so up to
+    330 − 1.25 × 231 = 41 min on a reading, about $0.72, and 60 − 40 = 20 min on a proof, about $0.35.
+- The lane's worst is bounded: the cap × each kind's worst, plus every other registered id (12, less the 4 that start)
+  as a non-start at the reading's $0.72: 2 × $1.15 + 2 × $6.61 + 8 × $0.72 = **$21.28**.
 - Each run is under the standing single-run tier ($15) and inside the launcher's 6 h cap.
 - **Strikes.** A strike is a started box that is NOT read (HARNESS_ERROR, VOID, a fault mid-install or mid-run), or two
   consecutive refusals at the guard fit (rc 41). **Two strikes** stop the lane pending a root-cause note. A read box
