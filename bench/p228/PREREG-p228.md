@@ -286,8 +286,8 @@ P227's and P229's Amendment 4, in its final form, for this lane.
     - Compute, priced conservatively at 600 s x $1.05/h: **$0.18**.
     - The image pull: the pinned image (`pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`, digest `a7103283...`) is
       9.4 GB compressed. Uncached, at the template's <= $0.04/GB, that is at most **$0.38**.
-    - So at most **$0.56** a box, and three in a row cost at most **$1.67** before the stop. That is outside the
-      started-box budget, as rc 17 always was.
+    - So at most **$0.56** a box, and three in a row cost at most **$1.68** (3 x $0.56) before the stop. That is
+      outside the started-box budget, as rc 17 always was.
     - Measured: `p229-5090-1`, the one rc 17 box so far, ran 195 s from create to teardown, and its ledger row
       (download included) is $0.002.
   - **The registry learns each one.** The runner prints `POWER_LIMIT_W <n> (floor 575)` before it refuses. Committing

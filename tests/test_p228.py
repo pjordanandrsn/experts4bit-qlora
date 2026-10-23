@@ -221,7 +221,7 @@ def test_amendment_6_admits_by_the_latest_power_record_and_the_box_reads_the_flo
                  "each template sets it to `\"eligible\"` (pod-launch's default), keeps the rule `\"latest\"`, and sets no"
                  " `max_age_days`",
                  "**Who counts:** the lane's owner, from each box's receipt (the runner's exit code).",
-                 "So at most **$0.56** a box, and three in a row cost at most **$1.67** before the stop."):
+                 "So at most **$0.56** a box, and three in a row cost at most **$1.68** (3 x $0.56) before the stop."):
         assert case in flat, case
     assert _rc17_stop([17, 17, 17])
     assert _rc17_stop([17, None, 17, None, 17])                  # refusals at create neither add nor reset
