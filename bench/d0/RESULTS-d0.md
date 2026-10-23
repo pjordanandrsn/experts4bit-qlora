@@ -21,9 +21,9 @@ named this open quantity: ‖ΔW‖ against the code gap after 200 steps. Here �
 **Provenance:** the registration is [`PREREG-d0.md`](PREREG-d0.md) with its Amendment 1. It did not pin the tools' hashes,
 and no copy of them was stored before the run. That the computation tools were unchanged since 2026-10-21 therefore rests on
 the author's statement; the tools as run are in the receipt. One stated deviation (D-1, the tokenizer's recorded name in the
-data step, before any pass) is described in the receipt's [README](receipts/d0-p224s3/README.md). An independent reviewer
-and the maintainer each re-derived both summaries from the private receipt store with zero differences. The summaries also
-re-derive from the public record here ([`REDERIVE.md`](REDERIVE.md)). Cost: USD 0.
+data step, before any pass) is described in the receipt's [README](receipts/d0-p224s3/README.md). Both summaries were
+re-derived twice, independently, from the private receipt store, with zero differences. They also re-derive from the
+public record here ([`REDERIVE.md`](REDERIVE.md)). Cost: USD 0.
 
 ## The numbers
 
@@ -71,7 +71,7 @@ fraction of changed values. Step 2 is held-out loss on 64 unseen rows (7,642 sco
 ## What follows
 
 The outcome is not one of the registered branches: they assume NF4 from Q is LOST, and here every cell is RETAINED. The
-maintainer ruled on it:
+ruling on it:
 - Path (a), a merged re-quantized arena, is viable on this fixture even from the trained NF4 base.
 - The registered cross-format served read goes ahead, to price the repack on the served model. It is a separate
   registration, with the tools' hashes committed before its run.

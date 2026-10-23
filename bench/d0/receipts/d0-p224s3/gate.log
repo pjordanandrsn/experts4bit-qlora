@@ -1,0 +1,3 @@
+row len 135: max |dlogit| 5.245e-06  (logit scale 13.0)
+row len 92: max |dlogit| 5.722e-06  (logit scale 13.7)
+D0_GATE {"layers": 2, "max_abs_dlogit": 5.7220458984375e-06, "ok": true}

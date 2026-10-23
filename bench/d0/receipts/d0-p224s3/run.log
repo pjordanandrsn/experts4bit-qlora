@@ -1,0 +1,11 @@
+2026-10-22T16:36:19Z start; free: 49 GB available; nproc 2
+2026-10-22T16:37:03Z dq: data rc 0 (D0_DATA {"hash_ok": true, "unseen_ok": true, "fingerprint_ok": true, "ok": true, "scored_tokens": 7642})
+2026-10-22T16:38:11Z gate: D0_GATE {"layers": 2, "max_abs_dlogit": 5.7220458984375e-06, "ok": true}
+2026-10-22T18:27:42Z dq: pass rc 0 in 6571 s (D0_PASS done)
+2026-10-22T18:29:10Z dq: step-1 completion rc 0 (16 layers)
+2026-10-22T18:29:11Z dq: reduce rc 0 (heldout-ok true)
+2026-10-22T18:30:06Z nodq: data rc 0 (D0_DATA {"hash_ok": true, "unseen_ok": true, "fingerprint_ok": true, "ok": true, "scored_tokens": 7642})
+2026-10-22T20:23:07Z nodq: pass rc 0 in 6781 s (D0_PASS done)
+2026-10-22T20:24:33Z nodq: step-1 completion rc 0 (16 layers)
+2026-10-22T20:24:34Z nodq: reduce rc 0 (heldout-ok true)
+2026-10-22T20:24:34Z end
