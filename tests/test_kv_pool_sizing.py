@@ -200,6 +200,17 @@ def test_a_refused_estimate_above_the_floor_counts_as_not_fitting(monkeypatch):
     assert r["max_seqs"] == 64 and r["pool_rows"] == cap
 
 
+def test_an_estimate_refused_even_at_the_floor_keeps_the_claim_all_pool_and_names_why(monkeypatch):
+    """No estimate at all (every width refused at its floor): no crash, the claim-all pool, the refusal in the record."""
+    from experts4bit_qlora import serve_recipe as sr
+    monkeypatch.setattr(sr, "estimate_serve_footprint",
+                        lambda topology, setup: sr.Footprint(items=(), refusals=("no estimate for this setup",)))
+    r = sr.size_shared_pool(_qwen3_30b(), sr.ServeSetup(max_tokens_per_seq=4096), FREE_5090, widths=(64, 16))
+    assert r["max_seqs"] == 16 and r["pool_rows"] is None
+    assert [c["refused"] for c in r["candidates"]] == [["no estimate for this setup"]] * 2
+    assert "refused every width" in r["why"] and "no estimate for this setup" in r["why"]
+
+
 @pytest.mark.parametrize("free,placement,why", [(None, "all-vram", "unknown"), (FREE_5090, "solver", "solver")])
 def test_unknown_memory_or_the_solver_keeps_the_claim_all_pool(free, placement, why):
     from experts4bit_qlora.serve_recipe import MAX_SEQS_AUTO_WIDTHS, ServeSetup, size_shared_pool

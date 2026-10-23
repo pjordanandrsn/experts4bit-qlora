@@ -266,6 +266,10 @@ def size_shared_pool(topology, setup: "ServeSetup", free_bytes, *, widths, margi
                                       pool_tokens=(lo - scratch) * bt, mean_tokens_per_slot=(lo - scratch) * bt // w))
     pick = next((c for c in out["candidates"] if c.get("fits")), None)
     if pick is None:
+        refused = {c["max_seqs"]: c["refused"] for c in out["candidates"] if c.get("refused")}
+        if refused and len(refused) == len(out["candidates"]):
+            return dict(out, why="the estimate refused every width at its floor (" + "; ".join(
+                f"{w}: {', '.join(map(str, r))}" for w, r in refused.items()) + f"): {floor} slots, the claim-all pool")
         return dict(out, why=f"no width holds {SHARED_POOL_MIN_TOKENS_PER_SLOT} tokens a slot and one full sequence in "
                              f"{int(free_bytes)} B free with the reserve and margin: {floor} slots, the claim-all pool")
     rows = None if pick["pool_rows"] >= pick["claim_all_rows"] else pick["pool_rows"]
