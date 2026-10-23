@@ -104,9 +104,9 @@
     {
       "module": "experts4bit_qlora.engines.router_epilogue",
       "qualname": "fuse_router_epilogue.<locals>._fwd",
-      "ast_sha256": "8dfe917076bba93dcea0a41f2ece56f4220c709ab6507f5099344b4e45601860",
+      "ast_sha256": "5fa370b7a2e647e716bea263f8d8201b3dacf44459e39a58131f21b33bdd9a71",
       "feature": "router_epilogue",
-      "source_commit": "41d72d33d7d994d85c96e676cb4fb5d67bb65532"
+      "source_commit": "e13d80f7702e71dd8bf0257ac954d86784c45de1"
     },
     {
       "module": "experts4bit_qlora.engines.router_epilogue",

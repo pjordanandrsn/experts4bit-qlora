@@ -267,8 +267,15 @@ def _why_not(mod, wrapper) -> str | None:
 def _compress_one(mod) -> None:
     import bitsandbytes.functional as F
 
+    from .adapter_schema import absmax_sha256
+
+    source = {}
     for which in _WHICH:
         absmax = mod._buffers[f"{which}_absmax"]
+        # the FULL fp32 absmax's qfp-v1 hash, taken before it is compressed: backend-adapter/2's fp32 source
+        # fingerprint, which a server compares with its fp32 arena exactly (no reconstruction, no device dependence).
+        # The bytes are the buffer's in storage order, the same bytes expert_absmax_fp32's view of it hashes.
+        source[which] = absmax_sha256(absmax)
         flat = absmax.reshape(-1)
         # bitsandbytes quantize_4bit(compress_statistics=True), statement for statement.
         offset = flat.mean()
@@ -282,7 +289,16 @@ def _compress_one(mod) -> None:
         mod.register_buffer(f"{which}_absmax_code", state2.code.to(torch.float32).contiguous())
         object.__setattr__(mod, f"{which}_absmax", _CompressedAbsmaxGuard(f"{type(mod).__name__}.{which}_absmax"))
         del absmax, flat
-    object.__setattr__(mod, _MARK, {"nested_blocksize": NESTED_BLOCKSIZE})
+    object.__setattr__(mod, _MARK, {"nested_blocksize": NESTED_BLOCKSIZE, "fp32_source_sha256": source})
+
+
+def absmax_source_sha256(mod, which: str) -> str | None:
+    """The qfp-v1 hash of the fp32 absmax :func:`compress_expert_absmax_` compressed for this projection, recorded
+    before compression; None for a stack that is not compressed (its absmax IS fp32) or was compressed without the
+    record."""
+    if which not in _WHICH:
+        raise ValueError(f"which must be one of {_WHICH}, got {which!r}")
+    return ((getattr(mod, "__dict__", {}).get(_MARK) or {}).get("fp32_source_sha256") or {}).get(which)
 
 
 def compress_expert_absmax_(model) -> int:

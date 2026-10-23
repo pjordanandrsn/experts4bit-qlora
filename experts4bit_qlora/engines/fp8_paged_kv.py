@@ -784,6 +784,76 @@ class Fp8PagedKV:
             ev.record()
             self._claim_cur[1] = ev
 
+    def claim_many(self, wants: dict, layers=None) -> int:
+        """:meth:`claim_blocks` for several slots at once, in ONE async host-to-device copy (lever G1's per-step claim,
+        ``bench/kv-pool-g/DESIGN.md``). ``wants`` maps a slot to the last block it must own. Rows are popped from each
+        layer's free list lowest first, slot by slot in ``wants``' order, so the rows are the ones consecutive
+        :meth:`claim_blocks` calls would give. Nothing is popped unless every layer has room for the whole step.
+
+        The (layer, slot, block, row) entries are packed into one pinned int32 buffer (a ring of two, each guarded by
+        an event recorded after its copy, as :meth:`_claim_staging`), copied to the device and scattered into
+        ``_bt_all`` with ``index_put_``: two launches on the current stream, ordered before whatever the caller queues
+        next. A slot holding different block counts across ``layers`` is refused (bulk claims never leave one). Returns
+        the entries written."""
+        layers = list(range(self.L)) if layers is None else list(layers)
+        if not layers or not wants:
+            return 0
+        plan = []
+        for seq, upto in wants.items():
+            self._refuse_alias(seq)
+            have = {len(self._rows.get((layer, seq), ())) for layer in layers}
+            if len(have) != 1:
+                # bulk claims keep every layer of a slot at one block count; a mismatch is a bookkeeping fault, and
+                # claiming per layer here would pop rows before the step's room check
+                raise RuntimeError(f"slot {seq} holds different block counts across layers {sorted(have)}; "
+                                   f"claim_many claims whole steps only")
+            lo = have.pop()
+            n = int(upto) + 1 - lo
+            if n > 0:
+                plan.append((seq, lo, n))
+        total = sum(n for _, _, n in plan)
+        if not total:
+            return 0
+        short = [layer for layer in layers if len(self._free[layer]) < total]
+        if short:
+            raise RuntimeError(f"layer {short[0]} is out of KV blocks — the scheduler admitted past capacity")
+        ent = []
+        for seq, lo, n in plan:
+            for layer in layers:
+                free = self._free[layer]
+                take = free[:n]
+                del free[:n]
+                self._rows.setdefault((layer, seq), []).extend(take)
+                ent.extend((layer, seq, lo + j, row) for j, row in enumerate(take))
+        m = len(ent)
+        host = self._many_staging(4 * m)
+        host.copy_(torch.tensor(ent, dtype=torch.int32).t().reshape(-1))
+        dev = torch.empty(4 * m, dtype=torch.int32, device=self.device)
+        dev.copy_(host, non_blocking=True)
+        idx = dev.view(4, m)
+        self._bt_all.index_put_((idx[0].long(), idx[1].long(), idx[2].long()), idx[3])
+        if self.device.type == "cuda":
+            ev = torch.cuda.Event()
+            ev.record()
+            self._many_cur[1] = ev
+        return m
+
+    def _many_staging(self, n: int) -> torch.Tensor:
+        """:meth:`claim_many`'s host buffer: a ring of two pinned int32 buffers that grow to the largest step seen, each
+        guarded by the event recorded after its copy, so a claim never rewrites a buffer a queued copy has not read."""
+        if self.device.type != "cuda":
+            return torch.empty(n, dtype=torch.int32)
+        ring = self.__dict__.setdefault("_many_ring", [[None, None], [None, None]])
+        nxt = self.__dict__.get("_many_next", 0)
+        self._many_next = nxt ^ 1
+        slot = ring[nxt]
+        if slot[1] is not None:
+            slot[1].synchronize()
+        if slot[0] is None or slot[0].numel() < n:
+            slot[0] = torch.empty(max(n, 1024), dtype=torch.int32).pin_memory()
+        self._many_cur = slot
+        return slot[0][:n]
+
     def append_prompt(self, seq: int, layers, ks, vs) -> bool:
         """:meth:`append` of a fresh slot's whole prompt for several layers at once. ``ks[i]``, ``vs[i]``: ``[T, H, D]``
         for ``layers[i]``.
