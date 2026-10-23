@@ -81,12 +81,18 @@ Both must hold, or the lane HALTS until it is amended:
   token rows, singleton groups) returns **bitwise** the same output for every (token, slot) row of four tokens whether
   it is called one token at a time (T = 1), two at a time (T = 2) or all four at once (T = 4). It runs on random NF4
   stores at Mixtral's two shapes (8 experts, top-2) over six routings: all eight experts distinct, a shared expert,
-  all four tokens on one pair, and three seeded draws. Every case must also launch K33.
+  all four tokens on one pair, and three seeded draws. **At each T on its own**, every case must launch K33 and record
+  the `nf4_singleton` route with no `nf4_k25`, so a fallback that depends on T is named by itself, not only through a
+  bitwise miss.
+- **Its input is the collapse's.** The collapse hands the expert call either the expanded rows
+  (`xr = x.index_select(0, rt)`) or the token rows (`x_tokens`), by the lean-glue setting. The premise passes
+  `x_tokens`; the K33 route expands those with the same `index_select` inside, so the arithmetic it checks is the
+  served call's either way.
 - **Why it licenses group 4 alone.** If each row's output does not depend on how many rows share the call, then B1's
   arithmetic at 2 tokens is B1's at 4, row for row, and the group-4 read covers group 2. Without it, B1 could differ
   between buckets 2 and 4, and a group-2 read would be owed.
 
-## The rule (`bench/p231/p231_reduce.py`, self-tested on 44 cases)
+## The rule (`bench/p231/p231_reduce.py`, self-tested on 70 cases)
 
 The verdict is the first of these that applies.
 
@@ -94,18 +100,26 @@ The verdict is the first of these that applies.
    - the fit check failed or is missing;
    - an arm or a quality phase is missing or not ok;
    - another e4b or grouped-nf4-gemm commit, another model revision, or another server size;
-   - an arm that ran the wrong switch (B0 must run it unset, B1 at `1`), or quality phases that did;
+   - an arm that ran the wrong switch (B0 must run it unset, B1 at `1`), or quality phases that did; a record without
+     its switch entry (the box writes it in every record, unset as null);
    - different prompts, lengths, reps or buckets across arms; different windows, lengths, layers or buckets across the
      quality phases;
-   - a void decode-only slope on any workload;
-   - **wrong engagement, read per bucket at capture and failing closed** (a bucket with no route tally is a fault):
+   - a void decode-only slope on any workload; a workload whose record lacks either length's tokens (each exactly its
+     batch of rows) or either length's rep digests (each exactly `reps` of them);
+   - **wrong engagement, read per bucket at capture and failing closed.** A bucket with no route tally is a fault, and
+     so is one whose gnf4 dispatch record does not name every counter grouped-nf4-gemm v0.50.0 keeps (the box writes
+     them all, zeros kept, so "no K33" is a count that ran, never an absent record). K25 is read positively from e4b's
+     own route tally, `ROUTE_SEEN`'s `nf4_k25` (keys `<route>|le256`, folded by route name), counted at the branch that
+     calls K25; v0.50.0 keeps no K25 counter of its own.
      every arm reports `graph` for buckets 1, 2, 4, 8 and 16; bucket 1 takes `nf4_singleton` and K33 with no K25 in
      every arm; buckets 2, 4 and 8 take `nf4_singleton` and K33 with no K25 in B1, and `nf4_k25` with no singleton and
      no K33 in B0; bucket 16 takes `nf4_k25` with no K33 in every arm. So the W1 and W16 controls are read positively,
      never argued from the code;
-   - the quality phases' engagement: OFF launches no K33 in its measurement; ON launches K33 and records `nf4_singleton`;
+   - the quality phases' engagement, each from a complete dispatch record and a route tally: OFF launches no K33 and
+     records `nf4_k25` with no `nf4_singleton`; ON launches K33 and records `nf4_singleton` with no `nf4_k25`;
      every pass's eager step and padding statistics match P115's bucket arithmetic at group 4 (half: two passes of 2);
-     no graph replay in a `capture=False` pass; every arm has its registered window count;
+     every pass records its replay count, and no graph replays in a `capture=False` pass; every arm has its registered
+     window count;
    - P115's mutant passes the quality bar on either text (the instrument cannot see a known fault).
 2. **FUNCTION_FAIL.** Any of: B0b's tokens differ from B0a's, or B1b's from B1a's, on any workload at either length;
    B1's tokens differ from B0's on a control (W1 or W16), where the switch is inert; an arm's timed reps do not all
@@ -178,7 +192,9 @@ and the pre-install fit), immediately before the first install command. A box is
   probe reads one stream; the fetch runs eight workers, so the probe errs low.)
 - **The stop, as HO3's:** after **3 consecutive rc 19** boxes the lane stops renting and reports the market's state on
   the bus instead of renting on; it resumes only on the maintainer's word or a later market read. (This sits inside the
-  HOST_REFUSED cap below, which still governs.)
+  HOST_REFUSED cap below, which still governs.) **Who counts:** the lane's launcher on the controller. Each fetched
+  box's `--classify` event and exit code go into the lane log, and before every create the launcher reads the log's
+  last three classified boxes. It refuses to create when all three are rc 19, and posts the market report.
 - **The receipt:** `download_probe.json` is written on EVERY box, refused or not: the HTTP status, the bytes read, the
   seconds, the measured MB/s, the shard and any error by name. It travels with the receipt, so the host registry
   learns the edge speed from a refusal too. The probe's bytes count in the box's download allowance (see Budget).
@@ -260,7 +276,10 @@ toward nothing.
 - **The probe, from a development host** (not a box): its code read Mixtral's pinned first shard at 88.7 MB/s over
   20 s, a public repository's smaller shard to its end, and recorded an unknown repository as a 401 with the error by
   name, writing `download_probe.json` each time.
-- **Locally:** the box's self-test (24 cases) and the reducer's (44), and `tests/test_p231.py`, pass. Triton does not
+- **Locally:** the box's self-test (30 cases) and the reducer's (70), and `tests/test_p231.py`, pass. A gate sweep
+  deletes, nulls or empties every leaf of the reducer's LICENSED fixture in turn (12,443 changes). The only changes
+  that still read LICENSED are per-window values (data), `argmax_agree` (unread), a missing `rep_identical` (it falls
+  back to the stricter floor), a prefill route the rule does not gate, and B0's switch written as empty (unset). Triton does not
   install on the development hosts, so the premise's test counts are read from the sources at the launch commit.
 
 ## What this lane cannot say

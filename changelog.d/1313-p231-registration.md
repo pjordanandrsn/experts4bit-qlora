@@ -14,5 +14,5 @@ served decode step, and at what quality cost.
   strike), so the 93 GB fetch fits its need; three consecutive rc 19 stop the renting, and every box records the
   probe's bytes and MB/s (`download_probe.json`).
 - **Budget:** guard 4.8 h; worst USD 6.12 a box, USD 14.56 for the lane (10 ids, at most 2 started).
-- **Files:** `bench/p231/` (PREREG, box with a 24-case self-test, reducer with a 44-case self-test, runner, drive,
+- **Files:** `bench/p231/` (PREREG, box with a 30-case self-test, reducer with a 70-case self-test, runner, drive,
   staged pins) and `tests/test_p231.py` (15 tests).

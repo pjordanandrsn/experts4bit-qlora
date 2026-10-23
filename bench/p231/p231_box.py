@@ -114,6 +114,25 @@ def row_mismatches(outs: dict, k: int) -> list:
     return bad
 
 
+def route_names(d) -> dict:
+    """e4b's route tally keyed by route name: ``ROUTE_SEEN`` keys are ``<route>|le256`` or ``<route>|gt256``."""
+    out = {}
+    for key, v in (d or {}).items():
+        name = str(key).split("|", 1)[0]
+        out[name] = out.get(name, 0) + v
+    return out
+
+
+def rows_engagement_faults(e: dict) -> list:
+    """One T of the rows premise: K33 launched, and the route was singleton groups with no K25."""
+    out = []
+    if not e.get("bw_launches"):
+        out.append(f"no K33 launch ({e.get('dispatch')})")
+    if not e.get("routes", {}).get("nf4_singleton") or e.get("routes", {}).get("nf4_k25"):
+        out.append(f"route {e.get('routes')}, registered nf4_singleton and no nf4_k25")
+    return out
+
+
 def rows_main(a) -> int:
     """The premise: B1's expert call returns each (token, slot) row bitwise identically at T = 1, 2 and 4."""
     import torch
@@ -147,18 +166,19 @@ def rows_main(a) -> int:
         return hr._fused_over_stack(None, ids, *Wt, MIXTRAL["shapes"], True, F.silu, singleton_groups=True,
                                     device_grouping=False, int4_stores=None, x_tokens=(X[tokens], rt, k))
     all_bad = []
+    groups = {1: [[0], [1], [2], [3]], 2: [[0, 1], [2, 3]], 4: [[0, 1, 2, 3]]}
     for name, pairs in routings.items():
-        c0 = dict(ng.dispatch_counts())
-        outs = {1: [call([t], pairs) for t in range(4)], 2: [call([0, 1], pairs), call([2, 3], pairs)],
-                4: [call([0, 1, 2, 3], pairs)]}
-        torch.cuda.synchronize()
-        d = {key: ng.dispatch_counts().get(key, 0) - c0.get(key, 0) for key in ng.dispatch_counts()}
+        outs, per_t = {}, {}
+        for T, calls in groups.items():           # K33 and the route counted PER T, so a T-dependent fallback is named
+            c0, r0 = _counts(), _routes()
+            outs[T] = [call(toks, pairs) for toks in calls]
+            torch.cuda.synchronize()
+            d, r = _delta_all(_counts(), c0), route_names(_delta(_routes(), r0))
+            per_t[str(T)] = {"dispatch": d, "routes": r, "bw_launches": sum(v for key, v in d.items() if key.startswith("bw_"))}
         bad = row_mismatches(outs, k)
-        bw = sum(v for key, v in d.items() if key.startswith("bw_"))
-        rec["cases"][name] = {"mismatches": [list(b) for b in bad[:20]], "n_mismatch": len(bad), "dispatch": d,
-                              "bw_launches": bw}
-        if bw == 0:
-            bad = bad + [("no K33 launch", name, 0)]
+        rec["cases"][name] = {"mismatches": [list(b) for b in bad[:20]], "n_mismatch": len(bad), "per_t": per_t,
+                              "bw_launches": [per_t[t]["bw_launches"] for t in per_t]}
+        bad = bad + [(f"T={t}: {why}", name, 0) for t, e in per_t.items() for why in rows_engagement_faults(e)]
         all_bad += [(name, *b) for b in bad]
     rec["ok"] = not all_bad
     rec["status"] = "ok" if not all_bad else "failed"
@@ -191,6 +211,12 @@ def _delta(after, before):
     return {k: after.get(k, 0) - before.get(k, 0) for k in after if after.get(k, 0) - before.get(k, 0)}
 
 
+def _delta_all(after, before):
+    """Every counter's change, zeros KEPT: gnf4's dispatch tally names all of its routes up front, so a recorded 0 is a
+    count that ran and saw no K33, never an absent record (rule 7: the reducer refuses a dispatch without them)."""
+    return {k: after.get(k, 0) - before.get(k, 0) for k in after}
+
+
 def _served_cfg(graphs=True):
     from experts4bit_qlora.serve_paged import PagedServeConfig
     cfg = PagedServeConfig.from_env()
@@ -215,7 +241,7 @@ def build_tagged(cfg):
         try:
             return orig(self, b, warmup)
         finally:
-            by_bucket[str(int(b))] = {"route": _delta(_routes(), r0), "dispatch": _delta(_counts(), c0)}
+            by_bucket[str(int(b))] = {"route": _delta(_routes(), r0), "dispatch": _delta_all(_counts(), c0)}
     paged_runner.PagedModelRunner._capture_bucket = tagged
     try:
         parts = build_engine(cfg)
@@ -306,7 +332,7 @@ def speed_main(a) -> int:
     parts, by_bucket = build_tagged(cfg)
     load_s = time.perf_counter() - t0
     rec = _base(cfg, "speed", arm, a, torch, parts.info, load_s)
-    rec.update(by_bucket=by_bucket, dispatch_build=_delta(_counts(), c0), route_build=_delta(_routes(), r0),
+    rec.update(by_bucket=by_bucket, dispatch_build=_delta_all(_counts(), c0), route_build=_delta(_routes(), r0),
                prompts_sha256=pf["prompts_sha256"], short=a.short, long=a.long, reps=a.reps,
                mem_after_load=p109_box._mem(torch), workloads={}, status="ok")
     for wname, b in WORKLOADS.items():
@@ -372,8 +398,8 @@ def quality_main(a) -> int:
            "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"), "knob": os.environ.get(KNOB),
            "gnf4_knobs": {k: os.environ.get(k) for k in GNF4_KNOBS}, "max_seqs": cfg.max_seqs,
            "max_tokens_per_seq": cfg.max_tokens_per_seq, "transformers": transformers.__version__,
-           "load_s": round(load_s, 1), "buckets": list(cfg.buckets), "dispatch_build": _delta(c1, c0),
-           "dispatch_measure": _delta(_counts(), c1), "route_measure": _delta(_routes(), r1), **rec,
+           "load_s": round(load_s, 1), "buckets": list(cfg.buckets), "dispatch_build": _delta_all(c1, c0),
+           "dispatch_measure": _delta_all(_counts(), c1), "route_measure": _delta(_routes(), r1), **rec,
            "gpu": torch.cuda.get_device_name(0), "max_mem_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2),
            "status": "ok"}
     json.dump(rec, open(a.out, "w"), indent=1, default=str)
@@ -409,7 +435,13 @@ def self_test() -> int:
           bool(premise_faults(junit(7, [], [1]), "served")),
           row_mismatches(same, 2) == [], row_mismatches(moved, 2) == [(3, 1, 4)],
           len(ROW_ROUTINGS) == 3 and len(ROW_SEEDS) == 3 and all(len(p) == 4 for p in ROW_ROUTINGS.values()),
-          decode_only([6.0, 7.4], [[0.5, 5.0], [0.4, 6.1]]) == [1.0, 1.3], decode_only([6.0], [[0.5, None]]) is None]
+          decode_only([6.0, 7.4], [[0.5, 5.0], [0.4, 6.1]]) == [1.0, 1.3], decode_only([6.0], [[0.5, None]]) is None,
+          _delta_all({"bw_prmt32": 3, "scalar": 0}, {"bw_prmt32": 3}) == {"bw_prmt32": 0, "scalar": 0},
+          route_names({"nf4_k25|le256": 2, "nf4_k25|gt256": 1, "nf4_singleton|le256": 4}) == {"nf4_k25": 3, "nf4_singleton": 4},
+          rows_engagement_faults({"bw_launches": 4, "routes": {"nf4_singleton": 4}}) == [],
+          len(rows_engagement_faults({"bw_launches": 0, "routes": {"nf4_singleton": 4}})) == 1,
+          len(rows_engagement_faults({"bw_launches": 4, "routes": {"nf4_singleton": 4, "nf4_k25": 1}})) == 1,
+          len(rows_engagement_faults({"bw_launches": 4})) == 1]
     print(f"p231_box self-test {'OK' if all(ok) else 'FAILED'} ({sum(ok)}/{len(ok)} cases)")
     return 0 if all(ok) else 1
 

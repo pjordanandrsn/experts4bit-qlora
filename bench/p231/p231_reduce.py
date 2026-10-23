@@ -54,6 +54,7 @@ import p115_reduce as pb  # noqa: E402  (Phase B's statistics, staged at its reg
 TAGS = ("B0a", "B1a", "B1b", "B0b")
 WORKLOADS = ("W1", "W2", "W4", "W8", "W16")
 RULED, CONTROLS = ("W2", "W4"), ("W1", "W16")
+BATCH = {"W1": 1, "W2": 2, "W4": 4, "W8": 8, "W16": 16}           # each workload's rows (the box's WORKLOADS)
 BUCKETS = ("1", "2", "4", "8", "16")
 SWITCHED_BUCKETS = ("2", "4", "8")
 SELF_SMALL, SELF_SMALL_W = (0.985, 1.015), ("W1", "W2", "W4")
@@ -77,8 +78,29 @@ HALT_CODES = {25: "the premise failed on the card (rows or served): the lane hal
               31: "the default server does not fit at 16 x 768: the lane halts until amended"}
 
 
-def _bw(d: dict) -> int:
-    return sum(v for k, v in (d or {}).items() if str(k).startswith("bw_"))
+#: grouped-nf4-gemm v0.50.0's decode-GEMV tally (``nf4_grouped.dispatch_counts()``): the box records every key, zeros kept,
+#: so K33's absence is a count that ran. (v0.50.0 has no K25 counter: K25 is read positively from e4b's own route tally,
+#: ``ROUTE_SEEN``'s ``nf4_k25``, counted at the branch that calls it.)
+GNF4_DISPATCH_KEYS = ("dotpad", "dotpad_splitk", "scalar", "scalar_splitk", "bw_tree", "bw_prmt32", "bw_splitk")
+
+
+def _routes(d):
+    """e4b's route tally by route name (``ROUTE_SEEN`` keys are ``<route>|le256`` or ``<route>|gt256``); None when the
+    record is not a dict (rule 7: absence is a fault, never an empty tally)."""
+    if not isinstance(d, dict):
+        return None
+    out = {}
+    for k, v in d.items():
+        name = str(k).split("|", 1)[0]
+        out[name] = out.get(name, 0) + v
+    return out
+
+
+def _bw_counted(d):
+    """K33's launches from a dispatch record that names every gnf4 counter; None when the record is absent or partial."""
+    if not isinstance(d, dict) or any(type(d.get(k)) is not int for k in GNF4_DISPATCH_KEYS):
+        return None
+    return sum(v for k, v in d.items() if str(k).startswith("bw_"))
 
 
 def _rate(r, w):
@@ -90,18 +112,23 @@ def _tok(r, w, n):
 
 
 def bucket_faults(tag: str, rec: dict) -> list:
-    """Rule 7, fail-closed: each bucket's route tally and dispatch counts must be present and show the registered
-    route. A missing bucket, or one with an empty route tally, is a fault."""
+    """Rule 7, fail-closed: each bucket's route tally and its complete gnf4 dispatch record must be present and show the
+    registered route. A missing bucket, an empty route tally, or a dispatch record without every gnf4 counter is a
+    fault: "no K33" and "no K25" are read from counts that ran, never from an absent record."""
     arm, out = tag[:2], []
     byb = rec.get("by_bucket")
     if not isinstance(byb, dict):
         return [f"{tag}: no per-bucket record"]
     for b in BUCKETS:
         e = byb.get(b)
-        if not isinstance(e, dict) or not isinstance(e.get("route"), dict) or not e["route"]:
+        route = _routes(e.get("route")) if isinstance(e, dict) else None
+        if not route:
             out.append(f"{tag}: bucket {b} has no route tally ({e!r})")
             continue
-        route, bw = e["route"], _bw(e.get("dispatch"))
+        bw = _bw_counted(e.get("dispatch"))
+        if bw is None:
+            out.append(f"{tag}: bucket {b} has no complete gnf4 dispatch record ({e.get('dispatch')!r})")
+            continue
         single, k25 = route.get("nf4_singleton", 0), route.get("nf4_k25", 0)
         if b == "1" or (b in SWITCHED_BUCKETS and arm == "B1"):
             if not (single > 0 and bw > 0 and k25 == 0):
@@ -127,13 +154,28 @@ def speed_faults(arms: dict, e4b_sha: str) -> list:
             void.append(f"{t}: model {r.get('model')}@{r.get('revision')} is not the registered pin")
         if (r.get("max_seqs"), r.get("max_tokens_per_seq")) != SERVER_SIZE:
             void.append(f"{t}: server {r.get('max_seqs')} x {r.get('max_tokens_per_seq')}, registered {SERVER_SIZE}")
-        if (r.get("knob") or "") != ("1" if t.startswith("B1") else ""):
+        if "knob" not in r:
+            void.append(f"{t}: no switch record (E4B_NF4_SMALLM_BW is recorded, unset as null)")
+        elif (r["knob"] or "") != ("1" if t.startswith("B1") else ""):
             void.append(f"{t}: E4B_NF4_SMALLM_BW={r.get('knob')!r}")
         g = r.get("graph_status") or {}
         if [g.get(b) for b in BUCKETS] != ["graph"] * len(BUCKETS):
             void.append(f"{t}: graph_status {g}")
         void += bucket_faults(t, r)
+        lens, reps = {str(r.get("short")), str(r.get("long"))}, r.get("reps")
         for w in WORKLOADS:
+            wl = (r.get("workloads") or {}).get(w)
+            if not isinstance(wl, dict):
+                void.append(f"{t}: no {w} record")
+                continue
+            rd, tk = wl.get("rep_digests"), wl.get("tokens")
+            if (not isinstance(reps, int) or reps <= 0 or not isinstance(rd, dict) or set(rd) != lens
+                    or any(not isinstance(x, list) or len(x) != reps for x in rd.values())):
+                void.append(f"{t} {w}: rep_digests {rd!r} do not name both lengths with {reps!r} reps each")
+            if not isinstance(tk, dict) or set(tk) != lens:
+                void.append(f"{t} {w}: tokens do not name both lengths ({sorted(tk) if isinstance(tk, dict) else tk!r})")
+            elif any(not isinstance(x, list) or len(x) != BATCH[w] for x in tk.values()):
+                void.append(f"{t} {w}: tokens are not {BATCH[w]} rows at each length")
             if not _rate(r, w) or _rate(r, w) <= 0:
                 void.append(f"{t}: {w} decode-only slope is void")
     if void:
@@ -167,7 +209,9 @@ def _pass_faults(e, arm, n, C) -> list:
         got = gs.get(b, {})
         if (got.get("eager_steps"), got.get("pad_rows")) != (w["eager_steps"], w["pad_rows"]):
             out.append(f"bucket {b} stats {got}, expected {w}")
-    if any(v.get("replays", 0) for v in gs.values()):
+    if any(not isinstance(v, dict) or type(v.get("replays")) is not int for v in gs.values()):
+        out.append(f"graph_stats without a replay count: {gs}")
+    elif any(v["replays"] for v in gs.values()):
         out.append(f"a replay in a capture=False pass: {gs}")
     return out
 
@@ -184,6 +228,8 @@ def quality_faults(off: dict | None, on: dict | None, e4b_sha: str) -> list:
             void.append(f"{name}: grouped-nf4-gemm {rec.get('gnf4_sha')} != {GNF4_SHA}")
         if REVS.get(rec.get("model")) != rec.get("revision"):
             void.append(f"{name}: model {rec.get('model')}@{rec.get('revision')} is not the registered pin")
+        if "knob" not in rec:
+            void.append(f"{name}: no switch record (E4B_NF4_SMALLM_BW is recorded, unset as null)")
         if rec.get("group") != GROUP:
             void.append(f"{name}: group {rec.get('group')}, registered {GROUP}")
         if (rec.get("max_seqs"), rec.get("max_tokens_per_seq")) != SERVER_SIZE:
@@ -197,11 +243,18 @@ def quality_faults(off: dict | None, on: dict | None, e4b_sha: str) -> list:
             void.append(f"the phases differ in {k}: {off.get(k)} / {on.get(k)}")
     if off.get("layers") != LAYERS:
         void.append(f"{off.get('layers')} layers, Mixtral registers {LAYERS}")
-    if _bw(off.get("dispatch_measure")) != 0:
+    off_bw, off_r = _bw_counted(off.get("dispatch_measure")), _routes(off.get("route_measure"))
+    on_bw, on_r = _bw_counted(on.get("dispatch_measure")), _routes(on.get("route_measure"))
+    if off_bw is None:
+        void.append(f"quality_off: no complete gnf4 dispatch record ({off.get('dispatch_measure')!r})")
+    elif off_bw != 0:
         void.append(f"quality_off: K33 launched in B0's measurement {off.get('dispatch_measure')}")
-    if _bw(on.get("dispatch_measure")) <= 0 or (on.get("route_measure") or {}).get("nf4_singleton", 0) <= 0:
-        void.append(f"quality_on: B1's measurement shows no K33 / nf4_singleton ({on.get('dispatch_measure')}, "
-                    f"{on.get('route_measure')})")
+    if not off_r or off_r.get("nf4_k25", 0) <= 0 or off_r.get("nf4_singleton", 0) != 0:
+        void.append(f"quality_off: route {off_r}, registered nf4_k25 and no nf4_singleton")
+    if on_bw is None or on_bw <= 0:
+        void.append(f"quality_on: B1's measurement shows no K33 ({on.get('dispatch_measure')!r})")
+    if not on_r or on_r.get("nf4_singleton", 0) <= 0 or on_r.get("nf4_k25", 0) != 0:
+        void.append(f"quality_on: route {on_r}, registered nf4_singleton and no nf4_k25")
     C = off.get("cont")
     sizes = [min(GROUP, WINDOWS - g0) for g0 in range(0, WINDOWS, GROUP)]
     for name, rec, arms in (("quality_off", off, OFF_ARMS), ("quality_on", on, ("ON",))):
@@ -340,11 +393,18 @@ def read_box(work: str) -> dict:
 E = "a" * 40
 
 
+def _disp(bw=0, drop=()):
+    """A gnf4 dispatch record as the box writes it: every counter, zeros kept."""
+    d = {k: 0 for k in GNF4_DISPATCH_KEYS}
+    d["bw_prmt32"] = bw
+    return {k: v for k, v in d.items() if k not in drop}
+
+
 def _byb(arm, drop=None, override=None):
     def entry(b):
         if b == "1" or (b in SWITCHED_BUCKETS and arm == "B1"):
-            return {"route": {"nf4_singleton": 64}, "dispatch": {"bw_prmt32": 128}}
-        return {"route": {"nf4_k25": 64}, "dispatch": {}}
+            return {"route": {"nf4_singleton|le256": 64}, "dispatch": _disp(128)}
+        return {"route": {"nf4_k25|le256": 64}, "dispatch": _disp(0)}
     d = {b: entry(b) for b in BUCKETS if b != drop}
     d.update(override or {})
     return d
@@ -353,14 +413,15 @@ def _byb(arm, drop=None, override=None):
 def _fake_arm(tag, rates, toks, *, e4b=E, byb=None, graphs=None, knob=None, digests=None, short=4, long_=8):
     arm = tag[:2]
 
-    def wl(rate):
-        return {"decode_tok_s": rate, "tokens": {str(short): [t[:short] for t in toks], str(long_): toks},
+    def wl(rate, b):
+        return {"decode_tok_s": rate, "tokens": {str(short): [list(t[:short]) for t in toks[:b]],
+                                                 str(long_): [list(t) for t in toks[:b]]},
                 "rep_digests": digests or {str(short): ["x"] * 3, str(long_): ["y"] * 3}}
     return {"status": "ok", "e4b_sha": e4b, "gnf4_sha": GNF4_SHA, "model": MIXTRAL, "revision": REVS[MIXTRAL],
             "max_seqs": 16, "max_tokens_per_seq": 768, "knob": ("1" if arm == "B1" else None) if knob is None else knob,
             "graph_status": graphs or {b: "graph" for b in BUCKETS}, "by_bucket": _byb(arm) if byb is None else byb,
             "prompts_sha256": "p", "short": short, "long": long_, "reps": 3, "buckets": [1, 2, 4, 8, 16],
-            "workloads": {w: wl(rates[w]) for w in WORKLOADS}}
+            "workloads": {w: wl(rates[w], BATCH[w]) for w in WORKLOADS}}
 
 
 def _fake_pass(arm, n, C):
@@ -376,7 +437,7 @@ def _fake_pass(arm, n, C):
             "graph_status": {b: "eager: capture=False" for b in BUCKETS}, "graph_stats": gs}
 
 
-def _fake_quality(phase, *, on_bias=0.002, mutant=0.4, group=GROUP, bw=None, drop_pass=False):
+def _fake_quality(phase, *, on_bias=0.002, mutant=0.4, group=GROUP, bw=None, routes=None, drop_pass=False):
     C = 8
     arms = OFF_ARMS if phase == "off" else ("ON",)
     sizes = [min(GROUP, WINDOWS - g0) for g0 in range(0, WINDOWS, GROUP)]
@@ -394,8 +455,9 @@ def _fake_quality(phase, *, on_bias=0.002, mutant=0.4, group=GROUP, bw=None, dro
             "group": group, "max_seqs": 16, "max_tokens_per_seq": 768, "knob": "1" if phase == "on" else None,
             "cont": C, "prompt": 512, "chunk": 512, "floor_chunk": 256, "layers": LAYERS, "windows_sha256": {"w": "s"},
             "buckets": [1, 2, 4, 8, 16], "rep_identical": {t: True for t in TEXTS},
-            "dispatch_measure": ({"bw_prmt32": 999} if phase == "on" else {}) if bw is None else bw,
-            "route_measure": {"nf4_singleton": 99} if phase == "on" else {"nf4_k25": 99},
+            "dispatch_measure": (_disp(999) if phase == "on" else _disp(0)) if bw is None else bw,
+            "route_measure": ({"nf4_singleton|le256": 99, "nf4_mtile_captured|gt256": 6} if phase == "on" else
+                              {"nf4_k25|le256": 99, "nf4_mtile_captured|gt256": 6}) if routes is None else routes,
             "per_window": per, "engagement": eng}
 
 
@@ -468,19 +530,77 @@ def self_test() -> int:
         ("B0 with the knob", v(arms(B0a=_fake_arm("B0a", B0, base, knob="1"))) == "VOID"),
         ("a bucket eager", v(arms(B0a=_fake_arm("B0a", B0, base, graphs={**{b: "graph" for b in BUCKETS}, "4": "eager: x"}))) == "VOID"),
         ("bucket 16 missing", v(arms(B1a=_fake_arm("B1a", B1, base, byb=_byb("B1", drop="16")))) == "VOID"),
-        ("bucket 4 empty route", v(arms(B0b=_fake_arm("B0b", B0, base, byb=_byb("B0", override={"4": {"route": {}, "dispatch": {}}})))) == "VOID"),
+        ("bucket 4 empty route", v(arms(B0b=_fake_arm("B0b", B0, base, byb=_byb("B0", override={"4": {"route": {}, "dispatch": _disp(0)}})))) == "VOID"),
         ("no per-bucket record", v(arms(B0a=_fake_arm("B0a", B0, base, byb="x"))) == "VOID"),
-        ("B1 bucket 2 on K25", v(arms(B1a=_fake_arm("B1a", B1, base, byb=_byb("B1", override={"2": {"route": {"nf4_k25": 8}, "dispatch": {}}})))) == "VOID"),
-        ("B0 bucket 8 with K33", v(arms(B0b=_fake_arm("B0b", B0, base, byb=_byb("B0", override={"8": {"route": {"nf4_k25": 8}, "dispatch": {"bw_prmt32": 2}}})))) == "VOID"),
-        ("bucket 16 with K33", v(arms(B1b=_fake_arm("B1b", B1, base, byb=_byb("B1", override={"16": {"route": {"nf4_k25": 8, "nf4_singleton": 2}, "dispatch": {"bw_prmt32": 2}}})))) == "VOID"),
-        ("bucket 1 without K33", v(arms(B0a=_fake_arm("B0a", B0, base, byb=_byb("B0", override={"1": {"route": {"nf4_singleton": 8}, "dispatch": {}}})))) == "VOID"),
+        ("B1 bucket 2 on K25", v(arms(B1a=_fake_arm("B1a", B1, base, byb=_byb("B1", override={"2": {"route": {"nf4_k25|le256": 8}, "dispatch": _disp(0)}})))) == "VOID"),
+        ("B0 bucket 8 with K33", v(arms(B0b=_fake_arm("B0b", B0, base, byb=_byb("B0", override={"8": {"route": {"nf4_k25|le256": 8}, "dispatch": _disp(2)}})))) == "VOID"),
+        ("bucket 16 with K33", v(arms(B1b=_fake_arm("B1b", B1, base, byb=_byb("B1", override={"16": {"route": {"nf4_k25|le256": 8, "nf4_singleton|le256": 2}, "dispatch": _disp(2)}})))) == "VOID"),
+        ("bucket 1 without K33", v(arms(B0a=_fake_arm("B0a", B0, base, byb=_byb("B0", override={"1": {"route": {"nf4_singleton|le256": 8}, "dispatch": _disp(0)}})))) == "VOID"),
         ("void slope", v(arms(B1a=_fake_arm("B1a", {**B1, "W4": None}, base))) == "VOID"),
         ("quality group 1", v(arms(), on=_fake_quality("on", group=1)) == "VOID"),
-        ("quality off with K33", v(arms(), off=_fake_quality("off", bw={"bw_prmt32": 3})) == "VOID"),
-        ("quality on without K33", v(arms(), on=_fake_quality("on", bw={})) == "VOID"),
+        ("quality off with K33", v(arms(), off=_fake_quality("off", bw=_disp(3))) == "VOID"),
+        ("quality on without K33", v(arms(), on=_fake_quality("on", bw=_disp(0))) == "VOID"),
         ("a quality pass missing", v(arms(), off=_fake_quality("off", drop_pass=True)) == "VOID"),
         ("quality missing", reduce(arms(), None, _fake_quality("on"), E, fit=fit)["verdict"] == "VOID"),
     ]
+
+    def arm_without(tag, path):            # one leaf deleted from an arm, the rest as LICENSED's
+        a = arms()
+        d = a[tag]
+        for k in path[:-1]:
+            d = d[k]
+        del d[path[-1]]
+        return a
+
+    def q_without(phase, key):
+        q = _fake_quality(phase)
+        del q[key]
+        return q
+
+    def byb_disp(arm, b, disp):
+        return _byb(arm, override={b: {"route": _byb(arm)[b]["route"], "dispatch": disp}})
+    cases += [
+        ("route keys fold by name", _routes({"nf4_k25|le256": 2, "nf4_k25|gt256": 1}) == {"nf4_k25": 3}
+         and _routes(None) is None and _bw_counted(_disp(4, drop=("bw_splitk",))) is None and _bw_counted(_disp(4)) == 4),
+        ("A: B0 bucket 2 dispatch missing",
+         v(arms(B0a=_fake_arm("B0a", B0, base, byb=_byb("B0", override={"2": {"route": {"nf4_k25|le256": 8}}})))) == "VOID"),
+        ("A: B0 bucket 4 dispatch None", v(arms(B0b=_fake_arm("B0b", B0, base, byb=byb_disp("B0", "4", None)))) == "VOID"),
+        ("A: B0 bucket 8 dispatch {}", v(arms(B0a=_fake_arm("B0a", B0, base, byb=byb_disp("B0", "8", {})))) == "VOID"),
+        ("A: bucket 16 dispatch partial",
+         v(arms(B1a=_fake_arm("B1a", B1, base, byb=byb_disp("B1", "16", _disp(0, drop=("bw_tree",)))))) == "VOID"),
+        ("A: bare route keys still read", v(arms(B0a=_fake_arm("B0a", B0, base, byb=_byb(
+            "B0", override={"2": {"route": {"nf4_k25": 8}, "dispatch": _disp(0)}})))) == "LICENSED"),
+        ("B: B0 arm knob missing", v(arm_without("B0a", ["knob"])) == "VOID"),
+        ("B: B1 arm knob missing", v(arm_without("B1b", ["knob"])) == "VOID"),
+        ("B: quality_off knob missing", v(arms(), off=q_without("off", "knob")) == "VOID"),
+        ("C: rep_digests missing", v(arm_without("B0a", ["workloads", "W2", "rep_digests"])) == "VOID"),
+        ("C: rep_digests empty", v(arms(B1a={**_fake_arm("B1a", B1, base), "workloads": {
+            **_fake_arm("B1a", B1, base)["workloads"], "W2": {**_fake_arm("B1a", B1, base)["workloads"]["W2"], "rep_digests": {}}}})) == "VOID"),
+        ("C: a length's digests missing", v(arms(B0b=_fake_arm("B0b", B0, base, digests={"4": ["x"] * 3}))) == "VOID"),
+        ("C: too few reps", v(arms(B1b=_fake_arm("B1b", B1, base, digests={"4": ["x"] * 2, "8": ["y"] * 2}))) == "VOID"),
+        ("C: tokens missing a length", v(arm_without("B1a", ["workloads", "W4", "tokens", "8"])) == "VOID"),
+        ("C: a workload missing", v(arm_without("B0a", ["workloads", "W8"])) == "VOID"),
+        ("D: quality_off dispatch missing", v(arms(), off=q_without("off", "dispatch_measure")) == "VOID"),
+        ("D: quality_off route missing", v(arms(), off=q_without("off", "route_measure")) == "VOID"),
+        ("D: quality_off on singleton", v(arms(), off=_fake_quality("off", routes={"nf4_singleton|le256": 99})) == "VOID"),
+        ("D: quality_off K25 and singleton",
+         v(arms(), off=_fake_quality("off", routes={"nf4_k25|le256": 99, "nf4_singleton|le256": 1})) == "VOID"),
+        ("E: quality_on partly on K25",
+         v(arms(), on=_fake_quality("on", routes={"nf4_singleton|le256": 99, "nf4_k25|le256": 50})) == "VOID"),
+        ("E: quality_on route missing", v(arms(), on=q_without("on", "route_measure")) == "VOID"),
+        ("E: quality_on dispatch partial", v(arms(), on=_fake_quality("on", bw=_disp(999, drop=("scalar",)))) == "VOID"),
+    ]
+    q = _fake_quality("off")
+    del q["engagement"][TEXTS[0]]["R"][0]["graph_stats"]["4"]["replays"]
+    cases.append(("a pass without a replay count", v(arms(), off=q) == "VOID"))
+    q = _fake_quality("on")
+    q["engagement"][TEXTS[1]]["ON"][2]["graph_stats"]["4"]["replays"] = None
+    cases.append(("a replay count of None", v(arms(), on=q) == "VOID"))
+    cases.append(("a dispatch counter of None", v(arms(B0a=_fake_arm("B0a", B0, base, byb=byb_disp(
+        "B0", "2", {**_disp(0), "scalar": None})))) == "VOID"))
+    a = arms()
+    a["B0a"]["workloads"]["W4"]["tokens"]["8"].pop()
+    cases.append(("a token row missing", v(a) == "VOID"))
     r = reduce(arms(), _fake_quality("off"), _fake_quality("on"), E, fit=fit)
     cases.append(("report", r["g"]["W2"] == round(70 / 60, 5) and r["g"]["W8"] == round(98 / 100, 5)
                   and set(r["quality"]) == set(TEXTS)))
