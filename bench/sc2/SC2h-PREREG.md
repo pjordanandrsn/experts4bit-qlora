@@ -274,3 +274,16 @@ entry that box O stages, the shared `bench/sc1/sc1_run.sh` included, must be byt
 
 **Unchanged:** every constant, threshold and cost, and everything Amendment 1 left unchanged.
 
+
+### Amendment 3 (registered before any SC2h run): the kit is held at e4b#2041's merge, for the harness's brotli pin and fetch retry
+
+As SC2f Amendment 5, for box O. The kit is held at `7b8f1f69` (e4b#2041's merge), replacing `1a25b209` for the KIT only.
+At the launch commit, every `bench/sc1/staged.sha256` entry, plus `bench/sc1/sc1_drive.sh` and `bench/sc1/make_pin.sh`,
+must be byte-identical to `7b8f1f69`'s. The stack under test stays `36cdd2d4`: the launch command sets `E4B_SHA=36cdd2d4e031e8365ab52e495c40cd79043edd49`.
+Against `1a25b209` the kit differs as SC2f Amendment 5 declares. In `sc1_run.sh`: the `"brotli>=1.2.0"` pin and the
+single fetch retry, both behavioural, and box Q's wiring, none of it reachable with `SC1_BOX` = O. Seven new box Q
+files are staged on box O, and nothing box O runs sources or calls them. Before the create,
+`bench/sc2/sc2_kit_hold.py check --at <launch commit>` runs from a `main` checkout that
+carries this amendment, fails closed, and its record is kept with the run.
+
+**Unchanged:** every constant, threshold and cost, and everything Amendments 1 and 2 left unchanged.
