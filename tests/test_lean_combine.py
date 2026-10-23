@@ -41,8 +41,11 @@ def _run(monkeypatch, lean, case, tokens, k, out_dtype, grads):
 def test_lean_combine_is_the_composite_bit_for_bit(monkeypatch, dev, tokens, k, hidden, down_dtype, out_dtype):
     case = _case(dev, tokens, k, hidden, down_dtype, out_dtype, tokens * 31 + k + hidden)
     for grads in GRADS:
+        n0 = dict(fast.COMBINE_STATS)
         base = _run(monkeypatch, False, case, tokens, k, out_dtype, grads)
+        assert fast.COMBINE_STATS["lean_fwd"] == n0["lean_fwd"] and fast.COMBINE_STATS["lean_bwd"] == n0["lean_bwd"]
         lean = _run(monkeypatch, True, case, tokens, k, out_dtype, grads)
+        assert fast.COMBINE_STATS["lean_fwd"] - n0["lean_fwd"] == 1 and fast.COMBINE_STATS["lean_bwd"] - n0["lean_bwd"] == 1
         for a, b in zip(base, lean):
             assert (a is None and b is None) or (a.dtype == b.dtype and torch.equal(a, b))
 
@@ -105,6 +108,7 @@ def test_chunked_images_keep_the_chunked_path(monkeypatch):
     lean = _run(monkeypatch, True, case, 190, 8, torch.bfloat16, (True, True))
     assert fast.COMBINE_STATS["chunked_fwd"] - n0["chunked_fwd"] == 1
     assert fast.COMBINE_STATS["chunked_bwd"] - n0["chunked_bwd"] == 1
+    assert fast.COMBINE_STATS["lean_fwd"] == n0["lean_fwd"] and fast.COMBINE_STATS["lean_bwd"] == n0["lean_bwd"]
     for a, b in zip(base, lean):
         assert torch.equal(a, b)
 

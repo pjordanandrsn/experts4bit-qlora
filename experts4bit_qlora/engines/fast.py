@@ -400,8 +400,9 @@ class _PermGather(torch.autograd.Function):
 COMBINE_CHUNK_BYTES = 32 << 20
 COMBINE_CHUNK_MIN_ROWS = 16
 COMBINE_CHUNK_MIN_BYTES = 128 << 20
-#: Combine calls that ran over row chunks (forward: the scatter; backward: the two gradients), for a training census.
-COMBINE_STATS = {"chunked_fwd": 0, "chunked_bwd": 0}
+#: Combine calls that ran over row chunks (forward: the scatter; backward: the two gradients), for a training census; and the
+#: training combines the lean kernels ran (E4B_TRAIN_LEAN_COMBINE=1), so a bench arm can show its knob engaged.
+COMBINE_STATS = {"chunked_fwd": 0, "chunked_bwd": 0, "lean_fwd": 0, "lean_bwd": 0}
 
 
 def _combine_chunk_rows(rows: int, hidden: int):
@@ -472,6 +473,7 @@ class _ScatterCombine(torch.autograd.Function):
         hidden = down.shape[1]
         if _lean_whole(down):
             # One launch for the cast, multiply and index_put into an empty buffer (order writes every row).
+            COMBINE_STATS["lean_fwd"] += 1
             buf = torch.empty(tokens * k, hidden, dtype=torch.float32, device=down.device)
             scatter_mul(buf, down, w, order)
         else:
@@ -493,6 +495,7 @@ class _ScatterCombine(torch.autograd.Function):
         # packed-row training peak (engines/fast.py, Qwen3-30B-A3B, 4,096 tokens, top-8).
         need_down, need_w = ctx.needs_input_grad[0], ctx.needs_input_grad[1]
         if _lean_whole(down):
+            COMBINE_STATS["lean_bwd"] += 1
             gw, gdown = grad_products(g, down, w, order, k, need_w, need_down)
             return gdown, gw, None, None, None, None
         c = _combine_chunk_rows(down.shape[0], down.shape[1])
