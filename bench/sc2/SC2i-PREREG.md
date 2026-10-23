@@ -140,3 +140,17 @@ servers first; a server lost to the deadline makes the reading UNREAD, never FAS
 - Quality: any FASTER arm gets its own quality read before a default question.
 - Other models, families and cards; 4,096 tokens a slot; prompts other than 512 tokens.
 - A second prefill graph at a smaller chunk: if `short_chunk` costs the TTFT, that is its own lane.
+
+## Amendments
+
+### Amendment 1 (registered before any SC2i run): which commit is the launch commit
+
+As SC2f Amendment 4, which corrects the same sentence. **The box (P)** above names the launch commit as "SC2f Amendment 3's:
+the first `main` commit containing `v0.57.0` and e4b#2011's merge". Read literally, that is `75ddc16e`, which predates
+e4b#2017's knobs (box P's tripwire would refuse it) and box P itself (e4b#2027). The launch commit is a `main` commit at
+or after `1a25b209`. Before the create, SC2f Amendment 3's mechanical default check runs at it against `v0.57.0`, with
+the same two allowance rules, and its output is recorded with the run.
+
+**Unchanged:** every constant, threshold and cost; the arms, the order, the gates, the rule, the predictions, the box,
+the proof, the guards, the budget and the $0 shakedown.
+
