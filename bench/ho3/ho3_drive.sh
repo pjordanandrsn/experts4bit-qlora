@@ -54,7 +54,7 @@ NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "ref
 PASS="HO3_RUN_ID=$RUN_ID HO3_RUN_NONCE=$NONCE HO3_DEADLINE_EPOCH=$DEADLINE HO3_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
 # Explicit IDs only (PREREG "Run ids"): the reading ids and the retry ids r1..r8. No code reads a number out of an id.
 case "$RUN_ID" in
-  ho3-5090-1|ho3-5090-r[1-8]|ho3-4090-1|ho3-4090-r[1-8]|ho3-a4000-1|ho3-a4000-2|ho3-a4000-r[1-8]) :;;
+  ho3-5090-1|ho3-5090-2|ho3-5090-r[1-8]|ho3-4090-1|ho3-4090-2|ho3-4090-r[1-8]|ho3-a4000-1|ho3-a4000-2|ho3-a4000-3|ho3-a4000-r[1-8]) :;;
   *) say "refusing unregistered run ID: $RUN_ID (is not a registered ho3 reading or retry id)"; exit 78;;
 esac
 # A second box must be another machine (PREREG "Machines"): HO2's two read machines are refused before anything is
@@ -64,6 +64,20 @@ MACHINE=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('m
 case "$MACHINE" in ""|unknown|*[!0-9]*) say "refusing: the launcher recorded no machine id for this box ($MACHINE)"; exit 78;; esac
 for m in $HO2_MACHINES; do [ "$MACHINE" = "$m" ] && { say "refusing: machine $MACHINE ran HO2's rows; a second box must be another machine"; exit 78; }; done
 say "machine $MACHINE (not one of HO2's: $HO2_MACHINES)"
+# Part B's cohorts need two machines (PREREG "Part B"): an RTX A4000 box is refused on the machine of any earlier A4000
+# box that ran this runner (its run directory holds a fetched ho3/), and refused when such a box's machine is unreadable.
+case "$RUN_ID" in
+  ho3-a4000-*)
+    RUNS_ROOT=$(cd "$RUN_DIR/../.." 2>/dev/null && pwd) || { say "refusing: cannot read the runs root above $RUN_DIR"; exit 78; }
+    for d in "$RUNS_ROOT"/*/ho3-a4000-*; do
+      [ -d "$d/ho3" ] || continue
+      [ "$(cd "$d" && pwd)" = "$(cd "$RUN_DIR" && pwd)" ] && continue
+      m=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['machine_id'])" "$d/instance.json" 2>/dev/null) \
+        || { say "refusing: earlier A4000 box $(basename "$d") ran but its machine is unreadable"; exit 78; }
+      [ "$m" = "$MACHINE" ] && { say "refusing: machine $MACHINE already ran $(basename "$d"); Part B needs a second machine"; exit 78; }
+    done
+    ;;
+esac
 if [ "${HO3_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash ho3_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/ho3"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/ho3; deadline $DEADLINE"
 $SSH "test ! -e $W && mkdir -p $W/logs /root/.cache/huggingface" || { say "stage failed: remote work directory exists"; exit 20; }

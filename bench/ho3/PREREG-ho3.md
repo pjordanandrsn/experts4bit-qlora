@@ -42,6 +42,8 @@ its pinned revision, the planner's own plan (no `--fix`, no `--observations`). B
 
 - **`ho3-a4000-1` and `ho3-a4000-2`:** two RTX A4000 boxes (cc 8.6, 16 GB, ≥ 16,000 MiB) on two DIFFERENT machines,
   declared at $0.25/h, a 3 h 10 min guard (11,400 s). On a 16 GB card the planner keeps ERNIE's experts on the host.
+  Each box is pinned at create to a machine no earlier A4000 box used. The driver also refuses an A4000 box on the
+  machine of any earlier A4000 box that ran the runner, and refuses when such a box's machine is unreadable.
 - **Cohorts:** ERNIE × A4000 (host offload) and LFM2 × A4000 (device), each two rows per box and two boxes. Each family's
   result is reported on its own, so a fault in one never reads as the other, and Part B never touches Part A's verdict.
 - **Prediction (before any measurement):** Loggetta 0.6.2's plan on a 16 GB RTX A4000 profile (16,376 MiB):
@@ -69,13 +71,18 @@ can carry several. A family on a box is COVERED when both its rows are, MISS oth
 families are. A row is VOID, and its family on that box is VOID, on any of HO2's VOID conditions: not exactly one receipt,
 status not OK, model, revision, workload, data or card differs from this registration, fewer tokens trained, or an
 overhead line that is not the inferred default. Every gate fails closed (bench/common rule 7): a row whose receipt
-records no expert residency, and a host row without its host estimate and peak, are VOID too.
+records no expert residency, and a host row without its host estimate and peak, are VOID too. A row with no receipt is
+UNREAD only when the runner recorded a deadline skip for it (`SKIPPED train <row>`); without that record it is VOID. A
+family with an UNREAD row and no VOID row reads UNREAD; the box reads VOID if either family is VOID, else UNREAD if either
+is UNREAD.
 
-`bench/ho3/ho3_reduce.py --self-test` holds HO2's 17 cases and 8 of HO3's; `tests/test_ho3.py` the rest.
+`bench/ho3/ho3_reduce.py --self-test` holds HO2's 17 cases and 11 of HO3's; `tests/test_ho3.py` the rest.
 
 ## Run ids, outcomes, caps and the stop (bench/common rules 2–4)
 
 - **Reading ids:** `ho3-5090-1`, `ho3-4090-1`, `ho3-a4000-1`, `ho3-a4000-2`.
+- **Re-run ids:** `ho3-5090-2`, `ho3-4090-2`, `ho3-a4000-3`, for a box that follows a STARTED box that was not read.
+  With the reading ids they cover every start the cap allows.
 - **Retry ids:** `ho3-<card>-r1` to `-r8` per card, for a box that follows one that did not start. Ids are labels: no
   code reads a number out of one.
 - **Outcome classes** are bench/common's table, decided from the launcher's receipt and the runner's exit, never by hand:
@@ -86,15 +93,17 @@ records no expert residency, and a host row without its host estimate and peak, 
 - **Worst:** each started box at its guard and declared rate plus a 65 GB download allowance at no more than $0.02/GB
   ($1.30): RTX 5090 $3.40, RTX 4090 $2.80, RTX A4000 $2.09. At the caps that is $18.67 for started boxes. A box that
   never starts is billed up to its card's boot slack, where the fit check refuses it (rc 41): 1,988 s on the RTX 5090
-  and RTX 4090, 1,088 s on the RTX A4000. Each card has 7 ids beyond its cap: RTX 5090 7 x $0.58 = $4.06, RTX 4090
-  7 x $0.41 = $2.90, RTX A4000 7 x $0.076 = $0.53, $7.49 in all. The lane worst is $26.16, under the $35 run cap; each
-  box is under $15. Expected about $2.50.
+  and RTX 4090, 1,088 s on the RTX A4000. Each card has 8 ids beyond its cap (10, 10 and 11 ids against caps of 2, 2
+  and 3): RTX 5090 8 x $0.58 = $4.64, RTX 4090 8 x $0.41 = $3.31, RTX A4000 8 x $0.076 = $0.60, $8.56 in all. The lane
+  worst is $27.23, under the $35 run cap; each box is under $15. Expected about $2.50.
 
 ## Fit and boot slack (bench/common rule 5)
 
 The runner's fit is the install to the gate, the fetch, the box-side plans, four rows, the reduce and the reserve:
-4,170 s on the RTX 5090 and RTX 4090 (480 s per row) and 8,250 s on the RTX A4000 (1,500 s per row, host offload being
-slower). With the 25 % headroom, each guard leaves at least 540 s for the launcher's ssh wait and the staging:
+4,170 s on the RTX 5090 and RTX 4090 (480 s per row, HO2's) and 8,250 s on the RTX A4000. Its 1,500 s per row is an
+ESTIMATE: host offload has never run on this stack, so no measured host stands behind it. A row that would not fit in
+the time left is skipped before it starts, and a row that reaches its own 1,800 s alarm is stopped. The runner records
+both as a deadline skip, so the row reads UNREAD and the box keeps its finished rows. With the 25 % headroom, each guard leaves at least 540 s for the launcher's ssh wait and the staging:
 7,200 − 5,212 = 1,988 s and 11,400 − 10,312 = 1,088 s. `tests/test_ho3.py` asserts it.
 
 ## When it closes (bench/common rule 6)

@@ -109,9 +109,11 @@ def row_of(tag, receipt, card, reg=None):
             "run_id": receipt.get("run_id")}, ""
 
 
-def reduce(receipts_by_tag, run_id, pins):
+def reduce(receipts_by_tag, run_id, pins, skipped=()):
     """``receipts_by_tag``: {tag: [receipt, ...]}; ``pins``: the launch commit and the e4b, gnf4 and loggetta commits the box
-    installed. One cohort result per family (COVERED, MISS or VOID with its cause); the box is COVERED only when both are."""
+    installed; ``skipped``: the rows the runner recorded as skipped for the deadline (its ``SKIPPED train <tag>`` lines). One
+    cohort result per family: COVERED, MISS, UNREAD (a row skipped for the deadline, nothing else wrong) or VOID with its
+    cause. The box is COVERED only when both are; VOID when either is; UNREAD otherwise when either is."""
     card = run_id.split("-")[1] if run_id.count("-") == 2 else None
     if card not in CARDS:
         return _void(f"unregistered run id {run_id!r}")
@@ -119,9 +121,12 @@ def reduce(receipts_by_tag, run_id, pins):
         return _void(f"a software pin is not a 40-char commit: {pins}")
     rows, cohorts = [], {}
     for fam in FAMILIES:
-        fam_rows, cause = [], None
+        fam_rows, cause, unread = [], None, []
         for tag in (t for t in TAGS if t.startswith(fam + "_")):
             found = receipts_by_tag.get(tag) or []
+            if not found and tag in skipped:        # the runner recorded the deadline skip: UNREAD, never VOID or a pass
+                unread.append(tag)
+                continue
             if len(found) != 1:
                 cause = cause or f"{tag}: {len(found)} receipts (not exactly one)"
                 continue
@@ -133,19 +138,31 @@ def reduce(receipts_by_tag, run_id, pins):
         rows.extend(fam_rows)
         if cause:
             cohorts[fam] = {"verdict": "VOID", "cause": cause, "card": CARDS[card]}
+        elif unread:
+            cohorts[fam] = {"verdict": "UNREAD", "unread": unread, "card": CARDS[card], "n_rows": len(fam_rows)}
         else:
             ok = all(r["outcome"] == "COVERED" for r in fam_rows)
             cohorts[fam] = {"verdict": "COVERED" if ok else "MISS", "card": CARDS[card],
                             "residency": sorted({r["residency"] for r in fam_rows}),
                             "n_covered": sum(r["outcome"] == "COVERED" for r in fam_rows), "n_rows": len(fam_rows)}
     verdicts = [c["verdict"] for c in cohorts.values()]
-    box = "VOID" if "VOID" in verdicts else ("COVERED" if all(v == "COVERED" for v in verdicts) else "MISS")
+    box = ("VOID" if "VOID" in verdicts else "UNREAD" if "UNREAD" in verdicts
+           else "COVERED" if all(v == "COVERED" for v in verdicts) else "MISS")
     out = {"verdict": box, "run_id": run_id, "card": CARDS[card], "pins": pins, "rows": rows, "cohorts": cohorts,
            "n_covered": sum(r["outcome"] == "COVERED" for r in rows), "n_rows": len(rows),
            "plan_findings": [f"{r['tag']}: {r['plan_diff']}" for r in rows if r.get("plan_diff")], "band_computed": False}
     if box == "VOID":
         out["cause"] = "; ".join(f"{f}: {c['cause']}" for f, c in cohorts.items() if c["verdict"] == "VOID")
     return out
+
+
+def load_skipped(run_dir):
+    """The rows the runner skipped for the deadline: its ``SKIPPED train <tag>`` lines in summary.txt, beside run/."""
+    try:
+        text = open(os.path.join(run_dir, os.pardir, "summary.txt"), encoding="utf-8").read()
+    except OSError:
+        return set()
+    return {ln.split()[2] for ln in text.splitlines() if ln.startswith("SKIPPED train ") and len(ln.split()) == 3}
 
 
 def load(run_dir):
@@ -244,10 +261,20 @@ def self_test():
     nr["ernie_2048"][0]["setup"] = {}
     r = reduce(nr, "ho3-a4000-1", pins)
     assert r["cohorts"]["ernie"]["verdict"] == "VOID" and "no expert residency" in r["cohorts"]["ernie"]["cause"], r
-    # (6) A retry id names its card the same way; an A4000 box never reads as a 4090's.
+    # (6) A row the runner skipped for the deadline is UNREAD, not VOID and never a pass; a missing row with no recorded
+    # skip is still VOID (a crash or a lost row, rule 7).
+    sk = copy.deepcopy(b)
+    sk.pop("ernie_2048")
+    r = reduce(sk, "ho3-a4000-1", pins, skipped={"ernie_2048"})
+    assert r["verdict"] == "UNREAD" and r["cohorts"]["ernie"]["verdict"] == "UNREAD" and r["cohorts"]["lfm2"]["verdict"] == "COVERED", r
+    assert reduce(sk, "ho3-a4000-1", pins)["cohorts"]["ernie"]["verdict"] == "VOID"
+    sk2 = copy.deepcopy(sk)
+    sk2["lfm2_1024"][0].update(status="ALARM")
+    assert reduce(sk2, "ho3-a4000-1", pins, skipped={"ernie_2048"})["verdict"] == "VOID"
+    # (7) A retry id names its card the same way; an A4000 box never reads as a 4090's.
     assert reduce(b, "ho3-a4000-r3", pins)["verdict"] == "COVERED"
     assert reduce(b, "ho3-4090-1", pins)["verdict"] == "VOID"
-    print("ho3 reducer self-test OK (17 HO2 cases + 8 HO3 cases)")
+    print("ho3 reducer self-test OK (17 HO2 cases + 11 HO3 cases)")
 
 
 def main():
@@ -264,7 +291,8 @@ def main():
     if a.self_test:
         self_test()
         return 0
-    v = reduce(load(a.dir), a.run_id, {"launch": a.launch, "e4b": a.e4b, "gnf4": a.gnf4, "loggetta": a.loggetta})
+    v = reduce(load(a.dir), a.run_id, {"launch": a.launch, "e4b": a.e4b, "gnf4": a.gnf4, "loggetta": a.loggetta},
+               skipped=load_skipped(a.dir))
     text = json.dumps(v, indent=1, sort_keys=True)
     if a.out:
         open(a.out, "w").write(text + "\n")

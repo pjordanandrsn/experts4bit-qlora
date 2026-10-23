@@ -63,10 +63,12 @@ MUTANTS = [
     ('if len(found) != 1:', "if not found:"),                                                  # two receipts for one row
     ("host_under = h_meas > h_est", "host_under = False"),                                     # the host side unchecked
     ('if residency == "host":', 'if False:'),                                                  # a host row without host numbers
-    ('box = "VOID" if "VOID" in verdicts else', 'box = "COVERED" if True else'),               # a VOID cohort hidden
+    ('box = ("VOID" if "VOID" in verdicts else', 'box = ("COVERED" if True else'),             # a VOID cohort hidden
     ("cause = cause or why", "cause = None"),                                                  # a bad row read as covered
     ("plan_diff = \"; \".join(diffs) or None", "plan_diff = None"),                            # a plan difference unrecorded
     ('if residency not in ("device", "host"):', "if False:"),                                  # an unknown residency skips the host check
+    ("if not found and tag in skipped:", "if not found:"),                                     # a lost row read as a deadline skip
+    ('else "UNREAD" if "UNREAD" in verdicts', 'else "COVERED" if "UNREAD" in verdicts'),        # an UNREAD cohort read as covered
 ]
 
 
@@ -124,7 +126,8 @@ def test_registered_plans_agree_with_the_registration():
 
 def test_run_ids_agree_across_runner_driver_and_prereg():
     readings = ["ho3-5090-1", "ho3-4090-1", "ho3-a4000-1", "ho3-a4000-2"]
-    for rid in readings:
+    reruns = ["ho3-5090-2", "ho3-4090-2", "ho3-a4000-3"]                     # the cap's re-runs need ids of their own
+    for rid in readings + reruns:
         assert rid in RUN and rid in DRIVE and f"`{rid}`" in PREREG
     for card in ("5090", "4090", "a4000"):
         assert f"ho3-{card}-r[1-8]" in RUN and f"ho3-{card}-r[1-8]" in DRIVE
@@ -147,6 +150,50 @@ def test_the_driver_refuses_ho2s_machines_and_an_unrecorded_one():
     assert machines == ["124996", "154091"] and all(f"`{m}`" in PREREG for m in machines)
     assert 'instance.json' in DRIVE and "recorded no machine id" in DRIVE
     assert DRIVE.index("HO2_MACHINES=") < DRIVE.index('$SCP $STAGE')                             # refused before anything is staged
+
+
+def test_a_deadline_overrun_is_recorded_as_a_skip_the_reducer_reads():
+    assert 'echo "SKIPPED $2" >> summary.txt' in RUN                                               # can_run's skip before a row
+    assert '[ "$rc" = 142 ] && {' in RUN and 'echo "SKIPPED train $tag" >> summary.txt' in RUN     # a row that hit its alarm
+    assert "skipped=load_skipped(a.dir)" in REDUCE
+
+
+def _dry_run(tmp_path, run_id, machine, earlier=()):
+    """The driver's $0 dry run in a fake runs root: ``earlier`` lists (run id, machine or None, ran) for boxes before it."""
+    root = tmp_path / "runs" / "2026-10-24"
+    for rid, m, ran in earlier:
+        d = root / rid
+        d.mkdir(parents=True)
+        if m is not None:
+            (d / "instance.json").write_text(json.dumps({"machine_id": m}))
+        if ran:
+            (d / "ho3").mkdir()
+    me = root / run_id
+    me.mkdir(parents=True)
+    (me / "instance.json").write_text(json.dumps({"machine_id": machine}))
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": str(tmp_path), "HO3_DRIVE_DRYRUN": "1",
+           "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-q", "E4B_RENT_RUN_DIR": str(me),
+           "E4B_RENT_RUN_ID": run_id, "E4B_RENT_DEADLINE_EPOCH": "9999999999", "E4B_RENT_INSTANCE_ID": "1"}
+    return subprocess.run(["bash", str(LANE / "ho3_drive.sh")], capture_output=True, text=True, env=env, timeout=60)
+
+
+def _clean_checkout():
+    r = subprocess.run(["git", "-C", str(REPO), "status", "--porcelain"], capture_output=True, text=True)
+    return r.returncode == 0 and not r.stdout.strip()
+
+
+@pytest.mark.skipif(not _clean_checkout(), reason="the driver refuses a dirty checkout before its machine checks")
+def test_part_b_needs_two_machines_and_fails_closed(tmp_path):
+    ok = _dry_run(tmp_path / "a", "ho3-a4000-2", "777", earlier=[("ho3-a4000-1", "778", True)])
+    assert ok.returncode == 0 and "DRYRUN" in ok.stdout, ok.stdout + ok.stderr
+    same = _dry_run(tmp_path / "b", "ho3-a4000-2", "777", earlier=[("ho3-a4000-1", "777", True)])
+    assert same.returncode == 78 and "Part B needs a second machine" in same.stdout, same.stdout
+    unread = _dry_run(tmp_path / "c", "ho3-a4000-3", "777", earlier=[("ho3-a4000-1", None, True)])
+    assert unread.returncode == 78 and "machine is unreadable" in unread.stdout, unread.stdout
+    refused = _dry_run(tmp_path / "d", "ho3-a4000-2", "777", earlier=[("ho3-a4000-r1", "777", False)])
+    assert refused.returncode == 0, refused.stdout                       # a box that never ran the runner holds no machine
+    ho2 = _dry_run(tmp_path / "e", "ho3-5090-1", "124996")
+    assert ho2.returncode == 78 and "ran HO2's rows" in ho2.stdout, ho2.stdout
 
 
 def test_the_driver_never_fetches_tensors():

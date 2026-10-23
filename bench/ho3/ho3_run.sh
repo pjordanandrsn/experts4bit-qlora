@@ -24,12 +24,12 @@ ALPACA_REV=dce01c9b08f87459cf36a430d809084718273017       # tatsu-lab/alpaca's p
 # The two families, named before any measurement (PREREG, "Families")
 LFM2=LiquidAI/LFM2-8B-A1B; LFM2_REV=c1c44ff9fc00db3ebf4516970563f5f383d23670
 ERNIE=baidu/ERNIE-4.5-21B-A3B-PT; ERNIE_REV=87db95487941cb39592ee0abca3b9155a6d19c5c
-# Explicit IDs only (PREREG "Run ids"): the reading ids and the retry ids r1..r8 for a box that follows one that did not
-# start. The id names the card; no code reads a number out of it.
+# Explicit IDs only (PREREG "Run ids"): the reading ids, the re-run ids (after a STARTED box that was not read) and the
+# retry ids r1..r8 (after a box that did not start). The id names the card; no code reads a number out of it.
 case "$HO3_RUN_ID" in
-  ho3-5090-1|ho3-5090-r[1-8]) GPU_CLASS="RTX 5090"; CC_WANT=12.0; VRAM_FLOOR=30000; NEED_TRAIN=480;;
-  ho3-4090-1|ho3-4090-r[1-8]) GPU_CLASS="RTX 4090"; CC_WANT=8.9; VRAM_FLOOR=23000; NEED_TRAIN=480;;
-  ho3-a4000-1|ho3-a4000-2|ho3-a4000-r[1-8]) GPU_CLASS="RTX A4000"; CC_WANT=8.6; VRAM_FLOOR=16000; NEED_TRAIN=1500;;
+  ho3-5090-1|ho3-5090-2|ho3-5090-r[1-8]) GPU_CLASS="RTX 5090"; CC_WANT=12.0; VRAM_FLOOR=30000; NEED_TRAIN=480;;
+  ho3-4090-1|ho3-4090-2|ho3-4090-r[1-8]) GPU_CLASS="RTX 4090"; CC_WANT=8.9; VRAM_FLOOR=23000; NEED_TRAIN=480;;
+  ho3-a4000-1|ho3-a4000-2|ho3-a4000-3|ho3-a4000-r[1-8]) GPU_CLASS="RTX A4000"; CC_WANT=8.6; VRAM_FLOOR=16000; NEED_TRAIN=1500;;
   *) say "unregistered run ID: $HO3_RUN_ID"; finish 78;;
 esac
 INSTALL_TO_GATE_S=450; NEED_FETCH=900; NEED_PLAN=240; NEED_REDUCE=60; RESERVE=600
@@ -140,6 +140,9 @@ train(){ local tag=$1 model=$2 rev=$3 seq=$4
     --out $W/run/receipts_$tag --adapter-out $W/run/adapter_$tag > logs/train_$tag.log 2>&1
   local rc=$?; phase_end "train_$tag"
   echo "train $tag rc=$rc" | tee -a summary.txt
+  # the row's own alarm (SIGALRM, rc 142) is a time overrun, not a fault: recorded as a deadline skip, so the reducer
+  # reads the row UNREAD and the box keeps its finished rows (PREREG "Fit")
+  [ "$rc" = 142 ] && { say "train $tag reached its alarm -- recorded as a deadline skip"; echo "SKIPPED train $tag" >> summary.txt; }
   return $rc; }
 train lfm2_1024 $LFM2 $LFM2_REV 1024 || say "train lfm2_1024 failed (rc $?) -- the reducer will VOID that row"
 train lfm2_2048 $LFM2 $LFM2_REV 2048 || say "train lfm2_2048 failed (rc $?) -- the reducer will VOID that row"
