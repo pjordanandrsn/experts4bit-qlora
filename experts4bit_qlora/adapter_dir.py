@@ -227,6 +227,10 @@ def arena_source_revision(arena_index: dict) -> str | None:
 
 #: the base scopes an operator may accept unverified (``E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE``)
 UNVERIFIED_BASE_SCOPES = ("experts",)
+#: the base scopes an operator may serve despite a MEASURED fingerprint mismatch
+#: (``E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH``); attention has none: its mismatch (11) is never overridden
+BASE_MISMATCH_SCOPES = ("experts",)
+ACCEPT_BASE_MISMATCH_ENV = "E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH"
 
 
 def parse_accept_unverified_base(raw: str) -> frozenset:
@@ -240,22 +244,107 @@ def parse_accept_unverified_base(raw: str) -> frozenset:
     return scopes
 
 
+def parse_accept_base_mismatch(raw: str) -> frozenset:
+    """``E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH``: a comma-separated list of scopes, each named (only ``experts``). It
+    serves an adapter whose recorded expert fingerprint the served arena MEASURABLY does not match; it never covers an
+    attention mismatch (refusal 11), and ``E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE`` never covers a measured one."""
+    scopes = frozenset(s.strip().lower() for s in (raw or "").split(",") if s.strip())
+    unknown = sorted(scopes - set(BASE_MISMATCH_SCOPES))
+    if unknown:
+        raise ValueError(f"{ACCEPT_BASE_MISMATCH_ENV}={raw!r}: unknown scope(s) {unknown}; name the scope to accept, "
+                         f"one of {list(BASE_MISMATCH_SCOPES)} (an attention mismatch is never overridden)")
+    return scopes
+
+
+def _v2_scope_fingerprint(ad: AdapterDir, scope: str):
+    """The manifest's recorded fingerprint for ``scope`` when it is one this server can compare (a /2 manifest, a known
+    scheme), else None."""
+    from .adapter_schema import KNOWN_SCHEMES
+
+    if ad.manifest.get("schema") != SCHEMA_V2:
+        return None
+    fp = (ad.manifest.get("fingerprints") or {}).get(scope)
+    return fp if isinstance(fp, dict) and fp.get("scheme_id") in KNOWN_SCHEMES else None
+
+
+def _dq_trained(ad: AdapterDir) -> bool:
+    return (ad.manifest.get("expert_absmax") or {}).get("form") == "double-quantized"
+
+
+def fingerprint_check(ad: AdapterDir, model, arena: str, *, accept_base_mismatch: frozenset = frozenset(),
+                      fingerprint=None) -> tuple:
+    """``(refusals, report)``: the SERVED base's qfp-v1 against the adapter's recorded one, per scope the /2 manifest
+    records. Called after the load and BEFORE :func:`merge_attention_lora` (the merge rewrites the attention weights)
+    and before any lever. ``report[scope]`` is ``{"scheme", "trained", "served", "modules", "seconds", "status"}``,
+    status ``verified`` | ``mismatch`` | ``mismatch (served under E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts)``.
+    Refusal 11: the attention base differs (never overridden). Refusal 12: the expert base differs, unless the operator
+    names ``experts`` in ``E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH``. ``fingerprint`` is
+    :func:`.adapter_schema.quant_fingerprint` (a test may pass its own)."""
+    if fingerprint is None:
+        from .adapter_schema import quant_fingerprint as fingerprint
+    refusals, report = [], {}
+    for scope in ("attention", "experts"):
+        want = _v2_scope_fingerprint(ad, scope)
+        if want is None:
+            continue
+        got = (fingerprint(model, "attention", source="resident") if scope == "attention"
+               else fingerprint(model, "experts", source="arena", arena=arena))
+        match = got["sha256"] == want.get("sha256") and got.get("scheme_id") == want.get("scheme_id")
+        row = {"scheme": got.get("scheme_id"), "trained": want.get("sha256"), "served": got["sha256"],
+               "modules": {"trained": want.get("modules"), "served": got.get("modules")},
+               "seconds": got.get("seconds"), "status": "verified" if match else "mismatch"}
+        report[scope] = row
+        if match:
+            continue
+        if scope == "attention":
+            refusals.append((11, f"the served attention base is not the adapter's: qfp-v1 {got['sha256'][:16]} served "
+                                 f"against {str(want.get('sha256'))[:16]} trained ({got.get('modules')} vs "
+                                 f"{want.get('modules')} modules). The attention LoRA would be merged into weights it "
+                                 f"was not trained on; this refusal has no override"))
+        elif "experts" in accept_base_mismatch:
+            row["status"] = f"mismatch (served under {ACCEPT_BASE_MISMATCH_ENV}=experts)"
+        else:
+            why = (" The manifest records a double-quantized expert absmax (training's default) and the arena stores "
+                   "fp32: this is the dq-vs-fp32 absmax case (docs/ADAPTER_PORTABILITY.md F1), not a different model. "
+                   "Retraining at E4B_ABSMAX_DQ=0 resolves it; a follow-up records the base's fp32 source "
+                   "fingerprint at training, which verifies the base (not the served absmax form)."
+                   if _dq_trained(ad) else
+                   " The arena was not baked from the base this adapter was trained on (or with another recipe).")
+            refusals.append((12, f"the served expert base is not the adapter's: qfp-v1 {got['sha256'][:16]} served "
+                                 f"against {str(want.get('sha256'))[:16]} trained.{why} To serve it anyway, set "
+                                 f"{ACCEPT_BASE_MISMATCH_ENV}=experts (reported in /health as a served mismatch); "
+                                 f"E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE does not cover a measured mismatch"))
+    return refusals, report
+
+
 def _expert_base_unverified(ad: AdapterDir) -> str:
     """Why this server cannot verify ``ad``'s expert base, for its manifest's schema."""
     if ad.manifest.get("schema") == SCHEMA_V2:
         form = (ad.manifest.get("expert_absmax") or {}).get("form")
-        return (f"backend-adapter/2 records the expert absmax form ({form}) and an expert fingerprint, but this server "
-                f"does not yet compare it against its arena (PA-1); the NF4 arena stores fp32 absmax "
+        return (f"backend-adapter/2 records the expert absmax form ({form}) but no expert fingerprint in a scheme this "
+                f"server knows, so there is nothing to compare against its arena; the NF4 arena stores fp32 absmax "
                 f"(docs/ADAPTER_PORTABILITY.md F1)")
     return ("backend-adapter/1 records no expert absmax form; training defaults to the double-quantized absmax, the NF4 "
             "arena stores fp32 (docs/ADAPTER_PORTABILITY.md F1)")
 
 
-def base_match(ad: AdapterDir, refusals=()) -> dict:
-    """What is known about the served base against the adapter's training base, per part of the model."""
-    attn = ("refused" if any(code == 8 for code, _ in refusals) else
+def base_match(ad: AdapterDir, refusals=(), fingerprints=None) -> dict:
+    """What is known about the served base against the adapter's training base, per part of the model. ``fingerprints``
+    is :func:`fingerprint_check`'s report, once the load has measured it."""
+    fps = fingerprints or {}
+    attn = ("refused" if any(code in (8, 11) for code, _ in refusals) else
             "exact by construction (up to the measured merge rounding)" if ad.attention else "none")
-    return {"attention": attn, "experts": f"unverified ({_expert_base_unverified(ad)})"}
+    if fps.get("attention", {}).get("status") == "verified":
+        attn += f"; base verified (qfp-v1 {fps['attention']['served'][:16]})"
+    ex = fps.get("experts")
+    if ex is not None:
+        experts = (f"verified (qfp-v1 {ex['served'][:16]})" if ex["status"] == "verified"
+                   else f"{ex['status']}: qfp-v1 {ex['served'][:16]} served, {str(ex['trained'])[:16]} trained")
+    elif _v2_scope_fingerprint(ad, "experts") is not None:
+        experts = "pending (the manifest's qfp-v1 is compared with the served arena at load)"
+    else:
+        experts = f"unverified ({_expert_base_unverified(ad)})"
+    return {"attention": attn, "experts": experts}
 
 
 def servable_refusals(ad: AdapterDir, *, served_revision: str | None, requested_revision: str | None,
@@ -265,14 +354,15 @@ def servable_refusals(ad: AdapterDir, *, served_revision: str | None, requested_
     """Every ``(code, reason)`` that stops this server from serving ``ad`` as trained (empty: servable). The codes are
     the spec's: 1 expert LoRA, 2 base revision, 3 arena source (repo and revision), 4 arena recipe, 5 re-quantizing levers,
     6 unknown target modules, 8 attention trained on a 4-bit base (v1), 9 an expert base this server cannot verify (v1),
-    unless the operator accepts it by name, 10 speculative decoding (its draft head and gate were read on the base). Refusal 7 (the verifier) has already passed. ``check_served_revision=False`` skips only
+    unless the operator accepts it by name, 10 speculative decoding (its draft head and gate were read on the base); 11
+    and 12 (the measured attention and expert fingerprints) come from :func:`fingerprint_check` after the load. Refusal 7 (the verifier) has already passed. ``check_served_revision=False`` skips only
     the served commit's comparison, for the check made before the load (the loader resolves the commit)."""
     import torch
 
     out = []
-    if "experts" not in accept_unverified_base:
-        # v1 records no expert absmax form; v2 records it and an expert fingerprint, which this server does not yet
-        # compare against its arena (PA-1). Until then neither verifies the expert base.
+    if "experts" not in accept_unverified_base and _v2_scope_fingerprint(ad, "experts") is None:
+        # v1 records no expert fingerprint (nor a /2 without one in a known scheme): nothing verifies the expert base.
+        # A /2 with one is compared with the served arena at load (fingerprint_check: refusal 12, or verified).
         out.append((9, f"the expert base cannot be verified: {_expert_base_unverified(ad)}, so the whole served model "
                        f"may differ from the trained one. Set E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts to serve "
                        f"it anyway (reported as base_match.experts=unverified)"))
