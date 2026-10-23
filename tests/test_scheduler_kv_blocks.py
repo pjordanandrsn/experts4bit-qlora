@@ -187,3 +187,13 @@ def test_every_exit_releases_the_reservation_exactly_once():
     s.run_until_idle(max_steps=100)
     done = {q.rid: q for q in s.done}
     assert done[c].finish_reason == "stop" and s.kv_blocks_reserved == 0
+
+
+@pytest.mark.parametrize("lookahead", [False, True])
+def test_a_binding_pool_composes_with_the_interleave_knobs(lookahead):
+    """G2's reservation and A1's prefill_every / loaded_chunk_tokens act on the same plan: together they change when
+    requests run, never what they emit, and every reservation is released at idle."""
+    out_free, _, _ = _serve()
+    out_both, s, _ = _serve(kv_blocks=8, block_tokens=4, prefill_every=2, loaded_chunk_tokens=2, lookahead=lookahead)
+    assert out_both == out_free
+    assert s.kv_blocks_waits > 0 and s.prefill_deferred > 0 and s.kv_blocks_reserved == 0
