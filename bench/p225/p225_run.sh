@@ -81,16 +81,19 @@ FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB"; finish 13; }
 RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < ${MIN_RAM_GB} GiB"; finish 16; }
+FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
+FIT=$((INSTALL_TO_GATE_S + NEED_WORK + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P225_DEADLINE_EPOCH - $(date +%s)))
+# rc 41: a refusal before the screen and the install, not a strike;
+# two consecutive headroom refusals count as one strike. It comes before the host screen: no script from another file runs before the fit check (bench/common/
+# README.md, 'Guard fit'). The screen that follows is short (a Mops loop, a 1 s steal read and a download probe
+# bounded at 60 s); its seconds come out of the 25 % headroom, not out of INSTALL_TO_GATE_S
+[ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
+echo "GUARD_FIT fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s" | tee -a summary.txt
 # ---- P225's host screen, ON THE BOX, BEFORE any install (PREREG "The host screen"): the registered floors only, refused
 # mechanically as HOST_REFUSED (rc 19, never a strike); a screen that cannot run refuses the same way
 python $W/p225_probe.py --floors $TIER --work $W --model $MODEL --revision $REV > logs/screen.log 2>&1; SCR=$?
 grep -a "^P225_SCREEN" logs/screen.log | tee -a summary.txt
 [ "$SCR" = 0 ] || { say "HOST_REFUSED: the screen read rc $SCR (a floor failed or the screen could not run); never a strike"; echo "refused: host screen rc $SCR" > REFUSAL; finish 19; }
-FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
-FIT=$((INSTALL_TO_GATE_S + NEED_WORK + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P225_DEADLINE_EPOCH - $(date +%s)))
-# rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
-[ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
-echo "GUARD_FIT fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s" | tee -a summary.txt
 source $W/phases.sh || finish 9          # the phase stamps, after the fit check (bench/common/README.md, "Guard fit")
 export PHASES_FILE=$W/run/phases.jsonl
 can_run(){ local need=$1 left; left=$((P225_DEADLINE_EPOCH - $(date +%s))); [ $((need + RESERVE)) -le "$left" ] || { say "STOP-2: $2 needs $((need + RESERVE))s, ${left}s left -- skipped"; echo "SKIPPED $2" >> summary.txt; return 1; }; }

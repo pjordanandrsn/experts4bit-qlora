@@ -244,7 +244,7 @@ def test_the_host_screen_runs_before_any_install_and_refuses_only_as_host_refuse
     eligible = RUN.index("STRIKE_ELIGIBLE")
     install = RUN.index("phase_start install")
     fit = RUN.index("FIT_HEADROOM_PCT=125")
-    assert screen < fit < eligible < install
+    assert fit < screen < eligible < install          # the fit first: no other file's script runs before it
     after = RUN[screen:RUN.index("\n", RUN.index("SCR\" = 0", screen))]
     assert "finish 19" in after and "HOST_REFUSED" in after
     assert _load("p225_probe").HOST_REFUSED == 19
