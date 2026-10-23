@@ -30,7 +30,7 @@ SHAPES = [(256, 512), (2048, 4096), (128, 2048)]       # toy, Qwen3's o_proj, Qw
 TOL = 1.5e-2
 
 
-class Attn(nn.Module):                                 # "Attention" in the name: the site the pin looks for
+class ToyAttention(nn.Module):                         # "Attention" in the name: the site the pin looks for
     def __init__(self, N, K):
         super().__init__()
         self.o_proj = nn.Linear(K, N, bias=False, device="cuda", dtype=torch.bfloat16)
@@ -39,7 +39,7 @@ class Attn(nn.Module):                                 # "Attention" in the name
 class Model(nn.Module):
     def __init__(self, N, K):
         super().__init__()
-        self.layers = nn.ModuleList([Attn(N, K)])
+        self.layers = nn.ModuleList([ToyAttention(N, K)])
 
 
 @pytest.fixture(scope="module")
