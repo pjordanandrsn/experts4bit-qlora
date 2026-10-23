@@ -60,11 +60,17 @@ def test_the_helpers_are_p149s_registered_bytes():
         assert pins[name] == p149[name], name
 
 
-def test_the_runner_the_reducer_and_ci_pin_the_same_grouped_nf4_gemm():
+#: Amendment 3: P223's OWN registered grouped-nf4-gemm (v0.49.0, the tag commit its shakes ran), asserted as a constant,
+#: never read from the live ci.yml, so a CI pin bump cannot silently re-point a registered reading.
+P223_GNF4 = "a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7"
+
+
+def test_the_runner_and_the_reducer_pin_p223s_own_registered_grouped_nf4_gemm():
     red = (LANE / "p223_reduce.py").read_text(encoding="utf-8")
-    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     sha = re.search(r"^GNF4_SHA=([0-9a-f]{40})", RUN, re.M).group(1)
-    assert f'GNF4_SHA = "{sha}"' in red and f"grouped-nf4-gemm.git@{sha}" in ci
+    assert sha == P223_GNF4, f"the runner pins {sha}, P223 registers {P223_GNF4} (v0.49.0)"
+    assert f'GNF4_SHA = "{P223_GNF4}"' in red
+    assert "## Amendment 3" in PRE and "`a83f6bb3`" in PRE and "never the live CI pin" in PRE
 
 
 def test_the_arms_are_the_registrations_in_box_reducer_and_runner():

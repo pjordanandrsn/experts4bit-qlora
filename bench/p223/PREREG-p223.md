@@ -232,6 +232,10 @@ the reading, none of them a term of the read:
 - **The retry ids `p223-5090-r1` to `p223-5090-r8`** (bench/common rule 2): labels, not budget, for boxes that follow
   one that did not start. The runner and the driver accept them beside `p223-5090-1` to `-3`.
 - **The fetch:** `p223_drive.sh` passes `--no-links`. The runner's new pin is in `staged-p223.sha256`.
+- **The kernel pin is P223's own.** The registration's pins name grouped-nf4-gemm "at that commit's CI pin"; that was
+  v0.49.0, `a83f6bb3`, the release the shakes ran. P223 is registered on `a83f6bb3`, whatever CI pins later: the
+  runner and the reducer pin it, and `tests/test_p223.py` asserts both against that constant, never the live CI pin, so
+  a CI bump cannot silently re-point this reading. The read itself does not move.
 
 **Budget (bench/common rule 4).**
 - **Worst per box:** 3.5 h × USD 1.05 + (93.4 GB checkpoint + 5 GB install + up to 4.9 GB of probe) × USD 0.011 =
