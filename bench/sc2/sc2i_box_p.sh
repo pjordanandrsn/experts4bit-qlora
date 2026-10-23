@@ -100,6 +100,7 @@ prove_p(){ local a s LEV
     $W/sc2/health_prove_lc128_end.json --arms base pe2 lc128 | tee -a summary.txt
   [ "${PIPESTATUS[0]}" = 0 ] || { say "PROVE: a server did not engage as registered -- NOT PROVED"; rec 23; }
   for a in base pe2 lc128; do
-    "$PY" $W/sc2e_census.py steps $W/sc2/steps_prove_$a.jsonl --arm s64a --require-wide | tee -a summary.txt
+    "$PY" $W/sc2e_census.py steps $W/sc2/steps_prove_$a.jsonl --arm s64a | tee -a summary.txt     # the census, reported
+    "$PY" $W/sc2i_reduce.py --census $W/sc2/steps_prove_$a.jsonl $a | tee -a summary.txt          # SC2e's wide check; lc: the 64-row step
     [ "${PIPESTATUS[0]}" = 0 ] || { say "PROVE: the $a step trace does not decompose with its 64-row steps -- NOT PROVED"; rec 23; }
   done; }

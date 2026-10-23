@@ -62,7 +62,11 @@ can change its tokens.
 - ENGAGED: SC2e's check (`sc2e_reduce.engagement`, arm s64a) unchanged on `base`, `pe2` and `pe4`. On `lc256` and
   `lc128`, a first chunk capped below the prefill graph's T runs eagerly by design (`short_chunk`), and a 512-token
   prompt has later chunks (`later_chunk`). There the gate requires replays + `short_chunk` = the requests admitted,
-  and every eager reason one of those two; the rest of SC2e's check runs unchanged (`sc2i_reduce.engagement_bad`);
+  and every eager reason one of those two; the rest of SC2e's check runs unchanged (`sc2i_reduce.engagement_bad`).
+  The adapted gate is tested on a real record, not only on hand-written ones: `tests/fixtures/sc2i_shake1/` holds the
+  end `/health` of an `lc128` server from the EXPLORE shakedown `sc2i-shake-1` (box P's proof on Granite, one RTX
+  5090), with sha256s against the receipt. That record has 12 replays + 78 `short_chunk` = 90 admitted, and
+  `later_chunk` 234 = 78 × 3. The adapted gate passes it, and SC2e's unadapted check fails it;
 - DEFAULTS: the start `/health` reads SC2f's `on` (`sc2f_reduce.flips_bad`) and the lookahead off;
 - KNOBS: the start `/health`'s `engine.prefill_every` and `engine.loaded_chunk_tokens` are the arm's;
 - PROMPTS: every request reports 512 prompt tokens.
@@ -110,7 +114,10 @@ never act, so serial texts would agree by construction).
 three servers (`base`, `pe2` and `lc128`) at 64 slots through ROUTES, SLOTS, KNOBS (proof form: Granite engages neither
 P130 knob), warm, `h_early` and the burst, a 6-request serial smoke and a 16-request Poisson smoke at 12 req/s, every
 request VALID. Each server's end `/health` then goes through ENGAGED as the reducer reads it. `lc128`'s is the real
-record the adapted gate is checked on, before any reading box.
+record the adapted gate is checked on, before any reading box. The step census (`sc2i_reduce.census_bad`) is SC2e's
+`--require-wide` on `base` and `pe2`: the 64-row decode step, and at least 26 prompts counted by prefill-graph replay.
+On `lc128` most first chunks run eagerly by design, so the replay count cannot reach 26 (the shakedown's `lc128`
+counted 12); there only the 64-row decode step is required. A `base` or `pe` arm with that census still fails.
 
 **Reading** (`sc2i-5090-*`, guard 4.5 h): installs about 10 min, fetch and bake 25–40 min, twelve servers at about
 12–14 min each: about 179–218 min, so a 4.0 h guard would leave 11 % headroom.

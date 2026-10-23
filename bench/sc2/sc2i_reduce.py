@@ -37,6 +37,7 @@ The reducer licenses nothing: a FASTER arm is a candidate for a quality read, ne
   sc2i_reduce.py --dir DIR [--out verdict.json]
   sc2i_reduce.py --knobs HEALTH.json ARM [--proof]     (box P's start check; exit 1 on a departure)
   sc2i_reduce.py --engagement END.json ... --arms ARM ...
+  sc2i_reduce.py --census STEPS.jsonl ARM             (the proof's step census: SC2e's wide check, lc arms the 64-row step)
   sc2i_reduce.py --self-test
 """
 import argparse
@@ -137,6 +138,19 @@ def engagement_bad(e_red, health_end, n, arm) -> list:
         why.append(f"{arm}: replays {g.get('replays')} + short_chunk {reasons.get('short_chunk', 0)} = {first}, want {n}")
     folded = dict(health_end, prefill_graph=dict(g, replays=first, eager_chunks=0, eager_reasons={}))
     return why + e_red.engagement(SLOT_ARM, folded, n)
+
+
+def census_bad(summary, arm) -> list:
+    """The proof's step-census check (``sc2e_census.steps`` summary). On ``base`` and the ``pe`` arms it is SC2e's
+    ``wide_ok`` unchanged: the 64-row decode step, and >= 26 prompts counted by their prefill-graph replays with the
+    forward's device time. On ``lc256`` and ``lc128`` most first chunks run eagerly by design, so the replay count cannot
+    reach 26; there only the 64-row decode step is required."""
+    if summary is None:
+        return ["no step census"]
+    if arm in ("lc256", "lc128"):
+        n = ((summary.get("decode_steps") or {}).get("64") or {}).get("n")
+        return [] if n else [f"{arm}: no decode step keyed 64 (have {sorted(summary.get('decode_steps') or {})})"]
+    return _sib("sc2e_census").wide_ok(summary)
 
 
 def _short_chunks(d, tag):
@@ -407,6 +421,7 @@ def main(argv=None) -> int:
     ap.add_argument("--knobs", nargs=2, metavar=("HEALTH", "ARM"))
     ap.add_argument("--proof", action="store_true")
     ap.add_argument("--engagement", nargs="+")
+    ap.add_argument("--census", nargs=2, metavar=("STEPS", "ARM"))
     ap.add_argument("--arms", nargs="+")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args(argv)
@@ -419,6 +434,12 @@ def main(argv=None) -> int:
         return 1 if bad else 0
     if a.engagement:
         return engagement_cli(a.engagement, a.arms or [])
+    if a.census:
+        rows = [json.loads(x) for x in open(a.census[0]) if x.strip()] if os.path.exists(a.census[0]) else None
+        summ = _sib("sc2e_census").steps(rows, SLOT_ARM) if rows else None
+        why = census_bad(summ, a.census[1])
+        print("SC2I_CENSUS " + json.dumps({"arm": a.census[1], "ok": not why, "why": why}), flush=True)
+        return 1 if why else 0
     if a.dir:
         r = reduce(a.dir)
         if a.out:

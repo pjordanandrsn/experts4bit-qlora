@@ -137,3 +137,59 @@ def test_box_p_is_wired_like_box_o():
     pin = (REPO / "bench" / "sc1" / "staged.sha256").read_text()
     for name in ("sc2i_box_p.sh", "sc2i_reduce.py"):
         assert re.search(rf"^[0-9a-f]{{64}}  {re.escape(name)}$", pin, re.M), name
+
+
+# ------------------------------------------------- the real records of the shakedown (tests/fixtures/sc2i_shake1) --
+FIX = REPO / "tests" / "fixtures" / "sc2i_shake1"
+
+
+def _fx(name):
+    return json.loads((FIX / name).read_text())
+
+
+def test_the_fixture_is_the_receipts_bytes():
+    import hashlib
+    man = _fx("manifest.json")
+    for name in ("health_prove_lc128_start.json", "health_prove_lc128_end.json", "stats_prove_lc128_end.json",
+                 "health_prove_base_end.json"):
+        assert hashlib.sha256((FIX / name).read_bytes()).hexdigest() == man["sha256"][name], name
+    assert man["admitted"] == {"base": 90, "pe2": 90, "lc128": 90}
+
+
+def test_the_adapted_engaged_gate_on_the_real_lc128_record():
+    e_red = _mod("sc2e_reduce")
+    end = _fx("health_prove_lc128_end.json")
+    g = end["prefill_graph"]
+    assert (g["replays"], g["eager_reasons"]) == (12, {"later_chunk": 234, "short_chunk": 78})
+    assert RED.engagement_bad(e_red, end, 90, "lc128") == []                 # replays + short_chunk = 90 admitted
+    assert e_red.engagement(RED.SLOT_ARM, end, 90) != []                    # SC2e's unadapted check fails it
+    assert RED.engagement_bad(e_red, end, 91, "lc128") != []                # a count off by one fails
+    assert RED.engagement_bad(e_red, end, 90, "pe2") != []                  # a pe arm keeps SC2e's check
+
+
+def test_the_real_base_record_passes_sc2es_unadapted_check():
+    e_red = _mod("sc2e_reduce")
+    assert RED.engagement_bad(e_red, _fx("health_prove_base_end.json"), 90, "base") == []
+
+
+def test_the_census_check_is_narrow_to_the_lc_arms():
+    lc, base = _fx("census_lc128.json"), _fx("census_base.json")
+    assert lc["prompts"] == 12 and lc["decode_steps"]["64"]["n"] > 0         # the real lc census: 12 replayed prompts
+    assert RED.census_bad(lc, "lc128") == []                                 # lc: the 64-row step is enough
+    assert RED.census_bad(lc, "base") != [] and RED.census_bad(lc, "pe2") != []   # a base or pe arm without it fails
+    assert RED.census_bad(base, "base") == [] and base["prompts"] >= 26
+    lc_no64 = json.loads(json.dumps(lc))
+    lc_no64["decode_steps"].pop("64")
+    assert RED.census_bad(lc_no64, "lc128") != []
+
+
+def test_the_knobs_check_on_the_real_lc128_start_record():
+    h = _fx("health_prove_lc128_start.json")
+    assert RED.knobs_bad(h, "lc128", proof=True) == {}
+    assert RED.knobs_bad(h, "base", proof=True) != {}
+
+
+def test_the_proof_uses_the_arm_scoped_census():
+    prove = BOX[BOX.index("prove_p(){"):]
+    assert '"$PY" $W/sc2i_reduce.py --census $W/sc2/steps_prove_$a.jsonl $a' in prove
+    assert "--require-wide" not in prove and "for a in base pe2 lc128; do" in prove
