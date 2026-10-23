@@ -1,0 +1,59 @@
+{
+ "arm": "P0",
+ "slot": "b1A2",
+ "build_s": 17.3,
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ],
+ "graphs": true,
+ "placement": "all-vram",
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16,
+  32
+ ],
+ "identity": {
+  "health_status": "ready",
+  "served_names": [
+   "Qwen/Qwen3-30B-A3B"
+  ],
+  "served_name": "Qwen/Qwen3-30B-A3B",
+  "adapter_id": null,
+  "manifest_sha256": null,
+  "base_match": null,
+  "accepted_unverified_base": null,
+  "merge": {},
+  "models_adapter": null
+ },
+ "cost": {
+  "W1": {
+   "ttft_ms": 238.671,
+   "itl_ms": 3.8436,
+   "tok_s": 175.724,
+   "requests": 8,
+   "batch": 1,
+   "tokens": 1024,
+   "ttft_any_ms": 238.671,
+   "itl_wall_ms": 3.8472
+  },
+  "W16": {
+   "ttft_ms": 2480.943,
+   "itl_ms": 27.485,
+   "tok_s": 335.14,
+   "requests": 32,
+   "batch": 16,
+   "tokens": 4096,
+   "ttft_any_ms": 2480.943,
+   "itl_wall_ms": 27.4869
+  }
+ },
+ "peak_vram_mib": 26634.5,
+ "ok": true
+}

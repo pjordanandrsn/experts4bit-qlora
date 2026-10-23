@@ -1,0 +1,14 @@
+nf4 bake: L=48 E=128 (baking 128/layer) I=768 H=2048 row=2654208 stride=2654208 total=16.3 GB
+  baked layer 3 (4/48, 1.4 GB, 5s)
+  baked layer 7 (8/48, 2.7 GB, 9s)
+  baked layer 11 (12/48, 4.1 GB, 14s)
+  baked layer 15 (16/48, 5.4 GB, 18s)
+  baked layer 19 (20/48, 6.8 GB, 23s)
+  baked layer 23 (24/48, 8.2 GB, 27s)
+  baked layer 27 (28/48, 9.5 GB, 31s)
+  baked layer 31 (32/48, 10.9 GB, 37s)
+  baked layer 35 (36/48, 12.2 GB, 41s)
+  baked layer 39 (40/48, 13.6 GB, 45s)
+  baked layer 43 (44/48, 14.9 GB, 48s)
+  baked layer 47 (48/48, 16.3 GB, 52s)
+nf4 bake complete: 6144 rows (16.3 GB) in 53s
