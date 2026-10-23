@@ -68,8 +68,9 @@ def run_bad(name: str, r):
         return f"{name}: a request did not finish"
     if r.get("rows_end"):
         return f"{name}: {r['rows_end']} rows still held at idle"
-    if shared and r.get("kv_blocks_waits"):
-        return f"{name}: waited on blocks {r['kv_blocks_waits']} times (the contract schedule must never wait)"
+    if shared and r.get("kv_blocks_waits") != 0:
+        return (f"{name}: kv_blocks_waits {r.get('kv_blocks_waits')!r}, not 0 (the contract schedule must never wait, "
+                f"and a missing count is not a zero)")
     return None
 
 
@@ -106,6 +107,7 @@ def self_test() -> int:
         ("shared differs", runs(sh=_fake("shared", outs=([1, 2, 9], [4, 5, 6]))), "VOID"),
         ("floor differs", runs(ca_b=_fake("claim-all", outs=([1, 2, 3], [4, 5, 7]))), "VOID"),
         ("shared waited", runs(sh=_fake("shared", kv_blocks_waits=3)), "VOID"),
+        ("shared wait count missing", runs(sh=_fake("shared", kv_blocks_waits=None)), "VOID"),
         ("wrong width", runs(ca_a=_fake("claim-all", max_seqs=64)), "VOID"),
         ("shared not incremental", runs(sh=_fake("shared", incremental_claims=False)), "VOID"),
         ("rows at idle", runs(sh=_fake("shared", rows_end=2)), "VOID"),

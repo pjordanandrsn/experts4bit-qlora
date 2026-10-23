@@ -52,6 +52,25 @@ def tag(arm, draw) -> str:
     return f"e4b_{arm}_d{draw}"
 
 
+def skipped(d, label) -> bool:
+    """Whether the runner recorded a deadline skip for ``label`` (sc1_run.sh's can_run writes ``SKIPPED <label>
+    host-limited deadline`` to the box's summary.txt, one directory above DIR). Only a recorded skip turns a missing
+    record into UNREAD; a missing record without one is a crash or a lost server, which is VOID (every gate fails
+    closed)."""
+    for p in (os.path.join(d, "summary.txt"), os.path.join(os.path.dirname(os.path.abspath(d)), "summary.txt")):
+        if os.path.exists(p):
+            return any(line.startswith(f"SKIPPED {label} ") for line in open(p, errors="replace"))
+    return False
+
+
+def missing(d, t, why, label=None):
+    """(class, reason) for a missing record of server ``t``: UNREAD on a recorded deadline skip of the server (or of
+    ``label``, a rung of it), VOID otherwise."""
+    if skipped(d, t) or (label is not None and skipped(d, label)):
+        return "UNREAD", f"{why} (a recorded deadline skip)"
+    return "VOID", f"{why} (no deadline skip recorded: a crash or a lost server)"
+
+
 def pool_bad(health, arm) -> dict:
     """POOL: the start /health reads its arm (claim-all with no sizing record; shared with its rows and derivation)."""
     e = (health or {}).get("engine") or {}
@@ -192,20 +211,25 @@ def toks(row, i):
 
 
 def plans_bad(d) -> list:
-    """QUALITY's plans: P117's split plans at its table width equal the servers' recorded plans at B = 16, 32, 64."""
+    """QUALITY's plans: P117's split plans at its table width equal the servers' recorded plans at B = 16, 32, 64.
+    Nothing passes on absence: quality/plans.json must carry all three, and every server must record a plan at each of
+    them that it captures (its auto buckets, so 16 and 32 at width 32; 16, 32 and 64 at width 64)."""
     q = _load(d, "quality/plans.json")
     if not q:
         return ["no quality/plans.json"]
-    why = []
+    why = [f"quality/plans.json has no plan at B={B}" for B in PLAN_BUCKETS if q.get(str(B)) is None]
     for D in DRAWS:
         for arm in SLOT_ARMS:
             h = _load(d, f"health_{tag(arm, D)}_start.json")
-            plans = (((h or {}).get("levers") or {}).get("attn_split_cap") or {}).get("plans") or {}
-            for B in PLAN_BUCKETS:
+            if h is None:
+                continue                          # no server: UNREAD by the start gate, not here
+            width = ((h.get("engine") or {}).get("max_seqs")) or 0
+            plans = ((h.get("levers") or {}).get("attn_split_cap") or {}).get("plans") or {}
+            for B in [b for b in PLAN_BUCKETS if b in auto_buckets(width)]:
                 srv = (plans.get(str(B)) or {}).get("n_split")
                 if srv is None:
-                    continue                      # a bucket this server does not capture (claim-all at 32)
-                if q.get(str(B)) != srv:
+                    why.append(f"{tag(arm, D)} B={B}: no recorded plan (the server captured this bucket)")
+                elif q.get(str(B)) != srv:
                     why.append(f"{tag(arm, D)} B={B}: server n_split {srv} != P117's {q.get(str(B))}")
     return why
 
@@ -218,7 +242,8 @@ def reduce(d: str) -> dict:
     for (a, D), h in starts.items():
         t = tag(a, D)
         if h is None:
-            unread.append(f"{t}: no start /health (the deadline or a failed start)")
+            cls, why = missing(d, t, f"{t}: no start /health")
+            (unread if cls == "UNREAD" else void).append(why)
             continue
         r = sc2c_reduce.routes_bad(h)
         if r:
@@ -229,7 +254,19 @@ def reduce(d: str) -> dict:
         s = slots_bad(h)
         if s:
             void.append(f"SLOTS {t}: {s}")
-        void += [f"ENGAGED {x}" for x in engagement_bad(t, ends[(a, D)], admitted(d, t))]
+        if ends[(a, D)] is None:
+            cls, why = missing(d, t, f"{t}: no end /health")
+            (unread if cls == "UNREAD" else void).append(why)
+        else:
+            void += [f"ENGAGED {x}" for x in engagement_bad(t, ends[(a, D)], admitted(d, t))]
+        for r in Q2_RATES:
+            if _load(d, f"{t}_r{r}.json") is None:
+                cls, why = missing(d, t, f"{t}: no Q2 run at {r} req/s", label=f"{t} rate {r}")
+                (unread if cls == "UNREAD" else void).append(why)
+        for r in Q3_RATES:
+            if _load(d, f"{t}_q3r{rtag(r)}.json") is None:
+                cls, why = missing(d, t, f"{t}: no Q3 run at {r} req/s", label=f"{t} q3 rate {r}")
+                (unread if cls == "UNREAD" else void).append(why)
         void += [f"PROMPTS {x}" for x in prompts_bad(d, t)]
     widths = {k: ((h or {}).get("engine") or {}).get("max_seqs") for k, h in starts.items()}
     out["widths"] = {f"{a}_d{D}": w for (a, D), w in widths.items()}
@@ -266,6 +303,9 @@ def reduce(d: str) -> dict:
     out["rows"] = {"Q2": q2, "Q3": q3}
     ceil = {a: ceiling(q2[a]) for a in SLOT_ARMS}
     ca_ceil = None if ceil["ca_a"] is None or ceil["ca_b"] is None else min(ceil["ca_a"], ceil["ca_b"])
+    out["reported"]["nonmonotone_q2"] = {a: [r for r in Q2_RATES if q2[a][r].get("meets_capacity") is False
+                                             and any(q2[a][x].get("meets_capacity") for x in Q2_RATES if x > r)]
+                                         for a in SLOT_ARMS}
     out["ceilings"] = {"ca": ca_ceil, "sh": ceil["sh"], "ca_a": ceil["ca_a"], "ca_b": ceil["ca_b"]}
 
     def lower_ca(rows, r, i):
@@ -379,7 +419,8 @@ def _summary(att_, tok=1000.0):
             "e2el_p50_s": 1.0, "output_tok_s": tok, "attainment": att_, "goodput_rps": 1.0, "achieved_rate": 1.0}
 
 
-def _fixture(d, *, ca_att=None, sh_att=None, q3_ca=None, q3_sh=None, widths=None, pressure_rise=(5, 5),
+def _fixture(d, *, ca_att=None, sh_att=None, q3_ca=None, q3_sh=None, widths=None, pressure_rise=(5, 5), drop_plans=False,
+             drop_end=None, skips=(), drop_run=None,
              contract="OK", quality="AT_PARITY", plans=None, sh_serial="t", pool_override=None, toks_sh=2000.0,
              q3_sh_d2=None):
     os.makedirs(os.path.join(d, "quality"), exist_ok=True)
@@ -401,6 +442,8 @@ def _fixture(d, *, ca_att=None, sh_att=None, q3_ca=None, q3_sh=None, widths=None
             for r in Q2_RATES:
                 at = (sh_att if a == "sh" else ca_att)[r]
                 tk = (toks_sh if a == "sh" else 1000.0) * (r / 8)
+                if drop_run == (a, D, r):
+                    continue
                 w(f"{t}_r{r}.json", {"requests": [{"valid": True, "prompt_tokens": T, "text": "t"}], "summary": _summary(at, tk)})
                 nreq += 1
             for r in Q3_RATES:
@@ -414,9 +457,15 @@ def _fixture(d, *, ca_att=None, sh_att=None, q3_ca=None, q3_sh=None, widths=None
             hs = _health("sh" if a == "sh" else "ca", widths[a], D)
             if pool_override and (a, D) in pool_override:
                 hs["engine"]["kv_pool"] = pool_override[(a, D)]
+            if drop_plans:
+                hs["levers"].pop("attn_split_cap", None)
             w(f"health_{t}_start.json", hs)
-            w(f"health_{t}_end.json", _health("sh" if a == "sh" else "ca", widths[a], D, end=True, prompts=nreq))
+            if drop_end != (a, D):
+                w(f"health_{t}_end.json", _health("sh" if a == "sh" else "ca", widths[a], D, end=True, prompts=nreq))
     w("contract.json", {"verdict": contract, "why": [] if contract == "OK" else ["x"]})
+    with open(os.path.join(d, "summary.txt"), "w") as f:
+        for lab in skips:
+            f.write(f"SKIPPED {lab} host-limited deadline\n")
     w("quality/verdict.json", {"verdict": quality})
     w("quality/plans.json", plans or {"16": 5, "32": 2, "64": 1})
 
@@ -446,6 +495,13 @@ def self_test() -> int:
     case("plans differ", "NOT_LICENSED", plans={"16": 4, "32": 2, "64": 1})
     case("identity differs", "UNREAD", sh_serial="other")
     case("pool wrong", "VOID", pool_override={("sh", 1): "claim-all"})
+    case("servers recorded no plans", "NOT_LICENSED", drop_plans=True)
+    case("P117's plans lack B=64", "NOT_LICENSED", plans={"16": 5, "32": 2})
+    case("a server lost its end /health, no skip recorded", "VOID", drop_end=("sh", 2))
+    case("a server lost its end /health to a recorded deadline skip", "UNREAD", drop_end=("sh", 2),
+         skips=("e4b_sh_d2",))
+    case("a Q2 run missing, no skip recorded", "VOID", drop_run=("sh", 2, 16))
+    case("a Q2 run skipped at the deadline", "UNREAD", drop_run=("sh", 2, 16), skips=("e4b_sh_d2 rate 16",))
     fails = 0
     for name, got, want, why in cases:
         ok = got == want

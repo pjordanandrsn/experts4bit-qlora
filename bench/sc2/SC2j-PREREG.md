@@ -115,8 +115,16 @@ rate, so it adds little beyond attainment. It guards against a ceiling won on at
 second lag.
 
 The verdict is REGRESSED if, in both draws, `sh`'s attainment at any Q2 rate at or below `ca`'s ceiling is below the
-lower `ca` server's − 0.05, or the same holds on Q3. It is NOT_LICENSED otherwise, with the failed clause named. A
-server lost to the deadline makes the reading UNREAD, never SHARED_LICENSED.
+lower `ca` server's − 0.05, or the same holds on Q3. It is NOT_LICENSED otherwise, with the failed clause named.
+
+**Every gate fails closed.** A missing, None or empty input never passes:
+- A server lost to the deadline makes the reading UNREAD, never SHARED_LICENSED. That holds only when the runner recorded
+  the deadline skip (`can_run`'s `SKIPPED` line for that server or rung).
+- A missing start or end `/health`, or a missing ladder run, WITHOUT a recorded skip is a crash or a lost server: VOID.
+- QUALITY needs every plan present: P117's at B = 16, 32 and 64, and each server's at every one of those buckets it
+  captures. A missing plan is QUALITY UNREAD.
+- CONTRACT needs `shared`'s `kv_blocks_waits` recorded as exactly 0; a missing count is VOID.
+- Each of these has a self-test case with its evidence removed.
 
 **Quality.**
 - The pool mode changes no token at matched width: the contract arm, gate 5.
@@ -170,7 +178,7 @@ the reserved blocks and the waits per ladder. The pool's derivation as G3 record
 ## Shakedown, proof and budget (bench/common rules 2-5)
 
 **$0 shakedown.**
-- The self-tests of the reducer (`sc2j_reduce.py`, 15 cases), the contract arm (`sc2j_contract.py`, 9) and the long
+- The self-tests of the reducer (`sc2j_reduce.py`, 21 cases), the contract arm (`sc2j_contract.py`, 10) and the long
   prompt pool (`sc2j_prompts.py`).
 - The box's checks on fixtures (`tests/test_sc2j_box.py`): the POOL check executed on every departure, the tripwire,
   the lane's constants held equal across files, Guard Fit's static form, the cap and ids, and the wiring.
