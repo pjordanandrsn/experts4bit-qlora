@@ -25,8 +25,8 @@ registered: K36 at one row, K37 at 2, 4 and 8.
 | 8 | 0.5081 | **0.5085** | 1.0108 | **1.0116** | PASS |
 
 Bars: I/D <= 0.70 and I/K <= 1.25, both on the upper bound and on its clock-adjusted value. Clock-adjusted bounds equal
-the raw ones (no arm ran a faster SM clock). I against D within 1.5e-2 in every rep (largest 0.0078). The full table is
-in [../../RESULTS-p229.md](../../RESULTS-p229.md).
+the raw ones by construction: clocks are sampled per M window, so the arms within an M share one clock median. I against
+D within 1.5e-2 in every rep (largest 0.0078). The full table is in [../../RESULTS-p229.md](../../RESULTS-p229.md).
 
 **Files:**
 - **What `SHA256SUMS` covers:** every file here.

@@ -19,8 +19,9 @@ bytes)?
 | 4 | 0.5136 | **0.5148** | 1.0272 | **1.0296** | PASS |
 | 8 | 0.5081 | **0.5085** | 1.0108 | **1.0116** | PASS |
 
-- **GO_ROWS_8.** Every read M up to 8 passes both bars on the upper bound and on its clock-adjusted value (equal here: no
-  arm ran a faster SM clock). `E4B_INT8_HEAD_ROWS` is licensed up to 8, its registered maximum.
+- **GO_ROWS_8.** Every read M up to 8 passes both bars on the upper bound and on its clock-adjusted value (equal by
+  construction: clocks are sampled per M window, so the arms within an M share one clock median). `E4B_INT8_HEAD_ROWS`
+  is licensed up to 8, its registered maximum.
 - At every M the route runs the head in about half the served path's time: a median 0.51 of D's.
 - At every M it stays within 3 % of the one-row int8 GEMV: a median 1.01 to 1.03 of K's.
 - **The instrument is sound.** The installed route was as registered (`rows_max` 8, K37 at plan (32, 256, 4) at every M from
@@ -49,7 +50,7 @@ bytes)?
   copy-rate floor is a conservative reference, not a bound.
 - **The timer:** each timed replay reads on a 2.048 µs grid. Many reps tie exactly, which is why I/D at M = 2 has an SE
   of 0, and why D/D2 at M = 8 is one grid step from 1.
-- **The clocks:** SM clock medians 2,865-2,872 MHz across all twelve arm-and-M cells, no cell clock-confounded. Power
+- **The clocks:** SM clock medians 2,865-2,872 MHz across the three M windows (sampled per window, not per arm). Power
   medians 238-334 W under the 575 W limit enforced in every sample.
 
 ## What follows (as registered)
