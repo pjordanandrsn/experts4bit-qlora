@@ -18,8 +18,9 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78
 STARTED_AT=$(date +%s)   # the arena must be written after this (the box's own bake, not a shipped file)
 GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949 # grouped-nf4-gemm v0.50.0 (gnf4#572): K39's prmt decode; P160's pin
 # the needs (PREREG "Cost"): the slowest measured fetch (806 s) and bake (362 s) x 1.5; the capture (load, 32 prefills,
-# 160+ eager steps with hooks); the bench: P160's 260 s at 16 rows, about 520 s at 32, x 3.5 (P156's 462 s inside it)
-NEED_FETCH=1210; NEED_BAKE=550; NEED_CAPTURE=900; NEED_BENCH=1800
+# 160+ eager steps with hooks); the bench runs P156's selection AND P160's confirmation: (462 + 260) s at 16 rows, about
+# 1,444 s at 32, x 1.50
+NEED_FETCH=1210; NEED_BAKE=550; NEED_CAPTURE=900; NEED_BENCH=2170
 INSTALL_TO_GATE_S=450   # the two installs and the self-tests (P224's allowance)
 RESERVE=600             # can_run's margin after a step: the reduce, the fetch-back and the teardown
 MIN_POWER_W=575   # P149's power floor (P152's, kept): a capped board refuses before the install, rc 17

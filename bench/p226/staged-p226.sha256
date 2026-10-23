@@ -1,5 +1,5 @@
 # P226's staged pieces, by the name the box sees them, and their sha256 at this registration (bench/p226/PREREG-p226.md)
-05093e321e996c365865f621d1025adb0ef9dd24e9b81104af269416fbe6b405  p226_run.sh
+948cc6d3146ca91cb1e09b4b704854d574e531eee590e45d1760524093af2826  p226_run.sh
 c7ee774da7a7b3291263b40f6ee6e5aebb250bd47e7f7b08116a74843b23090c  p226_capture.py
 c37c4c549cbe8b556ece7ad3691700e2b0aec8ef9aac783f9484ff6be26d8ab6  p226_bench.py
 749dd97ef4b3b6d4f8aa6cea835e34ae647f570bebebbb351adc6e382e0310e5  p226_reduce.py
