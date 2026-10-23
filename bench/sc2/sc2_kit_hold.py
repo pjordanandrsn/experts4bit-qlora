@@ -30,12 +30,14 @@ abbreviated or disagreeing is VOID. The record (``verdict_stack.json``) is a req
 
   check --hold <rev> [--base <rev>] [--at <rev>] [--e4b-sha SHA] [--out FILE]     exit 0 OK, 1 REFUSE
   verdict-stack --run <fetched sc1 dir> [--out FILE]                                exit 0 OK, 1 VOID
-  package-hold --base <rev> [--at <rev>] [--out FILE]                               exit 0 OK, 1 REFUSE
+  package-hold --base <rev> --e4b-sha SHA [--at <rev>] [--out FILE]               exit 0 OK, 1 REFUSE
+  verdict-stack --run <fetched sc1 dir> [--stack SHA] [--out FILE]                  (SC2j: --stack ea298854...)
 
-PACKAGE-HOLD (SC2j Amendment 2): a launch checkout later than a lane's registered launch commit, taken only for rule 8's
-fetch fix. It refuses unless the package under test is unchanged: the ``experts4bit_qlora/`` tree and the install
-metadata (``pyproject.toml``, ``MANIFEST.in``) are identical, the staged kit (``staged.sha256``) and ``make_pin.sh`` are byte-identical,
-and ``sc1_drive.sh`` differs at most by rule 8's one declared token.
+PACKAGE-HOLD (SC2j Amendment 3): the stack under test is pinned to the lane's registered launch commit ``base`` itself.
+The launch's ``E4B_SHA`` must be ``base`` in full (40 hex; missing, abbreviated or another commit refuses), so the box
+installs exactly that package. The kit checkout ``at`` may be later: its staged kit (``staged.sha256``) and
+``make_pin.sh`` must be byte-identical to ``base``'s, and ``sc1_drive.sh`` may differ at most by rule 8's one declared
+token. The package tree at ``at`` is not compared: the box never installs it.
   --self-test
 """
 import argparse
@@ -296,10 +298,11 @@ def check(git, hold, base=BASE, at=None, e4b_sha=None) -> dict:
     return rec
 
 
-def verdict_stack(run) -> dict:
-    """The fetched run's installed e4b commit (versions.txt) and launch E4B_SHA (summary.txt's KNOBS) against STACK."""
+def verdict_stack(run, stack=STACK) -> dict:
+    """The fetched run's installed e4b commit (versions.txt) and launch E4B_SHA (summary.txt's KNOBS) against ``stack``
+    (SC2f/h/i: STACK; SC2j Amendment 3: its pinned ea298854)."""
     from pathlib import Path
-    run, why = Path(run), []
+    run, why, STACK = Path(run), [], stack   # noqa: N806 -- the gate's subject, named as in the module
     vtxt = (run / "versions.txt").read_text() if (run / "versions.txt").is_file() else None
     stxt = (run / "summary.txt").read_text() if (run / "summary.txt").is_file() else None
     installed = re.findall(r"^e4b (\S+) @(\S+)$", vtxt or "", re.M)
@@ -320,24 +323,21 @@ def verdict_stack(run) -> dict:
             "installed": [{"version": v, "commit": c} for v, c in installed], "knobs_e4b": sorted(set(knobs))}
 
 
-PACKAGE_TREES = ("experts4bit_qlora",)
-PACKAGE_FILES = ("pyproject.toml", "MANIFEST.in", PIN, "bench/sc1/make_pin.sh")
+KIT_FILES = (PIN, "bench/sc1/make_pin.sh")
 
 
-def package_hold(git, base, at) -> dict:
-    """The launch checkout ``at`` against a lane's registered launch commit ``base``: the package, its install metadata
-    and the staged kit identical; the driver differing at most by rule 8's token."""
-    rec, why = {"base": base, "at": at}, []
+def package_hold(git, base, at, e4b_sha=None) -> dict:
+    """The stack pinned to ``base`` (``E4B_SHA`` == ``base`` in full) and the kit checkout ``at``: the staged kit and
+    make_pin.sh identical to ``base``'s, the driver differing at most by rule 8's token."""
+    rec, why = {"base": base, "at": at, "e4b_sha": e4b_sha}, []
     for k in ("base", "at"):
         full = git.sha(rec[k]) if rec[k] else None
         if not full:
             return {**rec, "verdict": "REFUSE", "why": [f"{k} {rec[k]!r} is not a readable commit"]}
         rec[k] = full
-    for t in PACKAGE_TREES:
-        a, b = git.tree(rec["at"], t), git.tree(rec["base"], t)
-        if a is None or a != b:
-            why.append(f"{t}/ differs from the registered launch commit (or is unreadable)")
-    for f in PACKAGE_FILES:
+    if e4b_sha != rec["base"]:
+        why.append(f"STACK: the launch's E4B_SHA is {e4b_sha!r}, not the pinned stack {rec['base']} (in full)")
+    for f in KIT_FILES:
         a, b = git.show(rec["at"], f), git.show(rec["base"], f)
         if a is None or a != b:
             why.append(f"{f} differs from the registered launch commit (or is unreadable)")
@@ -349,37 +349,30 @@ def package_hold(git, base, at) -> dict:
 
 
 def _package_self_test() -> list:
-    import hashlib as _h
     drv = 'pull_box() { local -a low=()\n' + PULL_BOX_RSYNC + ' x:/w/ ./\n}\n'
-    base = {"experts4bit_qlora/a.py": "x = 1\n", "pyproject.toml": "[project]\n", "MANIFEST.in": "i\n", PIN: "p\n",
-            "bench/sc1/make_pin.sh": "m\n", "bench/sc1/sc1_drive.sh": drv, "bench/other.md": "o\n"}
+    base = {"experts4bit_qlora/a.py": "x = 1\n", "pyproject.toml": "[project]\n", PIN: "p\n",
+            "bench/sc1/make_pin.sh": "m\n", "bench/sc1/sc1_drive.sh": drv}
+    B = "b" * 40
 
-    class FT(Fake):
-        def tree(self, rev, path):
-            t = self.trees.get(rev)
-            if t is None:
-                return None
-            items = sorted((k, v) for k, v in t.items() if k.startswith(path + "/"))
-            return _h.sha1(repr(items).encode()).hexdigest() if items else None
-
-    def run(**edits):
+    def run(e4b=B, **edits):
         at = dict(base)
         for k, v in edits.items():
-            k = {"pkg": "experts4bit_qlora/a.py", "pyproject": "pyproject.toml", "pin": PIN,
-                 "make_pin": "bench/sc1/make_pin.sh", "drive": "bench/sc1/sc1_drive.sh", "doc": "bench/other.md"}[k]
-            at[k] = v(at[k]) if callable(v) else v
-        return package_hold(FT({"B": base, "L": at}), "B", "L")["verdict"]
+            k = {"pkg": "experts4bit_qlora/a.py", "pin": PIN, "make_pin": "bench/sc1/make_pin.sh",
+                 "drive": "bench/sc1/sc1_drive.sh"}[k]
+            at[k] = v
+        return package_hold(Fake({B: base, "L": at}), B, "L", e4b_sha=e4b)["verdict"]
     nl = drv.replace("rsync -az --timeout", "rsync -az --no-links --timeout")
     return [
-        ("package: identical", run(), "OK"),
-        ("package: only rule 8's driver token", run(drive=nl), "OK"),
-        ("package: a doc elsewhere changed", run(doc="o2\n"), "OK"),
-        ("package: the package source changed", run(pkg="x = 2\n"), "REFUSE"),
-        ("package: pyproject changed", run(pyproject="[project]\nv=1\n"), "REFUSE"),
+        ("package: E4B_SHA = the pinned base, kit identical", run(), "OK"),
+        ("package: rule 8's driver token", run(drive=nl), "OK"),
+        ("package: the kit checkout's package changed (never installed)", run(pkg="x = 2\n"), "OK"),
+        ("package: E4B_SHA missing", run(e4b=None), "REFUSE"),
+        ("package: E4B_SHA another commit", run(e4b="c" * 40), "REFUSE"),
+        ("package: E4B_SHA abbreviated", run(e4b=B[:8]), "REFUSE"),
         ("package: the staged pin changed", run(pin="q\n"), "REFUSE"),
         ("package: make_pin changed", run(make_pin="n\n"), "REFUSE"),
         ("package: the driver changed beyond rule 8", run(drive=nl.replace("x:/w/", "y:/w/")), "REFUSE"),
-        ("package: base unreadable", package_hold(FT({"L": base}), "B", "L")["verdict"], "REFUSE"),
+        ("package: base unreadable", package_hold(Fake({"L": base}), B, "L", e4b_sha=B)["verdict"], "REFUSE"),
     ]
 
 
@@ -396,6 +389,14 @@ def _stack_self_test() -> list:
             if s is not None:
                 (Path(d) / "summary.txt").write_text(s)
             return verdict_stack(d)["verdict"]
+
+    def run_as(stack, v=None, s=None):
+        v = good_v.replace(STACK, stack) if v is None else v
+        s = good_s.replace(STACK, stack) if s is None else s
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "versions.txt").write_text(v)
+            (Path(d) / "summary.txt").write_text(s)
+            return verdict_stack(d, stack=stack)["verdict"]
     return [
         ("stack: both records name 36cdd2d4", run(), "OK"),
         ("stack: versions.txt missing", run(v=None), "VOID"),
@@ -409,6 +410,8 @@ def _stack_self_test() -> list:
         ("stack: no KNOBS e4b=", run(s="KNOBS box=N gnf4=x\n"), "VOID"),
         ("stack: abbreviated commit", run(v=good_v.replace(STACK, STACK[:8]), s=good_s.replace(STACK, STACK[:8])), "VOID"),
         ("stack: a second KNOBS line differs", run(s=good_s + f"KNOBS box=N e4b={other}\n"), "VOID"),
+        ("stack: --stack another pin, both records name it", run_as(other), "OK"),
+        ("stack: --stack another pin, records name 36cdd2d4", run_as(other, v=good_v, s=good_s), "VOID"),
     ]
 
 
@@ -535,6 +538,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("cmd", nargs="?", choices=("check", "verdict-stack", "package-hold"))
     ap.add_argument("--run")
+    ap.add_argument("--stack", default=STACK)
     ap.add_argument("--hold", default=HOLD)
     ap.add_argument("--base", default=BASE)
     ap.add_argument("--at")
@@ -548,7 +552,7 @@ def main(argv=None) -> int:
     if a.cmd == "package-hold":
         if not a.base or a.base == BASE:
             ap.error("package-hold needs --base <the lane's registered launch commit>")
-        v = package_hold(Git(a.repo), a.base, a.at or "HEAD")
+        v = package_hold(Git(a.repo), a.base, a.at or "HEAD", e4b_sha=a.e4b_sha)
         if a.out:
             with open(a.out, "w") as f:
                 json.dump(v, f, indent=1)
@@ -557,7 +561,7 @@ def main(argv=None) -> int:
     if a.cmd == "verdict-stack":
         if not a.run:
             ap.error("verdict-stack needs --run")
-        v = verdict_stack(a.run)
+        v = verdict_stack(a.run, stack=a.stack)
         if a.out:
             with open(a.out, "w") as f:
                 json.dump(v, f, indent=1)

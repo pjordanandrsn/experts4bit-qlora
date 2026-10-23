@@ -306,3 +306,35 @@ runs it on registered commits.
 
 **Unchanged:** every arm, gate, threshold, rate, guard, cap and cost; strike 1 of 2; proofs started 1 of 2; the next
 proof `sc2j-prove-2`.
+
+### Amendment 3 (registered before any SC2j reading): the stack under test is pinned to `ea298854`
+
+**Why.** Amendment 2 moved the launch checkout to the rule-8 fix's merge (`5c9579bb`) and required its package to equal
+Amendment 1's merge (`ea298854`). Between the two, an opt-in training change (`E4B_TRAIN_DETERMINISTIC`: `train.py`, a
+new `engines/train_determinism.py`, four lines of `engines/layer_major.py`) changed `experts4bit_qlora/`. So
+`package-hold` refused at `5c9579bb` and would refuse at every later `main` commit. Rather than judge which files
+matter to serving, the stack is pinned exactly, as SC2f, SC2h and SC2i pin theirs.
+
+**The change.**
+- The launch command sets `E4B_SHA=ea298854139fc6b5ea9bddcb392b3d82d3b9ef6d` (Amendment 1's merge), which
+  `sc1_drive.sh` uses in place of its checkout's `HEAD`. The box installs exactly that package, and its tripwire still
+  refuses (rc 9) unless the installed commit equals `E4B_SHA`. This supersedes Amendment 2's "the stack under test is
+  that checkout's `HEAD`".
+- The kit checkout is a `main` commit at or after this amendment's merge. Before the create,
+  `python bench/sc2/sc2_kit_hold.py package-hold --base ea298854 --e4b-sha "$E4B_SHA" --at HEAD --out
+  <run>/package_hold.json` must read OK, and its record is kept with the run. It refuses unless `E4B_SHA` is `ea298854`
+  in full (missing, abbreviated or another commit refuses), `staged.sha256` and `make_pin.sh` are byte-identical to
+  `ea298854`'s, and `sc1_drive.sh` differs at most by rule 8's one token on `pull_box`'s rsync line. It does not compare
+  the kit checkout's package, because the box never installs it. Measured: OK with `E4B_SHA=ea298854` at `5c9579bb`;
+  REFUSE with `E4B_SHA=5c9579bb`.
+- **The stack is a VOID condition of the rule.** A box verdict stands only when
+  `python bench/sc2/sc2_kit_hold.py verdict-stack --run <run>/sc1 --stack ea298854139fc6b5ea9bddcb392b3d82d3b9ef6d
+  --out <run>/verdict_stack.json` reads OK: `versions.txt`'s installed e4b commit and every `KNOBS ... e4b=` line of
+  `summary.txt` both name `ea298854`. Otherwise the read is VOID. `verdict_stack.json` is a required results file: a
+  results PR or re-derivation without it, or with it not OK, reads VOID.
+- Self-tests refuse a missing, abbreviated or other `E4B_SHA`, a changed kit file and a driver change beyond rule 8,
+  and `verdict-stack` against another pin. `tests/test_sc2_kit_hold.py` runs both on registered commits and on a real
+  fetched run's records.
+
+**Unchanged:** every arm, gate, threshold, rate, guard, cap and cost; strike 1 of 2; proofs started 1 of 2; the next
+proof `sc2j-prove-2`.
