@@ -274,6 +274,58 @@ def test_the_reducer_reads_real_engine_records():
     assert R.bucket_faults("B0a", {"by_bucket": {**b0, "16": partial}})
 
 
+#: Review's real records from other lanes' committed receipts, each sha256-pinned as committed. Every dict below is read
+#: verbatim from its receipt; none is subset or typed.
+REAL = {
+    "p226_k25": ("bench/p226/receipts/p226-5090-1/capture.json",
+                 "7be6cdaac6c5f12fcb6c70c61708a834a68e1766eb34aca44b20ef5601258451"),
+    "sv3_mixed": ("bench/sv3/receipts/sv3-5090-1/q36_g16.json",
+                  "e641d49999e4c60c55e896b524bc1203d345c1e13a125ac4a9d8df3b6156d1b6"),
+    "p115d_k33": ("bench/p115/receipts/p115d-5090-1/arm_D0a.json",
+                  "7cce4e9cdead31c996ddd487d19ec69fcc01ccdf23510ffe0b63c38c488de307"),
+    "fam_zero": ("bench/fam/receipts/fam-gptoss-1/fam_gptoss_anchor_ON_auto.json",
+                 "f570fe4cf247a549e9fe7a03783b1e54c397f3da7a18da6df0bb3d0c57afd9af"),
+}
+
+
+def _real(name):
+    import json
+    path, sha = REAL[name]
+    raw = (REPO / path).read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == sha, f"{path} changed"
+    return json.loads(raw)
+
+
+def test_the_bucket_gates_on_other_lanes_real_records():
+    """Review's set: a pure-K25 route tally (P226), a MIXED singleton + K25 tally (SV3), a dispatch tally with K33
+    (P115d) and an all-zero one (fam). Pure singleton is P227's verbatim B record (test above)."""
+    R = _load("p231_reduce")
+    k25 = _real("p226_k25")["route"]["route_seen_in_window"]
+    mixed = _real("sv3_mixed")["expert_routes_seen"]
+    k33 = _real("p115d_k33")["dispatch_build"]
+    zero = _real("fam_zero")["cells"]["wikitext|12|A"]["dispatch"]
+    single = _p227_engaged()["2"]["B"]["route"]
+    assert set(zero) == set(R.GNF4_DISPATCH_KEYS) == set(k33), "the receipts name exactly the counters P231 requires"
+    assert R._routes(mixed) == {"nf4_singleton": 160, "nf4_k25": 480, "nf4_mtile_captured": 1280}
+    tile, per_row = {"route": k25, "dispatch": zero}, {"route": single, "dispatch": k33}
+    b0 = {"1": per_row, "2": tile, "4": tile, "8": tile, "16": tile}
+    b1 = {"1": per_row, "2": per_row, "4": per_row, "8": per_row, "16": tile}
+    assert R.bucket_faults("B0a", {"by_bucket": b0}) == [] and R.bucket_faults("B1a", {"by_bucket": b1}) == []
+    # a real mixed tally where B1 registers the per-row route alone: refused
+    assert R.bucket_faults("B1a", {"by_bucket": {**b1, "4": {"route": mixed, "dispatch": k33}}})
+    # a real K33 dispatch where B0 registers the tile route: refused
+    assert R.bucket_faults("B0a", {"by_bucket": {**b0, "4": {"route": k25, "dispatch": k33}}})
+    # the quality gates on the same real records: ON on the mixed tally is refused, OFF with K33 is refused
+    on, off = R._fake_quality("on"), R._fake_quality("off")
+    on["route_measure"], on["dispatch_measure"] = mixed, k33
+    assert R.quality_faults(R._fake_quality("off"), on, R.E)
+    off["route_measure"], off["dispatch_measure"] = k25, k33
+    assert R.quality_faults(off, R._fake_quality("on"), R.E)
+    off["dispatch_measure"] = zero
+    on["route_measure"] = single
+    assert R.quality_faults(off, on, R.E) == []
+
+
 def test_the_runner_finishes_on_the_verdict():
     assert ('case "$V" in LICENSED|SLOWER|QUALITY_FAIL|FUNCTION_FAIL) finish 0;; *) say "P231 $V -- no reading"; '
             'finish 27;; esac') in RUN
