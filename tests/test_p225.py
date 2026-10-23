@@ -321,6 +321,7 @@ def test_amendment_1_adds_exactly_the_eight_refusal_retry_ids():
     assert "p225-5090-4" not in RUN and "p225-5090-4" not in DRIVE          # the 3-box-started cap is not widened
     assert "**`p225-5090-r1` to `p225-5090-r8`**, for ANY" in PREREG
     assert "**The ids are labels, not budget.**" in PREREG
+    assert "| **NOT_RUN** (Amendment 1) |" in PREREG
 
 
 def test_no_shakedown_and_no_fixture_generation():
