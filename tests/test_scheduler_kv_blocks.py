@@ -162,3 +162,28 @@ def test_blocks_of_is_the_ceiling_over_prompt_plus_new_tokens():
     s.add_request(list(range(1, 18)), 16)
     q = s.queue
     assert s.blocks_of(q[0]) == 2 and s.blocks_of(q[1]) == 3
+
+
+def test_every_exit_releases_the_reservation_exactly_once():
+    """Finish by length, finish on a stop id, abort mid-prefill, abort mid-decode: each frees its blocks once, so the
+    pool never leaks or double-frees over many cycles."""
+    r = Runner()
+    s = ContinuousScheduler(runner=r, clock=lambda: 0.0, max_seqs=2, chunk_tokens=2, kv_blocks=8, block_tokens=4)
+    for cycle in range(20):
+        a = s.add_request(list(range(1, 9)), 4)                  # 3 blocks; prefill takes 4 steps at chunk 2
+        b = s.add_request(list(range(1, 5)), 6, stop_ids=None)   # 3 blocks
+        s.step()
+        assert s.kv_blocks_reserved == 6
+        if cycle % 3 == 0:
+            assert s.abort(a)                                    # mid-prefill
+        for _ in range(3):
+            s.step()
+        if cycle % 3 == 1 and b in s.active:
+            assert s.abort(b)                                    # mid-decode
+        s.run_until_idle(max_steps=100)
+        assert s.kv_blocks_reserved == 0 and not s._reserved, cycle
+    stop_tok = Runner._next(list(range(1, 5)))                  # the first token request c will emit
+    c = s.add_request(list(range(1, 5)), 8, stop_ids=[stop_tok])
+    s.run_until_idle(max_steps=100)
+    done = {q.rid: q for q in s.done}
+    assert done[c].finish_reason == "stop" and s.kv_blocks_reserved == 0

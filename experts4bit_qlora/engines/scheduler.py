@@ -188,8 +188,10 @@ class ContinuousScheduler:
     admitted only if a slot is free AND the blocks already reserved plus its
     need fit ``kv_blocks``, and its reservation is released when its slot
     is freed. FIFO is kept: a head that does not fit waits, and nothing
-    behind it is admitted first. A request that could never fit is refused
-    at ``add_request``. ``None`` (the default) admits as before.
+    behind it is admitted first. That head-of-line blocking is by design:
+    letting smaller requests jump a waiting head would starve long prompts
+    under load. A request that could never fit is refused at
+    ``add_request``. ``None`` (the default) admits as before.
     """
 
     def __init__(self, *, runner: StepRunner, max_seqs: int = 8,
