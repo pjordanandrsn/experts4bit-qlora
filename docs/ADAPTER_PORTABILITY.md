@@ -245,8 +245,10 @@ module, it compares each fingerprint the manifest records with the served base's
   Why a recorded hash and not a re-compression on the server: the compression's offset is `flat.mean()` on the
   training device, and torch's CUDA reduction splits by the device's SM count, so its fp32 rounding can differ between
   GPU models; the offset is added to every dequantized value. An absmax is a max over 64 weights: exact and
-  order-free, so the fp32 absmax's hash is the same wherever it is computed (training's quantizer and the bake reach
-  the same bytes, tested on a real `bake_nf4` arena).
+  order-free, so the fp32 absmax's hash should not depend on the device that computes it. What is TESTED is the CPU:
+  training's quantizer and the bake reach the same bytes on a real `bake_nf4` arena (CI). A CUDA-trained adapter
+  against a CPU-baked arena is read by the GPU smoke before this ships; until that record exists, the cross-device
+  claim is the argument above, not a reading.
 - `/health` carries `adapter.fingerprints`: per scope, the trained and served sha256, the module counts, the seconds and
   the status.
 
