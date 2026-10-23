@@ -322,6 +322,19 @@ to check: 103 s (P226's reading), 184 s (`p225-5090-2`, which passed the fit), 4
   300 s staging margin, so an allowance below the launcher's own ssh wait cannot be registered again.
 - It is pre-data: no box has started. The lane resumes from its merge commit on `p225-5090-r2`.
 
+## Amendment 3 (pre-data): brotli >= 1.2.0 beside the unpinned huggingface_hub
+
+The box installs `huggingface_hub` unpinned (`>=0.23`). Its newest releases fetch over httpx and decode brotli with
+`Decompressor.process(..., output_buffer_limit=...)`, which needs **brotli >= 1.2.0**. The image ships an older brotli,
+so the model fetch raises a TypeError whenever the HF edge serves a file br-encoded. It is host- and edge-dependent: some
+boxes fetch cleanly, and others die at the fetch (another lane's explore box, rc 22, 2026-10-23).
+- **The change:** the runner's install line adds `"brotli>=1.2.0"` beside `"huggingface_hub>=0.23"`, and the staged
+  pin of the runner moves with it. Nothing else changes: no need, alarm, floor, rule, cap or id.
+- **Before it merges** (the maintainer's ruling, 2026-10-23): a box that dies at the fetch from this cause, with the
+  brotli TypeError in its receipt, is a launch fault, not a strike.
+- It is pre-data: no box of this lane has reached a reading. A box launched after it merges launches from its merge
+  commit.
+
 ## What this lane cannot say
 
 - Nothing about expert adapters (D0) or their serving.

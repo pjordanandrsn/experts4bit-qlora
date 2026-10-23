@@ -173,3 +173,8 @@ def test_the_runner_finishes_on_the_verdict():
     assert (R.SELF_LO, R.SELF_HI, R.KEEP_BAR, R.SLOWER_BAR) == (0.995, 1.005, 1.005, 0.995)
     for s in ("[0.995, 1.005]", "1.005", "0.995"):
         assert s in PREREG, s
+
+
+def test_amendment_1_pins_brotli_beside_the_unpinned_hub():
+    assert '"huggingface_hub>=0.23" "brotli>=1.2.0"' in RUN
+    assert "## Amendment 1 (pre-data): brotli >= 1.2.0 beside the unpinned huggingface_hub" in PREREG

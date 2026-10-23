@@ -196,6 +196,19 @@ id. A pre-create refusal (no instance) uses no id.
 - **Locally:** the box's self-test (10 cases) and the reducer's (38), and `tests/test_p230.py`, pass. Triton does not
   install on the development hosts, so the premise's test counts are read from the sources at the pinned commit.
 
+## Amendment 1 (pre-data): brotli >= 1.2.0 beside the unpinned huggingface_hub
+
+The box installs `huggingface_hub` unpinned (`>=0.23`). Its newest releases fetch over httpx and decode brotli with
+`Decompressor.process(..., output_buffer_limit=...)`, which needs **brotli >= 1.2.0**. The image ships an older brotli,
+so the model fetch raises a TypeError whenever the HF edge serves a file br-encoded. It is host- and edge-dependent: some
+boxes fetch cleanly, and others die at the fetch (another lane's explore box, rc 22, 2026-10-23).
+- **The change:** the runner's install line adds `"brotli>=1.2.0"` beside `"huggingface_hub>=0.23"`, and the staged
+  pin of the runner moves with it. Nothing else changes: no need, alarm, floor, rule, cap or id.
+- **Before it merges** (the maintainer's ruling, 2026-10-23): a box that dies at the fetch from this cause, with the
+  brotli TypeError in its receipt, is a launch fault, not a strike.
+- It is pre-data: no box of this lane has reached a reading. A box launched after it merges launches from its merge
+  commit.
+
 ## What this lane cannot say
 
 - Nothing about SC1's int4 configuration (P113's), other families, other cards, or batch sizes between 2 and 15.
