@@ -10,7 +10,10 @@ import ast
 import hashlib
 import importlib.util
 import inspect
+import os
 import pathlib
+import re
+import subprocess
 import sys
 
 import pytest
@@ -223,7 +226,7 @@ def test_build_engine_applies_it_after_the_dense_gemv_and_before_any_capture():
     src = inspect.getsource(sp.build_engine)
     at = [src.index(s) for s in ("_apply_fusions(model, cfg", "apply_dense_gemv_bw(model,",
                                  "apply_int8_head_bw_resolved(model, cfg)", "runner.enable_decode_graphs(",
-                                 'info["int8_head_bw"] = {**int8_head, "engagement"')]
+                                 'info["int8_head_bw"] = {**int8_head, "rows": int8_head_rows, "engagement"')]
     assert at == sorted(at), at
 
 
@@ -238,3 +241,166 @@ def test_the_installed_quantizer_is_the_one_p150_ruled_on():
     w[5] = 0
     for got, want in zip(dg.quantize_rows_int8(w), _quantize(w)):
         assert torch.equal(got, want)
+
+
+# --- E4B_INT8_HEAD_ROWS (K2b, bench/dense-small-m/DESIGN-K2.md): the head's 2..value rows on K37's linear_i8 ----------
+
+class _RowsStub:
+    """Stands where K37's ``linear_i8`` would: records each call and computes ``s * (x @ q.T)`` in fp32, rounded once."""
+
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, x, q, s):
+        assert x.dim() == 2 and 2 <= x.shape[0] <= ih.MAX_ROWS and x.is_contiguous() and q.dtype == torch.int8
+        self.calls.append(x.shape[0])
+        return ((x.float() @ q.float().T) * s).to(torch.bfloat16)
+
+
+def _plan(n, k, m):
+    return (32, 256, 4) if m < 6 else (64, 128, 8)          # a plan that differs by M: the record keeps each
+
+
+@pytest.mark.parametrize("value,want", [("", 1), ("1", 1), (" 1 ", 1), ("2", 2), ("4", 4), ("8", 8), (" 8 ", 8)])
+def test_rows_value_reads_1_to_8(value, want):
+    assert ih.rows_value(value) == want
+
+
+@pytest.mark.parametrize("value", ["0", "9", "16", "auto", "2.0", "-2", "on"])
+def test_rows_value_refuses_everything_else(value):
+    with pytest.raises(ValueError, match="E4B_INT8_HEAD_ROWS=.*expected 1 to 8"):
+        ih.rows_value(value)
+
+
+def test_rows_1_changes_nothing_and_imports_nothing(monkeypatch):
+    monkeypatch.setitem(sys.modules, "dense_i8", None)              # a grouped-nf4-gemm without K37: never asked
+    plain = _Toy()
+    assert ih.apply_int8_head_rows(plain, 1) == {"rows_max": 1}     # not even the head swap is required
+    m = _Toy()
+    _apply(m)
+    assert ih.apply_int8_head_rows(m, 1) == {"rows_max": 1}
+    assert m.lm_head.rows_max == 1 and m.lm_head._linear is None
+
+
+@pytest.mark.parametrize("value", [0, 9, "4", 2.0, None])
+def test_apply_rows_refuses_a_value_outside_1_to_8(value):
+    with pytest.raises(ValueError, match="1 to 8"):
+        ih.apply_int8_head_rows(_Toy(), value)
+
+
+def test_rows_refuse_a_head_that_is_not_the_int8_head():
+    with pytest.raises(RuntimeError, match="E4B_INT8_HEAD_ROWS=4: the output head is Linear, not the int8 head"):
+        ih.apply_int8_head_rows(_Toy(), 4, linear=_RowsStub())
+
+
+def test_rows_refuse_a_package_without_k37_by_name(monkeypatch):
+    m = _Toy()
+    _apply(m)
+    monkeypatch.setitem(sys.modules, "dense_i8", None)
+    with pytest.raises(RuntimeError, match=r"E4B_INT8_HEAD_ROWS needs grouped-nf4-gemm with dense_i8.linear_i8 \(K37"):
+        ih.apply_int8_head_rows(m, 4)
+    assert m.lm_head.rows_max == 1 and m.lm_head._linear is None    # nothing half-applied
+
+
+def test_rows_take_k37_from_a_package_that_has_it(monkeypatch):
+    fake = type(sys)("dense_i8")
+    fake.linear_i8, fake.plan = _RowsStub(), _plan
+    monkeypatch.setitem(sys.modules, "dense_i8", fake)
+    m = _Toy()
+    _apply(m)
+    rec = ih.apply_int8_head_rows(m, 8)
+    assert rec == {"rows_max": 8, "kernel": "dense_i8.linear_i8 (K37)",
+                   "plan": {"2": [32, 256, 4], "3": [32, 256, 4], "4": [32, 256, 4], "5": [32, 256, 4],
+                            "6": [64, 128, 8], "7": [64, 128, 8], "8": [64, 128, 8]}}
+    m4 = _Toy()
+    _apply(m4)
+    assert ih.apply_int8_head_rows(m4, 4)["plan"] == {"2": [32, 256, 4], "3": [32, 256, 4], "4": [32, 256, 4]}
+    assert m.lm_head._linear is fake.linear_i8 and m.lm_head.rows_max == 8
+
+
+def test_rows_route_1_to_k36_2_to_value_to_k37_and_more_to_f_linear(monkeypatch):
+    m = _Toy(seed=5)
+    gemv, _ = _apply(m)
+    lin = _RowsStub()
+    assert ih.apply_int8_head_rows(m, 4, linear=lin) == {"rows_max": 4, "kernel": "dense_i8.linear_i8 (K37)",
+                                                         "plan": None}
+    monkeypatch.setattr(ih, "_on_device", lambda x: True)
+    head = m.lm_head
+    grid = head.q.double() * head.s.double()[:, None]
+    for rows in (2, 3, 4):
+        x = torch.randn(rows, 16).to(torch.bfloat16)
+        y = head(x.reshape(1, rows, 16))                            # a decode bucket's [B, 1, H] or [1, T, H]
+        assert y.shape == (1, rows, 40) and y.dtype == torch.bfloat16
+        ref = x.double() @ grid.T
+        assert bool(((y.reshape(rows, 40).double() - ref).abs() <= ref.abs() * 2.0 ** -8 + 2.0 ** -16).all())
+    strided = torch.randn(2, 32).to(torch.bfloat16)[:, ::2]          # two rows, not contiguous: COPIED and routed
+    assert head(strided).shape == (2, 40)
+    head(torch.randn(1, 16).to(torch.bfloat16))                     # one row: K36, as before
+    head(torch.randn(5, 16).to(torch.bfloat16))                     # past the bound: F.linear on the grid
+    with pytest.raises(RuntimeError, match="dtype"):
+        head(torch.randn(3, 16))                                    # fp32: F.linear, as the plain nn.Linear
+    monkeypatch.setattr(ih, "_on_device", lambda x: False)
+    head(torch.randn(3, 16).to(torch.bfloat16))                     # CPU: never a kernel
+    assert lin.calls == [2, 3, 4, 2] and gemv.calls == [(40, 16)]
+    assert head.routed == {2: 2, 3: 1, 4: 1, 1: 1} and head.passed == {5: 1, 3: 2}
+
+
+def test_rows_engagement_names_the_kernel_per_routed_row_count(monkeypatch):
+    m = _Toy()
+    _apply(m)
+    ih.apply_int8_head_rows(m, 8, linear=_RowsStub())
+    monkeypatch.setattr(ih, "_on_device", lambda x: True)
+    for rows in (1, 2, 4, 8, 16):                                   # the default buckets' captures
+        m.lm_head(torch.randn(rows, 16).to(torch.bfloat16))
+    assert ih.engagement(m) == {"modules": 1, "routed_modules_by_rows": {"1": 1, "2": 1, "4": 1, "8": 1},
+                                "passed_modules_by_rows": {"16": 1},
+                                "routed_kernel_by_rows": {"1": "K36 gemv_i8_bw", "2": "K37 linear_i8",
+                                                          "4": "K37 linear_i8", "8": "K37 linear_i8"}}
+
+
+def test_the_server_config_reads_the_rows_knob(monkeypatch):
+    monkeypatch.delenv("E4B_INT8_HEAD_ROWS", raising=False)
+    assert sp.PagedServeConfig.from_env().int8_head_rows == 1
+    monkeypatch.setenv("E4B_INT8_HEAD_ROWS", "8")
+    assert sp.PagedServeConfig.from_env().int8_head_rows == 8
+    monkeypatch.setenv("E4B_INT8_HEAD_ROWS", "9")
+    with pytest.raises(ValueError, match="expected 1 to 8"):
+        sp.PagedServeConfig.from_env()
+    assert sp.INT8_HEAD_ROWS_ENV == ih.ROWS_ENV == "E4B_INT8_HEAD_ROWS"
+
+
+def test_the_rows_knob_is_snapshotted_and_adapter_neutral():
+    """Declared in LEVER_ENV (so /health's levers_env shows it, and the adapter census in tests/test_paged_adapter.py
+    must classify it): neutral, since it widens the allowed int8 head's route and quantizes nothing itself."""
+    assert ih.ROWS_ENV in sp.LEVER_ENV and ih.ROWS_ENV in sp.ADAPTER_NEUTRAL_KNOBS
+    assert ih.ENV in sp.ADAPTER_ALLOWED_LEVERS and ih.ROWS_ENV not in sp.ADAPTER_REFUSED_LEVERS
+
+
+def test_build_engine_widens_the_route_after_the_swap_and_before_any_capture():
+    src = inspect.getsource(sp.build_engine)
+    at = [src.index(s) for s in ("apply_int8_head_bw_resolved(model, cfg)",
+                                 'apply_int8_head_rows(model, getattr(cfg, "int8_head_rows", 1))',
+                                 "runner.enable_decode_graphs(",
+                                 'info["int8_head_bw"] = {**int8_head, "rows": int8_head_rows, "engagement"')]
+    assert at == sorted(at), at
+
+
+def test_the_rows_route_passes_interpreted_in_its_own_process():
+    """The real kernels (K36 at one row, K37's linear_i8 at 2..8) under Triton's interpreter, in a fresh process
+    (tests/test_int8_head_rows_interp.py; CI's suite imports triton compiled first). Skips without K37 or triton,
+    except under CI (``CI=true``): CI pins grouped-nf4-gemm 0.49.0, which carries K37, so there it must RUN, and a
+    skip fails. A green CI check is therefore the evidence that the real kernels ran."""
+    in_ci = os.environ.get("CI") == "true"
+    if not in_ci:
+        pytest.importorskip("triton")
+    here = pathlib.Path(__file__).resolve().parent
+    out = subprocess.run([sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider",
+                          str(here / "test_int8_head_rows_interp.py")], capture_output=True, text=True,
+                         cwd=here.parent, env={**os.environ, "TRITON_INTERPRET": "1"}, timeout=900)
+    last = (out.stdout.strip().splitlines() or [""])[-1]
+    if out.returncode in (0, 5) and re.match(r"1 skipped(, \d+ warnings?)? in ", last) and "without dense_i8" in out.stdout:
+        if in_ci:
+            pytest.fail("CI pins grouped-nf4-gemm 0.49.0, which carries K37: the interpreted route must run here")
+        pytest.skip("grouped-nf4-gemm without dense_i8 (K37)")
+    ok = out.returncode == 0 and re.match(r"7 passed, 4 skipped(, \d+ warnings?)? in ", last)   # CPU: no graphs
+    assert ok, out.stdout[-3000:] + out.stderr[-2000:]

@@ -41,6 +41,7 @@ def test_spec_is_off_by_default(monkeypatch):
 
 def test_a_valid_spec_config_passes():
     _cfg().validate()
+    _cfg(int8_head_rows=1).validate()          # K2b's knob at today's route combines; above 1 it is refused (below)
 
 
 @pytest.mark.parametrize("kw,why", [
@@ -49,6 +50,8 @@ def test_a_valid_spec_config_passes():
     (dict(spec_head=""), "E4B_PAGED_SPEC_HEAD"),
     (dict(graphs=False), "bucketed decode graphs"),
     (dict(decode_lookahead=True), "do not combine"),
+    (dict(int8_head_rows=2), "E4B_PAGED_SPEC and E4B_INT8_HEAD_ROWS=2 do not combine until a read covers them"),
+    (dict(int8_head_rows=8), "E4B_INT8_HEAD_ROWS=8 do not combine"),
     (dict(spec="off"), "E4B_PAGED_SPEC_K is set"),
 ])
 def test_spec_configs_that_cannot_run_are_refused(kw, why):

@@ -416,6 +416,16 @@ decode in 0.50.0. On an older package each resolves off, recorded.
   off. Unset, a head the swap refuses (tied, biased, int4, not bf16) or a kernel package without the int8 GEMV resolves
   it off, recorded, never a crash; an explicit `1` refuses them at startup. `0` restores the bf16 head. Reported in
   `levers.int8_head_bw`.
+  - **Opt-in: the int8 head at 2 to 8 rows (`E4B_INT8_HEAD_ROWS`, `1` to `8`; unset is `1`).** Without it, a call of
+    2 to 8 rows runs `F.linear` on the bf16 rounding of the grid, which reads twice the int8 bytes. With it, those
+    calls run grouped-nf4-gemm's int8 multi-row kernel (`dense_i8.linear_i8`, K37, 0.49.0 or later) over the same
+    codes and scales; one row keeps the int8 GEMV, and more rows keep `F.linear`. **Outputs change** at 2 to 8
+    requests, within bf16's output rounding of the same grid. No served read has run yet, so this is not a speed or
+    quality claim ([`bench/dense-small-m/DESIGN-K2.md`](../bench/dense-small-m/DESIGN-K2.md)). It is refused at startup
+    when the head is not on its int8 grid or the kernel package lacks K37, and together with speculative decode
+    (`E4B_PAGED_SPEC`), whose gate and draft were read with the head on `F.linear`, until a read covers the pair.
+    Unset imports nothing. Reported in `levers.int8_head_bw.rows`; which kernel each row count took is
+    `levers.int8_head_bw.engagement`.
 - **K25's codebook decode (`E4B_K25_LUT`, `prmt` on `qwen3_moe`).** The batched-decode expert GEMM (K25) decodes NF4
   codes through byte-permute table lookups (grouped-nf4-gemm K39, from 0.50.0) instead of the select tree. It is
   bit-identical to the tree. Sixteen requests decode 1.0925× as fast (the smallest of four ABBA pairs), and one is

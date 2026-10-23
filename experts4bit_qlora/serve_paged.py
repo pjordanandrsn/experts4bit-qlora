@@ -170,7 +170,7 @@ LEVER_ENV = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_I
              "E4B_INT4_ARTIFACT_DIR", "E4B_INT4_EXPECTED_FINGERPRINT", "E4B_INT4_DUMP_ARTIFACT_DIR",
              "E4B_INT4_ASSIGNMENT", "E4B_CALIB_LAYERS_PER_PASS", "E4B_INT4_KEEP_NF4",
              "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI", "E4B_FUSED_KV_APPEND",
-             "E4B_SERVE_ATTN_INT8")
+             "E4B_SERVE_ATTN_INT8", "E4B_INT8_HEAD_ROWS")
 FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
 # Under an adapter, a lever is classified by what it DEPENDS ON (docs/ADAPTER_PORTABILITY.md F4). REFUSED (refusal 5)
 # until a registered read gates it: (i) it re-quantizes an ADAPTED module (attention after the merge; experts once
@@ -218,6 +218,9 @@ ADAPTER_NEUTRAL_KNOBS = {
     "E4B_FUSE_ROUTER_EPI": ("the router's epilogue: reads the router weight, which no adapter trains; its store "
                             "rounds as torch's cast does"),
     "E4B_FUSED_KV_APPEND": "the paged KV cache's append kernel: no weights at all",
+    "E4B_INT8_HEAD_ROWS": ("routes the int8 head's 2..8 rows to K37 over the head's own codes and scales (K2b): it "
+                           "quantizes nothing and reads no calibration, and the head it widens is the allowed "
+                           "base-serving lever E4B_INT8_HEAD_BW"),
 }
 ADAPTER_ALLOW_ARENA_ENV = "E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA"
 ADAPTER_ACCEPT_BASE_ENV = "E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE"
@@ -275,6 +278,9 @@ DENSE_GEMV_BW_ENV = "E4B_DENSE_GEMV_BW"
 #: changes multi-row outputs too) and route its single-row decode GEMV through dense_gemv's gemv_i8_bw
 #: (engines/int8_head_bw.py). 0 or 1; unset resolves per family and head shape (INT8_HEAD_BW_DEFAULT_FAMILIES).
 INT8_HEAD_BW_ENV = "E4B_INT8_HEAD_BW"
+#: K2b (bench/dense-small-m/DESIGN-K2.md; engines/int8_head_bw.py): the int8 head's 2..value rows on grouped-nf4-gemm
+#: K37's linear_i8. 1 to 8; unset is 1, today's route (opt-in: no read has licensed a default)
+INT8_HEAD_ROWS_ENV = "E4B_INT8_HEAD_ROWS"
 # Lane P153's default for ``E4B_INT8_HEAD_BW`` (bench/p153/RESULTS-p153.md): an UNSET knob resolves to ``1`` on a
 # model_type here whose output head has a listed [N, K] shape, the shapes grouped-nf4-gemm K36 has a tuned plan for
 # (dense_gemv.PLANS_I8), and to ``0`` everywhere else, with the reason recorded. qwen3_moe at 151936 x 2048 takes it on
@@ -574,6 +580,12 @@ def _int8_head_bw_env(value: str) -> str:
     raise ValueError(f"{INT8_HEAD_BW_ENV}={value!r}: expected '0' or '1' (unset: per family and head shape, lane P153)")
 
 
+def _int8_head_rows_env(value: str) -> int:
+    """``E4B_INT8_HEAD_ROWS`` as the server reads it (:func:`~.engines.int8_head_bw.rows_value`): 1 to 8, unset 1."""
+    from .engines.int8_head_bw import rows_value
+    return rows_value(value)
+
+
 def resolve_int8_head_bw(value: str, model_type, head_shape, *, refusal=None, kernel_error=None) -> tuple:
     """``(mode, source)``: an explicit ``0`` / ``1`` passes through (``explicit``; the swap still refuses an ineligible
     head under ``1``). ``default`` resolves to ``1`` (``default-allowlisted``) only on a ``model_type`` in
@@ -716,6 +728,7 @@ class PagedServeConfig:
     attn_split_cap: str = FUSION_UNSET   # E4B_ATTN_SPLIT_CAP: 0 | 1..32, or "default" when unset (per family, P143)
     dense_gemv_bw: str = "0"             # E4B_DENSE_GEMV_BW: 0 | 1 (P151; grouped-nf4-gemm K35's gemv_bf16_bw)
     int8_head_bw: str = FUSION_UNSET     # E4B_INT8_HEAD_BW: 0 | 1, or "default" when unset (per family and head shape, P153)
+    int8_head_rows: int = 1              # E4B_INT8_HEAD_ROWS: 1 (today) | 2..8, the int8 head's rows on K37 (K2b)
     fusion_modes: dict = field(default_factory=dict)   # FUSION_KNOBS -> auto | 0 | 1 (_fusion_env), or "default" when
                                                        # unset (resolved per family at the build); a knob not named keeps
                                                        # its old reading: fuse_qkv, or the fold's own env var
@@ -777,6 +790,7 @@ class PagedServeConfig:
             attn_split_cap=_attn_split_cap_env(env(ATTN_SPLIT_CAP_ENV, "")),
             dense_gemv_bw=env(DENSE_GEMV_BW_ENV, "0").strip() or "0",
             int8_head_bw=_int8_head_bw_env(env(INT8_HEAD_BW_ENV, "")),
+            int8_head_rows=_int8_head_rows_env(env(INT8_HEAD_ROWS_ENV, "")),
             torch_threads=int(env("E4B_PAGED_TORCH_THREADS", "8")),
             max_tokens_cap=int(env("E4B_PAGED_MAX_TOKENS", "0")),
             max_queue=int(env("E4B_PAGED_MAX_QUEUE", "0")),
@@ -854,6 +868,11 @@ class PagedServeConfig:
             if self.decode_lookahead:
                 raise ValueError("E4B_PAGED_SPEC and E4B_PAGED_DECODE_LOOKAHEAD do not combine: each speculative step "
                                  "reads its accepted tokens back before the next is planned")
+            if self.int8_head_rows > 1:
+                raise ValueError(f"E4B_PAGED_SPEC and {INT8_HEAD_ROWS_ENV}={self.int8_head_rows} do not combine until "
+                                 "a read covers them: SD2's gate and draft were read with the head on F.linear at 2..4 "
+                                 f"rows, and K2b's served read is plain decode ({INT8_HEAD_ROWS_ENV}=1 or "
+                                 "E4B_PAGED_SPEC=off)")
         if not self.adapter and (self.adapter_allow_unverified_arena or self.adapter_accept_unverified_base):
             raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} are set but E4B_PAGED_ADAPTER "
                              f"is not")
@@ -1867,6 +1886,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # (unset: on for qwen3_moe at the head shape P153 read, else off with the reason recorded in info["int8_head_bw"])
     from .engines.int8_head_bw import engagement as int8_head_engagement
     int8_head = apply_int8_head_bw_resolved(model, cfg)
+    # K2b: the int8 head's 2..value rows on K37's linear_i8, before any capture (unset: 1, nothing imported); refused by
+    # name when the head did not resolve to int8 or the package lacks K37
+    from .engines.int8_head_bw import apply_int8_head_rows
+    int8_head_rows = apply_int8_head_rows(model, getattr(cfg, "int8_head_rows", 1))
 
     # proof of execution, the lanes' census (serve_stack.build_served_model) + their refusal rule
     try:
@@ -1935,7 +1958,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # during the build's captures and warm-ups: the engagement record a served read checks
     info["dense_gemv_bw"] = {**dense_gemv, "engagement": dense_gemv_engagement(model)}
     # P153: the head's record and, per row count, whether it routed or passed during the build's captures and warm-ups
-    info["int8_head_bw"] = {**int8_head, "engagement": int8_head_engagement(model)}
+    info["int8_head_bw"] = {**int8_head, "rows": int8_head_rows, "engagement": int8_head_engagement(model)}
     # E4B_K25_LUT as resolved at startup; which decode each K25 call took is prefill_routes()["seen"]["moe_k25_lut"]
     info["k25_lut"] = k25_lut
     # E4B_K25_PLAN as resolved at startup; which plan each K25 call took is prefill_routes()["seen"]["moe_k25_plan"]
