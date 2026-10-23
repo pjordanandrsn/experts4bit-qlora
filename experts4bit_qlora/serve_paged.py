@@ -1079,7 +1079,8 @@ class PagedEngine:
                     tr.mark("ops")
                 try:
                     plan = sched.step()
-                except Exception as e:  # noqa: BLE001
+                    self._dispatch()
+                except Exception as e:  # noqa: BLE001 -- a failed step or hand-off is the server's state
                     self.error = f"{type(e).__name__}: {e}"
                     self.state = "error"
                     log(f"engine step FAILED: {self.error}")
@@ -1090,7 +1091,6 @@ class PagedEngine:
                     if tr is not None:
                         tr.close()
                     return
-                self._dispatch()
                 if tr is not None:
                     if plan.is_empty:
                         tr.discard()
@@ -1139,40 +1139,63 @@ class PagedEngine:
             if stream.rid is not None and stream.rid in self._streams:
                 sched.abort(stream.rid)
 
-    def _push(self, stream: PagedStream, item) -> None:
+    def _push(self, stream: PagedStream, item, batch: Optional[list] = None) -> None:
+        """Hand ``item`` to ``stream``'s event-loop queue. With ``batch`` the hand-off is appended there and the caller
+        wakes the loop once for the lot (:meth:`_dispatch`); without it the loop is woken now."""
         if item[0] in (_DONE, _ERROR):
             if stream.finished:
                 return
             stream.finished = True
             with self._cv:
                 self._inflight = max(0, self._inflight - 1)
+        if batch is not None:
+            batch.append((stream.queue, item))
+        else:
+            self._wake(stream.queue.put_nowait, item)
+
+    def _wake(self, fn, arg) -> None:
         loop = self._loop
         try:
             if loop is not None and not loop.is_closed():
-                loop.call_soon_threadsafe(stream.queue.put_nowait, item)
+                loop.call_soon_threadsafe(fn, arg)
         except RuntimeError:     # loop closed under us (shutdown): nobody is listening
             pass
 
+    @staticmethod
+    def _fanout(items: list) -> None:
+        """On the event loop: one step's hand-offs, in the engine's order (the queues are unbounded, so none raises)."""
+        for queue, item in items:
+            queue.put_nowait(item)
+
     def _dispatch(self) -> None:
+        """One step's tokens and finishes to their streams, with ONE cross-thread wakeup for the step. A wakeup per
+        stream was the largest piece of the exposed host gap at 64 slots (``dispatch`` in
+        ``bench/h2h-2026-10-02/sc2e/decode64/README.md``, section (c))."""
         sched = self.parts.scheduler
-        for rid, req in sched.active.items():
-            st = self._streams.get(rid)
-            if st is not None and len(req.out) > st.sent:
-                self._push(st, (_TOKENS, req.out[st.sent:]))
-                st.sent = len(req.out)
-        for lst, idx_attr in ((sched.done, "_done_idx"), (sched.aborted, "_abort_idx")):
-            i = getattr(self, idx_attr)
-            while i < len(lst):
-                req = lst[i]
-                i += 1
-                st = self._streams.pop(req.rid, None)
-                if st is None:
-                    continue
-                rest = req.out[st.sent:]
-                st.sent = len(req.out)
-                rec = self._record(req, st)
-                self._push(st, (_DONE, (rest, req.finish_reason or "length", rec)))
-            setattr(self, idx_attr, i)
+        out: list = []
+        try:
+            for rid, req in sched.active.items():
+                st = self._streams.get(rid)
+                if st is not None and len(req.out) > st.sent:
+                    self._push(st, (_TOKENS, req.out[st.sent:]), out)
+                    st.sent = len(req.out)
+            for lst, idx_attr in ((sched.done, "_done_idx"), (sched.aborted, "_abort_idx")):
+                i = getattr(self, idx_attr)
+                while i < len(lst):
+                    req = lst[i]
+                    i += 1
+                    st = self._streams.get(req.rid)
+                    if st is None:
+                        continue
+                    rec = self._record(req, st)       # before the pop: a stream whose record fails is still failed
+                    del self._streams[req.rid]
+                    rest = req.out[st.sent:]
+                    st.sent = len(req.out)
+                    self._push(st, (_DONE, (rest, req.finish_reason or "length", rec)), out)
+                setattr(self, idx_attr, i)
+        finally:   # what was handed off before a failure still reaches its streams (they are already marked finished)
+            if out:
+                self._wake(self._fanout, out)
 
     def _record(self, req: Request, st: PagedStream) -> dict:
         rec = {
