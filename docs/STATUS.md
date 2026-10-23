@@ -410,6 +410,14 @@ small: 1.0198× at one request (the smaller of two ABBA pairs), SLOWER against i
 projects only the final prompt position through the LM head (#1337).
 `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`.
 
+**The per-row expert GEMV at 2-8 decode tokens (`E4B_NF4_SMALLM_BW=1`, opt-in).** In a captured microbench of the expert
+call (one RTX 5090, lane P227), the per-row route runs Mixtral-8x7B's experts in a median 0.36 and 0.46 of K25's time
+at two and four tokens (upper bounds 0.3601 and 0.4655, PASS against 0.70), and Qwen3-30B-A3B's in a median 0.74 and
+0.90 (upper bounds 0.7478 and 0.9047, MISS). No served speed is claimed: a served read on Mixtral needs its own
+registration, and the knob stays off by default.
+`e4b.kernel.p227.per-row-gemv.mixtral.5090.2026-10-23`, `e4b.kernel.p227.per-row-gemv.qwen3.5090.2026-10-23`
+([P227](../bench/p227/RESULTS-p227.md)).
+
 **The tile table over 4 programs.** `E4B_INT4_TILE_PROGRAMS=4` splits the one-launch cumsum tile table over 4 programs
 (#1433, grouped-nf4-gemm #524). On Qwen3-30B-A3B int4 it makes the captured 64-row step about 15.5 % faster with identical
 tokens: P126 read DEFAULT_ON_4 on attempt 2, under its Amendment 1. It is the default (`auto`) since #1476; see the

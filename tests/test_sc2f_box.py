@@ -169,17 +169,17 @@ def test_the_lane_tools_pass_their_self_tests(script):
 
 
 def test_box_n_is_wired_like_box_l():
-    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P) ;;' in RUN
+    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q) ;;' in RUN
     assert 'case "$BOX" in N|O) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac' in RUN      # v0.50.0 (Amendment 3)
-    assert "C|D|E|F|G|H|I|J|K|L|M|N|O|P) BASEPY=python3;;" in RUN
+    assert "C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q) BASEPY=python3;;" in RUN
     torch = next(x for x in RUN.splitlines() if '"torch==2.8.0"' in x and "pipx logs/pip_torch.log" in x)
     assert '[ "$BOX" = N ]' in torch
-    assert RUN.count('os.environ["TRIP_BOX"] in ("F", "G", "H", "I", "J", "K", "L", "N", "O", "P")') == 2   # main's routes, no pins
+    assert RUN.count('os.environ["TRIP_BOX"] in ("F", "G", "H", "I", "J", "K", "L", "N", "O", "P", "Q")') == 2   # main's routes, no pins
     assert "  N) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; . $W/sc2f_box_n.sh; install_sc2_client ;;" in RUN
-    assert 'N) PROVE_NEEDS="sc2client";;' in RUN and '[ "$BOX" = N ] && prove_n' in RUN and "N) box_n;; O) box_o;; P) box_p;; esac" in RUN
-    assert 'case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P) ;;' in DRIVE
-    assert "sc2f_box_n.sh sc2f_reduce.py sc2f_basis.py sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py; do STAGE=" in DRIVE
-    assert 'sc2c_*|sc2d_*|sc2e_*|sc2f_*|sc2h_*|sc2i_*) src="$SC2/$name";;' in DRIVE
+    assert 'N) PROVE_NEEDS="sc2client";;' in RUN and '[ "$BOX" = N ] && prove_n' in RUN and "N) box_n;; O) box_o;; P) box_p;; Q) box_q;; esac" in RUN
+    assert 'case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q) ;;' in DRIVE
+    assert "sc2f_box_n.sh sc2f_reduce.py sc2f_basis.py sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py sc2j_box_q.sh sc2j_reduce.py sc2j_contract.py sc2j_prompts.py; do STAGE=" in DRIVE
+    assert 'sc2c_*|sc2d_*|sc2e_*|sc2f_*|sc2h_*|sc2i_*|sc2j_*) src="$SC2/$name";;' in DRIVE
     pin = (REPO / "bench" / "sc1" / "staged.sha256").read_text()
     for name in ("sc2f_box_n.sh", "sc2f_reduce.py", "sc2f_basis.py"):
         assert re.search(rf"^[0-9a-f]{{64}}  {re.escape(name)}$", pin, re.M), name

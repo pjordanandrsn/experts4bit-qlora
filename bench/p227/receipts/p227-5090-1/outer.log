@@ -1,0 +1,32 @@
+KNOBS e4b=b714636349649de20579c89613d8aeaecce4b483 gnf4=41ef086e6a3e2be5b158ff1bb38e0de67862a949 gpu_class=5090 min_disk_gb=20 min_ram_gb=32 min_power_w=575 need_bench=1500
+CUDA_PROBE ok
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.126.18, GPU-965eee19-7929-a50e-dfdd-0ff0151769d7, 12.0
+power.limit,clocks.max.sm 575.00 W, 3090 MHz
+CPU(s):                                  128
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 9334 32-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             755         467         117           0         170         282
+overlay          40G   15M   40G   1% /
+POWER_LIMIT_W 575 (floor 575)
+GUARD_FIT fit=2700s need=3375s left=4143s
+[2026-10-23T13:32:09Z] p227: install e4b @b714636349649de20579c89613d8aeaecce4b483 + gnf4 @41ef086e6a3e2be5b158ff1bb38e0de67862a949 (image python; transformers 5.17.0; torch held at 2.8.0)
+tripwire OK: 0.57.0 gnf4 0.50.0 torch 2.8.0+cu128
+e4b 0.57.0 @b714636349649de20579c89613d8aeaecce4b483
+gnf4 0.50.0 @41ef086e6a3e2be5b158ff1bb38e0de67862a949
+torch 2.8.0+cu128
+triton 3.4.0
+cc (12, 0)
+sm_count 170
+p227_bench self-test OK (15 checks)
+p227_reduce self-test OK (45 checks)
+premise rc=0: 25 passed, 25 warnings in 13.62s
+premise ok
+[2026-10-23T13:33:12Z] p227: microbench (alarm=2400)
+bench rc=0 P227_BENCH rc=0 in 316.1 s; clocks n=22823 error=None
+
+[2026-10-23T13:38:40Z] p227: reduce
+P227_VERDICT qwen3=MISS mixtral=PASS
+  qwen3: MISS -- T=2: B/K 0.7440, upper bound 0.7478, clock-adjusted 0.7478; T=4: B/K 0.9002, upper bound 0.9047, clock-adjusted 0.9047; not both <= 0.7 at T = [2, 4]
+  mixtral: PASS -- T=2: B/K 0.3565, upper bound 0.3601, clock-adjusted 0.3601; T=4: B/K 0.4608, upper bound 0.4655, clock-adjusted 0.4655; both <= 0.7 at T = [2, 4]
+[2026-10-23T13:38:40Z] p227: TP_DONE rc=0
