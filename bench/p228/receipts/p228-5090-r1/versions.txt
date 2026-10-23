@@ -1,0 +1,5 @@
+e4b 0.57.0 @32fda64d2e606deb429b72c862a14bbbf493ba99
+torch 2.8.0+cu128
+cublaslt 120804 /opt/conda/lib/python3.11/site-packages/nvidia/cublas/lib/libcublasLt.so.12
+cc (12, 0)
+sm_count 170

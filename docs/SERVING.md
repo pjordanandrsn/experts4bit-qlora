@@ -395,12 +395,16 @@ MXFP4 expert store, on a placement that is not all-resident, and at any expert s
 engage on the device. Reported in `nf4_smallm_bw`; which token counts it routed is
 `prefill_routes.seen.moe_nf4_smallm_bw`.
 
-**Pinned dense GEMMs at 2 to 8 rows (`E4B_DENSE_LT_PIN=o_proj[,router]`; opt-in, not yet read).** At 2 to 8 rows,
+**Pinned dense GEMMs at 2 to 8 rows (`E4B_DENSE_LT_PIN=o_proj[,router]`; opt-in; selection read, table not yet filled).** At 2 to 8 rows,
 cuBLAS's own kernel choice for some dense projections is slower than at one row. This knob routes the named projections'
 2..8-row calls through one cuBLASLt algorithm pinned per (cuBLASLt version, compute capability, SM count, shape, rows),
 called on the library torch already loaded. The pin table is filled by a registered selection; until then the knob is
 refused for want of a pin. Calls without a pin for their row count pass to `F.linear` and are counted; one row and more
-than 8 rows are untouched.
+than 8 rows are untouched. The selection has been read (lane P228, one RTX 5090, cuBLASLt 120804): in a captured
+microbench, its pin runs `o_proj` in a median 0.60 and the router gate in a median 0.28 of `F.linear`'s time at 2 and 4
+rows; the router reads 0.88 at 8 rows, where cuBLAS's own choice goes split-K
+(`e4b.kernel.p228.dense-lt-pin.o-proj.qwen3.5090.2026-10-23`, [`bench/p228/RESULTS-p228.md`](../bench/p228/RESULTS-p228.md)).
+The table is filled by a separate code PR, and no served read has run, so this is not a served speed or quality claim.
 - **Refused by name, never degraded silently:**
   - a captured decode bucket without a pin;
   - another cuBLASLt version or device;
