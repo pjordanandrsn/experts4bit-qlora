@@ -2517,6 +2517,14 @@ small: 1.0198× at one request (the smaller of two ABBA pairs), SLOWER against i
 projects only the final prompt position through the LM head (#1337).
 `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`.
 
+**The per-row expert GEMV at 2-8 decode tokens (`E4B_NF4_SMALLM_BW=1`, opt-in).** In a captured microbench of the expert
+call (one RTX 5090, lane P227), the per-row route runs Mixtral-8x7B's experts in a median 0.36 and 0.46 of K25's time
+at two and four tokens (upper bounds 0.3601 and 0.4655, PASS against 0.70), and Qwen3-30B-A3B's in a median 0.74 and
+0.90 (upper bounds 0.7478 and 0.9047, MISS). No served speed is claimed: a served read on Mixtral needs its own
+registration, and the knob stays off by default.
+`e4b.kernel.p227.per-row-gemv.mixtral.5090.2026-10-23`, `e4b.kernel.p227.per-row-gemv.qwen3.5090.2026-10-23`
+([P227](../bench/p227/RESULTS-p227.md)).
+
 **The tile table over 4 programs.** `E4B_INT4_TILE_PROGRAMS=4` splits the one-launch cumsum tile table over 4 programs
 (#1433, grouped-nf4-gemm #524). On Qwen3-30B-A3B int4 it makes the captured 64-row step about 15.5 % faster with identical
 tokens: P126 read DEFAULT_ON_4 on attempt 2, under its Amendment 1. It is the default (`auto`) since #1476; see the
@@ -3568,6 +3576,8 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20 [measured]: Lane P158 (one RTX 5090): serving Qwen3-30B-A3B's batched-decode expert GEMM (K25) with grouped-nf4-gemm v0.50.0's K39 codebook decode (E4B_K25_LUT=prmt, K25's lut="prmt", bit-identical to the select tree) decodes sixteen concurrent requests 1.0925x as fast on the default serve_paged server (the smallest of four ABBA …
 - e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20 [measured]: Lane P161 (one RTX 5090): serving Qwen3-30B-A3B's batched-decode expert GEMM (K25) at plan c1 (E4B_K25_PLAN=c1: gate_up 64/256/4/2, down 128/128/8/3, P156's first carried pair, which P160 read in a microbench), both arms under K39's decode at qwen3_moe's default (prmt), decodes sixteen concurrent requests 1.4654x as …
 - e4b.serve.p149.int8-attn.mixtral.5090.2026-10-20 [measured]: Lane P149 box Q+S (one RTX 5090): serving Mixtral-8x7B-Instruct with its 128 attention projections (q, k, v, o) held in int8 with a per-row fp32 scale (E4B_SERVE_ATTN_INT8=1, #1848), decode calls of 1-16 rows on grouped-nf4-gemm 0.49.0's K37 (dense_i8.linear_i8), against the default server (bf16 projections), on the …
+- e4b.kernel.p227.per-row-gemv.mixtral.5090.2026-10-23 [measured]: Lane P227 (one RTX 5090): on Mixtral-8x7B's experts at two and four decode tokens, the per-row GEMV route (E4B_NF4_SMALLM_BW=1, K33 one row per program) runs the captured expert call in a median 0.36 and 0.46 of K25's time (upper bounds 0.3601 and 0.4655 against P227's 0.70 bar: PASS) …
+- e4b.kernel.p227.per-row-gemv.qwen3.5090.2026-10-23 [measured]: Lane P227 (one RTX 5090): on Qwen3-30B-A3B's experts at two and four decode tokens, the per-row GEMV route (E4B_NF4_SMALLM_BW=1) runs the captured expert call in a median 0.74 and 0.90 of K25's time at its served plan (upper bounds 0.7478 and 0.9047 against P227's 0.70 bar: MISS) …
 
 Open items (no evidence either way):
 
@@ -3575,4 +3585,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(460 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(462 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
