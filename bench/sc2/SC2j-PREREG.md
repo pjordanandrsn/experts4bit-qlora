@@ -38,6 +38,10 @@ same tokens as claim-all on one fixed schedule. It is not a speed claim. Explore
   `serve_recipe.size_shared_pool` and `/health`'s `engine.kv_pool_sizing`.
 - **Image and checkpoint:** as SC2f's: `nvidia/cuda:13.0.3-cudnn-devel-ubuntu24.04`, torch 2.8.0+cu128;
   Qwen3-30B-A3B @ `ad44e77`, baked to the int4 arena on the box.
+  - The e4b install line also pins `brotli>=1.2.0`. An unpinned `huggingface_hub` on httpx decodes brotli with an API
+    older brotli lacks, so a br-encoded file at the fetch raised TypeError on some hosts.
+  - A failed model fetch is retried once after 20 s before it is a DL FAIL.
+  - A box that still dies at the fetch from that cause is a launch fault, not a strike.
 
 ## The box (Q)
 

@@ -193,7 +193,7 @@ say "install e4b @$E4B_SHA + gnf4 @$GNF4_SHA (venv-e4b --system-site-packages; P
 PY=$W/venv-e4b/bin/python
 if [ "$BOX" = C ] || [ "$BOX" = D ] || [ "$BOX" = E ] || [ "$BOX" = F ] || [ "$BOX" = G ] || [ "$BOX" = H ] || [ "$BOX" = I ] || [ "$BOX" = J ] || [ "$BOX" = K ] || [ "$BOX" = L ] || [ "$BOX" = N ] || [ "$BOX" = O ] || [ "$BOX" = P ] || [ "$BOX" = Q ]; then pipx logs/pip_torch.log 1800 "torch==2.8.0" --index-url https://download.pytorch.org/whl/cu128 || { tail -3 logs/pip_torch.log; say "PIP FAIL (torch cu128)"; finish 9; }; fi
 pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
-  "transformers==5.16.1" "bitsandbytes==0.50.1" datasets accelerate sentencepiece tiktoken safetensors "huggingface_hub>=0.23" pytest || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
+  "transformers==5.16.1" "bitsandbytes==0.50.1" datasets accelerate sentencepiece tiktoken safetensors "huggingface_hub>=0.23" "brotli>=1.2.0" pytest || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
 pipx logs/pip_gnf4.log 900 --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
 WANT_E4B=$E4B_SHA WANT_GNF4=$GNF4_SHA TRIP_BOX=$BOX "$PY" - <<'PYT' || { say "TRIPWIRE FAIL (e4b)"; finish 9; }
 import site, os, json, re, inspect, importlib.metadata as md
@@ -312,8 +312,12 @@ ROUTEENV="E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_S
 K8ARGS="--placement-override all-vram --amort off --batch 1 --prompt-len 512 --gen-tokens 16 --ppl-steps 2048 --b1d-loop eager --no-fuse-qkv --ppl-source wikitext"
 PACKENV=""; QA=""; GA=""
 # ---- fetches (pinned revisions; the HF cache path of each snapshot lands in fetch_<name>.path)
+# huggingface_hub on httpx decodes brotli with an API that needs brotli >= 1.2.0 (pinned in the e4b install above); a
+# fetch that still fails is retried once after 20 s (the snapshot resumes) before it is a DL FAIL
 fetch(){ local NAME=$1 M=$2 R=$3 AL=$4; say "fetch $M @ $R"
   perl -e "alarm $(arm_alarm $AL); exec @ARGV" "$PY" -c "from huggingface_hub import snapshot_download as s; print(s('$M', revision='$R', allow_patterns=['*.safetensors','*.json','tokenizer*','*.model','*.txt','merges.txt','vocab.json'], max_workers=4))" > logs/fetch_$NAME.log 2>&1 \
+    || { say "fetch $NAME failed ($(tail -1 logs/fetch_$NAME.log | cut -c1-160)) -- one retry in 20 s"; sleep 20
+         perl -e "alarm $(arm_alarm $AL); exec @ARGV" "$PY" -c "from huggingface_hub import snapshot_download as s; print(s('$M', revision='$R', allow_patterns=['*.safetensors','*.json','tokenizer*','*.model','*.txt','merges.txt','vocab.json'], max_workers=4))" >> logs/fetch_$NAME.log 2>&1; } \
     || { tail -2 logs/fetch_$NAME.log; say "DL FAIL ($NAME)"; line "FETCH $NAME FAILED"; return 11; }
   tail -1 logs/fetch_$NAME.log > fetch_$NAME.path; line "FETCH $NAME $M@$R $(cat fetch_$NAME.path)"; }
 fetch_ggufs(){ have llamacpp || return 0; local f; mkdir -p $W/gguf
