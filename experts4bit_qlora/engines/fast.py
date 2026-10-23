@@ -66,6 +66,7 @@ import os
 import torch
 
 from ..absmax_dq import expert_absmax_fp32
+from .batched import _GatherTokenRows
 
 
 def fast_available() -> bool:
@@ -151,7 +152,15 @@ def recurrent_kernel_fallbacks(model) -> list:
 
 #: What ``enable_fast_train`` did, for an engagement census: modules patched, and every skipped module's reason. A fast arm whose
 #: ``skipped`` is non-empty ran PART of its experts on the reference path and must not be read as the fused path.
-FAST_TRAIN_STATS = {"patched": 0, "skipped": {}, "recurrent_fallbacks": [], "absmax_dq": None}   # absmax_dq: the last call's record
+FAST_TRAIN_STATS = {"patched": 0, "skipped": {}, "recurrent_fallbacks": [], "absmax_dq": None,   # absmax_dq: the last call's record
+                    "det_gather": 0}   # training forwards whose token gather took the deterministic backward
+
+
+def det_gather_enabled() -> bool:
+    """``E4B_TRAIN_DET_GATHER=1``: the fused training forward's token gather takes ``_GatherTokenRows``' deterministic
+    backward (engines/batched.py, #765) instead of ``index_select``'s. Off by default until it is shown self-identical
+    on a card; anything but ``1`` is off."""
+    return os.environ.get("E4B_TRAIN_DET_GATHER", "0").strip() == "1"
 
 
 def _refuse_under_capture(hidden_states) -> None:
@@ -753,7 +762,15 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
     token_rows = order // k
     sizes, expert_ids = _group_by_expert(flat, E)
 
-    a_cat = hidden_states.index_select(0, token_rows).contiguous()
+    # Every token is copied to its k expert rows. index_select's own backward scatters the k gradient copies back with
+    # index_add_ -- CUDA float atomics -- so dL/dx changes in its last bits call to call on identical inputs.
+    # E4B_TRAIN_DET_GATHER=1 takes the same gather with batched.py's deterministic backward (#765): each row's gradient
+    # assigned to its own cell (order is a permutation), then a fixed-axis sum over the k cells. The forward is identical.
+    if det_gather_enabled():
+        FAST_TRAIN_STATS["det_gather"] += 1
+        a_cat = _GatherTokenRows.apply(hidden_states, order, k).contiguous()
+    else:
+        a_cat = hidden_states.index_select(0, token_rows).contiguous()
 
     # Set by `nvme_train.enable_nvme_train_residency` when this layer's frozen
     # experts come off an NVMe arena. Routed staging then fills only the routed
