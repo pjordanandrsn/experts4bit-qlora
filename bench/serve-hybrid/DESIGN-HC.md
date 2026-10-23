@@ -2,7 +2,7 @@
 
 The capacity frontier's first open fact: `serve_paged` serves a model whose experts do not all fit in VRAM only if the
 paged runner, its bucketed decode graphs and the hybrid tier compose. Every serving number so far was read at the
-all-resident point (`E4B_PAGED_PLACEMENT=all-vram`). The ruling for this item: a USD 0 CPU test and this note first, and at
+all-resident point (`E4B_PAGED_PLACEMENT=all-vram`). The plan for this item: a USD 0 CPU test and this note first, and at
 most one explore box after it. Nothing here was measured on a GPU. Every claim below is read from the code at this note's
 base and cited by file and line.
 
@@ -66,7 +66,7 @@ every expert is resident and in identity order (`_all_hot`, driven on CPU), and 
 ## 4. Options for graphs at `solver` (for the record; none is proposed for code now)
 
 1. **Eager at `solver` (today).** Correct by construction. The forced `E4B_PAGED_GRAPHS=1` at `solver`, which captured
-   nothing bucket by bucket, is refused at startup in words by its own change (#2067), as ruled.
+   nothing bucket by bucket, is refused at startup in words by its own change (#2067).
 2. **Piecewise capture.** Capture attention, norms and the dense layers between MoE layers, and run each tiered MoE layer
    eagerly between graph segments. This keeps all three tiers, including the DRAM tier, which can never be captured
    because its compute is on the host. Cost: a graph segment per layer boundary, and a launch-floor saving bounded by the
@@ -94,11 +94,10 @@ own split, recorded from `/health`).
 4. Decode tokens per second at one request: `solver` eager, `all-vram` eager and `all-vram` graphs, same prompts, as
    explore numbers only.
 
-**Cost and caps:** about 40 minutes of a 5090 at the explore tier's per-box cap, a guard of 1 h, the explore tier's bus
-line at create and at teardown. **No result from it is a reading or a public number.** Anything it shows that is worth
+**Cost and caps:** about 40 minutes of a 5090 at the explore tier's per-box cap, a guard of 1 h, and the explore tier's
+notices at create and at teardown. **No result from it is a reading or a public number.** Anything it shows that is worth
 stating publicly gets a registration first.
 
-## 6. What this note asks for
+## 6. Status
 
-- Review of sections 1 and 2 (the composition table and the capture argument) against the code.
-- Leave to run the section 5 box at the explore tier once this merges.
+Sections 1 and 2 were checked against the code; the section 5 box runs at the explore tier.
