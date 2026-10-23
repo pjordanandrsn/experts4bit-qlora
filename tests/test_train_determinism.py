@@ -40,6 +40,15 @@ def test_it_refuses_by_name_without_a_deterministic_cublas_config(monkeypatch, c
     assert td.STATE["enabled"] is False
 
 
+def test_it_refuses_after_cuda_is_initialized(monkeypatch):
+    """Checked, not a convention: with CUDA already initialized a cuBLAS handle may exist that never read the setting."""
+    monkeypatch.setenv("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    monkeypatch.setattr(torch.cuda, "is_initialized", lambda: True)
+    with pytest.raises(RuntimeError, match="before any CUDA work"):
+        td.enable_training_determinism()
+    assert td.STATE["enabled"] is False
+
+
 def test_it_refuses_a_disagreeing_det_gather(monkeypatch):
     monkeypatch.setenv("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     monkeypatch.setenv("E4B_TRAIN_DET_GATHER", "0")

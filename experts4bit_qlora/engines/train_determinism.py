@@ -45,9 +45,14 @@ def deterministic_requested() -> bool:
 def enable_training_determinism() -> None:
     """Turn on pieces 1, 3 (checked) and 4 for this process. Call once at trainer start, before any CUDA work.
 
-    Refuses (``RuntimeError``) when ``CUBLAS_WORKSPACE_CONFIG`` is not one of :data:`CUBLAS_DETERMINISTIC`, since setting
-    it here would be too late for a cuBLAS handle that may already exist, and when ``E4B_TRAIN_DET_GATHER`` is set to
+    Refuses (``RuntimeError``) when CUDA is already initialized (checked, not a calling convention: a cuBLAS handle made
+    before this call never read the setting); when ``CUBLAS_WORKSPACE_CONFIG`` is not one of
+    :data:`CUBLAS_DETERMINISTIC`, since setting it here would be too late for a cuBLAS handle that may already exist; and
+    when ``E4B_TRAIN_DET_GATHER`` is set to
     anything but ``1`` (the two knobs would disagree). It never runs silently non-deterministic."""
+    if torch.cuda.is_initialized():
+        raise RuntimeError("E4B_TRAIN_DETERMINISTIC=1 must be enabled before any CUDA work: CUDA is already initialized, so a "
+                           "cuBLAS handle may exist that never read CUBLAS_WORKSPACE_CONFIG. Enable it at trainer start.")
     cw = os.environ.get("CUBLAS_WORKSPACE_CONFIG", "").strip()
     if cw not in CUBLAS_DETERMINISTIC:
         raise RuntimeError(
@@ -59,8 +64,8 @@ def enable_training_determinism() -> None:
         raise RuntimeError(f"E4B_TRAIN_DETERMINISTIC=1 with E4B_TRAIN_DET_GATHER={gather!r}: the deterministic mode needs "
                            "the deterministic token gather; unset E4B_TRAIN_DET_GATHER or set it to 1")
     os.environ["E4B_TRAIN_DET_GATHER"] = "1"
-    import torch.utils.deterministic
-    torch.utils.deterministic.fill_uninitialized_memory = False
+    from torch.utils import deterministic as _deterministic   # a bare `import torch.utils...` here would make torch local
+    _deterministic.fill_uninitialized_memory = False
     STATE["enabled"] = True
 
 
