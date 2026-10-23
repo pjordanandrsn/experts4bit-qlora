@@ -93,7 +93,9 @@ def test_the_stack_under_test_is_ho2s_exactly():
     for name in ("GNF4_SHA", "LOGGETTA_SHA", "ALPACA_REV", "LFM2_REV", "ERNIE_REV"):
         assert _var(RUN, name) == _var(HO2_RUN, name), name
     pip, ho2_pip = (t[t.index("pipx logs/pip_e4b.log"):t.index("PIP FAIL (e4b)")] for t in (RUN, HO2_RUN))
-    assert pip.replace("$E4B_STACK_SHA", "$E4B_SHA") == ho2_pip                                 # the same packages, same versions
+    # the same packages and versions, plus only the fetch-side brotli floor an unpinned huggingface_hub needs
+    assert pip.replace("$E4B_STACK_SHA", "$E4B_SHA").replace(' "brotli>=1.2.0"', "") == ho2_pip
+    assert '"brotli>=1.2.0"' in pip
     assert 'git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_STACK_SHA' in RUN
     assert "experts4bit-qlora.git@$E4B_SHA" not in RUN                                          # the launch commit is never installed
     assert 'WANT_E4B=$E4B_STACK_SHA' in RUN and "2.8.0+cu128" in RUN
@@ -104,6 +106,11 @@ def test_the_tripwire_is_the_one_ho2_ran_on_this_stack():
         i = text.index('say "TRIPWIRE FAIL"')
         return text[i:text.index("\nPYT\n", i)]
     assert trip(RUN).replace("/root/ho3/", "/root/ho2/") == trip(HO2_RUN)
+
+
+def test_a_failed_fetch_is_retried_once_before_the_box_refuses():
+    fetch = RUN[RUN.index("phase_start fetch"):RUN.index("phase_end fetch")]
+    assert "for attempt in 1 2; do" in fetch and fetch.index("for attempt in 1 2") < fetch.index('say "DL FAIL $1"')
 
 
 def test_the_rows_are_ho2s_and_the_planners_own():
