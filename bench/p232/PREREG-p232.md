@@ -110,8 +110,10 @@ The first rung that applies decides.
    - **NO_FLIP:** T = 2 misses. The knob stays opt-in, a reading, not a failure of K37.
 6. **TRIPWIRE, reported and named, never changing the verdict.** The PASS bar sits about 20x above the predicted gap, so
    a K37 defect several times larger than expected would still pass it. The wire fires at any T if **|mean NLL(K) -
-   mean NLL(R)| > 0.005 nats**, or **argmax agreement < 0.98**, or **the K-against-R KL above 3x the R self-pair
-   floor** (the KL of phase R's `rep` arm against R, measure_phase's floor draw). If it fires, the verdict still reads as
+   mean NLL(R)| > 0.005 nats**, or **argmax agreement < 0.98**, or **the K-against-R KL above max(3 x the R self-pair
+   floor, 0.002 nats per position)**. The floor is the KL of phase R's `rep` arm against R, measure_phase's floor draw;
+   R's repeat is meant to be bit-identical, so the floor is likely 0, and a zero or absent floor falls to the absolute
+   bound, never to 0 (P153's one-row head read KL 0.0006 against bf16, a larger change). If it fires, the verdict still reads as
    the rungs above say, but **no default-flip PR may open until a short written look explains it**, reviewed as usual.
    The reducer prints `TRIPWIRE` with every condition that fired, or `TRIPWIRE none`.
 
