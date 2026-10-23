@@ -537,3 +537,38 @@ def test_amendment_76_rule_each_gate_on_hand_built_draws():
     tail = draws(20.4e9, 21.6e9, 23.0e9, 0, 1.0010, tail=m.POS76_ABSENT_BYTES)    # 16 MiB unlisted: not absent
     r = m.pos76_rule(before, tail)
     assert not r["relocated"] and "may still be live" in r["why"], r
+
+
+def test_the_reducer_ignores_the_arm_provenance_keys_on_real_receipts():
+    """tc1_arm.py records arm_facts.threads and env.pytorch_cuda_alloc_conf on every arm (and step_mem under TC1_STEP_MEM=1). Recorded
+    only, never gated: tc1-5090-155's committed cells (old receipts, without them) reduce and render byte-identically with the keys
+    added, so no reading, VOID predicate or table moves on the new keys."""
+    import copy
+    import json
+
+    m = _mod()
+    d = REPO / "bench" / "h2h-2026-10-02" / "tc1" / "receipts" / "tc1-5090-155"
+    old = {}
+    for t in ("fd", "fd_cd1", "fd_cl1", "fd_cd1cl1"):
+        r = json.loads((d / "public" / f"qwen3pos75cl_e4b_fused_attn4_m_{t}.json").read_text(encoding="utf-8"))
+        assert "threads" not in (r.get("arm_facts") or {}) and "pytorch_cuda_alloc_conf" not in (r.get("env") or {})
+        old[("e4b", f"fused_attn4_m_{t}")] = r
+    new = copy.deepcopy(old)
+    for r in new.values():
+        r["arm_facts"]["threads"] = {"torch_num_threads": 48, "torch_interop_threads": 48, "omp": "48", "mkl": None, "openblas": None,
+                                     "affinity_cpus": 48, "quota_cpus": 47.0, "nr_throttled": 0, "nr_throttled_end": 0}
+        r["env"]["pytorch_cuda_alloc_conf"] = "expandable_segments:True"
+        r["step_mem"] = [{"step": 1, "max_allocated": 1, "max_reserved": 2, "allocated": 1, "reserved": 2, "device_used": 3}]
+    fo = {"qwen3pos75cl": m.reduce_family("qwen3pos75cl", old, {}, 60)}
+    fn = {"qwen3pos75cl": m.reduce_family("qwen3pos75cl", new, {}, 60)}
+
+    def readings(x):                                   # the reduction, with the raw records it carries (those differ by design) blanked
+        if isinstance(x, dict):
+            return "<record>" if "harness" in x and "tag" in x else {k: readings(v) for k, v in x.items()}
+        if isinstance(x, (list, tuple)):
+            return [readings(v) for v in x]
+        return x
+    assert readings(fo) == readings(fn) and fo["qwen3pos75cl"]["verdicts"] == fn["qwen3pos75cl"]["verdicts"]
+    assert m.render(fo, str(d / "tc1")) == m.render(fn, str(d / "tc1"))
+    for (fw, tag), r in old.items():
+        assert m.pos75_why(tag, r) == m.pos75_why(tag, new[(fw, tag)])
