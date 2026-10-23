@@ -167,3 +167,13 @@ head. K2b routes 2..N rows to K37's `linear_i8` over the same codes.
   - `tests/test_p229.py` reduces it to SHAKEDOWN with every structural check passed.
   - Five departures from it each VOID the record.
   - A mutant without the "the route reports the shipped plan" check accepts one of them.
+
+## Amendment 2 (2026-10-23, before any reading): a comment in the runner, re-pinned
+
+- The repository's guard-fit check (`tests/test_lane_guard_fit.py`) requires each runner's fit refusal to carry the
+  shared strike note. `p229_run.sh`'s rc 41 comment now reads "a refusal before the install, not a strike; two
+  consecutive headroom refusals count as one strike". That is a comment only: no command, exit code, threshold or
+  output changed.
+- `staged-p229.sha256` is re-pinned for `p229_run.sh`. So Amendment 1's "every staged file is unchanged since" holds
+  for every staged file except this one comment line. The real fixture is unchanged, and p229-shake-1's record still
+  reduces as Amendment 1 states.
