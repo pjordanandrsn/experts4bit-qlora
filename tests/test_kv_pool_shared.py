@@ -140,10 +140,29 @@ def test_claim_many_gives_the_rows_consecutive_claims_give_in_one_write(monkeypa
 
 def test_claim_many_pops_nothing_when_the_step_does_not_fit(monkeypatch):
     _, kv, _ = _runner(monkeypatch, True)
-    free_before = [list(f) for f in kv._free]
+    kv.claim_many({0: 1})                                       # something already owned, so "unchanged" is not all zeros
+    free_before, rows_before, bt_before = [list(f) for f in kv._free], dict(kv._rows), kv._bt_all.clone()
     with pytest.raises(RuntimeError, match="out of KV blocks"):
         kv.claim_many({seq: kv.blocks_per_seq for seq in range(kv.B)})   # one block more per slot than the pool has
-    assert kv._free == free_before and not any(seq < kv.B for (_, seq) in kv._rows)
+    assert kv._free == free_before and kv._rows == rows_before and torch.equal(kv._bt_all, bt_before)
+
+
+def test_claim_many_never_writes_one_table_entry_twice(monkeypatch):
+    """index_put_ with repeated indices has no defined write order on CUDA: one step's entries must be unique."""
+    _, kv, _ = _runner(monkeypatch, True)
+    seen = []
+    real = torch.Tensor.index_put_
+
+    def spy(t, indices, values, accumulate=False):
+        assert not accumulate
+        seen.append(list(zip(*(i.tolist() for i in indices))))
+        return real(t, indices, values, accumulate)
+    monkeypatch.setattr(torch.Tensor, "index_put_", spy)
+    kv.claim_many({0: 3, 2: 1, 1: 0})
+    kv.claim_many({0: 5, 1: 2, 3: 0})
+    assert seen and all(len(step) == len(set(step)) for step in seen)
+    assert all(kv._bt_all[layer, seq, blk].item() == kv._rows[(layer, seq)][blk]
+               for step in seen for layer, seq, blk in step)
 
 
 def test_the_claim_reaches_the_write_positions_block_and_no_further(monkeypatch):
