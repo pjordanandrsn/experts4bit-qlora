@@ -6,6 +6,6 @@
   experts on the host: the first held-out rows with host offload. Each family is its own cohort result.
 - HO2's rule per row, plus HOST_UNDER for a host-offload row whose host peak exceeds its host estimate. Each row's plan is
   compared with the registered one, and a difference is a finding beside the row. Every gate fails closed.
-- Prediction: every row COVERED. Lane worst $22.45 at the started-box caps; expected about $2.50.
+- Prediction: every row COVERED. Lane worst $26.16 at the started-box caps; expected about $2.50.
 - `bench/ho3/`: the registration, the controller and runner (HO2's by counted edits), the reducer (25 self-test cases)
   and the staged pins; `tests/test_ho3.py`.

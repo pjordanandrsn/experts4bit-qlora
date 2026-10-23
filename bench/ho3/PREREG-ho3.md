@@ -84,9 +84,11 @@ records no expert residency, and a host row without its host estimate and peak, 
 - **Started-box cap:** 2 RTX 5090 boxes, 2 RTX 4090 boxes, 3 RTX A4000 boxes (two readings, one re-run).
 - **The stop:** two strikes in a part end that part. A read box is never a strike.
 - **Worst:** each started box at its guard and declared rate plus a 65 GB download allowance at no more than $0.02/GB
-  ($1.30): RTX 5090 $3.40, RTX 4090 $2.80, RTX A4000 $2.09. At the caps that is $18.67 for started boxes, plus at most
-  21 boxes that never start, each at most 10 minutes at $1.05/h ($0.18): $3.78. The lane worst is $22.45, under the
-  $35 run cap; each box is under $15. Expected about $2.50.
+  ($1.30): RTX 5090 $3.40, RTX 4090 $2.80, RTX A4000 $2.09. At the caps that is $18.67 for started boxes. A box that
+  never starts is billed up to its card's boot slack, where the fit check refuses it (rc 41): 1,988 s on the RTX 5090
+  and RTX 4090, 1,088 s on the RTX A4000. Each card has 7 ids beyond its cap: RTX 5090 7 x $0.58 = $4.06, RTX 4090
+  7 x $0.41 = $2.90, RTX A4000 7 x $0.076 = $0.53, $7.49 in all. The lane worst is $26.16, under the $35 run cap; each
+  box is under $15. Expected about $2.50.
 
 ## Fit and boot slack (bench/common rule 5)
 
