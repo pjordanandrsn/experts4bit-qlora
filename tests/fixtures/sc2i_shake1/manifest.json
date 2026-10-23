@@ -1,0 +1,16 @@
+{
+ "admitted": {
+  "base": 90,
+  "lc128": 90,
+  "pe2": 90
+ },
+ "census": "census_<arm>.json are the SC2E_STEPS lines of summary.txt (sc2e_census.steps on each server's step trace), in run order base, pe2, lc128",
+ "sha256": {
+  "health_prove_base_end.json": "c6a2e91be25f5b334efafe286f620a3f0ce0a2c715ba6d12f3d344738e875513",
+  "health_prove_lc128_end.json": "50467bf4a70b40ca2a3825e07bc5778c188114711b98678df9e37c46cf4afd3a",
+  "health_prove_lc128_start.json": "637c3192ab0553a2b33d34a1ea262a58966e2860c8f49bc668beaac4f3010229",
+  "stats_prove_lc128_end.json": "b29f801d6d598aba9bf7df83eefa1979b0b8ccea341f227c098cc5fe9d40145b",
+  "summary.txt": "9ed1b43218668eb012b6edc93c8231031fa5656bf14d5a94fd634ef58748bd80"
+ },
+ "source": "the project's private receipt store, run sc2i-shake-1 (EXPLORE shakedown of box P's proof, Granite-3.1-3b-a800m, one RTX 5090, e4b 665f5ede, grouped-nf4-gemm 41ef086e)"
+}

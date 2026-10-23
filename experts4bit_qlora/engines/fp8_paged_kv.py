@@ -250,7 +250,8 @@ class Fp8PagedKV:
                  batch: int, max_tokens_per_seq: int,
                  k_groups: int | None = None,
                  batched_append: bool = True, device: str = "cuda",
-                 scratch_slots: int = 0, alias_slots: int = 0):
+                 scratch_slots: int = 0, alias_slots: int = 0,
+                 pool_rows: int | None = None):
         """``scratch_slots`` (#511) adds that many slots AFTER the ``batch``
         real ones (ids ``batch .. batch + scratch_slots - 1``), each backed
         by ONE block rather than a full sequence's worth. They exist for the
@@ -268,7 +269,14 @@ class Fp8PagedKV:
         slot's own blocks at its position plus ``i``. They are never padding
         rows (a padding row writes its slot's position 0, which through an
         aliased table is the speculating slot's first token), so they sit
-        outside ``scratch``, and that is asserted."""
+        outside ``scratch``, and that is asserted.
+
+        ``pool_rows`` (lever G3, ``bench/kv-pool-g/DESIGN.md``) sets each layer's row count below the claim-all size
+        ``batch x blocks_per_seq + scratch_slots``, so the slots share fewer rows than they could ever reach. Only a
+        caller that claims blocks as it writes and admits by reserved blocks may build one (the paged runner's
+        ``incremental_claims`` with the scheduler's ``kv_blocks = pool_rows - scratch_slots``): a slot that claimed
+        every block it could reach would run the pool dry. It must hold the scratch slots plus one full sequence, and
+        is never larger than the claim-all size. ``None`` (the default) is the claim-all size."""
         from fp8_kv import kv_block_bytes
         from row_pool import RowPool
 
@@ -337,7 +345,16 @@ class Fp8PagedKV:
         self.v_rows = [kv_block_bytes(self.bt, h, d) for h, d in zip(Hs, Ds)]
         self.k_row = max(self.k_rows)
         self.v_row = max(self.v_rows)
-        rows = batch * self.blocks_per_seq + self.n_scratch
+        full = batch * self.blocks_per_seq + self.n_scratch
+        if pool_rows is None:
+            rows = full
+        else:
+            rows = int(pool_rows)
+            if not self.n_scratch + self.blocks_per_seq <= rows <= full:
+                raise ValueError(f"pool_rows {rows} must hold the {self.n_scratch} scratch rows plus one full sequence "
+                                 f"({self.blocks_per_seq} blocks) and be at most the claim-all size {full}")
+        self.claim_all_rows = full
+        self.shared_pool = rows < full     # a pool smaller than its slots can reach: incremental claims only (G3)
         self._n_rows = rows
         self.kp = RowPool(n_layers, rows, 0, self.k_row, device=device)
         self.vp = RowPool(n_layers, rows, 0, self.v_row, device=device)
@@ -783,6 +800,76 @@ class Fp8PagedKV:
             ev = torch.cuda.Event()
             ev.record()
             self._claim_cur[1] = ev
+
+    def claim_many(self, wants: dict, layers=None) -> int:
+        """:meth:`claim_blocks` for several slots at once, in ONE async host-to-device copy (lever G1's per-step claim,
+        ``bench/kv-pool-g/DESIGN.md``). ``wants`` maps a slot to the last block it must own. Rows are popped from each
+        layer's free list lowest first, slot by slot in ``wants``' order, so the rows are the ones consecutive
+        :meth:`claim_blocks` calls would give. Nothing is popped unless every layer has room for the whole step.
+
+        The (layer, slot, block, row) entries are packed into one pinned int32 buffer (a ring of two, each guarded by
+        an event recorded after its copy, as :meth:`_claim_staging`), copied to the device and scattered into
+        ``_bt_all`` with ``index_put_``: two launches on the current stream, ordered before whatever the caller queues
+        next. A slot holding different block counts across ``layers`` is refused (bulk claims never leave one). Returns
+        the entries written."""
+        layers = list(range(self.L)) if layers is None else list(layers)
+        if not layers or not wants:
+            return 0
+        plan = []
+        for seq, upto in wants.items():
+            self._refuse_alias(seq)
+            have = {len(self._rows.get((layer, seq), ())) for layer in layers}
+            if len(have) != 1:
+                # bulk claims keep every layer of a slot at one block count; a mismatch is a bookkeeping fault, and
+                # claiming per layer here would pop rows before the step's room check
+                raise RuntimeError(f"slot {seq} holds different block counts across layers {sorted(have)}; "
+                                   f"claim_many claims whole steps only")
+            lo = have.pop()
+            n = int(upto) + 1 - lo
+            if n > 0:
+                plan.append((seq, lo, n))
+        total = sum(n for _, _, n in plan)
+        if not total:
+            return 0
+        short = [layer for layer in layers if len(self._free[layer]) < total]
+        if short:
+            raise RuntimeError(f"layer {short[0]} is out of KV blocks — the scheduler admitted past capacity")
+        ent = []
+        for seq, lo, n in plan:
+            for layer in layers:
+                free = self._free[layer]
+                take = free[:n]
+                del free[:n]
+                self._rows.setdefault((layer, seq), []).extend(take)
+                ent.extend((layer, seq, lo + j, row) for j, row in enumerate(take))
+        m = len(ent)
+        host = self._many_staging(4 * m)
+        host.copy_(torch.tensor(ent, dtype=torch.int32).t().reshape(-1))
+        dev = torch.empty(4 * m, dtype=torch.int32, device=self.device)
+        dev.copy_(host, non_blocking=True)
+        idx = dev.view(4, m)
+        self._bt_all.index_put_((idx[0].long(), idx[1].long(), idx[2].long()), idx[3])
+        if self.device.type == "cuda":
+            ev = torch.cuda.Event()
+            ev.record()
+            self._many_cur[1] = ev
+        return m
+
+    def _many_staging(self, n: int) -> torch.Tensor:
+        """:meth:`claim_many`'s host buffer: a ring of two pinned int32 buffers that grow to the largest step seen, each
+        guarded by the event recorded after its copy, so a claim never rewrites a buffer a queued copy has not read."""
+        if self.device.type != "cuda":
+            return torch.empty(n, dtype=torch.int32)
+        ring = self.__dict__.setdefault("_many_ring", [[None, None], [None, None]])
+        nxt = self.__dict__.get("_many_next", 0)
+        self._many_next = nxt ^ 1
+        slot = ring[nxt]
+        if slot[1] is not None:
+            slot[1].synchronize()
+        if slot[0] is None or slot[0].numel() < n:
+            slot[0] = torch.empty(max(n, 1024), dtype=torch.int32).pin_memory()
+        self._many_cur = slot
+        return slot[0][:n]
 
     def append_prompt(self, seq: int, layers, ks, vs) -> bool:
         """:meth:`append` of a fresh slot's whole prompt for several layers at once. ``ks[i]``, ``vs[i]``: ``[T, H, D]``

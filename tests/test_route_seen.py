@@ -139,6 +139,7 @@ def test_prefill_routes_reports_both_counters(monkeypatch):
     monkeypatch.setattr(hr, "K19_DISPATCH_SEEN", {"chained|lean|gt256": 48})
     monkeypatch.setattr(hr, "K25_LUT_SEEN", {"prmt|le256": 96})
     monkeypatch.setattr(hr, "K25_PLAN_SEEN", {"c1|le256": 96})
+    monkeypatch.setattr(hr, "NF4_SMALLM_BW_SEEN", {"T2": 48, "T4": 48})
     monkeypatch.setattr(glue_fuse, "PREFILL_FOLD_SEEN", {"norm": 97, "layer": 48})
     r = serve_paged.prefill_routes()
     assert r["seen"] == {"moe": {"mxfp4_k21|le256": 2, "nf4_mtile_captured|gt256": 1},
@@ -146,6 +147,7 @@ def test_prefill_routes_reports_both_counters(monkeypatch):
                          "moe_k19_dispatch": {"chained|lean|gt256": 48},     # E4B_PREFILL_LEAN_DISPATCH's evidence
                          "moe_k25_lut": {"prmt|le256": 96},                  # E4B_K25_LUT's
                          "moe_k25_plan": {"c1|le256": 96},                   # E4B_K25_PLAN's
+                         "moe_nf4_smallm_bw": {"T2": 48, "T4": 48},          # E4B_NF4_SMALLM_BW's
                          "prefill_folds": {"layer": 48, "norm": 97}}         # E4B_FUSE_PREFILL_GLUE's
     assert {"int4_prefill", "prefill_attn", "device_grouping"} <= set(r)   # the env-resolved fields stay
     assert r["prefill_lean_dispatch"] in ("auto", "0", "1")                # P2's resolved mode (P130: auto)

@@ -78,7 +78,10 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
   step's total prefill budget is ``max_prefill_tokens_per_step`` (default = chunk, the harness's
   ``--chunk``). The scheduler prefers prefill over decode within a step and each chunk is its own
   batch-1 forward, so resident decoders see one prefill forward of extra latency per step while a
-  prompt is ingesting -- the TTFT/ITL trade the chunk size sets.
+  prompt is ingesting -- the TTFT/ITL trade the chunk size sets. Two opt-in knobs reshape that trade while any
+  decode row is live: ``E4B_PAGED_PREFILL_EVERY=N`` puts prefill on at most one step in N, and
+  ``E4B_PAGED_LOADED_CHUNK_TOKENS`` caps the chunk and the step's budget (both default to today's plans; see
+  :class:`~.engines.scheduler.ContinuousScheduler`).
 * **Capacity.** Admission is bounded by ``max_seqs`` AND free KV slots (``kv_slots = max_seqs``);
   a request past capacity WAITS in the scheduler's FIFO queue and its TTFT includes that wait
   (``Request.arrival`` is stamped at HTTP arrival and handed to ``add_request(now=...)``). There
@@ -135,7 +138,12 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
   - 8: attention trained on a 4-bit base;
   - 9: an expert base a v1 manifest cannot verify (opt-in ``E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts``,
     reported as ``base_match``);
-  - 10: speculative decoding (``E4B_PAGED_SPEC``), whose draft head and gate were read on the base model.
+  - 10: speculative decoding (``E4B_PAGED_SPEC``), whose draft head and gate were read on the base model;
+  - 11: a backend-adapter/2 attention fingerprint (qfp-v1) the served attention base does not match, measured after the
+    load and before the merge (no override);
+  - 12: a backend-adapter/2 expert fingerprint the served arena does not match (PA-1; opt-in
+    ``E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts``, reported in ``/health`` as a served mismatch). A /2 manifest with
+    an expert fingerprint is compared instead of refused by 9.
   The served name becomes ``<model>+<adapter_id[:12]>``, and ``/health`` and ``/v1/models`` carry the adapter's id,
   manifest hash, base revision, merge report and ``base_match``.
 
@@ -155,7 +163,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional, Sequence
 
-from .adapter_dir import parse_accept_unverified_base
+from .adapter_dir import ACCEPT_BASE_MISMATCH_ENV, parse_accept_base_mismatch, parse_accept_unverified_base
 from .engines.scheduler import ContinuousScheduler, Request
 
 DEFAULT_BUCKETS = (1, 2, 4, 8, 16)
@@ -167,7 +175,7 @@ LEVER_ENV = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_I
              "E4B_INT4_ARTIFACT_DIR", "E4B_INT4_EXPECTED_FINGERPRINT", "E4B_INT4_DUMP_ARTIFACT_DIR",
              "E4B_INT4_ASSIGNMENT", "E4B_CALIB_LAYERS_PER_PASS", "E4B_INT4_KEEP_NF4",
              "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI", "E4B_FUSED_KV_APPEND",
-             "E4B_SERVE_ATTN_INT8")
+             "E4B_SERVE_ATTN_INT8", "E4B_INT8_HEAD_ROWS", "E4B_DENSE_LT_PIN")
 FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
 # Under an adapter, a lever is classified by what it DEPENDS ON (docs/ADAPTER_PORTABILITY.md F4). REFUSED (refusal 5)
 # until a registered read gates it: (i) it re-quantizes an ADAPTED module (attention after the merge; experts once
@@ -215,6 +223,12 @@ ADAPTER_NEUTRAL_KNOBS = {
     "E4B_FUSE_ROUTER_EPI": ("the router's epilogue: reads the router weight, which no adapter trains; its store "
                             "rounds as torch's cast does"),
     "E4B_FUSED_KV_APPEND": "the paged KV cache's append kernel: no weights at all",
+    "E4B_DENSE_LT_PIN": ("a pinned cuBLASLt algorithm for named bf16 projections at 2..8 rows (K1): it reads the merged "
+                         "weight as stored, re-quantizes nothing and reads no calibration; its outputs move within the "
+                         "served tolerance exactly as on the base server"),
+    "E4B_INT8_HEAD_ROWS": ("routes the int8 head's 2..8 rows to K37 over the head's own codes and scales (K2b): it "
+                           "quantizes nothing and reads no calibration, and the head it widens is the allowed "
+                           "base-serving lever E4B_INT8_HEAD_BW"),
 }
 ADAPTER_ALLOW_ARENA_ENV = "E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA"
 ADAPTER_ACCEPT_BASE_ENV = "E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE"
@@ -272,6 +286,9 @@ DENSE_GEMV_BW_ENV = "E4B_DENSE_GEMV_BW"
 #: changes multi-row outputs too) and route its single-row decode GEMV through dense_gemv's gemv_i8_bw
 #: (engines/int8_head_bw.py). 0 or 1; unset resolves per family and head shape (INT8_HEAD_BW_DEFAULT_FAMILIES).
 INT8_HEAD_BW_ENV = "E4B_INT8_HEAD_BW"
+#: K2b (bench/dense-small-m/DESIGN-K2.md; engines/int8_head_bw.py): the int8 head's 2..value rows on grouped-nf4-gemm
+#: K37's linear_i8. 1 to 8; unset is 1, today's route (opt-in: no read has licensed a default)
+INT8_HEAD_ROWS_ENV = "E4B_INT8_HEAD_ROWS"
 # Lane P153's default for ``E4B_INT8_HEAD_BW`` (bench/p153/RESULTS-p153.md): an UNSET knob resolves to ``1`` on a
 # model_type here whose output head has a listed [N, K] shape, the shapes grouped-nf4-gemm K36 has a tuned plan for
 # (dense_gemv.PLANS_I8), and to ``0`` everywhere else, with the reason recorded. qwen3_moe at 151936 x 2048 takes it on
@@ -373,24 +390,13 @@ def resolve_max_seqs(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
     output."""
     if str(cfg.max_seqs_requested).strip().lower() != "auto":
         return {}
-    from .serve_recipe import MAX_SEQS_AUTO_WIDTHS, MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS, ServeSetup, choose_max_seqs
-    env = os.environ.get
+    from .serve_recipe import choose_max_seqs
     try:
-        from .arch.topology import describe_moe
-        topo = describe_moe(model_config)
+        topo, setup, widths = _sizing_inputs(cfg, model_config)
     except Exception as e:                                 # a config describe_moe cannot read: today's default
         res = {"max_seqs": 16, "free_bytes": free_bytes, "candidates": [],
                "why": f"the model's topology could not be described ({type(e).__name__}: {str(e)[:160]}): 16"}
     else:
-        req = cfg.buckets_requested if cfg.buckets_requested != "default" else ""
-        b = _buckets_env(req)
-        setup = ServeSetup(placement=cfg.placement, max_seqs=16, max_tokens_per_seq=cfg.max_tokens_per_seq,
-                           chunk_tokens=cfg.chunk_tokens, graphs=cfg.graphs, buckets=b, kv_groups=cfg.kv_groups,
-                           prefill_graph=cfg.prefill_graph, vram_gb=cfg.vram_gb, dram_gb=cfg.dram_gb,
-                           hot_rows=cfg.hot_rows, bulk_kv=cfg.bulk_kv,
-                           exp_int4="1" in (env("E4B_SERVE_EXP_INT4", "0"), env("E4B_SERVE_EXP_INT4_CALIB", "0")),
-                           attn_int4="1" in (env("E4B_SERVE_ATTN_INT4", "0"), env("E4B_SERVE_ATTN_INT4_CALIB", "0")))
-        widths = MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS if str(b).strip().lower() == "auto" else MAX_SEQS_AUTO_WIDTHS
         # the int8 head's codes and scales arrive after the slots are sized: priced in whenever the knob resolves on
         res = choose_max_seqs(topo, setup, free_bytes, widths=widths,
                               extra_bytes=int8_head_copy_bytes(cfg, model_config))
@@ -399,6 +405,58 @@ def resolve_max_seqs(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
     cfg.validate()
     cfg.max_seqs_resolution = res
     log(f"E4B_PAGED_MAX_SEQS=auto -> {cfg.max_seqs} ({res.get('why')}); buckets {list(cfg.buckets)}")
+    return res
+
+
+def _sizing_inputs(cfg: "PagedServeConfig", model_config):
+    """The model's topology, the :class:`~.serve_recipe.ServeSetup` that prices this server, and the widths
+    ``E4B_PAGED_MAX_SEQS=auto`` tries: what :func:`resolve_max_seqs` and :func:`resolve_kv_pool` size from. Raises when
+    the topology cannot be described."""
+    from .arch.topology import describe_moe
+    from .serve_recipe import MAX_SEQS_AUTO_WIDTHS, MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS, ServeSetup
+    env = os.environ.get
+    topo = describe_moe(model_config)
+    req = cfg.buckets_requested if cfg.buckets_requested != "default" else ""
+    b = _buckets_env(req)
+    setup = ServeSetup(placement=cfg.placement, max_seqs=16, max_tokens_per_seq=cfg.max_tokens_per_seq,
+                       chunk_tokens=cfg.chunk_tokens, graphs=cfg.graphs, buckets=b, kv_groups=cfg.kv_groups,
+                       prefill_graph=cfg.prefill_graph, vram_gb=cfg.vram_gb, dram_gb=cfg.dram_gb,
+                       hot_rows=cfg.hot_rows, bulk_kv=cfg.bulk_kv,
+                       exp_int4="1" in (env("E4B_SERVE_EXP_INT4", "0"), env("E4B_SERVE_EXP_INT4_CALIB", "0")),
+                       attn_int4="1" in (env("E4B_SERVE_ATTN_INT4", "0"), env("E4B_SERVE_ATTN_INT4_CALIB", "0")))
+    widths = MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS if str(b).strip().lower() == "auto" else MAX_SEQS_AUTO_WIDTHS
+    return topo, setup, widths
+
+
+def resolve_kv_pool(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
+    """``E4B_PAGED_KV_POOL=shared`` (lever G3, ``bench/kv-pool-g/DESIGN.md``): size the slots (under
+    ``E4B_PAGED_MAX_SEQS=auto``; an explicit width is kept) and the KV pool's rows from the device's free memory before
+    any weight is loaded, by :func:`~.serve_recipe.size_shared_pool`, then re-derive the decode buckets for the width.
+    Sets ``cfg.kv_pool_rows`` (None: the claim-all size) and returns the record /health reports. The claim-all pool
+    (the default) never comes here."""
+    if cfg.kv_pool != "shared":
+        return {}
+    from .serve_recipe import size_shared_pool
+    auto = str(cfg.max_seqs_requested).strip().lower() == "auto"
+    try:
+        topo, setup, widths = _sizing_inputs(cfg, model_config)
+    except Exception as e:                                 # a config describe_moe cannot read: the claim-all pool
+        res = {"max_seqs": 16 if auto else cfg.max_seqs, "pool_rows": None, "free_bytes": free_bytes,
+               "candidates": [], "why": f"the model's topology could not be described "
+                                        f"({type(e).__name__}: {str(e)[:160]}): the claim-all pool"}
+    else:
+        res = size_shared_pool(topo, setup, free_bytes, widths=widths if auto else (cfg.max_seqs,),
+                               extra_bytes=int8_head_copy_bytes(cfg, model_config))
+    cfg.max_seqs = int(res["max_seqs"])
+    cfg.kv_pool_rows = res.get("pool_rows")
+    cfg.buckets = _buckets_env(cfg.buckets_requested if cfg.buckets_requested != "default" else "")
+    cfg.validate()
+    if auto:
+        cfg.max_seqs_resolution = res
+    cfg.kv_pool_resolution = res
+    log(f"E4B_PAGED_KV_POOL=shared -> {cfg.max_seqs} slots, "
+        f"{'the claim-all pool' if cfg.kv_pool_rows is None else f'{cfg.kv_pool_rows} pool rows'} ({res.get('why')}); "
+        f"buckets {list(cfg.buckets)}")
     return res
 
 
@@ -571,6 +629,12 @@ def _int8_head_bw_env(value: str) -> str:
     raise ValueError(f"{INT8_HEAD_BW_ENV}={value!r}: expected '0' or '1' (unset: per family and head shape, lane P153)")
 
 
+def _int8_head_rows_env(value: str) -> int:
+    """``E4B_INT8_HEAD_ROWS`` as the server reads it (:func:`~.engines.int8_head_bw.rows_value`): 1 to 8, unset 1."""
+    from .engines.int8_head_bw import rows_value
+    return rows_value(value)
+
+
 def resolve_int8_head_bw(value: str, model_type, head_shape, *, refusal=None, kernel_error=None) -> tuple:
     """``(mode, source)``: an explicit ``0`` / ``1`` passes through (``explicit``; the swap still refuses an ineligible
     head under ``1``). ``default`` resolves to ``1`` (``default-allowlisted``) only on a ``model_type`` in
@@ -696,6 +760,12 @@ class PagedServeConfig:
     max_tokens_per_seq: int = 4096       # E4B_PAGED_MAX_TOKENS_PER_SEQ: prompt + output per sequence
     chunk_tokens: int = 512              # E4B_PAGED_CHUNK_TOKENS
     max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
+    prefill_every: int = 1               # E4B_PAGED_PREFILL_EVERY: while decoding, prefill on at most 1 step in N
+    loaded_chunk_tokens: int = 0         # E4B_PAGED_LOADED_CHUNK_TOKENS: while decoding, chunk + budget cap; 0 = off
+    kv_pool: str = "claim-all"           # E4B_PAGED_KV_POOL: claim-all (default) / shared (levers G1-G3, opt-in)
+    kv_pool_rows: Optional[int] = None   # shared only: the pool's rows per layer, sized by resolve_kv_pool (G3); None
+                                         # = the claim-all size. Derived, never read from the environment
+    kv_pool_resolution: dict = field(default_factory=dict)   # resolve_kv_pool's record, for /health
     graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
     prefill_graph: str = "auto"          # E4B_PAGED_PREFILL_GRAPH: auto (default) / 1 / 0 (_prefill_graph_env)
     last_logits: bool = False            # E4B_PAGED_LAST_LOGITS: opt-in prefill head at one position
@@ -711,6 +781,7 @@ class PagedServeConfig:
     attn_split_cap: str = FUSION_UNSET   # E4B_ATTN_SPLIT_CAP: 0 | 1..32, or "default" when unset (per family, P143)
     dense_gemv_bw: str = "0"             # E4B_DENSE_GEMV_BW: 0 | 1 (P151; grouped-nf4-gemm K35's gemv_bf16_bw)
     int8_head_bw: str = FUSION_UNSET     # E4B_INT8_HEAD_BW: 0 | 1, or "default" when unset (per family and head shape, P153)
+    int8_head_rows: int = 1              # E4B_INT8_HEAD_ROWS: 1 (today) | 2..8, the int8 head's rows on K37 (K2b)
     fusion_modes: dict = field(default_factory=dict)   # FUSION_KNOBS -> auto | 0 | 1 (_fusion_env), or "default" when
                                                        # unset (resolved per family at the build); a knob not named keeps
                                                        # its old reading: fuse_qkv, or the fold's own env var
@@ -731,6 +802,7 @@ class PagedServeConfig:
     adapter: str = ""                    # E4B_PAGED_ADAPTER: one trained adapter directory (backend-adapter/1), merged at load
     adapter_allow_unverified_arena: bool = False   # E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA=1: refusal 3's opt-in
     adapter_accept_unverified_base: frozenset = frozenset()   # E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE: named scopes
+    adapter_accept_base_mismatch: frozenset = frozenset()     # E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH: refusal 12's opt-in
     adapter_id: str = ""                 # set by the build: sha256 of adapter.safetensors (the served name's suffix)
     device: str = "cuda"
 
@@ -753,6 +825,9 @@ class PagedServeConfig:
             max_tokens_per_seq=int(env("E4B_PAGED_MAX_TOKENS_PER_SEQ", "4096")),
             chunk_tokens=int(env("E4B_PAGED_CHUNK_TOKENS", "512")),
             max_prefill_tokens=int(env("E4B_PAGED_MAX_PREFILL_TOKENS", "0")),
+            prefill_every=int(env("E4B_PAGED_PREFILL_EVERY", "1") or "1"),
+            loaded_chunk_tokens=int(env("E4B_PAGED_LOADED_CHUNK_TOKENS", "0") or "0"),
+            kv_pool=(env("E4B_PAGED_KV_POOL", "") or "claim-all").strip().lower(),
             graphs=_graphs_env(env("E4B_PAGED_GRAPHS", "auto"), env("E4B_PAGED_DEVICE", "cuda"),
                                env("E4B_PAGED_PLACEMENT", "all-vram"), _capability(env("E4B_PAGED_DEVICE", "cuda"))),
             prefill_graph=_prefill_graph_env(env("E4B_PAGED_PREFILL_GRAPH", "auto")),
@@ -770,6 +845,7 @@ class PagedServeConfig:
             attn_split_cap=_attn_split_cap_env(env(ATTN_SPLIT_CAP_ENV, "")),
             dense_gemv_bw=env(DENSE_GEMV_BW_ENV, "0").strip() or "0",
             int8_head_bw=_int8_head_bw_env(env(INT8_HEAD_BW_ENV, "")),
+            int8_head_rows=_int8_head_rows_env(env(INT8_HEAD_ROWS_ENV, "")),
             torch_threads=int(env("E4B_PAGED_TORCH_THREADS", "8")),
             max_tokens_cap=int(env("E4B_PAGED_MAX_TOKENS", "0")),
             max_queue=int(env("E4B_PAGED_MAX_QUEUE", "0")),
@@ -787,6 +863,7 @@ class PagedServeConfig:
             adapter=env("E4B_PAGED_ADAPTER", "").strip(),
             adapter_allow_unverified_arena=_zero_one(ADAPTER_ALLOW_ARENA_ENV, env(ADAPTER_ALLOW_ARENA_ENV, "0")),
             adapter_accept_unverified_base=parse_accept_unverified_base(env(ADAPTER_ACCEPT_BASE_ENV, "")),
+            adapter_accept_base_mismatch=parse_accept_base_mismatch(env(ACCEPT_BASE_MISMATCH_ENV, "")),
             device=env("E4B_PAGED_DEVICE", "cuda"),
         )
         cfg.validate()
@@ -801,6 +878,12 @@ class PagedServeConfig:
             raise ValueError("E4B_PAGED_CHUNK_TOKENS must be >= 1")
         if self.max_prefill_tokens < 0:
             raise ValueError("E4B_PAGED_MAX_PREFILL_TOKENS must be >= 0 (0 = chunk_tokens)")
+        if self.prefill_every < 1:
+            raise ValueError("E4B_PAGED_PREFILL_EVERY must be >= 1 (1 = prefill on every step, the default)")
+        if self.loaded_chunk_tokens < 0:
+            raise ValueError("E4B_PAGED_LOADED_CHUNK_TOKENS must be >= 0 (0 = off, the default)")
+        if self.kv_pool not in ("claim-all", "shared"):
+            raise ValueError(f"E4B_PAGED_KV_POOL={self.kv_pool!r}: expected 'claim-all' (the default) or 'shared'")
         from .serve_recipe import default_buckets, usable_buckets
         if isinstance(self.buckets, str):
             if self.buckets.strip().lower() != "auto":
@@ -843,9 +926,15 @@ class PagedServeConfig:
             if self.decode_lookahead:
                 raise ValueError("E4B_PAGED_SPEC and E4B_PAGED_DECODE_LOOKAHEAD do not combine: each speculative step "
                                  "reads its accepted tokens back before the next is planned")
-        if not self.adapter and (self.adapter_allow_unverified_arena or self.adapter_accept_unverified_base):
-            raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} are set but E4B_PAGED_ADAPTER "
-                             f"is not")
+            if self.int8_head_rows > 1:
+                raise ValueError(f"E4B_PAGED_SPEC and {INT8_HEAD_ROWS_ENV}={self.int8_head_rows} do not combine until "
+                                 "a read covers them: SD2's gate and draft were read with the head on F.linear at 2..4 "
+                                 f"rows, and K2b's served read is plain decode ({INT8_HEAD_ROWS_ENV}=1 or "
+                                 "E4B_PAGED_SPEC=off)")
+        if not self.adapter and (self.adapter_allow_unverified_arena or self.adapter_accept_unverified_base
+                                 or self.adapter_accept_base_mismatch):
+            raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} / {ACCEPT_BASE_MISMATCH_ENV} are set "
+                             f"but E4B_PAGED_ADAPTER is not")
 
     @property
     def prefill_budget(self) -> int:
@@ -1079,7 +1168,8 @@ class PagedEngine:
                     tr.mark("ops")
                 try:
                     plan = sched.step()
-                except Exception as e:  # noqa: BLE001
+                    self._dispatch()
+                except Exception as e:  # noqa: BLE001 -- a failed step or hand-off is the server's state
                     self.error = f"{type(e).__name__}: {e}"
                     self.state = "error"
                     log(f"engine step FAILED: {self.error}")
@@ -1090,7 +1180,6 @@ class PagedEngine:
                     if tr is not None:
                         tr.close()
                     return
-                self._dispatch()
                 if tr is not None:
                     if plan.is_empty:
                         tr.discard()
@@ -1139,40 +1228,63 @@ class PagedEngine:
             if stream.rid is not None and stream.rid in self._streams:
                 sched.abort(stream.rid)
 
-    def _push(self, stream: PagedStream, item) -> None:
+    def _push(self, stream: PagedStream, item, batch: Optional[list] = None) -> None:
+        """Hand ``item`` to ``stream``'s event-loop queue. With ``batch`` the hand-off is appended there and the caller
+        wakes the loop once for the lot (:meth:`_dispatch`); without it the loop is woken now."""
         if item[0] in (_DONE, _ERROR):
             if stream.finished:
                 return
             stream.finished = True
             with self._cv:
                 self._inflight = max(0, self._inflight - 1)
+        if batch is not None:
+            batch.append((stream.queue, item))
+        else:
+            self._wake(stream.queue.put_nowait, item)
+
+    def _wake(self, fn, arg) -> None:
         loop = self._loop
         try:
             if loop is not None and not loop.is_closed():
-                loop.call_soon_threadsafe(stream.queue.put_nowait, item)
+                loop.call_soon_threadsafe(fn, arg)
         except RuntimeError:     # loop closed under us (shutdown): nobody is listening
             pass
 
+    @staticmethod
+    def _fanout(items: list) -> None:
+        """On the event loop: one step's hand-offs, in the engine's order (the queues are unbounded, so none raises)."""
+        for queue, item in items:
+            queue.put_nowait(item)
+
     def _dispatch(self) -> None:
+        """One step's tokens and finishes to their streams, with ONE cross-thread wakeup for the step. A wakeup per
+        stream was the largest piece of the exposed host gap at 64 slots (``dispatch`` in
+        ``bench/h2h-2026-10-02/sc2e/decode64/README.md``, section (c))."""
         sched = self.parts.scheduler
-        for rid, req in sched.active.items():
-            st = self._streams.get(rid)
-            if st is not None and len(req.out) > st.sent:
-                self._push(st, (_TOKENS, req.out[st.sent:]))
-                st.sent = len(req.out)
-        for lst, idx_attr in ((sched.done, "_done_idx"), (sched.aborted, "_abort_idx")):
-            i = getattr(self, idx_attr)
-            while i < len(lst):
-                req = lst[i]
-                i += 1
-                st = self._streams.pop(req.rid, None)
-                if st is None:
-                    continue
-                rest = req.out[st.sent:]
-                st.sent = len(req.out)
-                rec = self._record(req, st)
-                self._push(st, (_DONE, (rest, req.finish_reason or "length", rec)))
-            setattr(self, idx_attr, i)
+        out: list = []
+        try:
+            for rid, req in sched.active.items():
+                st = self._streams.get(rid)
+                if st is not None and len(req.out) > st.sent:
+                    self._push(st, (_TOKENS, req.out[st.sent:]), out)
+                    st.sent = len(req.out)
+            for lst, idx_attr in ((sched.done, "_done_idx"), (sched.aborted, "_abort_idx")):
+                i = getattr(self, idx_attr)
+                while i < len(lst):
+                    req = lst[i]
+                    i += 1
+                    st = self._streams.get(req.rid)
+                    if st is None:
+                        continue
+                    rec = self._record(req, st)       # before the pop: a stream whose record fails is still failed
+                    del self._streams[req.rid]
+                    rest = req.out[st.sent:]
+                    st.sent = len(req.out)
+                    self._push(st, (_DONE, (rest, req.finish_reason or "length", rec)), out)
+                setattr(self, idx_attr, i)
+        finally:   # what was handed off before a failure still reaches its streams (they are already marked finished)
+            if out:
+                self._wake(self._fanout, out)
 
     def _record(self, req: Request, st: PagedStream) -> dict:
         rec = {
@@ -1304,7 +1416,9 @@ def prefill_routes() -> dict:
     ``moe_k19_dispatch`` is :data:`~.engines.hot_residency.K19_DISPATCH_SEEN` (K19's tile table and dispatch,
     ``E4B_PREFILL_LEAN_DISPATCH``'s evidence), ``moe_k25_lut`` is :data:`~.engines.hot_residency.K25_LUT_SEEN` (K25's
     codebook decode per call, ``E4B_K25_LUT``'s), ``moe_k25_plan`` is :data:`~.engines.hot_residency.K25_PLAN_SEEN`
-    (K25's plan per call, ``E4B_K25_PLAN``'s) and ``prefill_folds`` is
+    (K25's plan per call, ``E4B_K25_PLAN``'s), ``moe_nf4_smallm_bw`` is
+    :data:`~.engines.hot_residency.NF4_SMALLM_BW_SEEN` (the collapse's calls ``E4B_NF4_SMALLM_BW`` routed, by token
+    count) and ``prefill_folds`` is
     :data:`~.engines.glue_fuse.PREFILL_FOLD_SEEN` (fused fold calls above 64 rows, ``E4B_FUSE_PREFILL_GLUE``'s)."""
     from .engines import glue_fuse, hot_residency, paged_attention
 
@@ -1332,6 +1446,7 @@ def prefill_routes() -> dict:
                    "moe_k19_dispatch": dict(sorted(hot_residency.K19_DISPATCH_SEEN.items())),
                    "moe_k25_lut": dict(sorted(hot_residency.K25_LUT_SEEN.items())),
                    "moe_k25_plan": dict(sorted(hot_residency.K25_PLAN_SEEN.items())),
+                   "moe_nf4_smallm_bw": dict(sorted(hot_residency.NF4_SMALLM_BW_SEEN.items())),
                    "prefill_folds": dict(sorted(glue_fuse.PREFILL_FOLD_SEEN.items()))}
     return out
 
@@ -1764,20 +1879,31 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # E4B_K25_PLAN: unset, qwen3_moe takes c1 where its decode resolved to prmt (lane P161), every other case today; an
     # explicit c1 runs only under the decode it was read with
     k25_plan = resolve_k25_plan(k25_lut, model_type=getattr(model_config, "model_type", None))
-    if str(cfg.max_seqs_requested).strip().lower() == "auto":
+    if str(cfg.max_seqs_requested).strip().lower() == "auto" or cfg.kv_pool == "shared":
         # sized before any weight is read: the estimate's device total includes the weights
         free = (torch.cuda.mem_get_info(torch.device(cfg.device))[0]
                 if str(cfg.device).startswith("cuda") and torch.cuda.is_available() else None)
-        resolve_max_seqs(cfg, model_config, free)
+        if cfg.kv_pool == "shared":
+            resolve_kv_pool(cfg, model_config, free)       # lever G3: the slots (under auto) and the pool's rows
+        else:
+            resolve_max_seqs(cfg, model_config, free)
     model, _ = load_moe_4bit_streaming(cfg.model, cfg.device, torch.bfloat16, r=8, alpha=16, quant_type="nf4",
                                        arena=cfg.arena, revision=cfg.revision or None)
     model.eval()
     if adapter is not None:
         # merged right after the load: before the levers, the fusions, the GEMV routes and graph capture, so every one of
         # them sees a plain nn.Linear (docs/ADAPTER_PORTABILITY.md)
-        from .adapter_dir import arena_source_revision, base_match, merge_attention_lora
+        from .adapter_dir import arena_source_revision, base_match, fingerprint_check, merge_attention_lora
         served = getattr(model.config, "_commit_hash", None)
         _raise_adapter_refusals(_adapter_refusals(adapter, cfg, arena_index, served_revision=served))
+        # the served base's qfp-v1 against the /2 manifest's (refusals 11 and 12): after the load, BEFORE the merge
+        # (which rewrites the attention weights) and before any lever, fusion or route touches a module
+        fp_refusals, fingerprints = fingerprint_check(adapter, model, cfg.arena,
+                                                      accept_base_mismatch=cfg.adapter_accept_base_mismatch)
+        _raise_adapter_refusals(fp_refusals)
+        for scope, row in fingerprints.items():
+            log(f"adapter fingerprint {scope}: {row['status']} (qfp-v1 {row['served'][:16]} served, "
+                f"{str(row['trained'])[:16]} trained, {row['seconds']} s)")
         report = merge_attention_lora(model, adapter)
         cfg.adapter_id = adapter.adapter_id
         adapter_info = {"path": adapter.path, "adapter_id": adapter.adapter_id,
@@ -1786,8 +1912,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                         "arena_revision": arena_source_revision(arena_index) or "unverified (allowed by "
                                                                                  f"{ADAPTER_ALLOW_ARENA_ENV}=1)",
                         "served_name": cfg.model_names[0] if cfg.model_names else None, "scale": adapter.scale,
-                        "merge": report.to_dict(), "base_match": base_match(adapter),
-                        "accepted_unverified_base": sorted(cfg.adapter_accept_unverified_base)}
+                        "merge": report.to_dict(), "base_match": base_match(adapter, fingerprints=fingerprints),
+                        "fingerprints": fingerprints,
+                        "accepted_unverified_base": sorted(cfg.adapter_accept_unverified_base),
+                        "accepted_base_mismatch": sorted(cfg.adapter_accept_base_mismatch)}
         log(f"adapter {adapter.adapter_id[:12]}: merged {report.merged} attention projections (scale {adapter.scale:g}, "
             f"max merge error {report.to_dict()['max_err']:.3g}); served as {adapter_info['served_name']!r}")
     mods = target_modules(model)
@@ -1830,6 +1958,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # (unset: on for qwen3_moe at the head shape P153 read, else off with the reason recorded in info["int8_head_bw"])
     from .engines.int8_head_bw import engagement as int8_head_engagement
     int8_head = apply_int8_head_bw_resolved(model, cfg)
+    # K2b: the int8 head's 2..value rows on K37's linear_i8, before any capture (unset: 1, nothing imported); refused by
+    # name when the head did not resolve to int8 or the package lacks K37
+    from .engines.int8_head_bw import apply_int8_head_rows
+    int8_head_rows = apply_int8_head_rows(model, getattr(cfg, "int8_head_rows", 1))
 
     # proof of execution, the lanes' census (serve_stack.build_served_model) + their refusal rule
     try:
@@ -1847,6 +1979,11 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         raise RuntimeError("int4 attention requested but no projection is Int4Linear")
     if 0 < int4_layers < L:
         log(f"WARNING int4 expert stores on {int4_layers}/{L} MoE layers -- a partial stack; see /health")
+    # E4B_NF4_SMALLM_BW (opt-in; serving roadmap lever B): 2..8-token calls on the NF4 collapse take K33 per row.
+    # Resolved after the levers built any int4 store and before any graph is captured; refused here where it cannot
+    # engage, never left to route silently
+    from .engines.hot_residency import resolve_nf4_smallm_bw
+    nf4_smallm_bw = resolve_nf4_smallm_bw(mods, cfg.device)
 
     hkv, hd = _kv_geometry(model.config)
     spec_k = cfg.spec_k if cfg.spec != "off" else 0
@@ -1855,7 +1992,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # a hybrid model's linear-attention layers keep no K/V: the pool holds its attention layers only
     kv = Fp8PagedKV(kv_layers(model, decoder_layers(model.config)), hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
-                    batched_append=True, device=cfg.device, scratch_slots=scratch, alias_slots=spec_k)
+                    batched_append=True, device=cfg.device, scratch_slots=scratch, alias_slots=spec_k,
+                    pool_rows=cfg.kv_pool_rows if cfg.kv_pool == "shared" else None)
     # P143: the attention split cap, on the KV before any decode graph is captured (a captured graph keeps its n_split)
     split_cap, split_cap_source = apply_attn_split_cap(kv, cfg, getattr(model.config, "model_type", None))
     runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits)
@@ -1868,11 +2006,28 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     moe_resid: dict = {}
     license_moe_residual(model, sorted({1, *cfg.buckets, *runner._verify_buckets}),
                          mode=(fusion_report.get("modes") or {}).get("E4B_FUSE_T1_GLUE_R2"), report=moe_resid)
+    # K1 (E4B_DENSE_LT_PIN, opt-in): the pinned cuBLASLt GEMM on the named dense projections at 2..8 rows -- after the
+    # fusions patched the routers and K35 swapped its one-row projections, before any graph is captured; every captured
+    # decode bucket in 2..8 (the verify buckets included) must carry a pin (bench/dense-small-m/DESIGN.md)
+    from .engines.dense_lt_pin import apply_dense_lt_pin, engagement as dense_lt_engagement
+    dense_lt = apply_dense_lt_pin(model, sorted({*cfg.buckets, *runner._verify_buckets}) if cfg.graphs else (),
+                                  device=cfg.device)
     graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None
     engage_prefill_graph(runner, cfg)
+    if dense_lt.get("on") and torch.cuda.current_stream(torch.device(cfg.device)) != dense_lt.pop("_stream"):
+        raise RuntimeError("E4B_DENSE_LT_PIN: the decode graphs were captured for a stream other than the pin's: its "
+                           "one workspace must serve one stream")
+    # E4B_PAGED_KV_POOL=shared (bench/kv-pool-g/DESIGN.md): graphed slots claim blocks as they write (G1), the
+    # scheduler admits by reserved blocks (G2), and the pool holds the rows free memory left (G3, resolve_kv_pool), so
+    # the reservation binds whenever the pool is smaller than its slots can reach.
+    shared = cfg.kv_pool == "shared"
+    if shared:
+        runner.incremental_claims = True
     sched = ContinuousScheduler(runner=runner, max_seqs=cfg.max_seqs, kv_slots=cfg.max_seqs,
                                 chunk_tokens=cfg.chunk_tokens, max_prefill_tokens_per_step=cfg.prefill_budget,
-                                lookahead=cfg.decode_lookahead)
+                                lookahead=cfg.decode_lookahead, prefill_every=cfg.prefill_every,
+                                loaded_chunk_tokens=cfg.loaded_chunk_tokens,
+                                kv_blocks=(kv._n_rows - kv.n_scratch) if shared else None, block_tokens=kv.bt)
     info = {"moe_layers": L, "experts": E, "top_k": k, "model_type": getattr(model.config, "model_type", None),
             "int4_expert_layers": int4_layers, "int4_store_kinds": kinds, "int4_attn_projections": int4_attn,
             "kv": {"n_kv_heads": hkv, "head_dim": hd, "k_groups": cfg.kv_groups, "scratch_slots": scratch,
@@ -1892,11 +2047,16 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # during the build's captures and warm-ups: the engagement record a served read checks
     info["dense_gemv_bw"] = {**dense_gemv, "engagement": dense_gemv_engagement(model)}
     # P153: the head's record and, per row count, whether it routed or passed during the build's captures and warm-ups
-    info["int8_head_bw"] = {**int8_head, "engagement": int8_head_engagement(model)}
+    info["int8_head_bw"] = {**int8_head, "rows": int8_head_rows, "engagement": int8_head_engagement(model)}
+    # K1: the resolved pins and, per (site, M, prefill|decode|eager), the calls routed through them or passed
+    info["dense_lt_pin"] = {**{k_: v_ for k_, v_ in dense_lt.items() if not k_.startswith("_")},
+                            "engagement": dense_lt_engagement()}
     # E4B_K25_LUT as resolved at startup; which decode each K25 call took is prefill_routes()["seen"]["moe_k25_lut"]
     info["k25_lut"] = k25_lut
     # E4B_K25_PLAN as resolved at startup; which plan each K25 call took is prefill_routes()["seen"]["moe_k25_plan"]
     info["k25_plan"] = k25_plan
+    # E4B_NF4_SMALLM_BW as resolved at startup; which token counts it routed is prefill_routes()["seen"]["moe_nf4_smallm_bw"]
+    info["nf4_smallm_bw"] = nf4_smallm_bw
     # P149: the int8 attention census and, per row count, which projections routed through K37's kernels or
     # dequantized during the build's captures and warm-ups (Python counts calls, never a replay): what Q reads
     from .engines.int8_attn import engagement as int8_attn_engagement
@@ -1920,6 +2080,24 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
 # ---------------------------------------------------------------------------
 # HTTP
 # ---------------------------------------------------------------------------
+
+
+def _kv_pool_health(cfg, parts):
+    """``E4B_PAGED_KV_POOL=shared`` (levers G1-G3): the pool's rows against the claim-all size, the blocks the
+    scheduler admits against, what it holds reserved and how often its queue head waited on blocks, and
+    :func:`resolve_kv_pool`'s derivation (its inputs and arithmetic). None under claim-all."""
+    if cfg.kv_pool != "shared":
+        return None
+    runner = getattr(parts, "runner", None)
+    kv = getattr(runner, "kv", None)
+    sched = getattr(parts, "scheduler", None)
+    out = {"pool_rows": getattr(kv, "_n_rows", None), "claim_all_rows": getattr(kv, "claim_all_rows", None),
+           "scratch_rows": getattr(kv, "n_scratch", None), "block_tokens": getattr(kv, "bt", None),
+           "kv_blocks": getattr(sched, "kv_blocks", None), "derivation": cfg.kv_pool_resolution or None}
+    if sched is not None and getattr(sched, "kv_blocks", None) is not None:
+        out["kv_blocks_reserved"] = sched.kv_blocks_reserved
+        out["kv_blocks_waits"] = sched.kv_blocks_waits
+    return out
 
 
 def _graph_stats(parts):
@@ -2165,6 +2343,8 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
                 "max_seqs": cfg.max_seqs, "kv_slots": cfg.max_seqs, "max_tokens_per_seq": cfg.max_tokens_per_seq,
                 "max_seqs_requested": cfg.max_seqs_requested, "max_seqs_resolution": cfg.max_seqs_resolution or None,
                 "chunk_tokens": cfg.chunk_tokens, "max_prefill_tokens_per_step": cfg.prefill_budget,
+                "prefill_every": cfg.prefill_every, "loaded_chunk_tokens": cfg.loaded_chunk_tokens,
+                "kv_pool": cfg.kv_pool, "kv_pool_sizing": _kv_pool_health(cfg, parts),
                 "graphs": cfg.graphs, "buckets": list(cfg.buckets), "buckets_requested": cfg.buckets_requested,
                 "graph_status": info.pop("graph_status", None), "graph_stats": _graph_stats(parts),
                 "placement": cfg.placement, "fuse_qkv": _fuse_qkv_health(cfg, info),

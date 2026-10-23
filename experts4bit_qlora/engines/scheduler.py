@@ -163,22 +163,69 @@ class ContinuousScheduler:
     admission is the synchronous path's. Sequences, tokens and finish
     reasons are the synchronous path's; a sequence that stops on a stop id
     frees its slot one step later.
+
+    Two prefill/decode interleave knobs (serving roadmap lever A1). Both
+    apply only while a decode row is live, and their defaults compose
+    exactly today's plans:
+
+    * ``prefill_every`` (``E4B_PAGED_PREFILL_EVERY``, default 1): a step
+      carries prefill work only if the previous ``prefill_every - 1``
+      steps carried none, so live decodes take at most one prefill stall
+      every N steps. The next chunk waits at most ``N - 1`` steps for its
+      turn, so a given prompt waits about ``N`` steps per chunk owed ahead
+      of it (its own and those of prompts admitted before it); with no
+      decode row live, prefill runs every step as before.
+    * ``loaded_chunk_tokens`` (``E4B_PAGED_LOADED_CHUNK_TOKENS``, default
+      0 = off): caps both the chunk and the step's prefill budget, so one
+      long chunk becomes several short stalls. A first chunk shorter than
+      the prefill graph's ``T`` runs eagerly (the runner counts it as a
+      ``short_chunk``); chunking a prompt differently can change its
+      tokens, as any change of ``chunk_tokens`` can.
+
+    ``kv_blocks`` (serving roadmap lever G2, ``bench/kv-pool-g/DESIGN.md``):
+    when set, admission also reserves KV blocks. A request needs
+    ``ceil((prompt_len + max_new_tokens) / block_tokens)`` blocks; it is
+    admitted only if a slot is free AND the blocks already reserved plus its
+    need fit ``kv_blocks``, and its reservation is released when its slot
+    is freed. FIFO is kept: a head that does not fit waits, and nothing
+    behind it is admitted first. That head-of-line blocking is by design:
+    letting smaller requests jump a waiting head would starve long prompts
+    under load. A request that could never fit is refused at
+    ``add_request``. ``None`` (the default) admits as before.
     """
 
     def __init__(self, *, runner: StepRunner, max_seqs: int = 8,
                  kv_slots: int | None = None, chunk_tokens: int = 512,
                  max_prefill_tokens_per_step: int | None = None,
-                 clock=time.monotonic, lookahead: bool = False):
+                 clock=time.monotonic, lookahead: bool = False,
+                 prefill_every: int = 1, loaded_chunk_tokens: int = 0,
+                 kv_blocks: int | None = None, block_tokens: int = 16):
         if max_seqs < 1:
             raise ValueError("max_seqs must be >= 1")
         if chunk_tokens < 1:
             raise ValueError("chunk_tokens must be >= 1")
+        if int(prefill_every) < 1:
+            raise ValueError("prefill_every must be >= 1 (1 = prefill on every step, today's plans)")
+        if int(loaded_chunk_tokens) < 0:
+            raise ValueError("loaded_chunk_tokens must be >= 0 (0 = off)")
+        self.prefill_every = int(prefill_every)
+        self.loaded_chunk_tokens = int(loaded_chunk_tokens)
+        self._since_prefill = self.prefill_every     # steps since the last one that carried prefill (saturates)
+        self.prefill_deferred = 0                    # steps that held pending prefill back under prefill_every
         self.runner = runner
         self.max_seqs = max_seqs
         self.kv_slots = max_seqs if kv_slots is None else kv_slots
         if self.kv_slots < 1:
             raise ValueError("kv_slots must be >= 1")
         self.chunk_tokens = chunk_tokens
+        if kv_blocks is not None and int(kv_blocks) < 1:
+            raise ValueError("kv_blocks must be >= 1 (None = admission by slots only)")
+        if int(block_tokens) < 1:
+            raise ValueError("block_tokens must be >= 1")
+        self.kv_blocks = None if kv_blocks is None else int(kv_blocks)
+        self.block_tokens = int(block_tokens)
+        self._reserved: dict[int, int] = {}      # rid -> blocks reserved at admission (kv_blocks only)
+        self.kv_blocks_waits = 0                 # plans whose queue head waited on blocks, not on a slot
         # a step's prefill budget: one chunk by default. Larger budgets
         # raise prefill throughput and delay every resident decode by the
         # same amount — the tradeoff the gate wants swept, not chosen
@@ -225,6 +272,11 @@ class ContinuousScheduler:
             raise ValueError("max_new_tokens must be >= 1")
         if min_tokens < 0:
             raise ValueError("min_tokens must be >= 0")
+        if self.kv_blocks is not None:
+            need = self._blocks_for(len(prompt), max_new_tokens)
+            if need > self.kv_blocks:
+                raise ValueError(f"this request needs {need} KV blocks of {self.block_tokens} tokens, more than the "
+                                 f"pool's {self.kv_blocks}: it could never be admitted")
         rid = next(self._ids)
         self.queue.append(Request(rid=rid, prompt=list(prompt),
                                   max_new_tokens=max_new_tokens,
@@ -258,11 +310,32 @@ class ContinuousScheduler:
         self._retire()
         return True
 
+    def _blocks_for(self, prompt_len: int, max_new_tokens: int) -> int:
+        return -(-(int(prompt_len) + int(max_new_tokens)) // self.block_tokens)
+
+    def blocks_of(self, req: Request) -> int:
+        """The KV blocks ``req`` reserves at admission when ``kv_blocks`` is set."""
+        return self._blocks_for(req.prompt_len, req.max_new_tokens)
+
+    @property
+    def kv_blocks_reserved(self) -> int:
+        return sum(self._reserved.values())
+
+    def _head_fits(self) -> bool:
+        """Whether the queue's head can be admitted now: a free slot, and (``kv_blocks``) its blocks."""
+        if not (self.queue and len(self.active) < self.max_seqs and self._free_slots):
+            return False
+        return self.kv_blocks is None or self.kv_blocks_reserved + self.blocks_of(self.queue[0]) <= self.kv_blocks
+
     def _admit(self) -> None:
-        """FIFO admission, bounded by batch width AND KV slots."""
-        while (self.queue and len(self.active) < self.max_seqs
-               and self._free_slots):
+        """FIFO admission, bounded by batch width AND KV slots (and, with ``kv_blocks``, reserved blocks)."""
+        while self.queue and len(self.active) < self.max_seqs and self._free_slots:
+            if not self._head_fits():
+                self.kv_blocks_waits += 1
+                break
             req = self.queue.pop(0)
+            if self.kv_blocks is not None:
+                self._reserved[req.rid] = self.blocks_of(req)
             req.slot = self._free_slots.pop(0)
             req.phase = Phase.PREFILL
             req.admitted_at = self.clock()
@@ -279,11 +352,19 @@ class ContinuousScheduler:
         excellent aggregate throughput and unbounded TTFT."""
         self._admit()
         plan = StepPlan()
-        budget = self.max_prefill_tokens
+        chunk, budget = self.chunk_tokens, self.max_prefill_tokens
+        loaded = any(req.phase is Phase.DECODE for req in self.active.values())
+        if loaded and self.loaded_chunk_tokens:
+            chunk = min(chunk, self.loaded_chunk_tokens)
+            budget = min(budget, self.loaded_chunk_tokens)
+        if loaded and self._since_prefill < self.prefill_every - 1:
+            if any(req.phase is Phase.PREFILL for req in self.active.values()):
+                self.prefill_deferred += 1
+            budget = 0
         for req in self.active.values():
             if req.phase is not Phase.PREFILL or budget <= 0:
                 continue
-            take = min(self.chunk_tokens, budget,
+            take = min(chunk, budget,
                        req.prompt_len - req.prompt_pos)
             if take > 0:
                 plan.prefill.append((req.rid, req.prompt_pos, take))
@@ -291,6 +372,7 @@ class ContinuousScheduler:
         for req in self.active.values():
             if req.phase is Phase.DECODE:
                 plan.decode.append(req.rid)
+        self._since_prefill = 0 if plan.prefill else min(self._since_prefill + 1, self.prefill_every)
         return plan
 
     # ------------------------------------------------------------- step --
@@ -347,7 +429,7 @@ class ContinuousScheduler:
         queued = len(self.queue)
         early = []
         if (self._pending is not None and self.queue
-                and not (len(self.active) < self.max_seqs and self._free_slots)
+                and not self._head_fits()
                 and any(self._ends_with_pending(self.active[r]) for r in self._pending_rids)):
             # a request waits for a slot that the queued step's last token frees: collect it before admitting
             early = self._collect_pending()
@@ -460,6 +542,7 @@ class ContinuousScheduler:
             if req.finished_at is None:
                 req.finished_at = self.clock()
             self.runner.free_slot(rid)
+            self._reserved.pop(rid, None)
             self._free_slots.append(req.slot)
             req.slot = None
             (self.aborted if req.finish_reason == "abort" else self.done).append(req)
@@ -506,6 +589,9 @@ class ContinuousScheduler:
             "per_stream_tok_s_mean": (sum(per_stream) / len(per_stream)
                                       if per_stream else None),
             "kv_slots_free": len(self._free_slots),
+            **({"prefill_deferred": self.prefill_deferred} if self.prefill_every > 1 else {}),
+            **({"kv_blocks": self.kv_blocks, "kv_blocks_reserved": self.kv_blocks_reserved,
+                "kv_blocks_waits": self.kv_blocks_waits} if self.kv_blocks is not None else {}),
             **({"lookahead_discarded": self.lookahead_discarded} if self.lookahead else {}),
             **({"spec_dropped": self.spec_dropped} if self.speculative else {}),
         }

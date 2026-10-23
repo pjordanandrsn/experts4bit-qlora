@@ -8,13 +8,13 @@
 # checks every pin against its source before anything is sent; starts the box script detached under a fresh nonce;
 # polls TP_DONE.<nonce>; fetches receipts, logs, samples and bake.json -- never the venvs, caches, arenas, checkpoints or
 # the pack's payloads (its manifest.json rides along). Nothing here creates, destroys or approves compute.
-# SC1_BOX=A|B|C|D|E|F|G|H|I|J|K|L|M|N|O is required (D = SC1b's census box, E = SC2's serving box, F = SC2b's prefill-graph box, G = SC2g's gpt-oss box, H = SC2c's bulk-KV box, I = SC1g's gpt-oss quality box, J = SC1g's e4b-only diagnostic box, K = SC2d's engagement box, L = SC2e's slots box, M = SC5's same-box head-to-head, N = SC2f's P130-defaults ladder, O = SC2h's decode-lookahead ladder; box O also needs SC2H_SC2F_VERDICT, SC2f's committed verdict). SC1_PROVE=1 runs the proving rental. SC1_DRIVE_DRYRUN=1 prints the plan and exits 0.
+# SC1_BOX=A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P is required (D = SC1b's census box, E = SC2's serving box, F = SC2b's prefill-graph box, G = SC2g's gpt-oss box, H = SC2c's bulk-KV box, I = SC1g's gpt-oss quality box, J = SC1g's e4b-only diagnostic box, K = SC2d's engagement box, L = SC2e's slots box, M = SC5's same-box head-to-head, N = SC2f's P130-defaults ladder, O = SC2h's decode-lookahead ladder, P = SC2i's prefill-interleave ladder; box O also needs SC2H_SC2F_VERDICT, SC2f's committed verdict). SC1_PROVE=1 runs the proving rental. SC1_DRIVE_DRYRUN=1 prints the plan and exits 0.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [sc1_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID SC1_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
-case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O) ;; *) say "refusing: SC1_BOX must be A, B, C, D, E, F, G, H, I, J, K, L, M, N or O (SC1b, SC2, SC2b, SC2g, SC2c, SC1g, SC1g-diag, SC2d, SC2e, SC5, SC2f, SC2h)"; exit 78;; esac
+case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P) ;; *) say "refusing: SC1_BOX must be A, B, C, D, E, F, G, H, I, J, K, L, M, N, O or P (SC1b, SC2, SC2b, SC2g, SC2c, SC1g, SC1g-diag, SC2d, SC2e, SC5, SC2f, SC2h, SC2i)"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # Lane liveness by PID identity and host uptime (#1512) and the host-fault marker (#1517): the helper is sourced here and
 # streamed to the box over ssh stdin for the launch and each probe; it is never staged (staged.sha256 does not list it).
@@ -26,7 +26,7 @@ STAGE="$HERE/sc1_run.sh $HERE/sc1_e4b_sched.py $HERE/sc1_prompts.py $HERE/sc1_sa
 [ -s "$HERE/sc1_reduce.py" ] && STAGE="$STAGE $HERE/sc1_reduce.py"
 # SC1b (bench/sc1b): the census box D's pieces, staged flat on EVERY box so staged.sha256 stays one list for A-D
 SC1B="$REPO/bench/sc1b"; for f in sc1b_census.py sc1b_e4b_census.py sc1b_vllm_census.py sc1b_serve_census.py sc1b_toy.py kernel_classes.json sc1b_box_d.sh; do STAGE="$STAGE $SC1B/$f"; done
-SC2="$REPO/bench/sc2"; for f in sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc1g_kl.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py sc2e_box_l.sh sc2e_reduce.py sc2e_census.py sc2e_basis.py sc2f_box_n.sh sc2f_reduce.py sc2f_basis.py sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py; do STAGE="$STAGE $SC2/$f"; done
+SC2="$REPO/bench/sc2"; for f in sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc1g_kl.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py sc2e_box_l.sh sc2e_reduce.py sc2e_census.py sc2e_basis.py sc2f_box_n.sh sc2f_reduce.py sc2f_basis.py sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py; do STAGE="$STAGE $SC2/$f"; done
 # SC2h (box O): the knee rates are SC2f's reading run through the registered rule (sc2h_reduce.knee_rates) -- here on
 # the controller before any rental, and again on the box; SC2f VOID / UNREAD or a row not VALID refuses. The verdict
 # travels as sc2f_verdict.json; the box records its sha256 beside the rates it resolved.
@@ -57,7 +57,7 @@ while read -r want name; do
     hook/usercustomize.py) src="$P42/hook/usercustomize.py";;
     test_k19_row_exact_gpu.py) src="$TESTS/$name";;
     sc1b_*|kernel_classes.json) src="$SC1B/$name";;
-    sc2_*|sc2b_*|sc2g_*|sc1g_*|sc2c_*|sc2d_*|sc2e_*|sc2f_*|sc2h_*) src="$SC2/$name";;
+    sc2_*|sc2b_*|sc2g_*|sc1g_*|sc2c_*|sc2d_*|sc2e_*|sc2f_*|sc2h_*|sc2i_*) src="$SC2/$name";;
     p98_bake.py) src="$P98/$name";;
     sc5_ref.json|sc5_ref_chunked.json) src="$SC5/ref/$name";;
     sc5_*) src="$SC5/$name";;

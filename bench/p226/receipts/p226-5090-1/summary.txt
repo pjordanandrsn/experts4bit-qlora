@@ -1,0 +1,28 @@
+KNOBS e4b=4913f959ef8f182eeca205b1b45ea3c334c8b6c7 gnf4=41ef086e6a3e2be5b158ff1bb38e0de67862a949 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 family=qwen3 min_power_w=575 moe_layers=48 need_bench=2170
+CUDA_PROBE ok
+POWER_LIMIT_W 575 (floor 575)
+GUARD_FIT fit=5880s need=7350s left=7637s
+e4b 0.57.0 @4913f959ef8f182eeca205b1b45ea3c334c8b6c7
+gnf4 0.50.0 @41ef086e6a3e2be5b158ff1bb38e0de67862a949
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p154_route self-test OK (24 cases)
+p226_capture self-test OK (8 checks)
+p226_bench self-test OK (13 checks)
+p226_reduce self-test OK (21 checks)
+p136_box self-test OK (5 cases)
+selftest OK (3 cases)
+premise rc=0: 4 passed in 27.85s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P226_PROMPTS {"rows": 32, "prompt_tokens": 512, "sha256": "85b9e1cf205a5415bf37928973c3b36fc3ff5dae34340d0b6c661a2579338742"}
+capture rc=0 P226_CAPTURE {"steps": 128, "summary": {"steps": 128, "layers": 48, "unique_per_layer_step": {"mean": 74.8206, "min": 55, "max": 103}, "unique_per_step_total": {"mean": 3591.39, "min": 3397, "max": 3788}, "hottest_expert_share_of_a_layer": 0.09631, "uniform_expectation_per_layer": 111.771}, "k25_calls": 12288, "picks": {"shape": [48, 32, 128, 8], "dtype": "int16", "sha256_le_i2": "013f22440a473807165fb1db7d2024ad202d0ffffae814d992615119e9edf2d4", "file_sha256": "452e9115edcb8625a82fec813535968de1c2dd42275a937553c96ee6922fe72c"}, "faults": []}
+
+bench rc=0 P226_CARRIED [{"gu": {"block_n": 64, "kc": 256, "warps": 8, "stages": 3}, "dn": {"block_n": 128, "kc": 128, "warps": 8, "stages": 4}}, {"gu": {"block_n": 64, "kc": 256, "warps": 4, "stages": 3}, "dn": {"block_n": 32, "kc": 256, "warps": 4, "stages": 2}}, {"gu": {"block_n": 32, "kc": 256, "warps": 2, "stages": 2}, "dn": {"block_n": 128, "kc": 128, "warps": 4, "stages": 2}}]
+P226_BENCH done in 573.4 s; walls {"routing_s": 0.2, "stores_s": 0.6, "tiles_s": 2.3, "select_s": 467.3, "confirm_s": 102.8}; clocks n=12137 error=None
+P226 NO_GO ["K1 0.9676x over c1, lower bound 0.9669, clock-adjusted 0.9644: not both >= 1.05; c1 stays at 32 rows"]
