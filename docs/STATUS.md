@@ -324,6 +324,13 @@ GEMV, which reads half the head's bytes.
 
 `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` ([P153](../bench/p153/RESULTS-p153.md)).
 
+**The int8 head at 2 to 8 rows (`E4B_INT8_HEAD_ROWS`, opt-in).** In a captured microbench of the head call (one RTX 5090,
+lane P229), grouped-nf4-gemm K37's `linear_i8` runs Qwen3-30B-A3B's 151936 x 2048 int8 head at 2, 4 and 8 rows in a
+median 0.51 of `F.linear`'s time on the grid's bf16 rounding (upper bounds 0.5109, 0.5148 and 0.5085 against 0.70), and
+within a median 1.01-1.03 of the one-row int8 GEMV. The verdict is GO_ROWS_8, so the knob is licensed to its maximum of
+8 rows. No served speed or quality is claimed: a served read with P153's quality bars comes first, and the knob stays
+off by default. `e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23` ([P229](../bench/p229/RESULTS-p229.md)).
+
 **Qwen3-30B-A3B's batched decode runs K25 with K39's byte-permute decode (on by default).** `E4B_K25_LUT=prmt` swaps
 K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), which yields the same values bit for bit.
 - **Speed:** sixteen requests decode **1.0925×** as fast on a 5090 (about 976 → 1067 tok/s; the smallest of four ABBA

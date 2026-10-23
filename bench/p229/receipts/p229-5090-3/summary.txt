@@ -1,0 +1,18 @@
+KNOBS e4b=32fda64d2e606deb429b72c862a14bbbf493ba99 gnf4=41ef086e6a3e2be5b158ff1bb38e0de67862a949 gpu_class=5090 min_disk_gb=20 min_ram_gb=16 min_power_w=575 need_bench=600
+CUDA_PROBE ok
+POWER_LIMIT_W 575 (floor 575)
+GUARD_FIT fit=2100s need=2625s left=3524s
+e4b 0.57.0 @32fda64d2e606deb429b72c862a14bbbf493ba99
+grouped-nf4-gemm 0.50.0 @41ef086e6a3e2be5b158ff1bb38e0de67862a949
+torch 2.8.0+cu128
+triton 3.4.0
+cc (12, 0)
+p229_bench self-test OK (8 checks)
+p229_reduce self-test OK (25 checks)
+premise gpu rc=0: 11 passed in 7.10s
+premise cpu rc=0: 45 passed in 11.53s
+premise ok
+bench rc=0 P229_BENCH rc=0 in 7.6 s; clocks n=933 error=None
+
+P229_VERDICT GO_ROWS_8
+  M=2: I/D 0.5109 (ub 0.5109, clock-adjusted 0.5109; bar 0.7), I/K 1.0217 (ub 1.0217, clock-adjusted 1.0217; bar 1.25): PASS; M=4: I/D 0.5136 (ub 0.5148, clock-adjusted 0.5148; bar 0.7), I/K 1.0272 (ub 1.0296, clock-adjusted 1.0296; bar 1.25): PASS; M=8: I/D 0.5081 (ub 0.5085, clock-adjusted 0.5085; bar 0.7), I/K 1.0108 (ub 1.0116, clock-adjusted 1.0116; bar 1.25): PASS; every read M up to 8 passes: E4B_INT8_HEAD_ROWS is licensed up to 8

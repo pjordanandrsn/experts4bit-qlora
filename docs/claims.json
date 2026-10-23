@@ -12901,6 +12901,31 @@
         "the private receipt store, run p227-5090-1 (receipt.json, teardown-proof.json)"
       ],
       "notes": "Pre-registered in #2013 (Amendments 1-4: the shakedowns and real fixture, the runner's strike-note comment, pod-launch's drive contract, the retry ids and the started-box cap), before any data. A microbench of the expert call, not a served read: B3, a served read of E4B_NF4_SMALLM_BW=1, needs its own registration with a quality bar. E4B_NF4_SMALLM_BW stays opt-in."
+    },
+    {
+      "id": "e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23",
+      "package": "experts4bit-qlora",
+      "area": "kernel",
+      "model": "Qwen/Qwen3-30B-A3B (lm_head shape only, 151936 x 2048; a random bf16 head on its per-row int8 grid, no checkpoint loaded)",
+      "claim": "Lane P229 (one RTX 5090): at 2, 4 and 8 rows of Qwen3-30B-A3B's 151936 x 2048 lm_head on its per-row int8 grid, the E4B_INT8_HEAD_ROWS route (grouped-nf4-gemm K37's linear_i8 at its shipped plan) runs the captured head call in a median 0.51 of F.linear's time on the grid's bf16 rounding (upper bounds 0.5109, 0.5148 and 0.5085 against P229's 0.70 bar) and within a median 1.01-1.03 of the one-row int8 GEMV (K36; upper bounds up to 1.0296 against 1.25); P229's verdict is GO_ROWS_8.",
+      "value": 0.5148,
+      "unit": "ratio, I / D head-call time, the largest upper bound over M = 2, 4, 8 (median + 2 SE over 60 reps, at M = 4; clock-adjusted bounds equal)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 580.105.08, a 575 W power limit read on the box before any install), one rented Vast.ai host (AMD EPYC 7713, 256 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @32fda64d (P229's registration with Amendments 1-6, #2061's merge) + grouped-nf4-gemm v0.50.0 @41ef086e; torch 2.8.0+cu128, triton 3.4.0; premise on the card exactly as registered (the real kernels, 11 passed; the route's CPU suite, 45 passed); one random bf16 head (seed 229) swapped by e4b's own resolvers (apply_int8_head_bw, then apply_int8_head_rows 8); arms D (F.linear on the grid's bf16 rounding, the control), D2 (D captured again, the self-pair), I (the installed route at M rows, K37 at plan (32, 256, 4)) and K (the route at one row, K36) in captured graphs, 60 reps of Williams-ordered arms with spacer replays, P155's larger-of SE, clock-adjusted bounds from a sampled SM clock; verdict by bench/p229/p229_reduce.py",
+      "measured_on": "2026-10-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p229/RESULTS-p229.md",
+        "bench/p229/PREREG-p229.md",
+        "bench/p229/p229_reduce.py",
+        "bench/p229/receipts/p229-5090-3/verdict_p229.json",
+        "bench/p229/receipts/p229-5090-3/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p229-5090-3 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2026 (Amendments 1-6: the shakedown and real fixture, a runner comment re-pinned, pod-launch's drive contract, the retry ids, the power admission by the latest record, and a fetch that imports no links), before any data. A microbench of the head call, not a served read: the served read (W2, W4 and W8 on the default Qwen3 server, with P153's quality bars) is registered next and comes before any default. E4B_INT8_HEAD_ROWS stays opt-in (unset is 1)."
     }
   ]
 }

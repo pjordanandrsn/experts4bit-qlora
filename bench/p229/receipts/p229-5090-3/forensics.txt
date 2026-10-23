@@ -1,0 +1,8 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.105.08, GPU-092cb15f-1c87-61da-a9bd-b233c3f0b998, 12.0
+power.limit,clocks.max.sm 575.00 W, 3090 MHz
+CPU(s):                               256
+Vendor ID:                            AuthenticAMD
+Model name:                           AMD EPYC 7713 64-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             440         108         264           0          67         327
+overlay          40G   77M   40G   1% /
