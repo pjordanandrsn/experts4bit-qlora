@@ -176,3 +176,12 @@ called through `router_linear`. The bench therefore times e4b's real pinned path
 - **The budget's 10 GB term** is the download allowance, not the disk. The create asks for a 40 GB disk, and the
   runner refuses under 20 GB free (rc 13). The worst case ($1.45), the guard and every constant are unchanged. P229's
   review found the wording; this lane carries the same correction.
+
+## Amendment 3 (2026-10-23, before any reading): a comment in the runner, re-pinned
+
+- The repository's guard-fit check (`tests/test_lane_guard_fit.py`) requires each runner's fit refusal to carry the
+  shared strike note. `p228_run.sh`'s rc 41 comment now reads "a refusal before the install, not a strike; two
+  consecutive headroom refusals count as one strike". That is a comment only: no command, exit code, threshold or
+  output changed.
+- `staged-p228.sha256` is re-pinned for `p228_run.sh`. Every other staged file and the real fixture are unchanged, so
+  p228-shake-1's record still reduces as Amendment 1 states.
