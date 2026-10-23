@@ -303,8 +303,16 @@ P222's, with the arms above. Everything not named here is P222's.
   - Started-box accounting is by outcome, never by id: no code parses an id's number.
   - The registered caps, the strike rules and the stop govern alone. Nothing is widened.
   - **The stop counts readings whose runner ran.** "Two consecutive HARNESS_ERROR, VOID or NOT_RUN readings stop the
-    lane" (Budget) never counts a refusal at create or a pre-flight teardown: neither is a reading. rc 17 and rc 41
-    stay not strikes, as registered.
+    lane" (Budget) never counts a refusal at create or a pre-flight teardown: neither is a reading.
+  - **What the stop counts:**
+    - An rc 17 box never counts toward the stop, whatever label the launcher's receipt carries (pod-launch labels such
+      a box HARNESS_ERROR).
+    - A single rc 41 is not a strike; two consecutive rc 41 count as one strike under the cross-lane rule
+      (Amendment 2), unchanged.
+    - A refusal at create and a pre-flight teardown count toward nothing.
+    - Decided pre-data: no P227 box has run. Why: rc 17 is the host's power floor and rc 41 the guard fit, both
+      refusals before any install; the stop exists to end a lane whose kit cannot produce a reading, not to let capped
+      hosts end it.
 - **A new outcome row, decided from the launcher's receipt and never classified:**
 
   | outcome | when | a reading? | a strike? |

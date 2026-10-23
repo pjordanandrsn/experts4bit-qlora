@@ -171,6 +171,25 @@ def test_amendment_4_adds_exactly_the_retry_ids_r1_to_r8():
     assert "not a strike, under the registered rc 17 rule)" in PREREG
 
 
+
+def test_amendment_4_states_what_the_stop_counts():
+    """The four cases, ruled pre-data after -1's rc 17: rc 17 never counts; a single rc 41 is not a strike but two
+    consecutive count as one (the cross-lane rule, also the runner's comment); a create refusal and a pre-flight
+    teardown count toward nothing; -1 counts 0."""
+    flat = " ".join(PREREG.split("## Amendment 4", 1)[1].split())
+    for case in ("An rc 17 box never counts toward the stop, whatever label the launcher's receipt carries.",
+                 "A single rc 41 is not a strike; two consecutive rc 41 count as one strike under the cross-lane rule"
+                 " (line 174), unchanged.",
+                 "A refusal at create and a pre-flight teardown count toward nothing.",
+                 "`p229-5090-1` (rc 17) counts 0.",
+                 "Decided pre-data (no reading exists), after `-1`'s rc 17."):
+        assert case in flat, case
+    line_174 = PREREG.splitlines()[173] + " " + PREREG.splitlines()[174]
+    assert "two consecutive headroom refusals count as one strike" in " ".join(line_174.split())
+    assert "# rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike" \
+        in RUN
+
+
 def test_the_drive_follows_pod_launchs_contract():
     """pod-launch runs a reading's drive without E4B_SHA (it proves the checkout HEAD is heads.e4b) and owns the run
     directory's receipt files: the drive derives the launch commit from the clean HEAD, refuses an override, and fetches
