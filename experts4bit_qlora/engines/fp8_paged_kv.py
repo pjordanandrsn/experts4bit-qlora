@@ -793,8 +793,8 @@ class Fp8PagedKV:
         The (layer, slot, block, row) entries are packed into one pinned int32 buffer (a ring of two, each guarded by
         an event recorded after its copy, as :meth:`_claim_staging`), copied to the device and scattered into
         ``_bt_all`` with ``index_put_``: two launches on the current stream, ordered before whatever the caller queues
-        next. A slot holding different block counts across ``layers`` takes the per-layer path. Returns the entries
-        written."""
+        next. A slot holding different block counts across ``layers`` is refused (bulk claims never leave one). Returns
+        the entries written."""
         layers = list(range(self.L)) if layers is None else list(layers)
         if not layers or not wants:
             return 0
@@ -803,9 +803,10 @@ class Fp8PagedKV:
             self._refuse_alias(seq)
             have = {len(self._rows.get((layer, seq), ())) for layer in layers}
             if len(have) != 1:
-                for layer in layers:
-                    self._ensure_blocks(layer, seq, int(upto))
-                continue
+                # bulk claims keep every layer of a slot at one block count; a mismatch is a bookkeeping fault, and
+                # claiming per layer here would pop rows before the step's room check
+                raise RuntimeError(f"slot {seq} holds different block counts across layers {sorted(have)}; "
+                                   f"claim_many claims whole steps only")
             lo = have.pop()
             n = int(upto) + 1 - lo
             if n > 0:

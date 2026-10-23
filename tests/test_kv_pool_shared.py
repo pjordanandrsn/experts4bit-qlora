@@ -212,3 +212,12 @@ def test_the_server_switch(monkeypatch):
         monkeypatch.setenv("E4B_PAGED_KV_POOL", bad)
         with pytest.raises(ValueError, match="E4B_PAGED_KV_POOL"):
             PagedServeConfig.from_env().validate()
+
+
+def test_claim_many_refuses_a_slot_with_mismatched_layers_before_popping(monkeypatch):
+    _, kv, _ = _runner(monkeypatch, True)
+    kv._ensure_blocks(0, 1, 2)                                  # layer 0 of slot 1 ahead of layer 1
+    free_before, bt_before = [list(f) for f in kv._free], kv._bt_all.clone()
+    with pytest.raises(RuntimeError, match="different block counts"):
+        kv.claim_many({0: 1, 1: 3})
+    assert kv._free == free_before and torch.equal(kv._bt_all, bt_before)
