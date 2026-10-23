@@ -56,18 +56,28 @@ same tokens as claim-all on one fixed schedule. It is not a speed claim. Explore
   drift and the noise. Every server of a draw runs the same plan seeds.
 - **The contract arm, in process, before the servers** (`bench/sc2/sc2j_contract.py`, G1's contract on this model and
   stack). The engine is driven step by step through `serve_paged.build_engine` on one fixed schedule, using
-  `bench/kv-pool-g/g3-smoke/g3_smoke.py`'s workload and drive at 32 slots:
+  `bench/kv-pool-g/g3-smoke/g3_smoke.py`'s workload and drive at an EXPLICIT 32 slots (`E4B_PAGED_MAX_SEQS=32`):
   - `claim-all` at 32 slots, twice (the floor);
-  - `shared` at 32 slots, with its pool sized by G3 on the box.
-  Every token and finish reason of `shared` must equal claim-all's; the floor must be IDENTICAL.
+  - `shared` at 32 slots. G3 keeps an explicit width and sizes the pool for it (`resolve_kv_pool`). At 4,096 tokens a
+    slot, 32 slots' claim-all size (32 × 256 + 32 scratch = 8,224 rows) fits whole, so the pool holds the claim-all
+    size.
+  - Every token and finish reason of `shared` must equal claim-all's, and the floor must be IDENTICAL.
+  - The fixed schedule never waits on blocks: the record must read `kv_blocks_waits` 0 on `shared`, or the arm is VOID
+    as unreadable. The contract therefore covers the claim timing (G1) at matched width, not admission under waits.
+    Admission under waits is G2's design test on the CPU (`tests/test_kv_pool_sizing.py`), where every request finishes
+    with the tokens claim-all gives it, and it is exercised under load by Q3 below.
 - **Per server:** 4 warm serial requests, SC2e's burst, serial 24 (seed = draw), then two ladders:
   - **the SC2 ladder** (Q2, the primary outcome): SC2's driver and 512-token prompts, `max_tokens` U[64, 256], Poisson at
     **1, 2, 4, 8, 12 and 16 req/s**, 120 requests each (SC2e's rates; seed draw × 100 + rate);
   - **the long ladder** (Q3, so reservations bind): 2,048-token prompts (`sc2_prompts.py` at 2,048 tokens from the same
-    wikitext-2 split), `max_tokens` U[512, 1,536], Poisson at **0.5, 1, 2 and 4 req/s**, 48 requests each (seed draw ×
-    1,000 + 10 × rate).
-    - At 64 slots a request reserves up to 224 blocks, so 64 such requests ask more than the pool holds, and admission
-      waits on blocks.
+    wikitext-2 split), `max_tokens` U[512, 1,536], Poisson at **0.5, 1, 2 and 4 req/s**, **96 requests each** (seed draw
+    × 1,000 + 10 × rate). `/stats` is captured before and after every rung.
+    - A request reserves its prompt plus its own `max_tokens`: 192 blocks on average and 224 at most. At the top rungs
+      the server holds 64 requests (the slots), and 64 × 192 = 12,288 blocks exceeds the pool's about 12,000 (the
+      estimate): admission is designed to wait.
+    - **PRESSURE**, stated before data: Q3 is read only if `sh`'s `kv_blocks_waits` rises over the 4 req/s rung in both
+      draws. Otherwise Q3 is UNREAD, the shared pool was never under reservation pressure, and the verdict cannot be
+      SHARED_LICENSED.
   - At the end, `/health` and `/stats` are captured.
 
 ## The rule (`bench/sc2/sc2j_reduce.py`, self-tested)
@@ -95,8 +105,12 @@ holds for both `ca` servers of each draw. Per draw and rate, `noise` = |attainme
 - at every Q2 rate up to and including `ca`'s ceiling, in each draw, `sh`'s attainment ≥ the lower `ca` server's − 0.02;
 - at `sh`'s ceiling, `sh`'s completion tokens per second ≥ 1.25 × `ca`'s at `ca`'s ceiling, in each draw: tokens/s at
   the knee;
-- on Q3, at every rate, in each draw, `sh`'s attainment ≥ the lower `ca` server's − max(0.05, noise at that rate). The
-  shared pool must not serve worse when reservations bind.
+- Q3 is read (PRESSURE holds), and at every Q3 rate, in each draw, `sh`'s attainment ≥ the lower `ca` server's −
+  max(0.05, noise at that rate). The shared pool must not serve worse when reservations bind.
+
+The tokens/s clause is kept on purpose. Any strictly higher Q2 ceiling on these rungs is already ≥ 1.33× the lower
+rate, so it adds little beyond attainment. It guards against a ceiling won on attainment while completion tokens per
+second lag.
 
 The verdict is REGRESSED if, in both draws, `sh`'s attainment at any Q2 rate at or below `ca`'s ceiling is below the
 lower `ca` server's − 0.05, or the same holds on Q3. It is NOT_LICENSED otherwise, with the failed clause named. A
@@ -109,11 +123,26 @@ server lost to the deadline makes the reading UNREAD, never SHARED_LICENSED.
   arithmetic's own perturbations. The stack has moved since (release 0.57.0), so the box re-runs P117's teacher-forced
   check at the launch stack as a QUALITY arm (`bench/p117/p117_box.py`, unchanged, buckets 32 and 64 against pieces of
   16), with P117's bar. QUALITY failing makes the verdict NOT_LICENSED (QUALITY), whatever the speed clauses read.
+- The QUALITY arm runs the servers' attention plans although its table is narrower. `p117_box.py` builds its pool at
+  its own window (P + C + 16 tokens), not 4,096, and the paged decode attention's split count reads the table width.
+  It reads it only as an upper bound: grouped-nf4-gemm v0.50.0, `fp8_paged_attn.decode_split_plan` (lines 1292-1310),
+  plans min(32, want, ceil(table tokens / 64)), with want = floor(11 × SMs / (5 × B × KV heads)).
+  - On an RTX 5090 (170 SMs) with Qwen3's 4 KV heads, want is 5 at B = 16, 2 at 32 and 1 at 64.
+  - P117's 656-token window gives a bound of 11 and 4,096 tokens gives 64. Both are above want at every bucket the
+    QUALITY arm compares, so the plans are the same.
+  - The box records `Fp8PagedKV.split_plans` in both and the reducer asserts they match at B = 16, 32 and 64.
+    Otherwise QUALITY is UNREAD.
 - Reported, no bar: per rate and draw, the share of requests whose streamed text is byte-equal between `sh` and
   `ca_a`. Under load, batch composition differs between servers, so this is descriptive only.
 
-**What a licence licenses**, as a separate PR citing this read: `E4B_PAGED_KV_POOL=shared` as the default for
-`E4B_PAGED_MAX_SEQS=auto`, on the scope below. Nothing else, and never a bare width.
+**What a licence licenses**, as a separate PR citing this read, and only what it read: `E4B_PAGED_KV_POOL=shared` as
+the default for `E4B_PAGED_MAX_SEQS=auto` for ONE allowlisted pair, **model_type `qwen3_moe` with the int4 expert store
+it served, on the sm_120 card class (the RTX 5090)**. It is a default-allowlist entry, like K25's plan allowlist, and
+not a global default.
+- Every other (family, card class) pair keeps claim-all until its own read.
+- A later lane may widen the allowlist by reading a second family (a different architecture, e.g. a dense or GQA-heavy
+  model) and a second card class (a smaller-memory card, where the shared pool's advantage should be largest).
+- Nothing else is licensed, and never a bare width.
 
 **Scope.** Qwen3-30B-A3B int4 through `serve_paged`, one RTX 5090, 4,096 tokens a slot, the two ladders above. 8,192
 tokens a slot (claim-all 16 against shared 64 in the estimate) is a later lane, if this one licenses.
@@ -124,7 +153,7 @@ tokens a slot (claim-all 16 against shared 64 in the estimate) is a later lane, 
 |---|---|---|---|
 | P1 | `ca`'s width 32 and `sh`'s 64 on the box | the estimate above | G3's arithmetic or the box's free memory differs from the estimate: the pool record names which |
 | P2 | `sh`'s Q2 ceiling 12 req/s and `ca`'s 8, both draws | SC2e's measured s64a 12 and s32a 8 at 2,048 tokens a slot: Q2's requests (512 + up to 256 tokens) never approach either ceiling, so the per-slot ceiling should not move the step cost | the width does not carry over to 4,096 tokens a slot on this stack: the census names where |
-| P3 | on Q3, `sh` counts block waits (`kv_blocks_waits` > 0) at 2 and 4 req/s | 64 × up to 224 blocks exceeds the pool | the long ladder did not exercise the reservation |
+| P3 | on Q3, `sh` counts block waits (`kv_blocks_waits` rising) at 2 and 4 req/s, both draws | 64 × the 192-block mean exceeds the pool | the long ladder did not exercise the reservation (at 4 req/s that is PRESSURE failing: Q3 UNREAD) |
 | P4 | serial p50 TTFT and TPOT of `sh` within ±5 % of `ca`'s | a serial request runs bucket 1 on every server | the pool mode costs a single sequence time: name where in the step trace |
 | P5 | VRAM at ready: `sh` − `ca` ≤ 1.5 GiB | both arms are sized to the same free memory less the same reserve and margin | G3 does not leave the margin it prices |
 
@@ -146,27 +175,36 @@ script's self-test, and `SC1_BOX=Q SC1_DRIVE_DRYRUN=1` at the launch commit.
 - a serial smoke, and a 16-request Poisson smoke on each ladder at its top rate, every request VALID.
 WIDTH is not read in the proof: Granite fits 64 slots under both pools. The QUALITY arm is smoked on 8 windows.
 
-**Reading** (`sc2j-5090-*`, guard 4.5 h):
+**Reading** (`sc2j-5090-*`, guard 5.5 h):
 - installs about 10 min; fetch and bake 25-40 min;
 - the contract arm about 15 min; the QUALITY arm about 10 min;
-- six servers at about 18-22 min each (start, warm and burst about 7; serial about 3; Q2 about 6; Q3 about 5).
-- Total about 190-225 min. The guard's slack over the top estimate is 45 min, above the 540 s boot floor.
+- six servers at about 22-26 min each (start, warm and burst about 7; serial about 3; Q2 about 6; Q3 about 10: 360 s
+  of arrivals plus the long generations' drain).
+- The fit is therefore about 192-231 min. Guard Fit's static form needs boot + 1.25 × fit ≤ guard. With a 540 s boot
+  term, 9 + 1.25 × 231 = 298 min, so the reading's guard is **5.5 h** (330 min, 32 min to spare). The proof's fit is
+  about 25 min, so 9 + 1.25 × 25 = 40 min, under its 1.0 h guard.
 
 **Run ids.** Proofs `sc2j-prove-1` onward and readings `sc2j-5090-1` onward, with retry ids `-r1` to `-r8` for a box
 that follows one that did not start (rule 2).
 
 **Outcome classes** are bench/common rule 3's, decided from the launcher's receipt and the runner's exit.
 
-**The started-box cap.** At most **4** boxes may START: two proofs and two readings, a re-run counted as a reading.
-- Worst cases at $1.05/h plus download at ≤ $0.011/GB: a proof 1.0 h ≤ $1.05 + ~$0.10 = $1.15; a reading 4.5 h ≤ $4.73
-  + ~$0.83 = $5.56.
-- The lane's worst is 2 × $1.15 + 2 × $5.56 = **$13.42**, plus any refused boxes' cost.
+**The started-box cap, by kind.** At most **4** boxes may START: at most 2 proofs and at most 2 readings, a re-run
+counted as a reading. A proof never stands in for a reading.
+- Worst cases at $1.05/h plus download at ≤ $0.011/GB: a proof 1.0 h ≤ $1.05 + ~$0.10 = $1.15; a reading 5.5 h ≤ $5.78
+  + ~$0.83 = $6.61.
+- A box that does not start (refused at create, NOT_RUN, refused before the install) costs at most about $0.25: up to
+  600 s held before the pre-flight gives up, at $1.05/h, with no download.
+- The lane's worst is bounded: the cap × each kind's worst, plus every other registered id (4 reading and proof ids
+  plus 8 retry ids, less the 4 that start) as a non-start: 2 × $1.15 + 2 × $6.61 + 8 × $0.25 = **$17.52**.
 - Each run is under the standing single-run tier ($15) and inside the launcher's 6 h cap.
-- Two started boxes in a row that are NOT read (HARNESS_ERROR, VOID, a fault mid-install or mid-run) stop the lane
-  pending a root-cause note. A read box never counts toward the stop.
+- **Strikes.** A strike is a started box that is NOT read (HARNESS_ERROR, VOID, a fault mid-install or mid-run), or two
+  consecutive refusals at the guard fit (rc 41). **Two strikes** stop the lane pending a root-cause note. A read box
+  never counts toward the stop, and neither does a non-start.
 
-**Boot slack.** Each box's guard minus its static fit need is at least 540 s (`ssh_ready_s` 420 s plus 120 s of
-staging), and `tests/test_sc2j_box.py` asserts it.
+**Boot slack.** Each box's guard satisfies Guard Fit's static form, boot + 1.25 × fit ≤ guard, with a boot term of at
+least 540 s (`ssh_ready_s` 420 s plus 120 s of staging). `tests/test_sc2j_box.py` asserts the static form for the
+proof and the reading, not a slack over the estimate.
 
 **Frozen pins once closed (rule 6).** When the verdict is recorded, the lane's tests assert its staged hashes and
 kernel pin against the read's merge commit (`SC2J_FROZEN`), never the live tree.
