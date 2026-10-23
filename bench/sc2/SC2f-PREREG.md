@@ -457,3 +457,39 @@ including the two disagreeing either way, and `tests/test_sc2_kit_hold.py` runs 
 **Unchanged:** every constant, threshold and cost; the arms, both knobs, FLIPS, the bar and its exclusions, the price
 ceiling, the order of the three lanes, the screen deadline, the box, the proof, the guards and the $0 shakedown.
 Amendment 3's default check still runs at the launch commit against `v0.57.0` and is recorded with the run.
+
+### Amendment 6 (registered before any SC2f run): the HOLD gate's declared exceptions, in one place
+
+**Why.** Amendment 5's HOLD gate requires the launch commit's staged kit, `sc1_drive.sh` and `make_pin.sh` to equal
+`7b8f1f69`'s byte for byte. Since then, two changes landed on `main` that boxes N, O and P never run, so no later
+`main` commit passed. bench/common rule 8 (a fetch never imports links) put `--no-links` into `sc1_drive.sh`'s fetch.
+SC2j's own amendments changed `sc2j_box_q.sh` and added `sc2j_quality.py` to the flat kit and to the drivers'
+staging lists. The only checkout that still passed was `7b8f1f69` itself, whose fetch keeps links.
+
+**The change.** The HOLD gate (`bench/sc2/sc2_kit_hold.py`) keeps its byte identity with `7b8f1f69` and tolerates
+exactly these exceptions. This list is the whole set; anything outside it refuses.
+
+1. **Rule 8's fetch token.** `sc1_drive.sh` may carry one ` --no-links`, immediately after `rsync -az` on `pull_box`'s
+   rsync line (`pull_box()` is the nearest function above that line). A second token, the token on any other line or
+   at any other position, or any other changed byte refuses.
+2. **Box Q's own files.**
+   - An entry whose name matches `sc2j_<name>.(py|sh|json)` exactly may be changed or added.
+   - Any other name refuses, including a new file nobody references: a staged `json.py` or `torch.py` would shadow a
+     real module on every box, so the exact name is a safety condition. A removed entry refuses.
+   - The staging lines of `sc1_drive.sh` and `make_pin.sh` may gain exactly the names of the sc2j entries that were
+     added, and nothing else.
+   - INERT runs again at the launch commit, over every other staged entry (the Python files included) and both
+     drivers. No `sc2j_<name>` may appear outside box Q's own `sc1_run.sh` lines and the drivers' staging lines.
+
+A launch from a dirty worktree (`check --at HEAD` with `git status --porcelain` non-empty) also refuses. Fetch flags
+and box Q's files change nothing that boxes N, O and P run, so the hold keeps its meaning. The stack is still
+`36cdd2d4`, under the STACK gate and `verdict-stack`.
+
+**Evidence.** The self-test refuses each exception beyond its letter (11 new cases: a non-sc2j entry changed; an N/O/P
+runner gaining `. $W/sc2j_extra.py`; a removed entry; the delta plus another driver byte; an unreferenced staged
+`json.py`; a staging line gaining a non-sc2j name, or an sc2j name that is not an added entry; an sc2j name on a
+non-staging driver line; a box Q file named outside the pattern; a dirty worktree). `tests/test_sc2_kit_hold.py`
+checks the registered `main` commit `ac7e6ed1`, which carries exactly exceptions 1 and 2: HOLD reads OK, and
+`hold_diff` is `sc2j_box_q.sh` and `sc2j_quality.py`.
+
+**Unchanged:** everything else Amendment 5 registered; every constant, threshold and cost.

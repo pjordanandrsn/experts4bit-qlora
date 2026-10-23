@@ -293,3 +293,12 @@ carries this amendment, with `--e4b-sha "$E4B_SHA"` (its STACK gate refuses any 
 `KNOBS ... e4b=` line of `summary.txt` both `36cdd2d4`); otherwise the read is VOID. `verdict_stack.json` is a
 required results file: a results PR or re-derivation without it, or with it not OK, reads VOID.
 **Unchanged:** every constant, threshold and cost, and everything Amendments 1 and 2 left unchanged.
+
+### Amendment 4 (registered before any SC2h run): the HOLD gate's declared exceptions
+
+As SC2f Amendment 6, for box O, which names the full list in one place. Rule 8's one `--no-links` on
+`pull_box`'s rsync line. Box Q's own `sc2j_<name>` files, changed or added and staged by name, with INERT re-run
+at the launch commit. A dirty launch worktree refuses. Anything else refuses. The staged kit's meaning for box O and
+the stack under test (`36cdd2d4`) are unchanged.
+
+**Unchanged:** everything else.

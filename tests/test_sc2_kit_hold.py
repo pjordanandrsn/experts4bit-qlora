@@ -107,3 +107,14 @@ def test_verdict_stack_takes_the_lanes_pin(tmp_path):
         (tmp_path / f).write_text((FIX / f).read_text())
     assert kh.verdict_stack(tmp_path, stack=kh.HOLD)["verdict"] == "OK"
     assert kh.verdict_stack(tmp_path)["verdict"] == "VOID"
+
+
+def test_the_hold_passes_a_registered_main_commit_with_box_qs_and_rule_8s_deltas():
+    """ac7e6ed1 (main after SC2j Am. 1-3 and rule 8): sc2j_box_q.sh changed, sc2j_quality.py added and staged, and
+    pull_box's --no-links. The HOLD exceptions (SC2f Am. 6, SC2h Am. 4, SC2i Am. 3) read OK; 1a25b209 -> it does not."""
+    g = kh.Git(str(REPO))
+    at = "ac7e6ed123403af2bd4582cd792a2c5bb4114076"
+    r = kh.check(g, kh.HOLD, at=at, e4b_sha=kh.STACK)
+    assert r["verdict"] == "OK", r["why"]
+    assert r["hold_diff"] == ["sc2j_box_q.sh", "sc2j_quality.py"]
+    assert kh.check(g, kh.HOLD, at=at, e4b_sha=kh.HOLD)["verdict"] == "REFUSE"      # the stack gate still holds

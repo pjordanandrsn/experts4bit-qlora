@@ -179,3 +179,12 @@ and its record is kept with the run.
 required results file: a results PR or re-derivation without it, or with it not OK, reads VOID.
 **Unchanged:** every constant, threshold and cost; the arms, the order, the gates, the rule, the predictions, the box,
 the proof, the guards, the budget and the $0 shakedown.
+
+### Amendment 3 (registered before any SC2i run): the HOLD gate's declared exceptions
+
+As SC2f Amendment 6, for box P, which names the full list in one place. Rule 8's one `--no-links` on
+`pull_box`'s rsync line. Box Q's own `sc2j_<name>` files, changed or added and staged by name, with INERT re-run
+at the launch commit. A dirty launch worktree refuses. Anything else refuses. The staged kit's meaning for box P and
+the stack under test (`36cdd2d4`) are unchanged.
+
+**Unchanged:** everything else.
