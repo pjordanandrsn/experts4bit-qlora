@@ -1,0 +1,6 @@
+NF4-Q     RETAINED                                 rho_bar 0.712  c_bar 0.662  f 0.9246
+NF4-W     RETAINED                                 rho_bar 0.995  c_bar 0.584  f 0.9353
+INT4-Q    RETAINED                                 rho_bar 0.949  c_bar 0.573  f 0.9086
+INT4-W    RETAINED                                 rho_bar 1.001  c_bar 0.559  f 0.8839
+MXFP4-Q   RETAINED                                 rho_bar 0.970  c_bar 0.528  f 0.1918
+MXFP4-W   RETAINED                                 rho_bar 0.990  c_bar 0.534  f 0.2076
