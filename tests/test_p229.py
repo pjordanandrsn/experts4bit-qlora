@@ -166,24 +166,56 @@ def test_amendment_4_adds_exactly_the_retry_ids_r1_to_r8():
     assert "**The ids are labels, not budget.**" in PREREG and "no code parses an id's number" in PREREG
     assert ("| **refused at create** (Amendment 4) | the provider refused the create, so nothing was created ($0) | no |"
             " no; counts toward no cap, uses one id |") in PREREG
-    assert "**The stop counts runs whose runner ran.**" in PREREG
-    assert "count a refusal at create or a pre-flight teardown: neither is a run for it." in PREREG
     assert "not a strike, under the registered rc 17 rule)" in PREREG
 
 
 
-def test_amendment_4_states_what_the_stop_counts():
-    """The four cases, ruled pre-data after -1's rc 17: rc 17 never counts; a single rc 41 is not a strike but two
-    consecutive count as one (the cross-lane rule, also the runner's comment); a create refusal and a pre-flight
-    teardown count toward nothing; -1 counts 0."""
+#: Amendment 4's host and fit refusals before the install; a box that passes them and begins the install STARTS
+PRE_INSTALL_REFUSALS = {10, 13, 15, 16, 17, 18, 28, 41}
+
+
+def _pre_install_refusals():
+    """Every `finish N` the runner can reach before its first install, minus the kit's own refusals (9 a staging
+    tripwire, 78 an unregistered id) and the signal trap (130)."""
+    head = RUN.split("\npipx logs/", 1)[0]
+    return {int(n) for n in re.findall(r"finish (\d+)", head)} - {9, 78, 130}
+
+
+def _counts(box):
+    """Amendment 4's rule, as the hand table applies it: (started, toward the stop)."""
+    started = box.get("runner_rc") is not None and box.get("began_install", False) \
+        and box["runner_rc"] not in PRE_INSTALL_REFUSALS
+    return started, started and not box.get("read", False)
+
+
+def test_amendment_4_one_start_definition_for_the_cap_and_the_stop():
+    """Ruled pre-data after -1's rc 17: a box STARTS when its runner passes the pre-install refusals and begins the
+    install; only started boxes count toward the cap (3) and the stop; the four non-start cases count toward nothing;
+    a mid-install fault starts and counts; the rc 41 pair rule is unchanged."""
+    assert _pre_install_refusals() == PRE_INSTALL_REFUSALS            # the runner refuses all of them before any install
     flat = " ".join(PREREG.split("## Amendment 4", 1)[1].split())
-    for case in ("An rc 17 box never counts toward the stop, whatever label the launcher's receipt carries.",
+    for case in ("**A box STARTS when its runner passes the refusals before the install (rc 17, rc 41, and the host"
+                 " refusals rc 10, 13, 15, 16, 18 and 28) and begins the install**",
+                 "**Only started boxes count toward the cap and toward any stop; a box that did not start (a refusal at"
+                 " create, a pre-flight teardown, rc 17, a single rc 41) counts toward none of them; the registered rc 41"
+                 " pair rule is unchanged.**",
+                 "**At most three boxes start.**", "3 x $1.45",
+                 "An rc 17 box never counts toward the stop, whatever label the launcher's receipt carries.",
                  "A single rc 41 is not a strike; two consecutive rc 41 count as one strike under the cross-lane rule"
                  " (line 174), unchanged.",
                  "A refusal at create and a pre-flight teardown count toward nothing.",
                  "`p229-5090-1` (rc 17) counts 0.",
                  "Decided pre-data (no reading exists), after `-1`'s rc 17."):
         assert case in flat, case
+    not_started = [{"runner_rc": None},                                  # a refusal at create: nothing created
+                   {"runner_rc": None, "created": True},                 # a pre-flight teardown: the runner never ran
+                   {"runner_rc": 17}, {"runner_rc": 41}]                 # the box's own refusals before the install
+    for box in not_started:
+        assert _counts(box) == (False, False), box
+    assert _counts({"runner_rc": 9, "began_install": True}) == (True, True)     # a mid-install fault (PIP FAIL, rc 9)
+    assert _counts({"runner_rc": 27, "began_install": True}) == (True, True)    # VOID: started, not read
+    assert _counts({"runner_rc": 0, "began_install": True, "read": True}) == (True, False)
+    assert "PIP FAIL (gnf4)\"; finish 9; }" in RUN.split("\npipx logs/", 1)[1][:400]
     line_174 = PREREG.splitlines()[173] + " " + PREREG.splitlines()[174]
     assert "two consecutive headroom refusals count as one strike" in " ".join(line_174.split())
     assert "# rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike" \

@@ -205,17 +205,24 @@ head. K2b routes 2..N rows to K37's `linear_i8` over the same codes.
 - **The ids are labels, not budget.**
   - Started-box accounting is by outcome, never by id: no code parses an id's number.
   - The registered caps, the strike rules and the stop govern alone. Nothing is widened.
-  - **The stop counts runs whose runner ran.** "Two consecutive runs that are not read stop the lane" (Budget) does not
-    count a refusal at create or a pre-flight teardown: neither is a run for it.
-  - **What the stop counts (line 125's text did not settle rc 17, so this settles it):**
-    - An rc 17 box never counts toward the stop, whatever label the launcher's receipt carries.
-    - A single rc 41 is not a strike; two consecutive rc 41 count as one strike under the cross-lane rule (line 174),
-      unchanged.
-    - A refusal at create and a pre-flight teardown count toward nothing.
-    - `p229-5090-1` (rc 17) counts 0.
-    - Decided pre-data (no reading exists), after `-1`'s rc 17. Why: rc 17 is the host's power floor and rc 41 the
-      guard fit, both refusals before any install; the stop exists to end a lane whose kit cannot produce a reading,
-      not to let capped hosts end it.
+- **A box STARTS when its runner passes the refusals before the install (rc 17, rc 41, and the host refusals rc 10,
+  13, 15, 16, 18 and 28) and begins the install**, whatever its outcome after that (read, HARNESS_ERROR, VOID, a
+  mid-install or mid-run fault). One definition serves the cap and the stop. **Only started boxes count toward the cap
+  and toward any stop; a box that did not start (a refusal at create, a pre-flight teardown, rc 17, a single rc 41)
+  counts toward none of them; the registered rc 41 pair rule is unchanged.**
+- **At most three boxes start.** The retry ids never add a started box; they only replace ids used by boxes that did
+  not start. This keeps the registered budget: 3 x $1.45.
+- **What the stop counts (line 125's text did not settle rc 17, so this settles it):**
+  - "Two consecutive runs that are not read stop the lane" (Budget) counts started boxes only. A started box that is
+    not read counts, including one that faults mid-install, so alternating faults cannot dodge the stop.
+  - An rc 17 box never counts toward the stop, whatever label the launcher's receipt carries.
+  - A single rc 41 is not a strike; two consecutive rc 41 count as one strike under the cross-lane rule (line 174),
+    unchanged.
+  - A refusal at create and a pre-flight teardown count toward nothing.
+  - `p229-5090-1` (rc 17) counts 0.
+  - Decided pre-data (no reading exists), after `-1`'s rc 17. Why: rc 17 is the host's power floor and rc 41 the guard
+    fit, both refusals before any install; the stop exists to end a lane whose kit cannot produce a reading, not to let
+    capped hosts end it.
 - **A new outcome row, decided from the launcher's receipt and never classified:**
 
   | outcome | when | a reading? | a strike? |
