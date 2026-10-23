@@ -219,13 +219,35 @@ echo "CPU allotment $ALLOT (cgroup quota capped by affinity; physical cores $PHY
 case " $FAMILIES " in *" qwen3ompab "*)
   [ "$ALLOT" -lt "$PHYS" ] || { say "BOX REFUSED: the container's CPU allotment ($ALLOT) is not below the physical cores ($PHYS) -- amendment 45's threads A/B has no contrast on this host (host floor)"; echo "BOX_REFUSED cpu_allotment=$ALLOT phys=$PHYS" >> summary.txt; finish 18; };;
 esac
-# TC1 amendment 76: a CPU-allotment floor in the pre-flight (P224's lesson, applied before data). Box tc1-5090-155 ran amendment 75's four
-# arms in 36.6 min at an allotment of 47. Scaling its CPU-bound phases as 47/ALLOT, every arm run three times (the load gate's two re-runs),
-# with 25 % headroom, the 2 h guard covers an allotment of 42 or more (TC1-PREREG amendment 76, "The CPU floor"). Below it the box refuses
-# here, before any venv or fetch.
-POS76_MIN_ALLOT=42
+# TC1 amendment 76's CPU-allotment floor (42) is SUPERSEDED by amendment 77: the quota is recorded (arm_facts.threads), never screened.
+# TC1 amendment 77: a SINGLE-THREAD floor in the pre-flight, before any venv or fetch. The probe is the launcher's own cpu_loop_mops loop
+# (its host probe; the same body as bench/p225/p225_probe.py), the median of 5 runs of at least 2 s each. Box tc1-5090-155 read 25.91
+# Mops (its launcher host facts); scaling its CPU-bound phases as 25.91/M, every arm run three times, with 25 % headroom, a 3 h guard
+# covers 15 Mops or more (TC1-PREREG amendment 77). Below the floor the box refuses here (rc 18, a host floor).
+POS77_MIN_MOPS=15
+single_thread_mops(){ python3 - <<'PYM' 2>/dev/null
+import statistics, time
+def loop():
+    x = 0
+    for i in range(1_000_000):
+        x = (x + i * 7) & 0xFFFF
+    return x
+def once(min_s=2.0):
+    t0, n = time.perf_counter(), 0
+    while True:
+        loop()
+        n += 1
+        dt = time.perf_counter() - t0
+        if dt >= min_s:
+            return n * 1_000_000 / dt / 1e6
+print("%.2f" % statistics.median(once() for _ in range(5)))
+PYM
+}
 case " $FAMILIES " in *" qwen3pos76co "*)
-  [ "$ALLOT" -ge "$POS76_MIN_ALLOT" ] || { say "BOX REFUSED: the container's CPU allotment ($ALLOT) is under amendment 76's floor ($POS76_MIN_ALLOT): the 2 h guard would not cover the four arms with the load gate's re-runs (host floor)"; echo "BOX_REFUSED cpu_allotment=$ALLOT floor=$POS76_MIN_ALLOT (amendment 76)" >> summary.txt; finish 18; };;
+  MOPS=$(single_thread_mops)
+  echo "SINGLE_THREAD ${MOPS:-unreadable} Mops (median of 5; floor $POS77_MIN_MOPS; python $(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null); amendment 77)" | tee -a summary.txt
+  python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "${MOPS:-0}" "$POS77_MIN_MOPS" 2>/dev/null \
+    || { say "BOX REFUSED: single-thread speed ${MOPS:-unreadable} Mops is under amendment 77's floor ($POS77_MIN_MOPS): the 3 h guard would not cover the four arms with the load gate's re-runs (host floor)"; echo "BOX_REFUSED single_thread_mops=${MOPS:-unreadable} floor=$POS77_MIN_MOPS (amendment 77)" >> summary.txt; finish 18; };;
 esac
 # P48 run 1 (2026-09-19) drew a host whose container overlay was 32 GB and died ENOSPC mid-fetch; box B fetches ~120 GB of
 # checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.

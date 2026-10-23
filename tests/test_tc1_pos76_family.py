@@ -134,23 +134,42 @@ def test_a_failed_switch_leaves_only_that_side_not_run(tmp_path: Path):
     assert all("the switch to grouped-nf4-gemm " + AFTER + " failed" in s for s in stubs)
 
 
-FLOOR = _cut(r"^POS76_MIN_ALLOT=.*?^esac\n")
+FLOOR = _cut(r"^POS77_MIN_MOPS=.*?\n") + _cut(r'^case " \$FAMILIES " in \*" qwen3pos76co "\*\)\n  MOPS=\$\(single_thread_mops\).*?^esac\n')
+PROBE = _cut(r"^single_thread_mops\(\)\{.*?^PYM\n\}\n")
 
 
-def _floor(tmp: Path, allot: int, families: str) -> str:
+def _floor(tmp: Path, mops: str, families: str) -> str:
     script = ('say(){ echo "SAY $*"; }\nfinish(){ echo "FINISH $1"; exit "$1"; }\n'
-              f'ALLOT={allot}; FAMILIES="{families}"\n' + FLOOR + 'echo PASSED\n')
+              f'single_thread_mops(){{ echo "{mops}"; }}\nFAMILIES="{families}"\n' + FLOOR + 'echo PASSED\n')
     r = subprocess.run(["bash", "-c", script], cwd=tmp, capture_output=True, text=True, timeout=30)
     return r.stdout + ((tmp / "summary.txt").read_text() if (tmp / "summary.txt").exists() else "")
 
 
-def test_the_cpu_floor_refuses_a_slow_box_before_any_venv(tmp_path: Path):
-    """Amendment 76's pre-flight floor: an allotment under 42 refuses the box (finish 18) when the family is on it; 42 and up pass, and
-    other families are not affected."""
-    assert "POS76_MIN_ALLOT=42" in FLOOR
-    out = _floor(tmp_path, 41, "qwen3pos76co")
-    assert "FINISH 18" in out and "BOX_REFUSED cpu_allotment=41 floor=42 (amendment 76)" in out and "PASSED" not in out, out
-    for allot, fam in ((42, "qwen3pos76co"), (47, "qwen3pos76co"), (16, "qwen3pos75cl")):
-        d = tmp_path / f"{allot}-{fam}"
+def test_the_single_thread_floor_refuses_a_slow_box_before_any_venv(tmp_path: Path):
+    """Amendment 77's pre-flight floor (it supersedes amendment 76's allotment floor): a single-thread speed under 15 Mops, or an
+    unreadable one, refuses the box (finish 18) when the family is on it; 15 and up pass, and other families are not affected. The
+    allotment is no longer screened."""
+    assert "POS77_MIN_MOPS=15" in FLOOR and "POS76_MIN_ALLOT" not in RUN.split("# TC1 amendment 76's CPU-allotment floor (42) is SUPERSEDED")[1][:2000]
+    for mops in ("14.99", ""):
+        d = tmp_path / f"refused-{mops or 'none'}"
         d.mkdir()
-        assert "PASSED" in _floor(d, allot, fam) and "FINISH" not in _floor(d, allot, fam), (allot, fam)
+        out = _floor(d, mops, "qwen3pos76co")
+        assert "FINISH 18" in out and f"BOX_REFUSED single_thread_mops={mops or 'unreadable'} floor=15 (amendment 77)" in out, out
+        assert "PASSED" not in out, out
+    for mops, fam in (("15.00", "qwen3pos76co"), ("25.91", "qwen3pos76co"), ("5.00", "qwen3pos75cl")):
+        d = tmp_path / f"{mops}-{fam}"
+        d.mkdir()
+        out = _floor(d, mops, fam)
+        assert "PASSED" in out and "FINISH" not in out, (mops, fam, out)
+    line = _floor(tmp_path / "25.91-qwen3pos76co", "25.91", "qwen3pos76co")
+    assert re.search(r"SINGLE_THREAD 25\.91 Mops \(median of 5; floor 15; python 3\.\d+\.\d+; amendment 77\)", line), line   # the loop is interpreter-sensitive
+
+
+def test_the_single_thread_probe_is_the_launchers_loop_and_reads_a_speed(tmp_path: Path):
+    """The probe is the launcher's cpu_loop_mops body (the same as bench/p225/p225_probe.py), the median of 5 runs of at least 2 s;
+    run here it prints one positive speed."""
+    p225 = (REPO / "bench" / "p225" / "p225_probe.py").read_text()
+    assert "x = (x + i * 7) & 0xFFFF" in PROBE and "x = (x + i * 7) & 0xFFFF" in p225 and "range(1_000_000)" in PROBE
+    assert "statistics.median(once() for _ in range(5))" in PROBE and "min_s=2.0" in PROBE
+    out = subprocess.run(["bash", "-c", PROBE + "single_thread_mops"], capture_output=True, text=True, timeout=120).stdout.strip()
+    assert float(out) > 0, out
