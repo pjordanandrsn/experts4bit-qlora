@@ -16,8 +16,9 @@ unset (on by default for qwen3_moe, ``default-allowlisted``). B16 = ``E4B_INT8_H
 THE RULING PAIR IS K37 AGAINST F.linear ON ONE GRID: both arms round the head in place to its per-row int8 grid; the
 knob changes only the kernel at 2 to 8 rows. K's tokens are never held to R's (reported only).
 
-NO REAL FIXTURE YET: no P232 box (shakedown or reading) has run, so every case below is synthetic, built to the box's
-record shape (p232_box.py); the shakedown's record becomes the real fixture by an amendment before the reading.
+THE REAL FIXTURE (Amendment 2): p232-shake-1's records, sha256-pinned under fixtures/p232-shake-1/, reduce to SHAKEDOWN
+(would_read FLIP_ROWS_8) in tests/test_p232.py, and reading-shaped they VOID on the 575 W floor alone. The cases below
+stay synthetic, built to the box's record shape (p232_box.py).
 
 The rule, first rung that applies:
   VOID           a record missing or not ok, the warm-up's included; the pins (e4b, grouped-nf4-gemm v0.50.0, torch,

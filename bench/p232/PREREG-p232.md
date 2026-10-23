@@ -201,3 +201,44 @@ count, arm or threshold moves; each item says what the registration left open or
   - **Guard 2.75 h** ((boot 300 + 7,360) x 1.25 = 9,575 s <= 9,900 s; 700 s over the fit need for a slow ssh).
   - **Worst case:** 2.75 h x $1.05 + 70 GB x $0.04 = **$5.69** a started box. A normal box is still expected near one
     hour.
+
+## Amendment 2 (2026-10-23, after the shakedown, before any reading): the real fixture, the floor on real bytes, the guard
+
+- **`p232-shake-1`:** one RTX 5090 on a host whose board was capped at **500 W** (read on the box), explore tier, about
+  $0.77, teardown verified. It ran this kit (the registration with Amendment 1, the kit's merge) end to end at three
+  reps:
+  - the download probe and the guard fit;
+  - the install and the tripwire (`TRIPWIRE none`);
+  - the premise: **11 passed** on the card and **45 passed** on the CPU;
+  - the warm-up, the eight speed arms and the three quality phases, every one rc 0;
+  - the reducer: `SHAKEDOWN`.
+  - No times, ratios or quality numbers are quoted: a 500 W board at three reps, and a shakedown is never a reading.
+- **The real fixture:** the twelve reducer inputs (`arm_{Rw,Ra,Ka,Kb,Rb,Rc,Kc,Kd,Rd}.json`,
+  `quality_{R,K,B16}.json`) are pinned by sha256 at `bench/p232/fixtures/p232-shake-1/`, byte-identical to the box's
+  (no host identifiers). `tests/test_p232.py`:
+  - reduces them to `SHAKEDOWN` with every integrity check passed, and reads the e4b pin on the real bytes;
+  - VOIDs each of six departures from them: a window short, an agreement that is not k/128, a missing KL, one record not
+    a shakedown, a K arm with the int8 head off, and an arm at the reading's rep count.
+- **The 575 W floor, on real bytes.** A shakedown's power is not ruled, so this record is the real-record test of the
+  reading's floor:
+  - Made reading-shaped (shakedown off on every record and the registered five reps on every arm, nothing else), it
+    VOIDs with exactly 108 reasons. Each one is the 500 W `power.limit` before or after a timed block: 9 processes x 3
+    workloads x 2 lengths x 2 sides.
+  - The same bytes with the recorded cap set to 575 W read a verdict, so the cap is the only fault.
+  - A reducer without the reading's `power_faults` call reads a verdict from the 500 W record: the old rule as a
+    mutant, which the test tells apart.
+- **The guard, read on this host:** `GUARD_FIT fit=7360s need=9200s left=9809s`, so **609 s over the need** after this
+  host's boot (about 90 s from the create to the check). Review flagged a slow host's boot at about 420 s, which still
+  leaves room. The box ran from create to teardown in about 46 minutes.
+  - The fit, the guard and the worst case stay as registered.
+  - A host too slow for the fit still refuses rc 41 before any install, at cents.
+- **A residual, stated, not changed:** the record carries each window's agreement as a fraction, not its position count.
+  - A partial-agreement window must still be k/128 or the record VOIDs (Amendment 1).
+  - A window at exactly 1.0 cannot show whether it was scored on 128 positions, and most of this record's windows read
+    1.0.
+  - Accepted at the kit's merge: it cannot move a read near the 0.95 bar, since a systematic short window VOIDs any
+    window short of full agreement.
+- **One staged pin moves:** `p232_reduce.py`'s docstring now names the fixture.
+  - Its staged sha256 moves from `74e3d168...` to `86abd61b...`.
+  - No rule, constant, case or output changes; the self-test reads the same 114 cases.
+  - The reading launches from this amendment's merge.
