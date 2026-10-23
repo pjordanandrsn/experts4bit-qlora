@@ -247,6 +247,7 @@ def test_amendment_5_admits_by_the_latest_power_record_and_the_box_reads_the_flo
     refused = head.index("finish 17; }", printed)                               # rc 17 after the print, before install
     assert printed < refused
     assert 17 in _pre_install_refusals()
+    assert 'say "REFUSED: power.limit unreadable"' in head and "finish 15; }" in head      # an unreadable cap is rc 15
     flat = " ".join(PREREG.split("## Amendment 5 ", 1)[1].split())
     for case in ("is never pinned, whatever the record's age",
                  "A machine whose latest record is 575 W or more, at any age, is admitted, and so is a machine with no"
@@ -256,7 +257,11 @@ def test_amendment_5_admits_by_the_latest_power_record_and_the_box_reads_the_flo
                  " outcome resets it.",
                  "**Unchanged:** the 575 W floor, the measurement, the rows, the rule",
                  "at most $1.05/h, guard 1.0 h, $1.45 worst for a started box, and at most three started boxes",
-                 "No staged pin moves and no runner byte changes."):
+                 "No staged pin moves and no runner byte changes.",
+                 "each template sets it to `\"eligible\"` (pod-launch's default), keeps the rule `\"latest\"`, and sets no"
+                 " `max_age_days`",
+                 "**Who counts:** the lane's owner, from each box's receipt (the runner's exit code).",
+                 "So at most **$0.56** a box, and three in a row cost at most **$1.67** before the stop."):
         assert case in flat, case
     assert _rc17_stop([17, 17, 17])
     assert _rc17_stop([17, None, 17, None, 17])                  # refusals at create neither add nor reset

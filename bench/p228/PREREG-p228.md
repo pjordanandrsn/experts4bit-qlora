@@ -264,8 +264,12 @@ P227's and P229's Amendment 4, in its final form, for this lane.
   - A machine whose latest record is 575 W or more, at any age, is admitted, and so is a machine with no record. A
     stale positive record is better evidence than none, and the box's own read decides either way. The ranking is: read
     within 3 days first, then older records at 575 W or more, then no record.
-  - The box reads its own power limit before the install and refuses below 575 W (rc 17), as registered. For a host
-    whose record is stale or missing, that refusal is how the floor is enforced.
+  - The launcher admits the same way. pod-launch applies the 575 W floor itself, and each reading template
+    (`template_read.json`) today sets `vast_power_limit_unknown` to `"exclude"`, which rents only machines whose
+    recorded cap clears the floor. From this amendment, each template sets it to `"eligible"` (pod-launch's default),
+    keeps the rule `"latest"`, and sets no `max_age_days`.
+  - The box reads its own power limit before the install and refuses below 575 W (rc 17), as registered; an
+    unreadable cap is rc 15. For a host whose record is stale or missing, that refusal is how the floor is enforced.
 - **Unchanged:** the 575 W floor, the measurement, the rows, the rule, every screen term except this admission, and
   every cap: at most $1.05/h, guard 1.0 h, $1.45 worst for a started box, and at most three started boxes
   (Amendment 5).
@@ -274,14 +278,22 @@ P227's and P229's Amendment 4, in its final form, for this lane.
   - **The stop for them (new): three consecutive rc 17 boxes stop the lane.** The owner posts the three machines and
     the caps they read, and the lane resumes only on a ruling. "Consecutive" counts boxes whose runner ran. A refusal
     at create or a pre-flight teardown neither adds to the count nor resets it; any other runner outcome resets it.
-  - **What one costs:** the boot plus the runner's checks before the install, at the offer's rate (at most $1.05/h).
-    `p229-5090-1`, the one rc 17 box so far, ran 195 s from create to teardown, and its receipt's actual cost is
-    $0.002. Priced conservatively at 600 s x $1.05/h = **$0.18** a box, three in a row cost at most **$0.53**
-    before the stop. That is outside the started-box budget, as rc 17 always was.
+  - **Who counts:** the lane's owner, from each box's receipt (the runner's exit code). The pin loop exits after every
+    launch, so no box follows another without the owner reading the last one. No code enforces the count; the
+    lane's test models it.
+  - **What one costs:** the boot plus the runner's checks before the install, at the offer's rate (at most $1.05/h),
+    plus the image pull when the host has not cached the image.
+    - Compute, priced conservatively at 600 s x $1.05/h: **$0.18**.
+    - The image pull: the pinned image (`pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`, digest `a7103283...`) is
+      9.4 GB compressed. Uncached, at the template's <= $0.04/GB, that is at most **$0.38**.
+    - So at most **$0.56** a box, and three in a row cost at most **$1.67** before the stop. That is outside the
+      started-box budget, as rc 17 always was.
+    - Measured: `p229-5090-1`, the one rc 17 box so far, ran 195 s from create to teardown, and its ledger row
+      (download included) is $0.002.
   - **The registry learns each one.** The runner prints `POWER_LIMIT_W <n> (floor 575)` before it refuses. Committing
     the box's receipt (`tools/commit-receipt`, which appends the host line) records that machine's cap. From then on
     the machine is excluded if it is below 575 W.
-- **Where the change lives:** the pin screen is controller-side code on the mini, not a staged kit file. Its
-  admission change gets its own review (the diff posted on the bus) and is installed only after this amendment
-  merges. No staged pin moves and no runner byte changes. Until then, the screen runs as it is.
+- **Where the change lives:** the pin screen and the reading template are controller-side files on the mini, not
+  staged kit files. Their admission change gets its own review (the diff posted on the bus) and is installed only
+  after this amendment merges. No staged pin moves and no runner byte changes. Until then, both run as they are.
 - Decided pre-data: no P228 box has run.
