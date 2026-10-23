@@ -634,6 +634,9 @@ _PHASE_PEAKS = None
 #: --phase-peaks: the max since reset_peak(). That reset falls after setup and eval0, so neither enters it. Folding every phase back in
 #: would quietly add setup and eval0 to peak_vram_gb whenever they peak higher than training (maintainer review of #1290).
 _RUN_PEAKS = None
+#: The allocator's RESERVED maxima folded at each phase boundary (--phase-peaks 1), beside _RUN_PEAKS: reset_peak_memory_stats() resets
+#: the reserved peak too, so step_mem_row folds these back to keep its max_reserved a running maximum (review of #2003).
+_RUN_RESERVED = None
 
 
 def _absmax_compressed(model):
@@ -663,6 +666,8 @@ def phase_mark(name):
     _PHASE_PEAKS[name] = max(_PHASE_PEAKS.get(name, 0), v)
     if _RUN_PEAKS is not None:
         _RUN_PEAKS.append(v)
+    if _RUN_RESERVED is not None:
+        _RUN_RESERVED.append(int(torch.cuda.max_memory_reserved()))
     torch.cuda.reset_peak_memory_stats()
 
 
@@ -697,15 +702,21 @@ def thread_facts():
 
 def step_mem_row(step):
     """TC1_STEP_MEM=1: the allocator at an optimizer step's end, peak stats NEVER reset here (the census and the record's window peaks
-    read them). The running maxima are monotone, so the step at which one first rises is the step that set the window peak; the current
-    allocated and reserved give the step-end gap; device_used is the card's used bytes (mem_get_info). All None off CUDA."""
+    read them). The running maxima are monotone, under --phase-peaks 1 too: both are folded back over the phases that phase_mark reset
+    (_RUN_PEAKS, _RUN_RESERVED). So the row at which one first rises bounds the step that set the window peak. Rows are written at a
+    step's end and in-loop evals run AFTER the row, so a rise first seen at row N+1 may have been set by the eval after step N, not by
+    step N+1. The current allocated and reserved give the step-end gap; device_used is the card's used bytes (mem_get_info). All None
+    off CUDA."""
     if DEV != "cuda":
         return {"step": step, "max_allocated": None, "max_reserved": None, "allocated": None, "reserved": None, "device_used": None}
     free, total = torch.cuda.mem_get_info()
     mx = int(torch.cuda.max_memory_allocated())
     if _RUN_PEAKS:                                     # amendment 56's phase folding (--phase-peaks 1) resets per phase: fold it back
         mx = max([mx] + _RUN_PEAKS)
-    return {"step": step, "max_allocated": mx, "max_reserved": int(torch.cuda.max_memory_reserved()), "allocated": int(torch.cuda.memory_allocated()),
+    mr = int(torch.cuda.max_memory_reserved())
+    if _RUN_RESERVED:                                  # the same reset drops the reserved peak: fold it back the same way
+        mr = max([mr] + _RUN_RESERVED)
+    return {"step": step, "max_allocated": mx, "max_reserved": mr, "allocated": int(torch.cuda.memory_allocated()),
             "reserved": int(torch.cuda.memory_reserved()), "device_used": int(total - free)}
 
 
@@ -724,6 +735,8 @@ def reset_peak():
         torch.cuda.reset_peak_memory_stats()
     if _RUN_PEAKS is not None:                         # amendment 56: phases folded before this reset stay out of peak_gb()
         _RUN_PEAKS.clear()
+    if _RUN_RESERVED is not None:
+        _RUN_RESERVED.clear()
 
 
 def autocast_ctx(enabled):
@@ -4060,10 +4073,10 @@ def run_arm(a, load_fn, sampler=True):
     host_ram0 = host_ram_report()                   # TC3: the cgroup peak BEFORE this arm, so a container-lifetime number is never credited to it
     lever = lever_of(a)                             # TC3: the memory lever this arm engages (None = resident), on every row it writes
     mcen = MemCensus() if getattr(a, "mem_census", 0) else None   # TC1 amendment 23: the allocator history records from here, before the load
-    global _PHASE_PEAKS, _RUN_PEAKS
+    global _PHASE_PEAKS, _RUN_PEAKS, _RUN_RESERVED
     if getattr(a, "phase_peaks", 0):                # TC1 amendment 56: resets the allocator's max at each phase boundary, which the census reads
         assert mcen is None, "--phase-peaks 1 resets the allocator's max at each phase, which --mem-census 1 reads: one or the other"
-        _PHASE_PEAKS, _RUN_PEAKS = {}, []
+        _PHASE_PEAKS, _RUN_PEAKS, _RUN_RESERVED = {}, [], []
     if mcen is not None:
         mcen.start()
     torch.manual_seed(a.seed)

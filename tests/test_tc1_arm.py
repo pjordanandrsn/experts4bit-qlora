@@ -2611,3 +2611,72 @@ def test_gnf4_code_identity_reads_the_installed_commit_and_the_imported_file(tmp
     monkeypatch.setattr(importlib.metadata, "distribution", gone)
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
     assert arm.gnf4_code_identity() == {"commit": None, "nf4_qlora_sha256": None}
+
+
+class _FakeAllocator:
+    """A stand-in for torch.cuda's peak stats: reset_peak_memory_stats() drops each maximum to the current value, as the real one does."""
+
+    def __init__(self):
+        self.alloc = self.reserved = self.max_alloc = self.max_reserved = self.resets = 0
+
+    def use(self, alloc, reserved):
+        self.alloc, self.reserved = alloc, reserved
+        self.max_alloc, self.max_reserved = max(self.max_alloc, alloc), max(self.max_reserved, reserved)
+
+    def synchronize(self):
+        pass
+
+    def max_memory_allocated(self):
+        return self.max_alloc
+
+    def max_memory_reserved(self):
+        return self.max_reserved
+
+    def memory_allocated(self):
+        return self.alloc
+
+    def memory_reserved(self):
+        return self.reserved
+
+    def mem_get_info(self):
+        return (100 - self.reserved, 100)
+
+    def reset_peak_memory_stats(self):
+        self.resets += 1
+        self.max_alloc, self.max_reserved = self.alloc, self.reserved
+
+
+def test_step_mem_maxima_stay_running_maxima_across_phase_resets(monkeypatch):
+    """#2003 review: under --phase-peaks 1, phase_mark() resets BOTH allocator peaks at every in-loop eval. step_mem_row must fold
+    both back (_RUN_PEAKS and _RUN_RESERVED), so its max_allocated and max_reserved never drop, and it must never reset them itself.
+    The mutant (no reserved fold, the PR's first head) shows the drop this test exists to catch."""
+    import types
+    arm = _load_arm_module()
+    cuda = _FakeAllocator()
+    monkeypatch.setattr(arm, "torch", types.SimpleNamespace(cuda=cuda))
+    monkeypatch.setattr(arm, "DEV", "cuda")
+
+    def run(fold_reserved):
+        cuda.__init__()
+        monkeypatch.setattr(arm, "_PHASE_PEAKS", {})
+        monkeypatch.setattr(arm, "_RUN_PEAKS", [])
+        monkeypatch.setattr(arm, "_RUN_RESERVED", [] if fold_reserved else None)
+        rows = []
+        cuda.use(10, 20)
+        rows.append(arm.step_mem_row(1))
+        cuda.use(12, 30)                       # the in-loop eval after step 1 peaks the reserved pool,
+        cuda.use(11, 15)                       # frees it,
+        arm.phase_mark("eval")                 # and the phase boundary resets both peaks to the current use
+        rows.append(arm.step_mem_row(2))
+        cuda.use(9, 14)
+        rows.append(arm.step_mem_row(3))
+        return rows
+
+    rows = run(fold_reserved=True)
+    assert [r["max_allocated"] for r in rows] == [10, 12, 12]
+    assert [r["max_reserved"] for r in rows] == [20, 30, 30]          # the eval's 30 is kept, and set before row 2 (the docstring note)
+    assert [r["reserved"] for r in rows] == [20, 15, 14] and rows[2]["device_used"] == 14
+    assert cuda.resets == 1                                           # phase_mark's reset only: step_mem_row never resets
+    mutant = run(fold_reserved=False)
+    assert [r["max_reserved"] for r in mutant] == [20, 15, 15]        # the drop the fold prevents
+    assert arm.step_mem_row.__doc__ and "eval after step N" in " ".join(arm.step_mem_row.__doc__.split())
