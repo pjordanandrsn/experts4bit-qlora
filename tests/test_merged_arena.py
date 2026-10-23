@@ -749,6 +749,35 @@ def test_the_opt_in_without_an_adapter_is_a_loose_flag(monkeypatch):
         PagedServeConfig.from_env()
 
 
+def _stub_paths(tmp_path, index):
+    arena = tmp_path / "stub.arena"
+    arena.write_bytes(b"")
+    (tmp_path / "stub.arena.index.json").write_text(json.dumps(index))
+    calib = tmp_path / "calib.json"
+    calib.write_text("{}")
+    return str(arena), str(calib)
+
+
+def test_build_engine_refuses_the_opt_in_on_a_base_arena_before_reading_anything(tmp_path):
+    """E4B_PAGED_MERGED_ARENA=1 on a base arena is a loose flag, refused at the index step: no adapter is verified and
+    no weight is read (the model id is never resolved)."""
+    from experts4bit_qlora.serve_paged import PagedServeConfig, build_engine
+    arena, calib = _stub_paths(tmp_path, {"bake_mode": MA.BASE_BAKE_MODE, "rows": []})
+    cfg = PagedServeConfig(model="org/never-read", arena=arena, calib=calib, adapter=str(tmp_path / "no-such-adapter"),
+                           merged_arena=True)
+    with pytest.raises(ValueError, match="E4B_PAGED_MERGED_ARENA=1 but .* is not a merged arena"):
+        build_engine(cfg)
+
+
+def test_build_engine_refuses_a_merged_arena_without_an_adapter_before_reading_anything(tmp_path):
+    from experts4bit_qlora.adapter_dir import AdapterRefused
+    from experts4bit_qlora.serve_paged import PagedServeConfig, build_engine
+    arena, calib = _stub_paths(tmp_path, {"bake_mode": MA.MERGED_BAKE_MODE, "rows": [],
+                                          "merge": {"writer": MA.WRITER, "adapter_id": "ab" * 32}})
+    with pytest.raises(AdapterRefused, match=r"\(13\) a merged arena \(adapter abababababab\) with no adapter"):
+        build_engine(PagedServeConfig(model="org/never-read", arena=arena, calib=calib))
+
+
 def test_build_engine_decides_13_before_the_load_for_every_config_and_hands_the_block_on():
     """The phase order, read from build_engine itself: the index is read and refusal 13 decided (with and without an
     adapter) before the load; the loader, the fingerprint check and the hybrid tier are handed the matched block."""
