@@ -206,9 +206,8 @@ Amendment 1 says:
 
 ## Amendment 3 (2026-10-23, before any reading): the fetch imports no links; a download probe; retry ids
 
-**Why.** The reading is now run by the decode seat (the earlier seat was released on 2026-10-23); `p223-shake-4` was
-re-derived from its record, byte for byte (SHAKE, no instrument fault), before this amendment. Three things change before
-the reading, none of them a term of the read:
+**Why.** Before this amendment, `p223-shake-4` was re-derived from its record, byte for byte (SHAKE, no instrument
+fault). Three things change before the reading, none of them a term of the read:
 - **The fetch imports no links** (the cross-lane rule of 2026-10-23, bench/common rule 8). The driver's fetch passes
   `rsync --no-links`, so a symbolic link a rented box leaves in its work directory is never copied to the controller,
   where the receipt writers would follow it.
@@ -226,7 +225,7 @@ the reading, none of them a term of the read:
     The probe reads one stream and the fetch eight workers, so the probe errs low.
   - `download_probe.json` (the status, bytes, seconds, MB/s, shard and any error) is written on **every** box, refused
     or not, and travels with the receipt, so the host registry learns the edge speed from a refusal too.
-  - **3 consecutive rc 14** boxes stop the renting, with a market report on the bus; the launcher counts them from the
+  - **3 consecutive rc 14** boxes stop the renting, with a market report; the launcher counts them from the
     lane log before every create.
   - The staged token goes to the resolve endpoint only, as an unredirected header, never to the CDN or a command line.
 - **The retry ids `p223-5090-r1` to `p223-5090-r8`** (bench/common rule 2): labels, not budget, for boxes that follow
