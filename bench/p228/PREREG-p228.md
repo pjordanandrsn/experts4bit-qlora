@@ -243,3 +243,45 @@ P227's and P229's Amendment 4, in its final form, for this lane.
   (420 s) plus a 120 s staging margin. `tests/test_p228.py` asserts it.
 - Pre-data: no reading exists. The runner's bytes change (the id case only), so its staged pin moves. Every P228 box
   launches from this amendment's merge commit.
+
+## Amendment 6 (2026-10-23, before any reading): the pin screen admits by each machine's latest power record
+
+- **Why (a market read; this lane has no data):** the pin screen admitted only RTX 5090 machines whose host registry
+  holds a power cap of at least 575 W read within the last 3 days (P222's screen term). By each machine's LATEST
+  record, the registry at HEAD holds 58 machines at 575 W or more (6 of them read within 3 days), 60 below 575 W, and
+  103 with no record. Machines the registry has never seen have no record either. The P228 window that closed at
+  15:30Z on 2026-10-23 pinned nothing. A read-only census runs the screen's own terms on one offer search every
+  30 minutes.
+  - Under the old admission, the recorded-cap term failed every listed offer.
+  - Under this amendment's admission, at 15:41Z: 29 offers listed; 0 admitted; 16 fail only the price cap, and
+    23 fail it at all.
+  - So with the floor admitting by the latest record, the price cap ($1.05/h with the disk) is the term that binds
+    next. The cap is not changed here; the full-window tally is reported on the bus.
+- **The admission, from this amendment:**
+  - A machine whose LATEST recorded power cap (the host registry at the receipt store's HEAD) is below 575 W is never
+    pinned, whatever the record's age. That is the launcher's own exclusion (`vast_min_power_limit_w`,
+    adertha-agents#268).
+  - A machine whose latest record is 575 W or more, at any age, is admitted, and so is a machine with no record. A
+    stale positive record is better evidence than none, and the box's own read decides either way. The ranking is: read
+    within 3 days first, then older records at 575 W or more, then no record.
+  - The box reads its own power limit before the install and refuses below 575 W (rc 17), as registered. For a host
+    whose record is stale or missing, that refusal is how the floor is enforced.
+- **Unchanged:** the 575 W floor, the measurement, the rows, the rule, every screen term except this admission, and
+  every cap: at most $1.05/h, guard 1.0 h, $1.45 worst for a started box, and at most three started boxes
+  (Amendment 5).
+- **rc 17 boxes, now expected.** An rc 17 box does not start, so it counts toward no cap and no stop
+  (Amendment 5), unchanged.
+  - **The stop for them (new): three consecutive rc 17 boxes stop the lane.** The owner posts the three machines and
+    the caps they read, and the lane resumes only on a ruling. "Consecutive" counts boxes whose runner ran. A refusal
+    at create or a pre-flight teardown neither adds to the count nor resets it; any other runner outcome resets it.
+  - **What one costs:** the boot plus the runner's checks before the install, at the offer's rate (at most $1.05/h).
+    `p229-5090-1`, the one rc 17 box so far, ran 195 s from create to teardown, and its receipt's actual cost is
+    $0.002. Priced conservatively at 600 s x $1.05/h = **$0.18** a box, three in a row cost at most **$0.53**
+    before the stop. That is outside the started-box budget, as rc 17 always was.
+  - **The registry learns each one.** The runner prints `POWER_LIMIT_W <n> (floor 575)` before it refuses. Committing
+    the box's receipt (`tools/commit-receipt`, which appends the host line) records that machine's cap. From then on
+    the machine is excluded if it is below 575 W.
+- **Where the change lives:** the pin screen is controller-side code on the mini, not a staged kit file. Its
+  admission change gets its own review (the diff posted on the bus) and is installed only after this amendment
+  merges. No staged pin moves and no runner byte changes. Until then, the screen runs as it is.
+- Decided pre-data: no P228 box has run.

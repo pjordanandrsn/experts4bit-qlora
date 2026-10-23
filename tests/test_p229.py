@@ -222,6 +222,50 @@ def test_amendment_4_one_start_definition_for_the_cap_and_the_stop():
         in RUN
 
 
+def _rc17_stop(boxes):
+    """Amendment 5's stop, as the owner applies it: True once three boxes whose runner ran end in rc 17 in a row. A
+    refusal at create or a pre-flight teardown (runner_rc None) neither adds to the count nor resets it; any other
+    runner outcome resets it."""
+    run = 0
+    for rc in boxes:
+        if rc is None:
+            continue
+        run = run + 1 if rc == 17 else 0
+        if run >= 3:
+            return True
+    return False
+
+
+def test_amendment_5_admits_by_the_latest_power_record_and_the_box_reads_the_floor():
+    """Amendment 5 admits a machine whose latest registry record is >= 575 W at any age, or that has no record, so the
+    box's own read is the floor for those hosts. The runner prints the read the registry parses, and refuses below 575 W
+    (rc 17), both before its first install. The floor and the caps are unchanged, and three consecutive rc 17 stop the
+    lane."""
+    head = RUN.split("\npipx logs/", 1)[0]
+    assert "MIN_POWER_W=575" in RUN
+    printed = head.index('echo "POWER_LIMIT_W $PL (floor $MIN_POWER_W)"')       # the registry's source for the cap
+    refused = head.index("finish 17; }", printed)                               # rc 17 after the print, before install
+    assert printed < refused
+    assert 17 in _pre_install_refusals()
+    flat = " ".join(PREREG.split("## Amendment 5 ", 1)[1].split())
+    for case in ("is never pinned, whatever the record's age",
+                 "A machine whose latest record is 575 W or more, at any age, is admitted, and so is a machine with no"
+                 " record.",
+                 "**The stop for them (new): three consecutive rc 17 boxes stop the lane.**",
+                 "A refusal at create or a pre-flight teardown neither adds to the count nor resets it; any other runner"
+                 " outcome resets it.",
+                 "**Unchanged:** the 575 W floor, the measurement, the rows, the rule",
+                 "at most $1.05/h, guard 1.0 h, $1.45 worst for a started box, and at most three started boxes",
+                 "No staged pin moves and no runner byte changes."):
+        assert case in flat, case
+    assert _rc17_stop([17, 17, 17])
+    assert _rc17_stop([17, None, 17, None, 17])                  # refusals at create neither add nor reset
+    assert not _rc17_stop([17, 17, 0, 17, 17])                   # a started box resets the count
+    assert not _rc17_stop([17, 17, 41, 17])                      # so does any other runner outcome
+    assert not _rc17_stop([None, None, None])                    # refusals at create never stop the lane on their own
+    assert _counts({"runner_rc": 17}) == (False, False)          # an rc 17 box still counts toward no cap and no stop
+
+
 def test_the_drive_follows_pod_launchs_contract():
     """pod-launch runs a reading's drive without E4B_SHA (it proves the checkout HEAD is heads.e4b) and owns the run
     directory's receipt files: the drive derives the launch commit from the clean HEAD, refuses an override, and fetches
