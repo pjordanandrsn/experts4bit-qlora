@@ -50,6 +50,9 @@ REPO_FAMILY = (
 #: statuses that count as current evidence; ``superseded``, ``retired`` and ``open`` rows are not
 PUBLIC_STATUSES = ("verified", "measured")
 PRIVATE_STATUSES = ("measured-private",)
+#: training statuses that credit a family with nothing, so they need no claim id behind them
+NO_CREDIT = ("not_tested", "n/a", "refused")
+NO_CLAIM = "no claim id"
 REPO_RE = re.compile(r"(?<![\w./-])([A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*)")
 
 
@@ -113,8 +116,9 @@ def render(capabilities: dict, claims: dict) -> str:
         out += [f"## Training paths: `{c['id']}`", "",
                 "From `docs/capabilities.json` (`training_support.by_model_type`; "
                 + (f"the headline path is `{ts['headline_path']}`" if ts.get("headline_path") else "no headline path")
-                + "). Each cell is the path's status and, in brackets, how many claim ids "
-                "back it.", "",
+                + "). Each cell is the path's status and, in brackets, how many claim ids back it. A status that "
+                f"credits the family (anything but {', '.join(f'`{s}`' for s in NO_CREDIT)}) with no claim id behind "
+                f"it reads `status, {NO_CLAIM}`.", "",
                 "| family | " + " | ".join(f"`{p}`" for p in paths) + " |",
                 "|---|" + "---|" * len(paths)]
         for fam, per in ts["by_model_type"].items():
@@ -125,19 +129,41 @@ def render(capabilities: dict, claims: dict) -> str:
                     cells.append("-" if e is None else _cell(e))
                     continue
                 n = len(e.get("claim_ids") or ())
-                cells.append(_cell(e.get("status", "?")) + (f" ({n})" if n else ""))
+                status = str(e.get("status", "?"))
+                if n:
+                    cells.append(_cell(status) + f" ({n})")
+                else:
+                    cells.append(_cell(status) + ("" if status in NO_CREDIT else f", {NO_CLAIM}"))
             out.append(f"| `{fam}` | " + " | ".join(cells) + " |")
         out.append("")
 
     out += ["## Capabilities that list each family", "",
-            "From `docs/capabilities.json` (each capability's `model_families`; its status is in the header).", "",
+            "From `docs/capabilities.json` (each capability's `model_families`; its status is in the header). "
+            "`listed (N)`: N current claims among the capability's own `claim_ids` name the family's model "
+            f"(mapped as in the claims table below). `listed, {NO_CLAIM}`: the capability lists the family, but none "
+            "of its current claim ids names it.", "",
             "| family | " + " | ".join(f"`{c['id']}` ({_cell(c.get('status'))})" for c in caps) + " |",
             "|---|" + "---|" * len(caps)]
+    current = {r.get("id"): r for r in rows if r.get("status") in PUBLIC_STATUSES + PRIVATE_STATUSES}
     listed = [{str(f) for f in (c.get("model_families") or ())} for c in caps]
+    backing = []                                       # per capability: family -> current claim ids that name it
+    for c in caps:
+        per: dict = {}
+        for cid in c.get("claim_ids") or ():
+            if cid in current:
+                for fam in families_of(current[cid].get("model")):
+                    per[fam] = per.get(fam, 0) + 1
+        backing.append(per)
     for fam in order:
         if not any(fam in s for s in listed):
             continue
-        out.append(f"| `{fam}` | " + " | ".join("listed" if fam in s else "-" for s in listed) + " |")
+        cells = []
+        for s, per in zip(listed, backing):
+            if fam not in s:
+                cells.append("-")
+            else:
+                cells.append(f"listed ({per[fam]})" if per.get(fam) else f"listed, {NO_CLAIM}")
+        out.append(f"| `{fam}` | " + " | ".join(cells) + " |")
     out.append("")
 
     areas = sorted({str(r.get("area")) for r in rows if r.get("area")})
@@ -181,15 +207,16 @@ def main(argv=None) -> int:
     ap.add_argument("--check", action="store_true", help="exit 1 when docs/FAMILIES.md is not current")
     args = ap.parse_args(argv)
     page = render(json.loads(CAPABILITIES.read_text(encoding="utf-8")), json.loads(CLAIMS.read_text(encoding="utf-8")))
+    want = page.encode("utf-8")                        # bytes, so the generator owns the line endings (LF)
     if args.check:
-        cur = OUT.read_text(encoding="utf-8") if OUT.exists() else None
-        if cur != page:
+        cur = OUT.read_bytes() if OUT.exists() else None
+        if cur != want:
             print(f"FAIL: {OUT.relative_to(ROOT)} is not what the registers say; run `python tools/family_matrix.py` "
                   "and commit the result", file=sys.stderr)
             return 1
         print(f"OK: {OUT.relative_to(ROOT)} is current")
         return 0
-    OUT.write_text(page, encoding="utf-8")
+    OUT.write_bytes(want)
     print(f"wrote {OUT.relative_to(ROOT)}")
     return 0
 

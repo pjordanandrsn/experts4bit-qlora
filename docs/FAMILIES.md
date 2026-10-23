@@ -6,7 +6,7 @@ One view per model family (transformers `model_type`) of what the project's two 
 
 ## Training paths: `qlora-fused-moe-experts`
 
-From `docs/capabilities.json` (`training_support.by_model_type`; the headline path is `fast_train`). Each cell is the path's status and, in brackets, how many claim ids back it.
+From `docs/capabilities.json` (`training_support.by_model_type`; the headline path is `fast_train`). Each cell is the path's status and, in brackets, how many claim ids back it. A status that credits the family (anything but `not_tested`, `n/a`, `refused`) with no claim id behind it reads `status, no claim id`.
 
 | family | `quantize` | `reference_train` | `fast_train` | `batched_train` | `nvme_train` | `native_mxfp4_train` |
 |---|---|---|---|---|---|---|
@@ -24,33 +24,33 @@ From `docs/capabilities.json` (`training_support.by_model_type`; the headline pa
 
 ## Training paths: `mxfp4-moe-training-and-residency`
 
-From `docs/capabilities.json` (`training_support.by_model_type`; no headline path). Each cell is the path's status and, in brackets, how many claim ids back it.
+From `docs/capabilities.json` (`training_support.by_model_type`; no headline path). Each cell is the path's status and, in brackets, how many claim ids back it. A status that credits the family (anything but `not_tested`, `n/a`, `refused`) with no claim id behind it reads `status, no claim id`.
 
 | family | `quantize` | `reference_train` | `fast_train` | `batched_train` | `nvme_train` | `native_mxfp4_train` |
 |---|---|---|---|---|---|---|
 | `gpt_oss` | supported (1) | refused (1) | refused (1) | refused (1) | refused | experimental (1) |
-| `deepseek_v4` | supported (1) | not_tested | not_tested | not_tested | experimental | not_tested |
+| `deepseek_v4` | supported (1) | not_tested | not_tested | not_tested | experimental, no claim id | not_tested |
 
 ## Capabilities that list each family
 
-From `docs/capabilities.json` (each capability's `model_families`; its status is in the header).
+From `docs/capabilities.json` (each capability's `model_families`; its status is in the header). `listed (N)`: N current claims among the capability's own `claim_ids` name the family's model (mapped as in the claims table below). `listed, no claim id`: the capability lists the family, but none of its current claim ids names it.
 
 | family | `quantize-fused-moe-experts` (supported) | `qlora-fused-moe-experts` (supported) | `run-moe-larger-than-vram` (supported) | `offload-moe-experts-to-cpu-or-nvme` (supported) | `serve-moe-on-consumer-gpu` (supported) | `mxfp4-moe-training-and-residency` (experimental) |
 |---|---|---|---|---|---|---|
-| `olmoe` | listed | listed | listed | listed | listed | - |
-| `qwen3_moe` | listed | listed | listed | listed | listed | - |
-| `gemma4_text` | listed | listed | listed | - | listed | - |
-| `granitemoe` | listed | listed | listed | - | listed | - |
-| `gpt_oss` | listed | - | listed | listed | listed | listed |
-| `mixtral` | listed | listed | listed | - | listed | - |
-| `lfm2_moe` | - | listed | - | - | - | - |
-| `granitemoehybrid` | - | listed | - | - | - | - |
-| `ernie4_5_moe` | - | listed | - | - | - | - |
-| `nemotron_h` | - | listed | - | - | - | - |
-| `qwen3_5_moe` | listed | listed | listed | - | - | - |
-| `deepseek_v4 (Flash, Pro)` | listed | - | listed | listed | - | listed |
-| `qwen3_next` | listed | - | listed | - | - | - |
-| `deepseek_v2` | listed | - | listed | - | - | - |
+| `olmoe` | listed (1) | listed (7) | listed, no claim id | listed, no claim id | listed (4) | - |
+| `qwen3_moe` | listed, no claim id | listed (58) | listed (3) | listed, no claim id | listed (21) | - |
+| `gemma4_text` | listed, no claim id | listed (2) | listed, no claim id | - | listed (4) | - |
+| `granitemoe` | listed, no claim id | listed (8) | listed, no claim id | - | listed (7) | - |
+| `gpt_oss` | listed (1) | - | listed, no claim id | listed, no claim id | listed (7) | listed (2) |
+| `mixtral` | listed, no claim id | listed (12) | listed (1) | - | listed (4) | - |
+| `lfm2_moe` | - | listed, no claim id | - | - | - | - |
+| `granitemoehybrid` | - | listed, no claim id | - | - | - | - |
+| `ernie4_5_moe` | - | listed, no claim id | - | - | - | - |
+| `nemotron_h` | - | listed, no claim id | - | - | - | - |
+| `qwen3_5_moe` | listed, no claim id | listed (6) | listed, no claim id | - | - | - |
+| `deepseek_v4 (Flash, Pro)` | listed, no claim id | - | listed, no claim id | listed, no claim id | - | listed, no claim id |
+| `qwen3_next` | listed, no claim id | - | listed, no claim id | - | - | - |
+| `deepseek_v2` | listed, no claim id | - | listed, no claim id | - | - | - |
 
 ## Claims on record
 
