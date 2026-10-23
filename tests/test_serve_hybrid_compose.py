@@ -76,8 +76,28 @@ def test_a_tiered_layer_syncs_before_any_branch_on_the_routing():
     # the only earlier exits are the collapse, the residual re-entry and the diet; none of them is on the tiered path
     # that serve_paged builds (dispatch_diet=False), and the residual re-entry calls this same forward without it. A new
     # exit above the mask (a sync-free static-flag path, diet-shaped) would bypass the sync, so the list is exact.
-    exits = [ln.strip().split("(")[0] for ln in src[:start].splitlines() if ln.strip().startswith("return")]
-    assert exits == ["return self._forward_collapsed", "return _HotResidency.forward", "return self._forward_diet"], exits
+    assert _exits_above_mask(src) == ["self._forward_collapsed", "_HotResidency.forward", "self._forward_diet"]
+
+
+def _exits_above_mask(src: str) -> list:
+    """Every return statement above the routing mask, by the callee it returns, from the parsed function (so a one-line
+    ``if flag: return self._path(...)`` counts, and a comment or docstring naming return does not)."""
+    import ast
+    import textwrap
+    body = textwrap.dedent(src)
+    mask_line = body[:body.index("hot_row = self.is_hot[flat]")].count("\n") + 1
+    out = []
+    for node in sorted(ast.walk(ast.parse(body)), key=lambda n: getattr(n, "lineno", 0)):
+        if isinstance(node, ast.Return) and node.lineno < mask_line:
+            v = node.value.left if isinstance(node.value, ast.BinOp) else node.value
+            out.append(ast.unparse(v.func) if isinstance(v, ast.Call) else ast.unparse(v) if v is not None else "None")
+    return out
+
+
+def test_the_exit_scan_counts_one_line_returns_and_ignores_text():
+    src = ('def forward(self, x):\n    """return self._not_an_exit()"""\n    # return self._comment()\n'
+           '    if self.flag: return self._sneaky(x)\n    hot_row = self.is_hot[flat]\n    return out\n')
+    assert _exits_above_mask(src) == ["self._sneaky"]
 
 
 def test_serve_paged_builds_the_tier_without_the_diet_or_prefetch():
