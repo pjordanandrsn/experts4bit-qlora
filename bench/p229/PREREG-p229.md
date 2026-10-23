@@ -236,3 +236,57 @@ head. K2b routes 2..N rows to K37's `linear_i8` over the same codes.
 - Pre-data: no reading exists. The runner's bytes change (the id case only), so its staged pin moves. A box launched
   before this amendment merges uses `-1` to `-3` from the earlier commit; a box launched after it launches from its
   merge commit.
+
+## Amendment 5 (2026-10-23, before any reading): the pin screen admits by each machine's latest power record
+
+- **Why (a market read; this lane has no data):** the pin screen admitted only RTX 5090 machines whose host registry
+  holds a power cap of at least 575 W read within the last 3 days (P222's screen term). By each machine's LATEST
+  record, the registry at HEAD holds 58 machines at 575 W or more (6 of them read within 3 days), 60 below 575 W, and
+  103 with no record. Machines the registry has never seen have no record either. The P229 window that closed at
+  15:00Z on 2026-10-23 pinned nothing. A read-only census runs the screen's own terms on one offer search every
+  30 minutes.
+  - Under the old admission, the recorded-cap term failed every listed offer.
+  - Under this amendment's admission, at 15:41Z: 29 offers listed; 1 admitted (a machine with no record, $0.944/h);
+    16 fail only the price cap, and 23 fail it at all.
+  - So with the floor admitting by the latest record, the price cap ($1.05/h with the disk) is the term that binds
+    next. The cap is not changed here; the full-window tally is reported on the bus.
+- **The admission, from this amendment:**
+  - A machine whose LATEST recorded power cap (the host registry at the receipt store's HEAD) is below 575 W is never
+    pinned, whatever the record's age. That is the launcher's own exclusion (`vast_min_power_limit_w`).
+  - A machine whose latest record is 575 W or more, at any age, is admitted, and so is a machine with no record. A
+    stale positive record is better evidence than none, and the box's own read decides either way. The ranking is: read
+    within 3 days first, then older records at 575 W or more, then no record.
+  - The launcher admits the same way. pod-launch applies the 575 W floor itself, and each reading template
+    (`template_read.json`) today sets `vast_power_limit_unknown` to `"exclude"`, which rents only machines whose
+    recorded cap clears the floor. From this amendment, each template sets it to `"eligible"` (pod-launch's default),
+    keeps the rule `"latest"`, and sets no `max_age_days`.
+  - The box reads its own power limit before the install and refuses below 575 W (rc 17), as registered; an
+    unreadable cap is rc 15. For a host whose record is stale or missing, that refusal is how the floor is enforced.
+- **Unchanged:** the 575 W floor, the measurement, the rows, the rule, every screen term except this admission, and
+  every cap: at most $1.05/h, guard 1.0 h, $1.45 worst for a started box, and at most three started boxes
+  (Amendment 4).
+- **rc 17 boxes, now expected.** An rc 17 box does not start, so it counts toward no cap and no stop
+  (Amendment 4), unchanged.
+  - **The stop for them (new): three consecutive rc 17 boxes stop the lane.** The owner posts the three machines and
+    the caps they read, and the lane resumes only on a ruling. "Consecutive" counts boxes whose runner ran. A refusal
+    at create or a pre-flight teardown neither adds to the count nor resets it; any other runner outcome resets it.
+  - **Who counts:** the lane's owner, from each box's receipt (the runner's exit code). The pin loop exits after every
+    launch, so no box follows another without the owner reading the last one. No code enforces the count; the
+    lane's test models it.
+  - **What one costs:** the boot plus the runner's checks before the install, at the offer's rate (at most $1.05/h),
+    plus the image pull when the host has not cached the image.
+    - Compute, priced conservatively at 600 s x $1.05/h: **$0.18**.
+    - The image pull: the pinned image (`pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`, digest `a7103283...`) is
+      9.4 GB compressed. Uncached, at the template's <= $0.04/GB, that is at most **$0.38**.
+    - So at most **$0.56** a box, and three in a row cost at most **$1.68** (3 x $0.56) before the stop. That is
+      outside the started-box budget, as rc 17 always was.
+    - Measured: `p229-5090-1`, the one rc 17 box so far, ran 195 s from create to teardown, and its ledger row
+      (download included) is $0.002.
+  - **The registry learns each one.** The runner prints `POWER_LIMIT_W <n> (floor 575)` before it refuses. Committing
+    the box's receipt (`tools/commit-receipt`, which appends the host line) records that machine's cap. From then on
+    the machine is excluded if it is below 575 W.
+- **Where the change lives:** the pin screen and the reading template are controller-side files on the mini, not
+  staged kit files. Their admission change gets its own review (the diff posted on the bus) and is installed only
+  after this amendment merges. No staged pin moves and no runner byte changes. Until then, both run as they are.
+- Decided pre-data: no P229 box has read. `p229-5090-1` was a host with no record that read 525 W
+  (rc 17); the registry now records its cap (machine 140733, 525 W).
