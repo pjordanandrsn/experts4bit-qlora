@@ -438,10 +438,21 @@ _K25_PLAN = {"block_n": 32, "kc": 64, "warps": 4, "stages": 3, "lut": "tree", "d
 #: decode, at Qwen3-30B-A3B's W16 shapes on one RTX 5090, every rep bit-identical; ``bench/p160``). It is a plan for K39's
 #: decode ONLY: the select tree at these shapes runs slower than at today's (P155: 255 registers), so an explicit ``c1``
 #: under any decode but ``prmt`` is refused, never run. Lane P161 read it in the served step, and qwen3_moe takes it by
-#: default (:data:`K25_PLAN_DEFAULT_FAMILIES`).
+#: default (:data:`K25_PLAN_DEFAULT_FAMILIES`). ``m1`` is lane P222's selected pair M (``bench/p222/RESULTS-p222.md``,
+#: a microbench at Mixtral-8x7B's W16 shapes on one RTX 5090; the record is ``receipts/p222-5090-5/bench_p222.json``'s
+#: ``"m"``): c1's gate_up with a down plan of its own. It is OPT-IN, no family takes it by default, and like c1 it is a
+#: plan for K39's decode ONLY (:data:`_K25_PLAN_PRMT_ONLY`).
 _K25_PLANS: dict = {
     "today": ({}, {}),
     "c1": ({"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, {"block_n": 128, "kc": 128, "warps": 8, "stages": 3}),
+    "m1": ({"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, {"block_n": 32, "kc": 256, "warps": 4, "stages": 2}),
+}
+#: Every plan but ``today`` is served under K39's decode (K25's ``lut="prmt"``) ONLY, as ``{name: (whose plan it is, why
+#: it never runs under another decode)}``: an explicit one under another decode, or with K25 off or absent, is refused,
+#: never run (:func:`_k25_plan_refusal`).
+_K25_PLAN_PRMT_ONLY: dict = {
+    "c1": ("lane P160's plan", "The tree at c1's shapes is slower than at today's (P155)"),
+    "m1": ("lane P222's plan", "P222 read m1 under no other decode (its tree arm was dropped, Amendment 1)"),
 }
 #: Lane P161's default for ``E4B_K25_PLAN`` (``bench/p161/RESULTS-p161.md``): an UNSET knob resolves to ``c1`` on a
 #: model_type here, at engine build (:func:`resolve_k25_plan`), where K25's decode resolved to ``prmt`` (the decode c1
@@ -532,26 +543,28 @@ def _k25_plan(nf4_smallm_mod) -> dict:
 
 
 def _k25_plan_raw():
-    """``E4B_K25_PLAN`` as set: ``today`` or ``c1``, or None when unset or empty (the per-family default,
-    :data:`_K25_PLAN_DEFAULT`). Anything else is refused."""
+    """``E4B_K25_PLAN`` as set: a name in :data:`_K25_PLANS` (``today``, ``c1`` or ``m1``), or None when unset or empty
+    (the per-family default, :data:`_K25_PLAN_DEFAULT`). Anything else is refused."""
     v = os.environ.get("E4B_K25_PLAN", "").strip().lower()
     if not v:
         return None
     if v not in _K25_PLANS:
-        raise ValueError(f"E4B_K25_PLAN={v!r}: expected 'today' or 'c1'")
+        raise ValueError(f"E4B_K25_PLAN={v!r}: expected one of " + ", ".join(repr(n) for n in _K25_PLANS))
     return v
 
 
-def _k25_c1_refusal(lut, why) -> RuntimeError:
-    return RuntimeError(f"E4B_K25_PLAN=c1 is lane P160's plan for K39's decode (K25's lut='prmt'), but K25's decode here "
-                        f"is {lut!r} ({why}). The tree at c1's shapes is slower than at today's (P155), so it is never "
-                        "run: set E4B_K25_LUT=prmt where the kernel package and device carry it, or E4B_K25_PLAN=today")
+def _k25_plan_refusal(name, lut, why) -> RuntimeError:
+    whose, slower = _K25_PLAN_PRMT_ONLY[name]
+    return RuntimeError(f"E4B_K25_PLAN={name} is {whose} for K39's decode (K25's lut='prmt'), but K25's decode here "
+                        f"is {lut!r} ({why}). {slower}, so it is never run: set E4B_K25_LUT=prmt where the kernel "
+                        "package and device carry it, or E4B_K25_PLAN=today")
 
 
 def _k25_plans(nf4_smallm_mod) -> tuple:
     """``(gate_up's plan, down's plan, the plan's name)``: :func:`_k25_plan` with ``E4B_K25_PLAN``'s block shapes
-    (:data:`_K25_PLANS`; unset is the build's per-family default, :data:`_K25_PLAN_DEFAULT`). An explicit ``c1`` under a
-    decode other than ``prmt`` is refused, never run; a default ``c1`` there serves ``today`` (a default never refuses).
+    (:data:`_K25_PLANS`; unset is the build's per-family default, :data:`_K25_PLAN_DEFAULT`). An explicit plan other than
+    ``today`` (``c1``, ``m1``) under a decode other than ``prmt`` is refused, never run; a default ``c1`` there serves
+    ``today`` (a default never refuses).
     The name is what :data:`K25_PLAN_SEEN` counts, so the record is the plan resolved here."""
     base = _k25_plan(nf4_smallm_mod)
     raw = _k25_plan_raw()
@@ -560,7 +573,8 @@ def _k25_plans(nf4_smallm_mod) -> tuple:
         name = "today"
     if name != "today" and base["lut"] != "prmt":
         raw = _k25_lut_raw()
-        raise _k25_c1_refusal(base["lut"], f"E4B_K25_LUT={raw}" if raw else "unset E4B_K25_LUT, as resolved at build")
+        raise _k25_plan_refusal(name, base["lut"],
+                                f"E4B_K25_LUT={raw}" if raw else "unset E4B_K25_LUT, as resolved at build")
     gu, dn = _K25_PLANS[name]
     return dict(base, **gu), dict(base, **dn), name
 
@@ -616,12 +630,12 @@ def resolve_k25_lut(model_type=None) -> dict:
 
 def resolve_k25_plan(k25_lut: dict, family_known: bool = True, model_type=None) -> dict:
     """``E4B_K25_PLAN`` resolved at engine build from :func:`resolve_k25_lut`'s result ``k25_lut``, before any weight
-    loads. Returns ``{"env": the raw value or None, "plan": "today" | "c1", or None when K25 is off or absent, "why": the
-    reason when None, "source": "explicit" | "default-allowlisted" | "default-off: <why>" | "unresolved: <why>",
-    "gu" / "dn": each projection's block shape}``.
+    loads. Returns ``{"env": the raw value or None, "plan": a name in :data:`_K25_PLANS`, or None when K25 is off or
+    absent, "why": the reason when None, "source": "explicit" | "default-allowlisted" | "default-off: <why>" |
+    "unresolved: <why>", "gu" / "dn": each projection's block shape}``.
 
-    - **Explicit:** ``c1`` is refused when K25 is off or absent, and when K25's decode is not ``prmt`` (as the forward
-      refuses it, :func:`_k25_plans`).
+    - **Explicit:** any plan but ``today`` (``c1``, ``m1``) is refused when K25 is off or absent, and when K25's decode
+      is not ``prmt`` (as the forward refuses it, :func:`_k25_plans`).
     - **Unset:** the per-family default (:data:`K25_PLAN_DEFAULT_FAMILIES`, lane P161): ``c1`` where ``model_type`` is
       listed and K25's decode resolved to ``prmt``; otherwise ``today``, with the reason. Never a refusal. The resolution
       is kept in :data:`_K25_PLAN_DEFAULT` for the forward.
@@ -647,11 +661,11 @@ def resolve_k25_plan(k25_lut: dict, family_known: bool = True, model_type=None) 
             name, source = want, "default-allowlisted"
             _K25_PLAN_DEFAULT[0] = want
     if lut is None:
-        if raw == "c1":
-            raise RuntimeError(f"E4B_K25_PLAN=c1 names K25's plan, but K25 does not run here ({k25_lut.get('why')})")
+        if raw is not None and raw != "today":
+            raise RuntimeError(f"E4B_K25_PLAN={raw} names K25's plan, but K25 does not run here ({k25_lut.get('why')})")
         return {"env": raw, "plan": None, "why": k25_lut.get("why"), "source": source}
     if raw is not None and name != "today" and lut != "prmt" and (family_known or k25_lut.get("env") is not None):
-        raise _k25_c1_refusal(lut, k25_lut.get("source"))
+        raise _k25_plan_refusal(name, lut, k25_lut.get("source"))
     base = {k: _K25_PLAN[k] for k in ("block_n", "kc", "warps", "stages")}
     gu, dn = _K25_PLANS[name]
     return {"env": raw, "plan": name, "why": None, "source": source, "gu": dict(base, **gu), "dn": dict(base, **dn)}
@@ -667,6 +681,9 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     the GEMV instead of the kernel it gates (lane P87). K21's opt-in does the same on the MXFP4 store, and K25's
     (``E4B_NF4_GROUPED_SMALLM=1``) on the NF4 store.
 
+    ``E4B_NF4_SMALLM_BW=1`` (opt-in) goes the other way on the NF4 store: a call of 2..8 tokens takes singleton groups
+    like T == 1, with or without :data:`DEVICE_GROUPING`, so it reaches K33's bandwidth GEMV (:func:`_nf4_smallm_bw_env`).
+
     A T > 1 call that would take HOST grouping on a uniform-int4 store -- every prefill chunk with
     :data:`DEVICE_GROUPING` off -- takes device grouping instead under ``E4B_INT4_PREFILL=k19`` or ``mtile`` (e4b#916;
     see :func:`_int4_prefill_mode_env`). Singleton groups, when chosen, are left alone."""
@@ -678,6 +695,8 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     nf4_t1 = T == 1 and int4_stores is None and _nf4_t1_device_grouping_env()
     if k19_t1 or k21_t1 or k25_t1 or nf4_t1:
         return False, True
+    if _nf4_smallm_bw_takes(T, int4_stores):
+        return True, False                # E4B_NF4_SMALLM_BW: 2..8 tokens take singleton groups, every row its own
     singleton = T == 1 or (FORCE_SINGLETON_GROUPS[0] and not DEVICE_GROUPING[0])
     device = DEVICE_GROUPING[0] and T > 1
     if (not singleton and not device and int4_stores is not None and int4_stores.get("kind") != "mxfp4"
@@ -698,6 +717,105 @@ def _nf4_t1_device_grouping_env() -> bool:
     if v not in ("0", "1"):
         raise ValueError(f"E4B_NF4_T1_DEVICE_GROUPING={v!r}: expected '0' or '1'")
     return v == "1"
+
+
+#: The widest step ``E4B_NF4_SMALLM_BW`` routes, in tokens: the serving roadmap's small-M regime (lever B, 2 <= T <= 8).
+NF4_SMALLM_BW_MAX_T = 8
+
+
+def _nf4_smallm_bw_env() -> bool:
+    """``E4B_NF4_SMALLM_BW=1`` (opt-in; off by default, also when unset): on the NF4 store's all-resident collapse, a
+    call of 2 to :data:`NF4_SMALLM_BW_MAX_T` tokens takes singleton groups (every (token, slot) row its own group), as
+    T == 1 does, instead of the device tile table and K25. grouped-nf4-gemm's ``gemm_4bit_grouped`` serves every
+    singleton call through K33's bandwidth GEMV where :func:`resolve_nf4_smallm_bw` found it engages, so each row is
+    computed as it is at T == 1: K33 reads one row per program, and its result never depends on the row count. Rows that
+    share an expert each read its weights (no reuse across rows); what that costs against K25 is a registered read's
+    to say, and none is claimed here. The tokens differ from K25's (a different function within the tolerance
+    contract), so a default needs a quality bar. Anything other than ``0``/``1`` is refused."""
+    v = os.environ.get("E4B_NF4_SMALLM_BW", "0").strip() or "0"
+    if v not in ("0", "1"):
+        raise ValueError(f"E4B_NF4_SMALLM_BW={v!r}: expected '0' or '1'")
+    return v == "1"
+
+
+def _nf4_smallm_bw_takes(T: int, int4_stores) -> bool:
+    """Whether ``E4B_NF4_SMALLM_BW`` routes a call of ``T`` tokens. It names the NF4 store's rows only: on a layer with an
+    int4 or MXFP4 store, and beside ``E4B_NF4_GROUPED_SMALLM=1`` (which names the same rows for K25), it is refused,
+    never dropped."""
+    if not 1 < T <= NF4_SMALLM_BW_MAX_T or not _nf4_smallm_bw_env():
+        return False
+    if int4_stores is not None:
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 routes the NF4 store's rows to K33's bandwidth GEMV, but this layer "
+                           f"serves a {int4_stores.get('kind', 'int4_b32')} expert store: unset one of them")
+    if _k25_mode_env() == "1":
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 and E4B_NF4_GROUPED_SMALLM=1 both name the rows of "
+                           f"2..{NF4_SMALLM_BW_MAX_T} tokens (K33 and K25): unset one of them")
+    if not _NF4_SMALLM_BW_RESOLVED[0]:
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 routes 2..8-token calls only after "
+                           "hot_residency.resolve_nf4_smallm_bw(modules, device) checked that K33 engages at this "
+                           "model's expert shapes on this device; nothing in this process has: call it after the "
+                           "levers and before any capture, or unset E4B_NF4_SMALLM_BW")
+    return True
+
+
+#: Whether :func:`resolve_nf4_smallm_bw` found ``E4B_NF4_SMALLM_BW=1`` servable in this process (one list cell, as
+#: :data:`_K25_LUT_DEFAULT`). The routing refuses the knob without it: an unresolved process (a harness enabling the
+#: collapse itself) could otherwise send the rows to dot-pad or the scalar GEMV where K33 does not engage.
+_NF4_SMALLM_BW_RESOLVED = [False]
+
+
+#: The all-resident collapse's calls ``E4B_NF4_SMALLM_BW`` routed, by token count, as ``{"T<n>": calls}``; counted in
+#: the Python forward (eager calls and captures count, replays do not), beside :data:`ROUTE_SEEN`'s ``nf4_singleton``.
+NF4_SMALLM_BW_SEEN: dict = {}
+
+
+def resolve_nf4_smallm_bw(modules, device) -> dict:
+    """``E4B_NF4_SMALLM_BW`` resolved once at engine build, after the levers and before any graph is captured, so a knob
+    that cannot engage fails at startup, never as a silent route. ``modules`` are the MoE modules carrying
+    ``_hot_residency``. Returns ``{"env": the raw value or None, "on": bool, "max_tokens":`` :data:`NF4_SMALLM_BW_MAX_T`
+    ``, "why": the reason when off, "shapes": every expert projection's (N, K) when on}``.
+
+    An explicit ``1`` is refused beside ``E4B_NF4_GROUPED_SMALLM=1``, on any layer with an int4 or MXFP4 store, on any
+    layer that is not on the all-resident collapse (the only forward that reads the knob), on a kernel package without
+    K33, and at any expert shape where K33 does not engage on this device (``GNF4_GEMV_BW``'s rule: there the singleton
+    route would run dot-pad or the scalar GEMV). Only a resolution that passes lets the forward route the knob
+    (:data:`_NF4_SMALLM_BW_RESOLVED`); an unresolved process refuses it at the first 2..8-token call."""
+    raw = os.environ.get("E4B_NF4_SMALLM_BW", "").strip() or None
+    base = {"env": raw, "on": False, "max_tokens": NF4_SMALLM_BW_MAX_T}
+    _NF4_SMALLM_BW_RESOLVED[0] = False    # a refusal below leaves the knob unservable in this process
+    if not _nf4_smallm_bw_env():
+        return {**base, "why": "opt-in: E4B_NF4_SMALLM_BW is not 1"}
+    if _k25_mode_env() == "1":
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 and E4B_NF4_GROUPED_SMALLM=1 both name the rows of "
+                           f"2..{NF4_SMALLM_BW_MAX_T} tokens (K33 and K25): unset one of them")
+    states = [getattr(m, "_hot_residency", None) for m in modules]
+    if not states or any(s is None for s in states):
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 needs the hot-residency engine on every MoE layer; "
+                           f"{sum(s is None for s in states)}/{len(states)} have none")
+    stores = [s for s in states if getattr(s, "_int4_stores", None)]
+    if stores:
+        raise RuntimeError(f"E4B_NF4_SMALLM_BW=1 routes the NF4 store's rows, but {len(stores)}/{len(states)} MoE "
+                           "layers serve an int4 or MXFP4 expert store: unset one of them")
+    off_collapse = sum(1 for s in states if not (getattr(s, "collapse_resident", False) and s._all_hot()))
+    if off_collapse:
+        raise RuntimeError(f"E4B_NF4_SMALLM_BW=1 runs on the all-resident collapse only, and {off_collapse}/"
+                           f"{len(states)} MoE layers are not on it (not every expert resident)")
+    try:
+        import nf4_grouped
+        engages = nf4_grouped._bw_engages
+    except (ImportError, AttributeError) as e:
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 needs grouped-nf4-gemm with K33's bandwidth GEMV "
+                           "(nf4_grouped._bw_engages, grouped-nf4-gemm#500)") from e
+    dev = torch.device(device)
+    shapes = sorted({(int(s.shapes[0]), int(s.shapes[1])) for s in states}
+                    | {(int(s.shapes[2]), int(s.shapes[3])) for s in states})
+    off = [nk for nk in shapes if not engages(nk[0], nk[1], dev)]
+    if off:
+        raise RuntimeError(f"E4B_NF4_SMALLM_BW=1: K33's bandwidth GEMV does not engage at (N, K) {off} on this device "
+                           f"(GNF4_GEMV_BW={os.environ.get('GNF4_GEMV_BW') or 'auto'}), so the singleton route would "
+                           "run dot-pad or the scalar GEMV there: unset E4B_NF4_SMALLM_BW, or set GNF4_GEMV_BW=1")
+    _NF4_SMALLM_BW_RESOLVED[0] = True
+    return {**base, "on": True, "why": None, "shapes": [list(nk) for nk in shapes]}
 
 
 def _decode_a16_default() -> bool:
@@ -747,7 +865,7 @@ def _seen_k25_lut(lut: str, rows: int) -> None:
     K25_LUT_SEEN[key] = K25_LUT_SEEN.get(key, 0) + 1
 
 
-#: K25's calls by ``E4B_K25_PLAN`` plan, as ``{"<plan>|<rows>": calls}`` (``today`` or ``c1``, :func:`_k25_plans`),
+#: K25's calls by ``E4B_K25_PLAN`` plan, as ``{"<plan>|<rows>": calls}`` (``today``, ``c1`` or ``m1``, :func:`_k25_plans`),
 #: counted beside :data:`K25_LUT_SEEN`. It is what an ``E4B_K25_PLAN`` read asserts: the arm's plan, and no other.
 K25_PLAN_SEEN: dict = {}
 
@@ -966,9 +1084,9 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "(nf4_smallm.gemm_nf4_grouped_smallm, grouped-nf4-gemm#429)") from e
             if _k25_lut_raw() == "prmt":  # an asked-for prmt is never dropped with K25, even under auto
                 raise _k25_without_kernel(e) from e
-            if _k25_plan_raw() == "c1":   # nor an asked-for c1
-                raise RuntimeError("E4B_K25_PLAN=c1 names K25's plan, but the installed kernel package has no K25 "
-                                   f"(nf4_smallm.gemm_nf4_grouped_smallm): {e}") from e
+            if _k25_plan_raw() not in (None, "today"):   # nor an asked-for plan (c1, m1)
+                raise RuntimeError(f"E4B_K25_PLAN={_k25_plan_raw()} names K25's plan, but the installed kernel package "
+                                   f"has no K25 (nf4_smallm.gemm_nf4_grouped_smallm): {e}") from e
             _k25 = None                   # auto: the kernel package predates K25 -> today's NF4 route
     _small = _k19 if _k19 is not None else _k25
     _fused_tiles = None
@@ -1018,13 +1136,15 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         x_t, row_token, top_k = x_tokens
         if (_lean or _pf_lean) and _CALIB_SINK is None:
             _tok = (x_t, top_k)           # K23: K19's (or K25's) gate_up reads the token rows itself (gather_div)
-        elif (x_t.shape[0] == 1 and singleton_groups and not device_grouping and int4_stores is None
+        elif ((x_t.shape[0] == 1 or _nf4_smallm_bw_takes(x_t.shape[0], int4_stores))
+              and singleton_groups and not device_grouping and int4_stores is None
               and not _mxfp4_store and _CALIB_SINK is None and _nf4_takes_gather_div(gemm_4bit_grouped)):
             # ONE token, on the NF4 singleton route (the last branch below): gemm_4bit_grouped's gate_up reads row
             # r's token r // top_k -- token 0 for every row -- itself (gather_div, grouped-nf4-gemm#530), so the
             # (token, slot) copy is not made: bitwise the copied rows' result, one launch a layer fewer at T == 1
-            # (e4b#1313, lane P127's Phase 2, item b2). One token only: gather_div assumes token-major rows, which
-            # _row_index builds, but with one token the row order cannot matter at all.
+            # (e4b#1313, lane P127's Phase 2, item b2). gather_div assumes token-major rows: with one token the row
+            # order cannot matter, and E4B_NF4_SMALLM_BW's 2..8 tokens reach here only from the all-resident collapse,
+            # whose rows _row_index builds token-major (row r is token r // top_k).
             _gd = (x_t, top_k)
         else:
             x_rows = x_t.index_select(0, row_token)
@@ -1854,6 +1974,8 @@ class _HotResidency:
         else:
             xr, xtok = x.index_select(0, rt), None
         singleton, grouped = _collapsed_grouping(T, getattr(self, "_int4_stores", None))
+        if singleton and T > 1 and _nf4_smallm_bw_takes(T, getattr(self, "_int4_stores", None)):
+            NF4_SMALLM_BW_SEEN[f"T{T}"] = NF4_SMALLM_BW_SEEN.get(f"T{T}", 0) + 1
         dn = _fused_over_stack(xr, flat, self.h_gu_p, self.h_gu_a,
                                self.h_dn_p, self.h_dn_a, self.shapes,
                                self.has_gate, self.act_fn, gptoss=gptoss,

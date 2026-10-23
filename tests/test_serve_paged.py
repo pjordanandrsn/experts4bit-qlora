@@ -508,6 +508,111 @@ def test_closing_the_sse_generator_aborts_the_request():
     assert engine.stats()["scheduler"]["aborted"] == 1
 
 
+def test_one_cross_thread_wakeup_per_step_and_per_stream_order_is_kept():
+    """F1: a step's tokens and finishes reach the event loop in ONE ``call_soon_threadsafe``, not one per stream
+    (at 64 slots the per-stream wakeups were the largest piece of the exposed host gap, decode64 census section (c)). Every
+    stream still sees its own tokens in order, then exactly one ``done``."""
+    n, max_tokens = 64, 6
+    runner = ScriptedRunner()
+    cfg = PagedServeConfig(model="tiny/moe", max_seqs=n, max_tokens_per_seq=64, chunk_tokens=8)
+    engine = PagedEngine(cfg, _parts(runner, max_seqs=n, chunk=8 * n))
+    sched = engine.parts.scheduler
+    steps, wakeups = [0], []
+    real_step = sched.step
+
+    def counted_step():
+        plan = real_step()
+        if not plan.is_empty:
+            steps[0] += 1
+        return plan
+
+    sched.step = counted_step
+
+    class CountingLoop:
+        def __init__(self, loop):
+            self._loop = loop
+
+        def is_closed(self):
+            return self._loop.is_closed()
+
+        def call_soon_threadsafe(self, fn, *args):
+            wakeups.append(len(args[0]) if fn == getattr(engine, "_fanout", None) else 1)
+            return self._loop.call_soon_threadsafe(fn, *args)
+
+    async def go():
+        streams = [_stream_for(PROMPT_IDS, max_tokens) for _ in range(n)]
+        for s in streams:                    # all queued before the engine runs: one prefill step admits them all
+            engine.submit(s)
+        engine.start(CountingLoop(asyncio.get_running_loop()))
+        got = []
+        for s in streams:
+            items = []
+            while True:
+                kind, payload = await asyncio.wait_for(s.queue.get(), 5)
+                items.append((kind, payload))
+                if kind == "done":
+                    break
+            got.append(items)
+        return got
+
+    try:
+        got = asyncio.run(go())
+    finally:
+        engine.shutdown()
+    for items in got:
+        kinds = [k for k, _ in items]
+        assert kinds[-1] == "done" and kinds.count("done") == 1 and set(kinds[:-1]) <= {"tokens"}
+        toks = [t for k, p in items if k == "tokens" for t in p] + list(items[-1][1][0])
+        assert toks == [1000 + i for i in range(max_tokens)]
+    assert len(wakeups) <= steps[0], (len(wakeups), steps[0])
+    assert max(wakeups) == n                   # a full decode step carried every stream in its one wakeup
+    assert sum(wakeups) == sum(len(items) for items in got)
+
+
+def test_a_failure_mid_dispatch_still_delivers_what_was_handed_off(monkeypatch):
+    """F1's batch is woken in a ``finally``: when building a finish record raises for the second of two streams that
+    finish in one step, the first stream (already marked finished) still gets its tokens and its ``done``, and the
+    second gets an ``error`` through the step-failure path instead of hanging."""
+    runner = ScriptedRunner()
+    cfg = PagedServeConfig(model="tiny/moe", max_seqs=4, max_tokens_per_seq=64, chunk_tokens=8)
+    engine = PagedEngine(cfg, _parts(runner))
+    calls = [0]
+    real_record = engine._record
+
+    def flaky_record(req, st):
+        calls[0] += 1
+        if calls[0] == 2:
+            raise OSError("trace volume gone")
+        return real_record(req, st)
+
+    monkeypatch.setattr(engine, "_record", flaky_record)
+
+    async def go():
+        a, b = _stream_for(PROMPT_IDS, 3), _stream_for(PROMPT_IDS, 3)
+        engine.submit(a)
+        engine.submit(b)                      # both queued before the engine runs: they finish in the same step
+        engine.start(asyncio.get_running_loop())
+        got = []
+        for s in (a, b):
+            items = []
+            while True:
+                kind, payload = await asyncio.wait_for(s.queue.get(), 5)
+                items.append((kind, payload))
+                if kind in ("done", "error"):
+                    break
+            got.append(items)
+        return got
+
+    try:
+        first, second = asyncio.run(go())
+    finally:
+        engine.shutdown()
+    toks = [t for k, p in first if k == "tokens" for t in p] + list(first[-1][1][0])
+    assert first[-1][0] == "done" and toks == [1000, 1001, 1002] and first[-1][1][1] == "length"
+    assert second[-1][0] == "error" and "trace volume gone" in second[-1][1]
+    assert calls[0] == 2 and engine.state == "error"
+
+
 # ----------------------------------------------------------- chat + auth --
 
 def test_chat_completions_apply_the_template_and_stream_deltas():
