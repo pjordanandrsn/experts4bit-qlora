@@ -390,24 +390,13 @@ def resolve_max_seqs(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
     output."""
     if str(cfg.max_seqs_requested).strip().lower() != "auto":
         return {}
-    from .serve_recipe import MAX_SEQS_AUTO_WIDTHS, MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS, ServeSetup, choose_max_seqs
-    env = os.environ.get
+    from .serve_recipe import choose_max_seqs
     try:
-        from .arch.topology import describe_moe
-        topo = describe_moe(model_config)
+        topo, setup, widths = _sizing_inputs(cfg, model_config)
     except Exception as e:                                 # a config describe_moe cannot read: today's default
         res = {"max_seqs": 16, "free_bytes": free_bytes, "candidates": [],
                "why": f"the model's topology could not be described ({type(e).__name__}: {str(e)[:160]}): 16"}
     else:
-        req = cfg.buckets_requested if cfg.buckets_requested != "default" else ""
-        b = _buckets_env(req)
-        setup = ServeSetup(placement=cfg.placement, max_seqs=16, max_tokens_per_seq=cfg.max_tokens_per_seq,
-                           chunk_tokens=cfg.chunk_tokens, graphs=cfg.graphs, buckets=b, kv_groups=cfg.kv_groups,
-                           prefill_graph=cfg.prefill_graph, vram_gb=cfg.vram_gb, dram_gb=cfg.dram_gb,
-                           hot_rows=cfg.hot_rows, bulk_kv=cfg.bulk_kv,
-                           exp_int4="1" in (env("E4B_SERVE_EXP_INT4", "0"), env("E4B_SERVE_EXP_INT4_CALIB", "0")),
-                           attn_int4="1" in (env("E4B_SERVE_ATTN_INT4", "0"), env("E4B_SERVE_ATTN_INT4_CALIB", "0")))
-        widths = MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS if str(b).strip().lower() == "auto" else MAX_SEQS_AUTO_WIDTHS
         # the int8 head's codes and scales arrive after the slots are sized: priced in whenever the knob resolves on
         res = choose_max_seqs(topo, setup, free_bytes, widths=widths,
                               extra_bytes=int8_head_copy_bytes(cfg, model_config))
@@ -416,6 +405,58 @@ def resolve_max_seqs(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
     cfg.validate()
     cfg.max_seqs_resolution = res
     log(f"E4B_PAGED_MAX_SEQS=auto -> {cfg.max_seqs} ({res.get('why')}); buckets {list(cfg.buckets)}")
+    return res
+
+
+def _sizing_inputs(cfg: "PagedServeConfig", model_config):
+    """The model's topology, the :class:`~.serve_recipe.ServeSetup` that prices this server, and the widths
+    ``E4B_PAGED_MAX_SEQS=auto`` tries: what :func:`resolve_max_seqs` and :func:`resolve_kv_pool` size from. Raises when
+    the topology cannot be described."""
+    from .arch.topology import describe_moe
+    from .serve_recipe import MAX_SEQS_AUTO_WIDTHS, MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS, ServeSetup
+    env = os.environ.get
+    topo = describe_moe(model_config)
+    req = cfg.buckets_requested if cfg.buckets_requested != "default" else ""
+    b = _buckets_env(req)
+    setup = ServeSetup(placement=cfg.placement, max_seqs=16, max_tokens_per_seq=cfg.max_tokens_per_seq,
+                       chunk_tokens=cfg.chunk_tokens, graphs=cfg.graphs, buckets=b, kv_groups=cfg.kv_groups,
+                       prefill_graph=cfg.prefill_graph, vram_gb=cfg.vram_gb, dram_gb=cfg.dram_gb,
+                       hot_rows=cfg.hot_rows, bulk_kv=cfg.bulk_kv,
+                       exp_int4="1" in (env("E4B_SERVE_EXP_INT4", "0"), env("E4B_SERVE_EXP_INT4_CALIB", "0")),
+                       attn_int4="1" in (env("E4B_SERVE_ATTN_INT4", "0"), env("E4B_SERVE_ATTN_INT4_CALIB", "0")))
+    widths = MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS if str(b).strip().lower() == "auto" else MAX_SEQS_AUTO_WIDTHS
+    return topo, setup, widths
+
+
+def resolve_kv_pool(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
+    """``E4B_PAGED_KV_POOL=shared`` (lever G3, ``bench/kv-pool-g/DESIGN.md``): size the slots (under
+    ``E4B_PAGED_MAX_SEQS=auto``; an explicit width is kept) and the KV pool's rows from the device's free memory before
+    any weight is loaded, by :func:`~.serve_recipe.size_shared_pool`, then re-derive the decode buckets for the width.
+    Sets ``cfg.kv_pool_rows`` (None: the claim-all size) and returns the record /health reports. The claim-all pool
+    (the default) never comes here."""
+    if cfg.kv_pool != "shared":
+        return {}
+    from .serve_recipe import size_shared_pool
+    auto = str(cfg.max_seqs_requested).strip().lower() == "auto"
+    try:
+        topo, setup, widths = _sizing_inputs(cfg, model_config)
+    except Exception as e:                                 # a config describe_moe cannot read: the claim-all pool
+        res = {"max_seqs": 16 if auto else cfg.max_seqs, "pool_rows": None, "free_bytes": free_bytes,
+               "candidates": [], "why": f"the model's topology could not be described "
+                                        f"({type(e).__name__}: {str(e)[:160]}): the claim-all pool"}
+    else:
+        res = size_shared_pool(topo, setup, free_bytes, widths=widths if auto else (cfg.max_seqs,),
+                               extra_bytes=int8_head_copy_bytes(cfg, model_config))
+    cfg.max_seqs = int(res["max_seqs"])
+    cfg.kv_pool_rows = res.get("pool_rows")
+    cfg.buckets = _buckets_env(cfg.buckets_requested if cfg.buckets_requested != "default" else "")
+    cfg.validate()
+    if auto:
+        cfg.max_seqs_resolution = res
+    cfg.kv_pool_resolution = res
+    log(f"E4B_PAGED_KV_POOL=shared -> {cfg.max_seqs} slots, "
+        f"{'the claim-all pool' if cfg.kv_pool_rows is None else f'{cfg.kv_pool_rows} pool rows'} ({res.get('why')}); "
+        f"buckets {list(cfg.buckets)}")
     return res
 
 
@@ -721,7 +762,10 @@ class PagedServeConfig:
     max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
     prefill_every: int = 1               # E4B_PAGED_PREFILL_EVERY: while decoding, prefill on at most 1 step in N
     loaded_chunk_tokens: int = 0         # E4B_PAGED_LOADED_CHUNK_TOKENS: while decoding, chunk + budget cap; 0 = off
-    kv_pool: str = "claim-all"           # E4B_PAGED_KV_POOL: claim-all (default) / shared (lever G1 + G2, opt-in)
+    kv_pool: str = "claim-all"           # E4B_PAGED_KV_POOL: claim-all (default) / shared (levers G1-G3, opt-in)
+    kv_pool_rows: Optional[int] = None   # shared only: the pool's rows per layer, sized by resolve_kv_pool (G3); None
+                                         # = the claim-all size. Derived, never read from the environment
+    kv_pool_resolution: dict = field(default_factory=dict)   # resolve_kv_pool's record, for /health
     graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
     prefill_graph: str = "auto"          # E4B_PAGED_PREFILL_GRAPH: auto (default) / 1 / 0 (_prefill_graph_env)
     last_logits: bool = False            # E4B_PAGED_LAST_LOGITS: opt-in prefill head at one position
@@ -1835,11 +1879,14 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # E4B_K25_PLAN: unset, qwen3_moe takes c1 where its decode resolved to prmt (lane P161), every other case today; an
     # explicit c1 runs only under the decode it was read with
     k25_plan = resolve_k25_plan(k25_lut, model_type=getattr(model_config, "model_type", None))
-    if str(cfg.max_seqs_requested).strip().lower() == "auto":
+    if str(cfg.max_seqs_requested).strip().lower() == "auto" or cfg.kv_pool == "shared":
         # sized before any weight is read: the estimate's device total includes the weights
         free = (torch.cuda.mem_get_info(torch.device(cfg.device))[0]
                 if str(cfg.device).startswith("cuda") and torch.cuda.is_available() else None)
-        resolve_max_seqs(cfg, model_config, free)
+        if cfg.kv_pool == "shared":
+            resolve_kv_pool(cfg, model_config, free)       # lever G3: the slots (under auto) and the pool's rows
+        else:
+            resolve_max_seqs(cfg, model_config, free)
     model, _ = load_moe_4bit_streaming(cfg.model, cfg.device, torch.bfloat16, r=8, alpha=16, quant_type="nf4",
                                        arena=cfg.arena, revision=cfg.revision or None)
     model.eval()
@@ -1945,7 +1992,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # a hybrid model's linear-attention layers keep no K/V: the pool holds its attention layers only
     kv = Fp8PagedKV(kv_layers(model, decoder_layers(model.config)), hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
-                    batched_append=True, device=cfg.device, scratch_slots=scratch, alias_slots=spec_k)
+                    batched_append=True, device=cfg.device, scratch_slots=scratch, alias_slots=spec_k,
+                    pool_rows=cfg.kv_pool_rows if cfg.kv_pool == "shared" else None)
     # P143: the attention split cap, on the KV before any decode graph is captured (a captured graph keeps its n_split)
     split_cap, split_cap_source = apply_attn_split_cap(kv, cfg, getattr(model.config, "model_type", None))
     runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits)
@@ -1969,9 +2017,9 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     if dense_lt.get("on") and torch.cuda.current_stream(torch.device(cfg.device)) != dense_lt.pop("_stream"):
         raise RuntimeError("E4B_DENSE_LT_PIN: the decode graphs were captured for a stream other than the pin's: its "
                            "one workspace must serve one stream")
-    # E4B_PAGED_KV_POOL=shared (bench/kv-pool-g/DESIGN.md): graphed slots claim blocks as they write (G1) and the
-    # scheduler admits by reserved blocks (G2). The pool keeps its claim-all size here, so the reservation never binds;
-    # sizing the pool from free memory (G3) is a separate, later change.
+    # E4B_PAGED_KV_POOL=shared (bench/kv-pool-g/DESIGN.md): graphed slots claim blocks as they write (G1), the
+    # scheduler admits by reserved blocks (G2), and the pool holds the rows free memory left (G3, resolve_kv_pool), so
+    # the reservation binds whenever the pool is smaller than its slots can reach.
     shared = cfg.kv_pool == "shared"
     if shared:
         runner.incremental_claims = True
@@ -1979,7 +2027,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                                 chunk_tokens=cfg.chunk_tokens, max_prefill_tokens_per_step=cfg.prefill_budget,
                                 lookahead=cfg.decode_lookahead, prefill_every=cfg.prefill_every,
                                 loaded_chunk_tokens=cfg.loaded_chunk_tokens,
-                                kv_blocks=(kv.B * kv.blocks_per_seq) if shared else None, block_tokens=kv.bt)
+                                kv_blocks=(kv._n_rows - kv.n_scratch) if shared else None, block_tokens=kv.bt)
     info = {"moe_layers": L, "experts": E, "top_k": k, "model_type": getattr(model.config, "model_type", None),
             "int4_expert_layers": int4_layers, "int4_store_kinds": kinds, "int4_attn_projections": int4_attn,
             "kv": {"n_kv_heads": hkv, "head_dim": hd, "k_groups": cfg.kv_groups, "scratch_slots": scratch,
@@ -2032,6 +2080,24 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
 # ---------------------------------------------------------------------------
 # HTTP
 # ---------------------------------------------------------------------------
+
+
+def _kv_pool_health(cfg, parts):
+    """``E4B_PAGED_KV_POOL=shared`` (levers G1-G3): the pool's rows against the claim-all size, the blocks the
+    scheduler admits against, what it holds reserved and how often its queue head waited on blocks, and
+    :func:`resolve_kv_pool`'s derivation (its inputs and arithmetic). None under claim-all."""
+    if cfg.kv_pool != "shared":
+        return None
+    runner = getattr(parts, "runner", None)
+    kv = getattr(runner, "kv", None)
+    sched = getattr(parts, "scheduler", None)
+    out = {"pool_rows": getattr(kv, "_n_rows", None), "claim_all_rows": getattr(kv, "claim_all_rows", None),
+           "scratch_rows": getattr(kv, "n_scratch", None), "block_tokens": getattr(kv, "bt", None),
+           "kv_blocks": getattr(sched, "kv_blocks", None), "derivation": cfg.kv_pool_resolution or None}
+    if sched is not None and getattr(sched, "kv_blocks", None) is not None:
+        out["kv_blocks_reserved"] = sched.kv_blocks_reserved
+        out["kv_blocks_waits"] = sched.kv_blocks_waits
+    return out
 
 
 def _graph_stats(parts):
@@ -2278,7 +2344,7 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
                 "max_seqs_requested": cfg.max_seqs_requested, "max_seqs_resolution": cfg.max_seqs_resolution or None,
                 "chunk_tokens": cfg.chunk_tokens, "max_prefill_tokens_per_step": cfg.prefill_budget,
                 "prefill_every": cfg.prefill_every, "loaded_chunk_tokens": cfg.loaded_chunk_tokens,
-                "kv_pool": cfg.kv_pool,
+                "kv_pool": cfg.kv_pool, "kv_pool_sizing": _kv_pool_health(cfg, parts),
                 "graphs": cfg.graphs, "buckets": list(cfg.buckets), "buckets_requested": cfg.buckets_requested,
                 "graph_status": info.pop("graph_status", None), "graph_stats": _graph_stats(parts),
                 "placement": cfg.placement, "fuse_qkv": _fuse_qkv_health(cfg, info),

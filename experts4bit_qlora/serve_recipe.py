@@ -65,6 +65,10 @@ class ServeSetup:
     attn_int4: bool = False
     #: E4B_PAGED_BULK_KV: a prompt's K/V is flushed into the FP8 pool in one bulk write (the server's default)
     bulk_kv: bool = True
+    #: E4B_PAGED_KV_POOL=shared only (lever G3): each layer's KV pool rows, below the claim-all size; None is the
+    #: claim-all size (``max_seqs x blocks_per_seq`` + the graph scratch slots). Derived (:func:`size_shared_pool`),
+    #: never read from the environment
+    kv_pool_rows: int | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -199,10 +203,87 @@ def choose_max_seqs(topology, setup: "ServeSetup", free_bytes, *, widths=MAX_SEQ
                                         f"{int(margin_bytes)} B to spare")
 
 
-def paged_kv_pool_bytes(n_layers: int, n_kv_heads, head_dim, *, batch: int, max_tokens_per_seq: int,
-                        k_groups=None, scratch_slots: int = 0) -> int:
-    """Device bytes ``Fp8PagedKV(n_layers, n_kv_heads, head_dim, batch=..., ...)`` allocates for its K and V row pools
-    and its block tables: the same normalization and row arithmetic, so a planner can size the pool before building it."""
+#: Lever G3 (``E4B_PAGED_KV_POOL=shared``, :func:`size_shared_pool`): the fewest tokens a slot may have on average
+#: when the pool is shared, the floor ``bench/kv-pool-g/DESIGN.md``'s roadmap entry names (``slots = floor(pool_tokens /
+#: max(context_hint, 1024))``), capped at the per-slot ceiling.
+SHARED_POOL_MIN_TOKENS_PER_SLOT = 1024
+
+
+def size_shared_pool(topology, setup: "ServeSetup", free_bytes, *, widths, margin_bytes: int = MAX_SEQS_AUTO_MARGIN_BYTES,
+                     extra_bytes: int = 0) -> dict:
+    """Lever G3 (``E4B_PAGED_KV_POOL=shared``, ``bench/kv-pool-g/DESIGN.md``): the slots and the KV pool's rows from
+    free device memory. For each of ``widths``, widest first, the rows are the most whose :func:`estimate_serve_footprint`
+    device total, plus the prefill graph's reserve, ``extra_bytes`` and ``margin_bytes``, fits ``free_bytes`` (as
+    :func:`choose_max_seqs` prices a width), capped at the claim-all size. A width is offered only when those rows hold
+    the graph scratch slots plus, beyond them, one full sequence (``max_tokens_per_seq``) and
+    :data:`SHARED_POOL_MIN_TOKENS_PER_SLOT` tokens a slot on average (capped at the ceiling). The widest offered width
+    wins. With no width offered, with the free memory unknown, or under the solver placement, the narrowest width keeps
+    its claim-all pool (``pool_rows`` None). Returns the choice, every candidate's arithmetic and the inputs, for
+    ``/health``."""
+    floor = min(int(w) for w in widths)
+    bt = BLOCK_TOKENS
+    out = {"max_seqs": floor, "pool_rows": None, "free_bytes": None if free_bytes is None else int(free_bytes),
+           "margin_bytes": int(margin_bytes), "extra_bytes": int(extra_bytes),
+           "min_tokens_per_slot": SHARED_POOL_MIN_TOKENS_PER_SLOT, "block_tokens": bt, "candidates": []}
+    if free_bytes is None:
+        return dict(out, why=f"free device memory unknown (no CUDA device): {floor} slots, the claim-all pool")
+    if setup.placement != "all-vram":
+        return dict(out, why=f"the shared pool sizes the all-vram server; placement {setup.placement!r} keeps {floor} "
+                             f"slots and the claim-all pool")
+    kg = None if setup.kv_groups == "auto" else int(setup.kv_groups)
+    row = paged_kv_row_bytes(topology.kv_layers, topology.kv_heads, topology.kv_head_dims, k_groups=kg)
+    bps = -(-int(setup.max_tokens_per_seq) // bt)
+    for w in sorted({int(x) for x in widths}, reverse=True):
+        s = replace(setup, max_seqs=w, kv_pool_rows=None)
+        scratch = max(s.decode_buckets) if s.graphs else 0
+        full = w * bps + scratch
+        per_slot = -(-min(SHARED_POOL_MIN_TOKENS_PER_SLOT, int(setup.max_tokens_per_seq)) // bt)
+        least = scratch + max(bps, w * per_slot)
+        reserve = prefill_graph_reserve_bytes(topology, s)
+
+        def need(rows):
+            fp = estimate_serve_footprint(topology, replace(s, kv_pool_rows=rows))
+            return None if fp.refusals else fp.device_bytes + reserve + int(extra_bytes) + int(margin_bytes), fp
+        n_least, fp = need(min(least, full))
+        cand = {"max_seqs": w, "scratch_slots": scratch, "blocks_per_seq": bps, "claim_all_rows": full,
+                "least_rows": least, "row_bytes": row, "prefill_graph_reserve_bytes": reserve}
+        if n_least is None:
+            out["candidates"].append(dict(cand, refused=list(fp.refusals)))
+            continue
+        if least > full or n_least > int(free_bytes):
+            out["candidates"].append(dict(cand, need_bytes_at_least=n_least, fits=False))
+            continue
+        lo, hi = least, full                       # the most rows that fit: the device total is non-decreasing in rows
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            n_mid = need(mid)[0]
+            if n_mid is not None and n_mid <= int(free_bytes):   # a refused estimate never fits
+                lo = mid
+            else:
+                hi = mid - 1
+        n_rows, _ = need(lo)
+        out["candidates"].append(dict(cand, pool_rows=lo, need_bytes=n_rows, fits=True,
+                                      pool_tokens=(lo - scratch) * bt, mean_tokens_per_slot=(lo - scratch) * bt // w))
+    pick = next((c for c in out["candidates"] if c.get("fits")), None)
+    if pick is None:
+        refused = {c["max_seqs"]: c["refused"] for c in out["candidates"] if c.get("refused")}
+        if refused and len(refused) == len(out["candidates"]):
+            return dict(out, why="the estimate refused every width at its floor (" + "; ".join(
+                f"{w}: {', '.join(map(str, r))}" for w, r in refused.items()) + f"): {floor} slots, the claim-all pool")
+        return dict(out, why=f"no width holds {SHARED_POOL_MIN_TOKENS_PER_SLOT} tokens a slot and one full sequence in "
+                             f"{int(free_bytes)} B free with the reserve and margin: {floor} slots, the claim-all pool")
+    rows = None if pick["pool_rows"] >= pick["claim_all_rows"] else pick["pool_rows"]
+    return dict(out, max_seqs=pick["max_seqs"], pool_rows=rows,
+                why=(f"the widest of {sorted({int(x) for x in widths}, reverse=True)} whose pool holds "
+                     f"{SHARED_POOL_MIN_TOKENS_PER_SLOT} tokens a slot and one full sequence in {int(free_bytes)} B free: "
+                     f"{pick['pool_rows']} rows ({pick['pool_rows'] - pick['scratch_slots']} for the slots, "
+                     f"{pick['scratch_slots']} scratch) of {pick['claim_all_rows']} claim-all"
+                     + ("" if rows is not None else ", so the claim-all size")))
+
+
+def paged_kv_row_bytes(n_layers: int, n_kv_heads, head_dim, *, k_groups=None) -> int:
+    """Device bytes ONE pool row costs across every layer (a K row plus a V row per layer, each at the largest layer's
+    stride): ``Fp8PagedKV``'s row arithmetic. A pool of ``r`` rows costs ``r`` times this plus its block tables."""
     from fp8_kv import kv_block_bytes
 
     from .engines.fp8_paged_kv import _auto_k_groups
@@ -214,10 +295,20 @@ def paged_kv_pool_bytes(n_layers: int, n_kv_heads, head_dim, *, batch: int, max_
     kgs = [_auto_k_groups(d) for d in ds] if k_groups is None else [int(k_groups)] * n_layers
     k_row = max(kv_block_bytes(BLOCK_TOKENS, h, d) + BLOCK_TOKENS * h * 4 * (kg - 1) for h, d, kg in zip(hs, ds, kgs))
     v_row = max(kv_block_bytes(BLOCK_TOKENS, h, d) for h, d in zip(hs, ds))
+    return n_layers * (k_row + v_row)
+
+
+def paged_kv_pool_bytes(n_layers: int, n_kv_heads, head_dim, *, batch: int, max_tokens_per_seq: int,
+                        k_groups=None, scratch_slots: int = 0, pool_rows: int | None = None) -> int:
+    """Device bytes ``Fp8PagedKV(n_layers, n_kv_heads, head_dim, batch=..., ...)`` allocates for its K and V row pools
+    and its block tables: the same normalization and row arithmetic, so a planner can size the pool before building it.
+    ``pool_rows`` is ``Fp8PagedKV``'s (lever G3): the rows per layer, ``None`` for the claim-all size. The tables keep
+    their claim-all shape either way."""
+    row = paged_kv_row_bytes(n_layers, n_kv_heads, head_dim, k_groups=k_groups)
     blocks_per_seq = -(-max_tokens_per_seq // BLOCK_TOKENS)
-    rows = batch * blocks_per_seq + scratch_slots
+    rows = batch * blocks_per_seq + scratch_slots if pool_rows is None else int(pool_rows)
     tables = n_layers * (batch + scratch_slots) * blocks_per_seq * 4 + n_layers * (batch + scratch_slots) * 4
-    return n_layers * rows * (k_row + v_row) + tables
+    return rows * row + tables
 
 
 def linear_state_pool_bytes(layers, n_slots: int, conv_bytes: int = 2) -> int:
@@ -542,10 +633,15 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
     scratch = max(setup.decode_buckets) if setup.graphs else 0      # what the server captures
     kv = paged_kv_pool_bytes(topology.kv_layers, topology.kv_heads, topology.kv_head_dims, batch=setup.max_seqs,
                              max_tokens_per_seq=setup.max_tokens_per_seq,
-                             k_groups=None if setup.kv_groups == "auto" else int(setup.kv_groups), scratch_slots=scratch)
+                             k_groups=None if setup.kv_groups == "auto" else int(setup.kv_groups), scratch_slots=scratch,
+                             pool_rows=setup.kv_pool_rows)
+    shape = (f"{setup.max_seqs} seqs x {setup.max_tokens_per_seq} tokens + {scratch} graph scratch slots"
+             if setup.kv_pool_rows is None else
+             f"{setup.kv_pool_rows} shared rows of {BLOCK_TOKENS} tokens for {setup.max_seqs} seqs of up to "
+             f"{setup.max_tokens_per_seq} tokens, {scratch} of them graph scratch")
     items.append(FootprintItem("FP8 paged KV pool", "device", kv, "derived",
-                               f"{topology.kv_layers} layers x ({setup.max_seqs} seqs x {setup.max_tokens_per_seq} tokens"
-                               f" + {scratch} graph scratch slots), fp8 payload + fp32 scales (Fp8PagedKV's arithmetic)"))
+                               f"{topology.kv_layers} layers x ({shape}), fp8 payload + fp32 scales "
+                               f"(Fp8PagedKV's arithmetic)"))
     if topology.linear_state_layers:
         slots = setup.max_seqs + scratch
         items.append(FootprintItem("linear-attention state pool", "device",

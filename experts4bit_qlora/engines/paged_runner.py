@@ -429,7 +429,7 @@ class PagedModelRunner(StepRunner):
             # claim-all: every reachable block; incremental: the prompt's blocks and the one its first decode writes
             last = (min(self.kv.blocks_per_seq - 1, len(self.tokens[rid]) // self.kv.bt)
                     if getattr(self, "incremental_claims", False)
-                    else self.kv.blocks_per_seq - 1)
+                    else self._claim_all_last())
             self.kv.claim_blocks(slot, last, self.pool_layers)
             self._graph_ready.add(slot)
             self._kv_counts["ready_at_flush"] += 1
@@ -738,6 +738,14 @@ class PagedModelRunner(StepRunner):
         self.kv.claim_many({slot: min(cap, int(pos) // self.kv.bt) for slot, pos in write_pos.items()}, self.pool_layers)
         self._graph_ready.update(write_pos)
 
+    def _claim_all_last(self) -> int:
+        """The last block a claim-all slot claims: every block it can reach. A pool smaller than its slots can reach
+        (``Fp8PagedKV(pool_rows=...)``, lever G3) refuses: only incremental claims may draw on it."""
+        if getattr(self.kv, "shared_pool", False):
+            raise RuntimeError(f"the KV pool holds {self.kv._n_rows} rows, fewer than its slots can reach "
+                               f"({self.kv.claim_all_rows}): claim-all would run it dry; it needs incremental_claims")
+        return self.kv.blocks_per_seq - 1
+
     def _ensure_graph_ready(self, slot: int) -> None:
         """A graph step addresses KV blocks from the device table and never
         allocates, so every block a decoding slot can reach is claimed once,
@@ -747,7 +755,7 @@ class PagedModelRunner(StepRunner):
             return
         if slot in self._graph_ready:
             return
-        last = self.kv.blocks_per_seq - 1
+        last = self._claim_all_last()
         if self.bulk_kv:
             self.kv.claim_blocks(slot, last, self.pool_layers)
             self._kv_counts["ready_bulk"] += 1
