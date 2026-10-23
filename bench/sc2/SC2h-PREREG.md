@@ -298,7 +298,7 @@ required results file: a results PR or re-derivation without it, or with it not 
 
 As SC2f Amendment 6, for box O, which names the full list in one place. Rule 8's one `--no-links` on
 `pull_box`'s rsync line. Box Q's own `sc2j_<name>` files, changed or added and staged by name, with INERT re-run
-at the launch commit. A dirty launch worktree refuses. Anything else refuses. The staged kit's meaning for box O and
+at the launch commit. A staging checkout that is dirty, or whose `HEAD` is not the launch commit, refuses. Anything else refuses. The staged kit's meaning for box O and
 the stack under test (`36cdd2d4`) are unchanged.
 
 **Unchanged:** everything else.

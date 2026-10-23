@@ -481,14 +481,18 @@ exactly these exceptions. This list is the whole set; anything outside it refuse
    - INERT runs again at the launch commit, over every other staged entry (the Python files included) and both
      drivers. No `sc2j_<name>` may appear outside box Q's own `sc1_run.sh` lines and the drivers' staging lines.
 
-A launch from a dirty worktree (`check --at HEAD` with `git status --porcelain` non-empty) also refuses. Fetch flags
+The checkout that stages must be the launch commit, clean. The check runs in that checkout (`--repo <launch
+checkout>`) and refuses if its `git status --porcelain` is non-empty or its `HEAD` is not `--at`, however `--at` is
+spelled. Fetch flags
 and box Q's files change nothing that boxes N, O and P run, so the hold keeps its meaning. The stack is still
 `36cdd2d4`, under the STACK gate and `verdict-stack`.
 
-**Evidence.** The self-test refuses each exception beyond its letter (11 new cases: a non-sc2j entry changed; an N/O/P
+**Evidence.** The self-test refuses each exception beyond its letter (the new cases: a non-sc2j entry changed; an N/O/P
 runner gaining `. $W/sc2j_extra.py`; a removed entry; the delta plus another driver byte; an unreferenced staged
 `json.py`; a staging line gaining a non-sc2j name, or an sc2j name that is not an added entry; an sc2j name on a
-non-staging driver line; a box Q file named outside the pattern; a dirty worktree). `tests/test_sc2_kit_hold.py`
+non-staging driver line; a box Q file named outside the pattern, including names only a prefix or substring match
+would pass, `sc2j_extra.py.bak` and `foo_sc2j_extra.py`; a dirty staging checkout at a full-sha `--at`; a staging
+checkout whose `HEAD` is not `--at`). `tests/test_sc2_kit_hold.py`
 checks the registered `main` commit `ac7e6ed1`, which carries exactly exceptions 1 and 2: HOLD reads OK, and
 `hold_diff` is `sc2j_box_q.sh` and `sc2j_quality.py`.
 

@@ -25,7 +25,8 @@ the create, its JSON recorded with the run:
              staging lines of `sc1_drive.sh` / `make_pin.sh` may gain exactly the names of the added sc2j entries; and
              INERT runs again AT THE LAUNCH COMMIT over every other entry and both drivers: no `sc2j_<name>` appears
              outside box Q's own sc1_run.sh lines and the drivers' staging lines.
-         A launch from a dirty worktree (``--at HEAD`` with ``git status --porcelain`` non-empty) refuses.
+         The checkout that stages must BE the launch commit, clean: its ``git status --porcelain`` empty and its HEAD
+         equal to ``--at`` (however ``--at`` is spelled), else it refuses.
   STACK  the launch's ``E4B_SHA`` (``--e4b-sha``, by default the environment's) is the stack under test, 36cdd2d4, in full:
          ``sc1_drive.sh`` installs it in place of the checkout's HEAD, so a launch without it would test the kit's commit.
 
@@ -191,6 +192,9 @@ class Git:
         r = subprocess.run(["git", "-C", self.repo, "status", "--porcelain"], capture_output=True, text=True)
         return r.returncode != 0 or bool(r.stdout.strip())
 
+    def head(self):
+        return self.sha("HEAD")
+
     def tree(self, rev, path):
         r = subprocess.run(["git", "-C", self.repo, "rev-parse", "--verify", f"{rev}:{path}"], capture_output=True,
                            text=True)
@@ -257,8 +261,18 @@ def inert_hits(name: str, text: str, allowed: tuple):
     return hits
 
 
+def staging_checkout_bad(git, at_full: str) -> list:
+    """The checkout that stages is the launch commit, clean: porcelain empty and HEAD == ``at`` (by full sha)."""
+    why = []
+    if git.dirty():
+        why.append("the staging checkout is dirty (git status --porcelain is not empty)")
+    head = git.head()
+    if head != at_full:
+        why.append(f"the staging checkout's HEAD {head!r} is not the launch commit {at_full}")
+    return why
+
+
 def check(git, hold, base=BASE, at=None, e4b_sha=None) -> dict:
-    at_ref = at
     why, rec = [], {"base": base, "hold": hold, "at": at, "e4b_sha": e4b_sha}
     if not hold:
         return {**rec, "verdict": "REFUSE", "why": ["no hold commit given (e4b#2041's merge)"]}
@@ -323,8 +337,7 @@ def check(git, hold, base=BASE, at=None, e4b_sha=None) -> dict:
     if any(not x["allowed"] for x in hits):
         why.append("INERT: " + "; ".join(f"{x['file']}:{x['line_no']}" for x in hits if not x["allowed"]))
     # HOLD
-    if getattr(git, "dirty", lambda: False)() and at_ref == "HEAD":
-        why.append("HOLD: the launch worktree is dirty (git status --porcelain is not empty)")
+    why += [f"HOLD: {w}" for w in staging_checkout_bad(git, rec["at"])]
     ea = entries(git.show(at, PIN))
     added = set()
     if ea is None:
@@ -333,6 +346,9 @@ def check(git, hold, base=BASE, at=None, e4b_sha=None) -> dict:
         diff = sorted(n for n in set(ea) | set(eh) if ea.get(n) != eh.get(n))
         rec["hold_diff"] = diff
         removed = [n for n in diff if n not in ea]
+        # Defence in depth: INERT-at-launch below also refuses most of what these name rules refuse (a changed non-sc2j
+        # runner that names an sc2j file trips both), so a mutant that weakens one rule can survive the self-test while
+        # the other holds; the cases that only fullmatch refuses (a prefix or substring name) pin the name rule itself.
         foreign = [n for n in diff if n in ea and not SC2J_NAME.fullmatch(n)]
         added = {n for n in diff if n not in eh and SC2J_NAME.fullmatch(n)}
         if removed:
@@ -406,8 +422,7 @@ def package_hold(git, base, at, e4b_sha=None) -> dict:
         if not full:
             return {**rec, "verdict": "REFUSE", "why": [f"{k} {rec[k]!r} is not a readable commit"]}
         rec[k] = full
-    if at == "HEAD" and getattr(git, "dirty", lambda: False)():
-        why.append("the launch worktree is dirty (git status --porcelain is not empty)")
+    why += staging_checkout_bad(git, rec["at"])
     if e4b_sha != rec["base"]:
         why.append(f"STACK: the launch's E4B_SHA is {e4b_sha!r}, not the pinned stack {rec['base']} (in full)")
     for f in KIT_FILES:
@@ -427,13 +442,13 @@ def _package_self_test() -> list:
             "bench/sc1/make_pin.sh": "m\n", "bench/sc1/sc1_drive.sh": drv}
     B = "b" * 40
 
-    def run(e4b=B, **edits):
+    def run(e4b=B, head="L", **edits):
         at = dict(base)
         for k, v in edits.items():
             k = {"pkg": "experts4bit_qlora/a.py", "pin": PIN, "make_pin": "bench/sc1/make_pin.sh",
                  "drive": "bench/sc1/sc1_drive.sh"}[k]
             at[k] = v
-        return package_hold(Fake({B: base, "L": at}), B, "L", e4b_sha=e4b)["verdict"]
+        return package_hold(Fake({B: base, "L": at}, head=head), B, "L", e4b_sha=e4b)["verdict"]
     nl = drv.replace("rsync -az --timeout", "rsync -az --no-links --timeout")
     return [
         ("package: E4B_SHA = the pinned base, kit identical", run(), "OK"),
@@ -445,7 +460,10 @@ def _package_self_test() -> list:
         ("package: the staged pin changed", run(pin="q\n"), "REFUSE"),
         ("package: make_pin changed", run(make_pin="n\n"), "REFUSE"),
         ("package: the driver changed beyond rule 8", run(drive=nl.replace("x:/w/", "y:/w/")), "REFUSE"),
-        ("package: base unreadable", package_hold(Fake({"L": base}), B, "L", e4b_sha=B)["verdict"], "REFUSE"),
+        ("package: base unreadable", package_hold(Fake({"L": base}, head="L"), B, "L", e4b_sha=B)["verdict"], "REFUSE"),
+        ("package: the staging checkout is not the kit commit", run(head=B), "REFUSE"),
+        ("package: the staging checkout is dirty",
+         package_hold(Fake({B: base, "L": dict(base)}, head="L", dirty=True), B, "L", e4b_sha=B)["verdict"], "REFUSE"),
     ]
 
 
@@ -490,8 +508,8 @@ def _stack_self_test() -> list:
 
 # ------------------------------------------------------------------ self-test: each gate with its evidence removed
 class Fake:
-    def __init__(self, trees):
-        self.trees = trees
+    def __init__(self, trees, head=None, dirty=False):
+        self.trees, self._head, self._dirty = trees, head, dirty
 
     def show(self, rev, path):
         v = self.trees.get(rev, {}).get(path)
@@ -500,10 +518,11 @@ class Fake:
     def sha(self, rev):
         return rev if rev in self.trees else None
 
-
-class FakeDirty(Fake):           # a Fake whose worktree reads dirty
     def dirty(self):
-        return True
+        return self._dirty
+
+    def head(self):
+        return self._head
 
 
 def _pin(tree):
@@ -558,7 +577,7 @@ def self_test() -> int:
     try:
         b, h = _fixtures()
 
-        def run(mut_h=None, mut_at=None, mut_b=None, stack=STACK):
+        def run(mut_h=None, mut_at=None, mut_b=None, stack=STACK, head="L", dirty=False):
             bb, hh = dict(b), dict(h)
             if mut_b:
                 mut_b(bb)
@@ -569,17 +588,21 @@ def self_test() -> int:
             aa = dict(hh)
             if mut_at:
                 mut_at(aa)
-            return check(Fake({"B": bb, "H": hh, "L": aa}), "H", base="B", at="L", e4b_sha=stack)["verdict"]
+            return check(Fake({"B": bb, "H": hh, "L": aa}, head=head, dirty=dirty), "H", base="B", at="L",
+                         e4b_sha=stack)["verdict"]
 
-        def boxq(extra=None, drop=None, drive=None, name="sc2j_extra.py"):
+        def boxq(extra=None, drop=None, drive=None, name="sc2j_extra.py", stage=True):
             """At the launch commit: sc2j_box_q.sh changed, ``name`` added and staged in both drivers, rule 8's token."""
             def f(t):
                 t["bench/sc2/sc2j_box_q.sh"] = t["bench/sc2/sc2j_box_q.sh"] + "# box Q edit\n"
                 t["bench/sc2/" + name] = "# a new box Q file\n"
-                d = t["bench/sc1/sc1_drive.sh"].replace("sc2j_box_q.sh;", f"sc2j_box_q.sh {name};")
+                d = t["bench/sc1/sc1_drive.sh"]
+                if stage:
+                    d = d.replace("sc2j_box_q.sh;", f"sc2j_box_q.sh {name};")
                 d = d.replace("rsync -az --timeout", "rsync -az --no-links --timeout", 1)
                 t["bench/sc1/sc1_drive.sh"] = drive(d) if drive else d
-                t["bench/sc1/make_pin.sh"] = t["bench/sc1/make_pin.sh"].replace("sc2j_box_q.sh;", f"sc2j_box_q.sh {name};")
+                if stage:
+                    t["bench/sc1/make_pin.sh"] = t["bench/sc1/make_pin.sh"].replace("sc2j_box_q.sh;", f"sc2j_box_q.sh {name};")
                 for k, v in (extra or {}).items():
                     t[k] = v
                 if drop:
@@ -632,8 +655,13 @@ def self_test() -> int:
             ("an sc2j name on a non-staging driver line",
              run(mut_at=boxq(drive=lambda d: d.replace("other() {\n  :", "other() {\n  python3 sc2j_extra.py"))), "REFUSE"),
             ("an added box Q file named outside the exact pattern", run(mut_at=boxq(name="sc2j-extra.py")), "REFUSE"),
-            ("a dirty launch worktree at HEAD",
-             check(FakeDirty({"B": b, "H": h, "HEAD": h}), "H", base="B", at="HEAD", e4b_sha=STACK)["verdict"], "REFUSE"),
+            ("a dirty staging checkout, --at a full sha", run(dirty=True), "REFUSE"),
+            ("the staging checkout's HEAD is not --at", run(head="H"), "REFUSE"),
+            ("an added name only a prefix match would pass (sc2j_extra.py.bak), unstaged",
+             run(mut_at=boxq(name="sc2j_extra.py.bak", stage=False)), "REFUSE"),
+            ("an added name only a substring match would pass (foo_sc2j_extra.py), unstaged",
+             run(mut_at=boxq(name="foo_sc2j_extra.py", stage=False)), "REFUSE"),
+            ("an added sc2j entry not staged by the drivers (never reaches a box)", run(mut_at=boxq(stage=False)), "OK"),
             ("launch pin unreadable", run(mut_at=lambda t: t.pop(PIN)), "REFUSE"),
             ("no E4B_SHA on the launch", run(stack=None), "REFUSE"),
             ("E4B_SHA is the kit's commit", run(stack=HOLD), "REFUSE"),
