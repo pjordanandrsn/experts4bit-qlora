@@ -364,6 +364,13 @@ def test_the_server_config_reads_the_rows_knob(monkeypatch):
     assert sp.INT8_HEAD_ROWS_ENV == ih.ROWS_ENV == "E4B_INT8_HEAD_ROWS"
 
 
+def test_the_rows_knob_is_snapshotted_and_adapter_neutral():
+    """Declared in LEVER_ENV (so /health's levers_env shows it, and the adapter census in tests/test_paged_adapter.py
+    must classify it): neutral, since it widens the allowed int8 head's route and quantizes nothing itself."""
+    assert ih.ROWS_ENV in sp.LEVER_ENV and ih.ROWS_ENV in sp.ADAPTER_NEUTRAL_KNOBS
+    assert ih.ENV in sp.ADAPTER_ALLOWED_LEVERS and ih.ROWS_ENV not in sp.ADAPTER_REFUSED_LEVERS
+
+
 def test_build_engine_widens_the_route_after_the_swap_and_before_any_capture():
     src = inspect.getsource(sp.build_engine)
     at = [src.index(s) for s in ("apply_int8_head_bw_resolved(model, cfg)",

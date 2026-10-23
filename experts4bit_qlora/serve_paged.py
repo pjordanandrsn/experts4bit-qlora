@@ -167,7 +167,7 @@ LEVER_ENV = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_I
              "E4B_INT4_ARTIFACT_DIR", "E4B_INT4_EXPECTED_FINGERPRINT", "E4B_INT4_DUMP_ARTIFACT_DIR",
              "E4B_INT4_ASSIGNMENT", "E4B_CALIB_LAYERS_PER_PASS", "E4B_INT4_KEEP_NF4",
              "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI", "E4B_FUSED_KV_APPEND",
-             "E4B_SERVE_ATTN_INT8")
+             "E4B_SERVE_ATTN_INT8", "E4B_INT8_HEAD_ROWS")
 FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
 # Under an adapter, a lever is classified by what it DEPENDS ON (docs/ADAPTER_PORTABILITY.md F4). REFUSED (refusal 5)
 # until a registered read gates it: (i) it re-quantizes an ADAPTED module (attention after the merge; experts once
@@ -215,6 +215,9 @@ ADAPTER_NEUTRAL_KNOBS = {
     "E4B_FUSE_ROUTER_EPI": ("the router's epilogue: reads the router weight, which no adapter trains; its store "
                             "rounds as torch's cast does"),
     "E4B_FUSED_KV_APPEND": "the paged KV cache's append kernel: no weights at all",
+    "E4B_INT8_HEAD_ROWS": ("routes the int8 head's 2..8 rows to K37 over the head's own codes and scales (K2b): it "
+                           "quantizes nothing and reads no calibration, and the head it widens is the allowed "
+                           "base-serving lever E4B_INT8_HEAD_BW"),
 }
 ADAPTER_ALLOW_ARENA_ENV = "E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA"
 ADAPTER_ACCEPT_BASE_ENV = "E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE"
