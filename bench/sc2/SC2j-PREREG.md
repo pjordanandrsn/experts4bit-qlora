@@ -289,3 +289,20 @@ note. Spent so far: $0.251. Retry ids used: `sc2j-r1` to `sc2j-r3` (`sc2j-prove-
 QUALITY's place in the rule (anything other than AT_PARITY is NOT_LICENSED (QUALITY), whatever the speed clauses read).
 SC2f, SC2h and SC2i are untouched: their kit is held at `7b8f1f69` (their own notes), and this change to the shared kit
 means they launch from `7b8f1f69` itself.
+
+### Amendment 2 (registered before any SC2j reading): the launch checkout takes rule 8's fetch fix
+
+**Why.** bench/common rule 8: a fetch never imports links. The launch commit Amendment 1 registered (its merge,
+`ea298854`) fetches with `rsync -az`, which keeps symlinks, so no box may be created from it. This change adds
+`--no-links` to `sc1_drive.sh`'s `pull_box` rsync line.
+
+**The change.** The launch checkout is a `main` commit at or after this amendment's merge, and the stack under test is
+that checkout's `HEAD`, as before. Before the create, `python bench/sc2/sc2_kit_hold.py package-hold --base ea298854
+--at HEAD --out <run>/package_hold.json` must read OK, and its record is kept with the run. It refuses unless the package
+under test is Amendment 1's: the `experts4bit_qlora/` tree and the install metadata (`pyproject.toml`, `MANIFEST.in`)
+are identical, the staged kit (`staged.sha256`) and `make_pin.sh` are byte-identical, and `sc1_drive.sh` differs at most
+by rule 8's one token on `pull_box`'s rsync line. Its self-test removes or alters each, and `tests/test_sc2_kit_hold.py`
+runs it on registered commits.
+
+**Unchanged:** every arm, gate, threshold, rate, guard, cap and cost; strike 1 of 2; proofs started 1 of 2; the next
+proof `sc2j-prove-2`.

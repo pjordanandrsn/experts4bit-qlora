@@ -184,12 +184,36 @@ while :; do
 done
 mkdir -p "$RUN_DIR/ho3" && [ -z "$(find "$RUN_DIR/ho3" -mindepth 1 -maxdepth 1 -print -quit)" ] || { say "fetch failed: local dir"; exit 22; }
 # The checkpoints stay on the box (the hub cache, outside $W), and so do the trained adapters (tensors); the receipts,
-# logs, phase stamps and the verdict travel.
-rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
+# logs, phase stamps and the verdict travel. A fetch never imports links (Amendment 3): a link left on a rented box
+# could point a store commit at a file on this controller, so --no-links skips any, and a link that still arrives refuses.
+rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
   --exclude 'run/adapter_*' --exclude '*.safetensors' --exclude '*.pt' \
   --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' \
   "root@$HOST:$W/" "$RUN_DIR/ho3/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/ho3" | wc -l | tr -d ' ') entries"
+# A link that still arrives is recorded (path and target, never followed) in refused_links.txt and removed, so the run
+# dir holds no link and its receipt can still be committed; then the fetch refuses (exit 22).
+if [ -n "$(find "$RUN_DIR/ho3" -type l -print -quit)" ]; then
+  RL="$RUN_DIR/ho3/refused_links.txt"; KEPT="$RUN_DIR/ho3/refused_links.box-supplied.txt"; NOTE=""
+  # scratch lives on the controller, never in the box's tree (a box-shipped link there would be followed by >)
+  SELF=$(mktemp) || { say "fetch failed: no temp file"; exit 22; }
+  # 1. the sweep comes FIRST: every link is recorded (path and target, never followed) and removed before anything in the
+  #    tree is renamed or written, so no later step can be steered through a link (e.g. a mv into a linked directory)
+  find "$RUN_DIR/ho3" -type l -print0 | while IFS= read -r -d '' l; do
+    printf '%q -> %q\n' "${l#"$RUN_DIR/ho3/"}" "$(readlink "$l")" >> "$SELF"; rm -f -- "$l"
+  done
+  [ -z "$(find "$RUN_DIR/ho3" -type l -print -quit)" ] || { say "fetch failed: a link survived the sweep:"; cat "$SELF"; rm -f -- "$SELF"; exit 22; }
+  # 2. a refused_links.txt the box shipped itself is never appended to: a regular file is kept, renamed; anything else
+  #    (both names taken, or a directory) refuses with the links listed in the log, touching neither
+  if [ -e "$RL" ]; then
+    if [ -f "$RL" ] && [ ! -e "$KEPT" ]; then mv -- "$RL" "$KEPT"
+      NOTE="# the box shipped its own refused_links.txt: kept as refused_links.box-supplied.txt"
+    else say "fetch failed: the box shipped refused_links.txt and refused_links.box-supplied.txt (or a directory); links:"
+      cat "$SELF"; rm -f -- "$SELF"; exit 22; fi
+  fi
+  { [ -z "$NOTE" ] || printf '%s\n' "$NOTE"; cat "$SELF"; } > "$RL"; rm -f -- "$SELF"
+  say "fetch failed: $(grep -vc '^#' "$RL" | tr -d ' ') symlink(s) arrived; recorded in refused_links.txt and removed"; exit 22
+fi
 [ "$(cat "$RUN_DIR/ho3/HO3_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/ho3/TP_DONE.$NONCE" ] || {
   [ "${LANE_DEAD:-0}" = 1 ] && { say "lane DIED on the box: its process was gone with no HO3_EXIT_CODE and no TP_DONE -- artifacts fetched, nothing measured"; exit 25; }
