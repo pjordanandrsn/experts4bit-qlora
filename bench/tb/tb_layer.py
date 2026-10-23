@@ -17,7 +17,11 @@ base's FIRST block, bitwise.
 
 Step: the same 4 fixed micro-batches through the whole model (forward + backward, no optimizer: the optimizer does not see
 the knobs and is timed once at the end), mirrored the same way; every trainable gradient against base's, bitwise. The
-step wall per arm is measured, and projected from the layer too: base step - 192 layer calls x the layer's saving.
+MEASURED step decides. The projection from the layer (e4b#2043's form, host and device split per arm from the profile) is
+reported beside it as a check on the instrument:
+  projected = base step - [min(192 x host saved a layer, base step wall - base step device) + 192 x device saved a layer]
+where a layer's host saved = its wall saved - its device saved. Where measured and projected differ by more than the
+self-pair spread (the largest gap between one arm's two mirrored blocks), that is flagged: a finding about the instrument.
 
 decide() is DESIGN-TB section 5's kill criteria, fixed before the box, FAILING CLOSED (bench/common rule 7):
   wall      the layer's median wall falls by >= 20 % against base (judged on the fast-CPU host; the host is named)
@@ -92,6 +96,20 @@ def decide(arm: str, m: dict, base: dict) -> dict:
     return {"arm": arm, "verdict": "FAIL" if fail else "PASS", "why": fail, **res}
 
 
+def project(b: dict, s: dict, opt_ms: float, spread: float) -> dict:
+    """The arm's measured step and its projection from the layer (e4b#2043's form), and whether they disagree beyond the
+    self-pair spread. b / s: the base's and the arm's summaries (layer wall/device, step wall/device, all ms)."""
+    exposed = b["step"]["wall_ms"] - b["step"]["device_ms"]
+    dev_saved = b["layer"]["device_ms"] - s["layer"]["device_ms"]
+    host_saved = (b["layer"]["wall_ms"] - s["layer"]["wall_ms"]) - dev_saved
+    proj = b["step"]["wall_ms"] - (min(LAYER_CALLS_PER_STEP * host_saved, exposed) + LAYER_CALLS_PER_STEP * dev_saved)
+    measured = s["step"]["wall_ms"] + opt_ms
+    gap = measured - (proj + opt_ms)
+    return {"measured_step_ms": round(measured, 1), "projected_step_ms": round(proj + opt_ms, 1),
+            "layer_host_saved_ms": round(host_saved, 4), "layer_device_saved_ms": round(dev_saved, 4),
+            "projection_gap_ms": round(gap, 1), "projection_disagrees": abs(gap) > spread}
+
+
 def self_test() -> int:
     def arm(wall, dev, res, ge=True, sw=1000.0, sres=0, sge=True, fp=0, lc=0):
         return {"layer": {"wall_ms": wall, "device_ms": dev, "reserved_peak": res, "grads_equal_base": ge},
@@ -118,7 +136,17 @@ def self_test() -> int:
     del nocount["engaged"]["lean_combine_calls"]
     assert decide("t1", nocount, base)["verdict"] == "VOID"
     assert ORDER == tuple(list(ORDER[:4]) + list(reversed(ORDER[:4]))) and set(ORDER) == set(ARMS)
-    print("tb self-test: 9 verdict cases, 5 fail-closed cases and the mirrored order passed")
+    # the projection: base step 3000 ms with 2000 ms device (1000 ms exposed); a layer saving 2 ms host and 0.5 ms device
+    pb = {"layer": {"wall_ms": 20.0, "device_ms": 10.0}, "step": {"wall_ms": 3000.0, "device_ms": 2000.0}}
+    ps = {"layer": {"wall_ms": 17.5, "device_ms": 9.5}, "step": {"wall_ms": 2530.0, "device_ms": 1900.0}}
+    pr = project(pb, ps, 100.0, 50.0)
+    assert pr["layer_host_saved_ms"] == 2.0 and pr["layer_device_saved_ms"] == 0.5, pr
+    assert pr["projected_step_ms"] == 3000 - (192 * 2.0 + 192 * 0.5) + 100, pr          # host 384 ms < 1000 exposed
+    assert pr["measured_step_ms"] == 2630 and not pr["projection_disagrees"], pr        # gap 10 ms <= 50
+    big = {"layer": {"wall_ms": 10.0, "device_ms": 10.0}, "step": {"wall_ms": 2500.0, "device_ms": 2000.0}}
+    pr2 = project(pb, big, 100.0, 50.0)                                                  # host 10 ms a layer: capped at 1000; measured 400 ms off
+    assert pr2["projected_step_ms"] == 3000 - 1000 + 100 and pr2["projection_disagrees"], pr2
+    print("tb self-test: 9 verdict cases, 5 fail-closed cases, the mirrored order and the projection passed")
     return 0
 
 
@@ -255,7 +283,8 @@ def main():
 
     res = {arm: {"layer": {"walls": [], "device": [], "events": [], "launches": [], "reserved": [], "allocated": [],
                            "grads_equal_base": True, "grads_first_diff": None},
-                 "step": {"walls": [], "reserved": [], "grads_equal_base": True, "grads_first_diff": None},
+                 "step": {"walls": [], "block_medians": [], "device": [], "reserved": [], "grads_equal_base": True,
+                          "grads_first_diff": None},
                  "engaged": {"fused_pad_calls": 0, "lean_combine_calls": 0}} for arm in ARMS}
     ref_layer = ref_step = None
 
@@ -320,6 +349,13 @@ def main():
                     if d:
                         S["grads_equal_base"], S["grads_first_diff"] = False, S["grads_first_diff"] or f"block {bi}: {d}"
         S["reserved"].append(torch.cuda.max_memory_reserved())
+        S["block_medians"].append(statistics.median(S["walls"][-a.step_reps:]))
+        if bi < len(ARMS):                                  # one profiled step per arm: its device busy time
+            torch.cuda.synchronize()
+            with profile(activities=[ProfilerActivity.CUDA]) as prof:
+                step_rep()
+                torch.cuda.synchronize()
+            S["device"].append(_device_ms(prof)[0])
         c1 = _counters()
         for k in c1:
             res[arm]["engaged"][k] += c1[k] - c0[k]
@@ -346,13 +382,15 @@ def main():
                                   "reserved_peak": max(L["reserved"]), "allocated_peak": max(L["allocated"]),
                                   "grads_equal_base": L["grads_equal_base"], "grads_first_diff": L["grads_first_diff"]},
                         "step": {"wall_ms": round(statistics.median(S["walls"]), 1), "reserved_peak": max(S["reserved"]),
+                                 "device_ms": round(statistics.median(S["device"]), 1) if S["device"] else None,
+                                 "self_pair_ms": round(abs(S["block_medians"][0] - S["block_medians"][-1]), 1),
                                  "grads_equal_base": S["grads_equal_base"], "grads_first_diff": S["grads_first_diff"]},
                         "engaged": d["engaged"]}
     b = summary["base"]
+    spread = max(s["step"]["self_pair_ms"] for s in summary.values())
+    exposed = b["step"]["wall_ms"] - b["step"]["device_ms"]                 # the base step's wall not covered by device work
     for arm, s in summary.items():
-        s["step"]["measured_step_ms"] = round(s["step"]["wall_ms"] + opt_ms, 1)
-        s["step"]["projected_from_layer_ms"] = round(b["step"]["wall_ms"] + opt_ms
-                                                     - LAYER_CALLS_PER_STEP * (b["layer"]["wall_ms"] - s["layer"]["wall_ms"]), 1)
+        s["step"].update(project(b, s, opt_ms, spread))
     verdicts = {arm: decide(arm, summary[arm], b) for arm in ARMS}
     import importlib.metadata as md
     cpu = (open("/proc/cpuinfo").read().split("model name")[1].split("\n")[0].strip(": \t") if os.path.exists("/proc/cpuinfo") else None)
@@ -360,7 +398,8 @@ def main():
            "accum": a.accum, "r": a.r, "alpha": a.alpha, "layer": a.layer, "reps": a.reps, "step_reps": a.step_reps,
            "order": ORDER, "n_patched": n_patched, "gpu": torch.cuda.get_device_name(), "cpu": cpu, "torch": torch.__version__,
            "versions": {"e4b": md.version("experts4bit-qlora"), "gnf4": md.version("grouped-nf4-gemm")},
-           "optimizer_ms": round(opt_ms, 1), "summary": summary, "verdicts": verdicts, "raw": res,
+           "optimizer_ms": round(opt_ms, 1), "self_pair_spread_ms": round(spread, 1), "base_step_exposed_ms": round(exposed, 1),
+           "summary": summary, "verdicts": verdicts, "raw": res,
            "rule": {"wall_fall_min": WALL_FALL_MIN, "device_rise_max": DEVICE_RISE_MAX, "reserved_rise_max": RESERVED_RISE_MAX,
                     "judged_on": "the fast-CPU host (the 7950X); any other host is reported beside it"}}
     Path(a.out).write_text(json.dumps(out, indent=1))
@@ -368,7 +407,10 @@ def main():
         s, v = summary[arm], verdicts[arm]
         print(f"[tb] {arm}: layer wall {s['layer']['wall_ms']} ms device {s['layer']['device_ms']} ms launches "
               f"{s['layer']['launches']} reserved {s['layer']['reserved_peak'] / 2**30:.2f} GiB; step {s['step']['measured_step_ms']} ms "
-              f"(projected {s['step']['projected_from_layer_ms']}) -> {v['verdict']} {v['why']}", flush=True)
+              f"(projected {s['step']['projected_step_ms']}, gap {s['step']['projection_gap_ms']}"
+              f"{' DISAGREES beyond the self-pair spread' if s['step']['projection_disagrees'] else ''}) -> {v['verdict']} {v['why']}",
+              flush=True)
+    print(f"[tb] self-pair spread {spread:.1f} ms; base step exposed (wall - device) {exposed:.1f} ms", flush=True)
     print(f"[tb] host {cpu}; gpu {out['gpu']}", flush=True)
     return 0
 
