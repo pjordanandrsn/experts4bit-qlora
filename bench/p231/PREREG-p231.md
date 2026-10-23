@@ -304,8 +304,10 @@ fetched: no answer, so by the table above it is **a strike**, and it used one of
    - The ids `p231-shake-1` to `p231-shake-3` run this runner through the refusals, the download probe, the installs,
      the tripwire and the self-tests, then stop with rc 0 (`SHAKE OK`) before the premise, with nothing fetched.
    - Their fit is the installs only, and their disk floor is 40 GB.
-   - The classifier reads them as `SHAKE_OK` or `SHAKE_FAIL`: never a box-started run, never a strike, never a host
-     refusal. A `SHAKE_FAIL` halts the lane until the kit is fixed.
+   - The classifier reads them as `SHAKE_OK` (rc 0), `SHAKE_HOST_REFUSED` (a host code 13, 15, 16, 18 or 19, or the
+     fit's 41: the host or its boot, not the kit, so no halt and the next shake id) or `SHAKE_FAIL` (any other code).
+     None of them is a box-started run, a strike or a reading's host refusal. A `SHAKE_FAIL` halts the lane until the
+     kit is fixed.
    - Before `p231-5090-2`, one shakedown at this amendment's merge runs on a 5090 as an exploration, outside the lane's
      counts and budget, at a worst case under USD 1.
 

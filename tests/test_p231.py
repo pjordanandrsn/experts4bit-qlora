@@ -476,5 +476,11 @@ def test_amendment_2_shakedowns_stop_before_the_premise_and_never_count():
     R = _load("p231_reduce")
     assert R.classify(0, True, "p231-shake-1")["event"] == "SHAKE_OK" and not R.classify(0, True, "p231-shake-1")["started"]
     assert R.classify(9, True, "p231-shake-2")["event"] == "SHAKE_FAIL" and R.classify(9, True, "p231-shake-2")["halt"]
+    for rc in (13, 15, 16, 18, 19, 41):                      # the host or its boot, never the kit: no halt
+        c = R.classify(rc, rc != 41, "p231-shake-1")
+        assert c["event"] == "SHAKE_HOST_REFUSED" and not c["halt"] and not c["started"], (rc, c)
+    assert set(R.HOST_CODES) | set(R.FIT_CODES) == {13, 15, 16, 18, 19, 41}, "a new host code needs its shake class"
+    for rc in (10, 21, 22, 25, 28, 78, 130):
+        assert R.classify(rc, True, "p231-shake-3")["event"] == "SHAKE_FAIL" and R.classify(rc, True, "p231-shake-3")["halt"], rc
     assert R.classify(9, True, "p231-5090-2")["event"] == "NO_ANSWER", "a reading id's class is unchanged"
     assert "## Amendment 2" in PREREG and "p231-shake-1" in PREREG

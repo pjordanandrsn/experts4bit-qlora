@@ -358,12 +358,18 @@ def reduce(arms: dict, off, on, e4b_sha: str, fit=None) -> dict:
 
 def classify(rc: int, started: bool, run_id: str = "") -> dict:
     """The registered class of one fetched box: ``{"event", "started", "host_refused_cap", "halt", "why"}``. Amendment 2:
-    a ``p231-shake-N`` box is an explore shakedown, SHAKE_OK at rc 0 and SHAKE_FAIL otherwise; it never counts as a
-    started box, a strike or a host refusal, and a failure halts the lane until the kit is fixed."""
+    a ``p231-shake-N`` box is an explore shakedown: SHAKE_OK at rc 0; SHAKE_HOST_REFUSED on a host or fit code (the
+    host or its boot, not the kit: no halt, the next shake id); SHAKE_FAIL on any other code, which halts the lane until
+    the kit is fixed. None of them counts as a started box, a strike or a reading's host refusal."""
     if run_id.startswith("p231-shake-"):
-        return {"event": "SHAKE_OK" if rc == 0 else "SHAKE_FAIL", "started": False, "host_refused_cap": False,
-                "halt": rc != 0, "why": "an explore shakedown: never a reading, never counted"
-                + ("" if rc == 0 else f"; exit {rc}: the lane halts until the kit is fixed")}
+        base = {"started": False, "host_refused_cap": False}
+        if rc == 0:
+            return {**base, "event": "SHAKE_OK", "halt": False, "why": "an explore shakedown: never a reading, never counted"}
+        if rc in HOST_CODES or rc in FIT_CODES:
+            return {**base, "event": "SHAKE_HOST_REFUSED", "halt": False,
+                    "why": f"exit {rc}: {HOST_CODES.get(rc) or FIT_CODES.get(rc)}; the host, not the kit: the next shake id"}
+        return {**base, "event": "SHAKE_FAIL", "halt": True,
+                "why": f"exit {rc}: {KIT_CODES.get(rc, 'a kit or harness fault')}; the lane halts until the kit is fixed"}
     if not started:
         if rc in HOST_CODES:
             return {"event": "HOST_REFUSED", "started": False, "host_refused_cap": True, "halt": False,
@@ -494,6 +500,13 @@ def _classify_cases() -> list:
         sh0, sh9 = classify(0, True, "p231-shake-1"), classify(9, True, "p231-shake-2")
         out.append(("a shakedown is never counted (Amendment 2)", sh0["event"] == "SHAKE_OK" and not sh0["started"]
                     and not sh0["halt"] and sh9["event"] == "SHAKE_FAIL" and not sh9["started"] and sh9["halt"]))
+        for c in sorted(HOST_CODES) + sorted(FIT_CODES):
+            sh = classify(c, c != 41, "p231-shake-1")
+            out.append((f"a shakedown's host/fit code {c} is SHAKE_HOST_REFUSED, never a halt",
+                        sh["event"] == "SHAKE_HOST_REFUSED" and not sh["halt"] and not sh["started"]))
+        for c in sorted(KIT_CODES) + [21, 22, 25, 130]:
+            sh = classify(c, True, "p231-shake-1")
+            out.append((f"a shakedown's code {c} is SHAKE_FAIL and halts", sh["event"] == "SHAKE_FAIL" and sh["halt"]))
         for name, w in (("two exit files", box(0, True, codes=2)), ("no exit file", box(0, True, codes=0))):
             try:
                 read_box(w)
