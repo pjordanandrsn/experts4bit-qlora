@@ -235,7 +235,7 @@ The paged server must prove that it serves the adapter:
 | **UNRUNNABLE** | the HOST_REFUSED cap trips a second time (8 refusals in all) | no: a lane end, no reading | no |
 | FAMILY_RULE_RETIRED (an event, not an outcome) | a fast-family host reads under 30 on the box | no | no; one log line, and the pin order changes as registered |
 | pre-create refusal | no instance existed ($0) | no | no |
-| **NOT_RUN** (Amendment 1) | the launcher's pre-flight tore down a created instance before the runner ran (no `RUN_ID`, exit file or marker) | no | no; counts toward no cap, uses one id (`p225-5090-1`) |
+| **NOT_RUN** (Amendment 1) | the launcher's pre-flight tore down a created instance before the runner ran (no `RUN_ID`, exit file or marker); decided from the launcher's receipt before any fetch, never classified by `--classify` or the hand table, and not PRE_INSTALL_HALT | no | no; counts toward no cap, uses one id (`p225-5090-1`) |
 
 **The strike call is mechanical.** The runner writes `run/STRIKE_ELIGIBLE` once every floor has passed, just before the
 first install. On the renter side, `p225_reduce.py --classify --work W` runs on EVERY fetched box (W is the box's work
