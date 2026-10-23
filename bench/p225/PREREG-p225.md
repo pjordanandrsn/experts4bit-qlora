@@ -235,6 +235,7 @@ The paged server must prove that it serves the adapter:
 | **UNRUNNABLE** | the HOST_REFUSED cap trips a second time (8 refusals in all) | no: a lane end, no reading | no |
 | FAMILY_RULE_RETIRED (an event, not an outcome) | a fast-family host reads under 30 on the box | no | no; one log line, and the pin order changes as registered |
 | pre-create refusal | no instance existed ($0) | no | no |
+| **NOT_RUN** (Amendment 1) | the launcher's pre-flight tore down a created instance before the runner ran (no `RUN_ID`, exit file or marker); decided from the launcher's receipt before any fetch, never classified by `--classify` or the hand table, and not PRE_INSTALL_HALT | no | no; counts toward no cap, uses one id (`p225-5090-1`) |
 
 **The strike call is mechanical.** The runner writes `run/STRIKE_ELIGIBLE` once every floor has passed, just before the
 first install. On the renter side, `p225_reduce.py --classify --work W` runs on EVERY fetched box (W is the box's work
@@ -278,6 +279,30 @@ worst: 3 boxes plus 8 host refusals, about 3 x 6.75 + 8 x 0.10 = **about USD 21.
 3. The merge.
 4. The readings, `p225-5090-1` to `-3`, through pod-launch from the merge commit, or by direct API rental under the
    project's standing rental rules (host pinned, USD 15 per box, verified teardown).
+
+## Amendment 1 (pre-data): retry run ids for boxes that did not start
+
+The registration names three run ids, `p225-5090-1` to `-3`. Every box needs its own id and receipt (the ledger holds
+one row per run, so an id is never reused), but a box that does not start uses an id while counting toward no
+started slot: a HOST_REFUSED box (capped separately, 4 refusals a trip, 8 in all), or a NOT_RUN box (the launcher's
+pre-flight tore the instance down before the runner ran: no `RUN_ID`, no exit file, no marker; no strike, and it
+counts toward neither cap, like a pre-create refusal; its own row under Outcomes). `p225-5090-1` was such a NOT_RUN
+box, recorded under that row. So `-1` to `-3` can run
+out before three boxes have started. This amendment adds the retry ids **`p225-5090-r1` to `p225-5090-r8`**, for ANY
+box that follows one that did not start, at the same tier and terms. The runner's and the driver's id cases accept
+them; nothing else changes.
+- **The ids are labels, not budget.** The registered caps (3 box-started, 4 refusals a trip, 8 in all) and the strike
+  rules alone govern. Started-box accounting is by outcome, never by id: no code parses the id's number.
+- A box that HOST_REFUSES or is NOT_RUN keeps its own id and receipt, with no strike. A HOST_REFUSED box counts toward
+  the refusal cap as registered; a NOT_RUN box counts toward no cap.
+- A retry box that passes the screen and starts takes the next unused box-started slot. The 3-box-started cap, the
+  strike rules, the stop and the HOST_REFUSED cap are unchanged; nothing is widened.
+- NOT_RUN is decided from the launcher's receipt (its pre-flight teardown), before any fetch. It is never classified by
+  `p225_reduce.py --classify` or the hand-reading table, and it is not PRE_INSTALL_HALT (whose "no marker" reading
+  applies only to a box whose runner ran).
+- If NOT_RUN boxes ever use up `r8`, that is a launcher fault to fix, not a reason to add ids.
+- It is pre-data: no box has started. A box launched after it merges launches from its merge commit, since the
+  runner's bytes (and their staged pin) change.
 
 ## What this lane cannot say
 
