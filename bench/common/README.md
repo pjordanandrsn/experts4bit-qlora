@@ -70,7 +70,10 @@ hit one of these gaps.
    - Every box has its own id and receipt, and an id is never reused, because the ledger holds one row per run.
    - Register a reading id for EVERY box the cap allows to start (`<lane>-<card>-1` to `-N`, with N at least the cap),
      so a re-run after a started box that was not read has its own id. Also register retry ids (`-r1` to `-r8`) for any
-     box that follows one that did not start.
+     box that follows one that was created but did not start (NOT_RUN, or a refusal before the install). A refusal at
+     create uses no id: the launcher receipts it under `<id>-refused-<ns>-<pid>` (with `environment.requested_run_id` =
+     the id), and the next attempt takes the same id again. An ALARM (a possible orphan), or a create already sent to a
+     provider the sweeper tracks, keeps the id: its receipt is that id's record.
    - Ids are labels, not budget. No code may parse an id's number; the caps below govern alone.
    - If boxes that did not start ever use up `r8`, that is a launcher or market fault to fix, not a reason to add ids.
 3. **Outcome classes, and what each counts toward.** Each class is decided from the launcher's receipt and the
@@ -78,7 +81,7 @@ hit one of these gaps.
 
    | outcome | when | started? | counts toward |
    |---|---|---|---|
-   | refused at create | the provider refused; nothing was created ($0) | no | nothing |
+   | refused at create | the provider refused; nothing was created ($0). Its receipt is `<id>-refused-*`, and it uses no id | no | nothing |
    | NOT_RUN | the launcher's pre-flight tore the instance down before the runner ran (no RUN_ID, exit file or marker) | no | nothing |
    | refused before the install | the runner's own refusal before its first install: the power floor (rc 17), the guard fit (rc 41), a host refusal | no | a host refusal counts toward the lane's refusal cap, if it registers one. A single rc 41 is no strike; two consecutive rc 41 count as one strike toward the stop (Guard fit) |
    | started | the runner passed those refusals and began its install | yes | the started-box cap, always; the stop only when NOT read (HARNESS_ERROR, VOID, a fault mid-install or mid-run). A read ends or advances the lane by its own rule |
@@ -90,10 +93,11 @@ hit one of these gaps.
      one strike, and two consecutive rc 41 are one strike (Guard fit). A read box is never a strike. The PREREG states
      how many strikes stop the lane. A capped host therefore cannot end a lane, and alternating faults cannot dodge
      the stop.
-   - The lane's worst is bounded by its ids: at most N + 8 boxes (N reading ids plus r1 to r8), of which at most the
-     cap start. So the lane worst = cap x the box worst + (N + 8 - cap) x the worst of a box that does not start. That
-     is its time to the refusal at the box rate (at most rule 5's boot term, plus the fit check), plus any download
-     before it. A refusal at create costs $0; a NOT_RUN or rc 17/41 box costs its time to the refusal.
+   - The lane's worst is bounded by its ids: at most N + 8 created boxes (N reading ids plus r1 to r8; a refusal at
+     create uses no id and costs $0, so it is not among them), of which at most the cap start. So the lane worst =
+     cap x the box worst + (N + 8 - cap) x the worst of a box that does not start. That is its time to the refusal at
+     the box rate (at most rule 5's boot term, plus the fit check), plus any download before it. A NOT_RUN or rc 17/41
+     box costs its time to the refusal.
 5. **Boot slack.** A box's deadline runs from the create, and the launcher alone may wait `ssh_ready_s` (420 s on
    Vast) for ssh before it stages the kit. So the boot term in Guard fit's static check is at least `ssh_ready_s` plus
    a staging margin of 120 s or more: guard - FIT_NEED >= 540 s on Vast. The lane's test asserts it. A boot term below
