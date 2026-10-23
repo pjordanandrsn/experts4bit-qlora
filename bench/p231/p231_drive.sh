@@ -65,7 +65,8 @@ PASS="P231_RUN_ID=$RUN_ID P231_RUN_NONCE=$NONCE P231_DEADLINE_EPOCH=$DEADLINE P2
 # start (PREREG "Run ids").
 case "$RUN_ID" in
   p231-5090-1|p231-5090-2|p231-5090-r1|p231-5090-r2|p231-5090-r3|p231-5090-r4|p231-5090-r5|p231-5090-r6|p231-5090-r7|p231-5090-r8) :;;
-  *) say "refusing unregistered run ID: $RUN_ID (is not p231-5090-1, -2 or -rN)"; exit 78;;
+  p231-shake-1|p231-shake-2|p231-shake-3) :;;   # Amendment 2: explore shakedowns, stopped before the premise
+  *) say "refusing unregistered run ID: $RUN_ID (is not p231-5090-1, -2, -rN or p231-shake-N)"; exit 78;;
 esac
 if [ "${P231_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p231_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p231"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/p231; deadline $DEADLINE"
