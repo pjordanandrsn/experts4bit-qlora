@@ -246,3 +246,46 @@ kernel pin against the read's merge commit (`SC2J_FROZEN`), never the live tree.
 - 8,192 tokens a slot, other models, families and cards.
 - The decode lookahead (SC2h) and the prefill knobs (SC2f, SC2i): at their defaults here.
 - A default flip: only a separate PR citing a SHARED_LICENSED read.
+
+## Amendments
+
+### Amendment 1 (registered before any SC2j reading, after the proof `sc2j-r3`): QUALITY at box Q's stack constants
+
+**Why.** The proof `sc2j-r3` (machine 52780, 2026-10-23, $0.235) started and was NOT PROVED, on QUALITY alone. Everything
+else passed: the installs and tripwires, every self-test, CONTRACT OK (shared IDENTICAL to claim-all, 96 requests and
+79,313 tokens at 32 slots, `sh` waits 0, the floor identical), both servers' ROUTES, POOL, EARLY and BURST, the Q3 smokes
+VALID, and the serial identity. QUALITY read VOID because `bench/p117/p117_reduce.py` holds two constants that name
+P117's registration, not its method:
+
+- the grouped-nf4-gemm commit P117 ran (`b4f93f1c`, v0.42.0). Box Q installs v0.50.0 (`41ef086e`), and `q_quality` did
+  not export `GNF4_SHA` to `p117_box.py`, so the record carried none;
+- P117's window count per model (Qwen3 64, Granite 40). The proof smokes 8 Granite windows.
+
+As registered, QUALITY could never read on box Q, in the proof or in the reading. That is a kit fault, and the proof did
+its job by catching it.
+
+**The change.**
+- `q_quality` exports box Q's `GNF4_SHA` to `p117_box.py`, which is unchanged and records `os.environ["GNF4_SHA"]`.
+- The verdict comes from `bench/sc2/sc2j_quality.py`, staged beside `p117_reduce.py`. It runs `p117_reduce.reduce` with
+  exactly two constants set to box Q's registered values: `GNF4_SHA` = `41ef086e6a3e2be5b158ff1bb38e0de67862a949`, and the
+  windows, Qwen3-30B-A3B 64 (P117's own count; the reading) and Granite 8 (the proof's smoke). P117's bar (tol 0.01,
+  spread 2x with a 0.005 floor), its floor draws, its engagement and FUNCTION checks and its model revisions are unchanged.
+- It fails closed. A record whose grouped-nf4-gemm is not box Q's, a box that installed another commit, or a window
+  count other than the registered one for its model is VOID, through P117's own checks. Its self-test (11 cases) refuses
+  each of these with its evidence removed.
+- `tests/test_sc2j_box.py` runs the change on `sc2j-r3`'s own QUALITY record (`tests/fixtures/sc2j_r3_quality/`). As
+  recorded it reads VOID under P117's constants. With the exported `GNF4_SHA` it reads AT_PARITY at box Q's constants:
+  FUNCTION 248 positions, 0 differ, under P117's unchanged bar. Each of the four refusals above turns it VOID.
+- The kit gains one staged entry, `sc2j_quality.py`, and `sc2j_box_q.sh` changes; `staged.sha256` is regenerated. The
+  launch commit is this amendment's merge.
+
+**Strikes, ids and spend.** `sc2j-r3` is a started box that was not read: strike 1 of the two that stop the lane
+(bench/common rule 3). Proofs started: 1 of 2. The next proof is `sc2j-prove-2`, the last proof the cap allows: it
+follows a box that started, so it takes a proof id, not a retry id. A second strike stops the lane pending a root-cause
+note. Spent so far: $0.251. Retry ids used: `sc2j-r1` to `sc2j-r3` (`sc2j-prove-1` and `sc2j-r1`/`r2` did not start: the
+320 GB disk floor, then a ghost ask, then a vanished offer, all before any install).
+
+**Unchanged:** every arm, gate, threshold, rate, guard, cap and cost; the outcome classes; the QUALITY plan match; and
+QUALITY's place in the rule (anything other than AT_PARITY is NOT_LICENSED (QUALITY), whatever the speed clauses read).
+SC2f, SC2h and SC2i are untouched: their kit is held at `7b8f1f69` (their own notes), and this change to the shared kit
+means they launch from `7b8f1f69` itself.

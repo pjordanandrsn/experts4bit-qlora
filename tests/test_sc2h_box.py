@@ -158,7 +158,7 @@ def test_box_o_is_wired_like_box_n():
             "install_sc2_client ;;") in RUN
     assert 'O) PROVE_NEEDS="sc2client";;' in RUN and '[ "$BOX" = O ] && prove_o' in RUN and "O) box_o;; P) box_p;; Q) box_q;; esac" in RUN
     assert 'case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q) ;;' in DRIVE
-    assert "sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py sc2j_box_q.sh sc2j_reduce.py sc2j_contract.py sc2j_prompts.py; do STAGE=" in DRIVE
+    assert "sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py sc2j_box_q.sh sc2j_reduce.py sc2j_contract.py sc2j_prompts.py sc2j_quality.py; do STAGE=" in DRIVE
     assert 'sc2f_*|sc2h_*|sc2i_*|sc2j_*) src="$SC2/$name";;' in DRIVE
     assert 'python3 "$SC2/sc2h_reduce.py" --knee-rule "$SC2H_SC2F_VERDICT"' in DRIVE
     assert '[ "$SC1_BOX" = O ] && [ "${SC1_PROVE:-0}" != 1 ]' in DRIVE

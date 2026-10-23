@@ -178,7 +178,7 @@ def test_box_n_is_wired_like_box_l():
     assert "  N) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; . $W/sc2f_box_n.sh; install_sc2_client ;;" in RUN
     assert 'N) PROVE_NEEDS="sc2client";;' in RUN and '[ "$BOX" = N ] && prove_n' in RUN and "N) box_n;; O) box_o;; P) box_p;; Q) box_q;; esac" in RUN
     assert 'case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q) ;;' in DRIVE
-    assert "sc2f_box_n.sh sc2f_reduce.py sc2f_basis.py sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py sc2j_box_q.sh sc2j_reduce.py sc2j_contract.py sc2j_prompts.py; do STAGE=" in DRIVE
+    assert "sc2f_box_n.sh sc2f_reduce.py sc2f_basis.py sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py sc2j_box_q.sh sc2j_reduce.py sc2j_contract.py sc2j_prompts.py sc2j_quality.py; do STAGE=" in DRIVE
     assert 'sc2c_*|sc2d_*|sc2e_*|sc2f_*|sc2h_*|sc2i_*|sc2j_*) src="$SC2/$name";;' in DRIVE
     pin = (REPO / "bench" / "sc1" / "staged.sha256").read_text()
     for name in ("sc2f_box_n.sh", "sc2f_reduce.py", "sc2f_basis.py"):
