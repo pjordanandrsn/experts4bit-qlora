@@ -268,3 +268,12 @@ P222's, with the arms above. Everything not named here is P222's.
   K/K2 self-pair fell outside 0.99-1.01 at T = 4 in each run (Qwen3 in -1, Mixtral in -2). A shakedown reports it. On the
   5090 the reading's graphs hold 48 and 8 layers. If the band VOIDs a family there, that family is re-read under the
   per-family rule above.
+
+## Amendment 2 (2026-10-23, before any reading): a comment in the runner, re-pinned
+
+- The repository's guard-fit check (`tests/test_lane_guard_fit.py`) requires each runner's fit refusal to carry the
+  shared strike note. `p227_run.sh`'s rc 41 comment now reads "a refusal before the install, not a strike; two
+  consecutive headroom refusals count as one strike". That is a comment only: no command, exit code, threshold or
+  output changed.
+- `staged-p227.sha256` is re-pinned for `p227_run.sh`. Every other staged file and the real fixture are unchanged, so
+  p227-shake-2's record still reduces as Amendment 1 states.
