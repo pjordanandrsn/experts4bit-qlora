@@ -769,11 +769,12 @@ class PagedModelRunner(StepRunner):
         got: dict[int, int] = {}
         kv = self.kv
         tr = self.tracer
-        incremental = getattr(self, "incremental_claims", False)
-        first = {self.slot_of[r] for r in rids} - self._graph_ready
-        if incremental:
+        if getattr(self, "incremental_claims", False):
             # ONE claim for the whole step, every piece's slots, before the first piece: one staging buffer and one
-            # table write, so a step wider than the largest bucket never claims per piece
+            # table write, so a step wider than the largest bucket never claims per piece. Its first decodes are
+            # counted here; the claim marks the slots ready, so the per-piece count below adds none
+            if tr is not None:
+                tr.count("first_decodes", sum(1 for r in rids if self.slot_of[r] not in self._graph_ready))
             self._claim_step({self.slot_of[r]: self.pos_of[r] - 1 for r in rids})
         for chunk in chunk_rows(rids, self._buckets[-1]):
             n = len(chunk)
@@ -781,9 +782,11 @@ class PagedModelRunner(StepRunner):
             buf = self._bufs[b]
             slots = [self.slot_of[r] for r in chunk]
             if tr is not None:
-                tr.count("first_decodes", sum(1 for s_ in slots if s_ in first))
+                tr.count("first_decodes", sum(1 for s_ in slots if s_ not in self._graph_ready))
                 tr.count("dec_pieces")             # > 1: the step ran as consecutive replays of the largest bucket
-            if not incremental:
+            if getattr(self, "incremental_claims", False):
+                pass                               # the step's claim was made before the first piece
+            else:
                 for s_ in slots:
                     self._ensure_graph_ready(s_)
             if tr is not None:
@@ -902,12 +905,12 @@ class PagedModelRunner(StepRunner):
         if ring["event"] is not None:
             ring["event"].synchronize()        # collected already, so its copies have run: this never waits
         pieces, off = [], 0
-        incremental = getattr(self, "incremental_claims", False)
-        first = {self.slot_of[r] for r in rids} - self._graph_ready
-        if incremental:
+        if getattr(self, "incremental_claims", False):
             # ONE claim per step over every piece's slots, before the first piece. Per piece, the claims took
             # alternate buffers of the two-buffer staging ring, so the next step's second piece waited on an event
             # recorded after this step's first replay: the overlap the lookahead exists for was lost
+            if tr is not None:
+                tr.count("first_decodes", sum(1 for r in rids if self.slot_of[r] not in self._graph_ready))
             self._claim_step({self.slot_of[r]: self.pos_of[r] - 1 + inflight.get(r, 0) for r in rids})
         for chunk in chunk_rows(rids, self._buckets[-1]):
             n = len(chunk)
@@ -916,9 +919,11 @@ class PagedModelRunner(StepRunner):
             st = buf["st"]
             slots = [self.slot_of[r] for r in chunk]
             if tr is not None:
-                tr.count("first_decodes", sum(1 for s_ in slots if s_ in first))
+                tr.count("first_decodes", sum(1 for s_ in slots if s_ not in self._graph_ready))
                 tr.count("dec_pieces")
-            if not incremental:
+            if getattr(self, "incremental_claims", False):
+                pass                               # the step's claim was made before the first piece
+            else:
                 for s_ in slots:
                     self._ensure_graph_ready(s_)
             if tr is not None:
