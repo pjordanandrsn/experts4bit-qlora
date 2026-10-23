@@ -136,6 +136,20 @@ def test_the_guard_fit_has_25_percent_headroom_and_the_prereg_states_it():
     assert abs(1.25 * 1.05 + 10 * 0.04 - 1.71) < 0.005
 
 
+SSH_READY_S, STAGING_MARGIN_S = 420, 120   # pod-launch's longest wait for ssh on Vast; the drive's staging margin
+
+
+def test_the_slack_clears_a_slow_ssh_host():
+    """The deadline runs from the create, so the guard minus the runner's FIT_NEED must hold pod-launch's ssh wait plus
+    the staging, or a slow-ssh host halts the lane at the fit check (rc 41) before the install (P225's r1 took 443 s)."""
+    get = lambda v: int(re.search(rf"^{v}=(\d+)", RUN, re.M).group(1))  # noqa: E731
+    fit_need = (get("INSTALL_TO_GATE_S") + get("NEED_BENCH") + get("RESERVE")) * get("FIT_HEADROOM_PCT") // 100
+    guard_s = round(float(re.search(r"\*\*guard ([\d.]+) h\*\*", PREREG).group(1)) * 3600)
+    assert (guard_s, fit_need) == (GUARD_S, 3375)
+    assert guard_s - fit_need == 1125 >= SSH_READY_S + STAGING_MARGIN_S
+    assert "guard - FIT_NEED = 4500 - 3375 = 1125 s" in PREREG
+
+
 def test_the_drive_never_creates_compute_and_refuses_what_is_not_registered():
     assert "p227-5090-[1-3]|p227-5090-r[1-8]|p227-shake-[1-3]) :;;" in DRIVE and 'refusing unregistered run ID' in DRIVE
     assert "the checkout is dirty" in DRIVE

@@ -309,6 +309,9 @@ P222's, with the arms above. Everything not named here is P222's.
   | **refused at create** (Amendment 4) | the provider refused the create, so nothing was created ($0) | no | no; counts toward no cap, uses one id |
 
 - If boxes that did not start ever use up `r8`, that is a launcher or market fault to fix, not a reason to add ids.
+- **The slack, checked (a test, no kit change):** the box's deadline runs from the create, so a slow-ssh host must not
+  halt the lane at the fit check. guard - FIT_NEED = 4500 - 3375 = 1125 s, at least pod-launch's longest ssh wait
+  (420 s) plus a 120 s staging margin. `tests/test_p227.py` asserts it.
 - Pre-data: no reading exists. The runner's bytes change (the id case only), so its staged pin moves. A box launched
   before this amendment merges uses `-1` to `-3` from the earlier commit; a box launched after it launches from its
   merge commit.
