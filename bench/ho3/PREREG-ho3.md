@@ -56,8 +56,9 @@ directory, fetched as a link, could make a later store commit read a file on the
 `--no-links`. A fetched tree that still holds a link refuses with the fetch-failed exit (22) before anything reads it:
 each link's path and target are recorded in `refused_links.txt` (the link is never followed) and the link is removed,
 so the evidence and the run's receipt can both be committed without a link in the store. The file is always written
-fresh: a `refused_links.txt` the box shipped itself is kept as `refused_links.box-supplied.txt` (a link of that name is
-recorded and removed like any other). Fetch-only: no package under test, row, rule, prediction, cap or id changes. The launch commit for every box not yet
+fresh, after every link in the tree has been recorded and removed: a regular `refused_links.txt` the box shipped
+itself is kept as `refused_links.box-supplied.txt`, and if that name is taken too the refusal lists the links in the
+driver log and touches neither. Fetch-only: no package under test, row, rule, prediction, cap or id changes. The launch commit for every box not yet
 started is this amendment's merge.
 
 ## Stack and launch (bench/common rule 1)

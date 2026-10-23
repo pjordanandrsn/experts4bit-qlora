@@ -194,19 +194,24 @@ say "fetched $(ls "$RUN_DIR/ho3" | wc -l | tr -d ' ') entries"
 # A link that still arrives is recorded (path and target, never followed) in refused_links.txt and removed, so the run
 # dir holds no link and its receipt can still be committed; then the fetch refuses (exit 22).
 if [ -n "$(find "$RUN_DIR/ho3" -type l -print -quit)" ]; then
-  RL="$RUN_DIR/ho3/refused_links.txt"; NOTE=""
-  # the box controls the fetched tree: a refused_links.txt it shipped is never appended to. A file is kept, renamed
-  # refused_links.box-supplied.txt; a link is recorded below with the others and removed. Ours is then written fresh.
-  if [ -L "$RL" ]; then NOTE="# the box shipped refused_links.txt as a link; it is recorded below and removed"
-  elif [ -e "$RL" ]; then mv -f -- "$RL" "$RUN_DIR/ho3/refused_links.box-supplied.txt"
-    NOTE="# the box shipped its own refused_links.txt: kept as refused_links.box-supplied.txt"; fi
+  RL="$RUN_DIR/ho3/refused_links.txt"; KEPT="$RUN_DIR/ho3/refused_links.box-supplied.txt"; NOTE=""
   # scratch lives on the controller, never in the box's tree (a box-shipped link there would be followed by >)
   SELF=$(mktemp) || { say "fetch failed: no temp file"; exit 22; }
-  [ -L "$RL" ] && { printf '%q -> %q\n' "refused_links.txt" "$(readlink "$RL")" > "$SELF"; rm -f -- "$RL"; }
-  { [ -z "$NOTE" ] || printf '%s\n' "$NOTE"; cat "$SELF"; } > "$RL"; rm -f -- "$SELF"
+  # 1. the sweep comes FIRST: every link is recorded (path and target, never followed) and removed before anything in the
+  #    tree is renamed or written, so no later step can be steered through a link (e.g. a mv into a linked directory)
   find "$RUN_DIR/ho3" -type l -print0 | while IFS= read -r -d '' l; do
-    printf '%q -> %q\n' "${l#"$RUN_DIR/ho3/"}" "$(readlink "$l")" >> "$RL"; rm -f -- "$l"
+    printf '%q -> %q\n' "${l#"$RUN_DIR/ho3/"}" "$(readlink "$l")" >> "$SELF"; rm -f -- "$l"
   done
+  [ -z "$(find "$RUN_DIR/ho3" -type l -print -quit)" ] || { say "fetch failed: a link survived the sweep:"; cat "$SELF"; rm -f -- "$SELF"; exit 22; }
+  # 2. a refused_links.txt the box shipped itself is never appended to: a regular file is kept, renamed; anything else
+  #    (both names taken, or a directory) refuses with the links listed in the log, touching neither
+  if [ -e "$RL" ]; then
+    if [ -f "$RL" ] && [ ! -e "$KEPT" ]; then mv -- "$RL" "$KEPT"
+      NOTE="# the box shipped its own refused_links.txt: kept as refused_links.box-supplied.txt"
+    else say "fetch failed: the box shipped refused_links.txt and refused_links.box-supplied.txt (or a directory); links:"
+      cat "$SELF"; rm -f -- "$SELF"; exit 22; fi
+  fi
+  { [ -z "$NOTE" ] || printf '%s\n' "$NOTE"; cat "$SELF"; } > "$RL"; rm -f -- "$SELF"
   say "fetch failed: $(grep -vc '^#' "$RL" | tr -d ' ') symlink(s) arrived; recorded in refused_links.txt and removed"; exit 22
 fi
 [ "$(cat "$RUN_DIR/ho3/HO3_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }

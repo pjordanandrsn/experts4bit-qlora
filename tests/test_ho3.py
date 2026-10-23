@@ -369,36 +369,48 @@ def test_a_fetched_link_is_recorded_removed_and_refused(tmp_path):
 
 
 def test_a_box_supplied_refused_links_file_is_replaced_never_followed(tmp_path):
-    """The box controls the fetched tree: its own refused_links.txt (a file, or a link to a controller file) is replaced."""
+    """The box controls the fetched tree: links are swept BEFORE any rename, its own refused_links.txt is kept under a
+    marked name (never appended to), and nothing is ever written through a link into the controller."""
     start = DRIVE.index('if [ -n "$(find "$RUN_DIR/ho3" -type l -print -quit)" ]; then')
     block = DRIVE[start:DRIVE.index("\nfi\n", start) + 4]
     script = 'say(){ echo "$*"; }\nRUN_DIR="$1"\n' + block
-    for kind in ("file", "link", "scratch"):
-        run = tmp_path / kind / "run"
+    for kind in ("file", "link", "scratch", "dirlink", "both"):
+        base = tmp_path / kind
+        run, ctl_dir = base / "run", base / "controller_dir"
         (run / "ho3").mkdir(parents=True)
-        target = tmp_path / kind / "controller.txt"
+        ctl_dir.mkdir()
+        target = base / "controller.txt"
         target.write_text("keep\n")
-        rl = run / "ho3" / "refused_links.txt"
+        rl, kept = run / "ho3" / "refused_links.txt", run / "ho3" / "refused_links.box-supplied.txt"
         if kind == "file":
             rl.write_text("forged -> nothing\n")
             (run / "ho3" / "x").symlink_to(target)
         elif kind == "link":
             rl.symlink_to(target)
-        else:                                     # links at the names an in-tree scratch file would have used
+        elif kind == "scratch":                   # links at the names an in-tree scratch file would have used
             rl.symlink_to(target)
             for name in ("refused_links.txt.tmp", "refused_links.txt.links"):
                 (run / "ho3" / name).symlink_to(target)
+        elif kind == "dirlink":                   # the rename's destination is a link to a controller directory
+            rl.write_text("forged -> nothing\n")
+            kept.symlink_to(ctl_dir, target_is_directory=True)
+        else:                                     # both names taken by regular files: refuse, touch neither
+            rl.write_text("forged -> nothing\n")
+            kept.write_text("also forged\n")
+            (run / "ho3" / "x").symlink_to(target)
         r = subprocess.run(["bash", "-c", script, "x", str(run)], capture_output=True, text=True, timeout=30)
-        assert r.returncode == 22, r.stdout + r.stderr
-        assert target.read_text() == "keep\n" and not rl.is_symlink() and not [p for p in run.rglob("*") if p.is_symlink()]
+        assert r.returncode == 22, (kind, r.stdout + r.stderr)
+        assert target.read_text() == "keep\n" and not list(ctl_dir.iterdir()), kind           # nothing written through
+        assert not [p for p in run.rglob("*") if p.is_symlink()], kind                      # no link left anywhere
+        if kind == "both":
+            assert rl.read_text() == "forged -> nothing\n" and kept.read_text() == "also forged\n"
+            assert "refused_links.box-supplied.txt" in r.stdout and str(target) in r.stdout, r.stdout
+            continue
         rec = rl.read_text()
-        assert "forged" not in rec and rec.startswith("# the box shipped"), rec
-        assert str(target) in rec                                                  # every link is recorded with its target
-        kept = run / "ho3" / "refused_links.box-supplied.txt"
-        if kind == "file":
-            assert kept.read_text() == "forged -> nothing\n" and not kept.is_symlink()   # kept, marked, not appended to
+        assert "forged" not in rec, (kind, rec)
+        if kind in ("file", "dirlink"):
+            assert rec.startswith("# the box shipped") and kept.read_text() == "forged -> nothing\n", (kind, rec)
         else:
-            assert not kept.exists()
-        if kind == "scratch":
-            assert rec.count(" -> ") == 3, rec                                       # all three links recorded
-
+            assert not kept.exists(), kind
+        want = {"file": [str(target)], "link": [str(target)], "scratch": [str(target)] * 3, "dirlink": [str(ctl_dir)]}[kind]
+        assert rec.count(" -> ") == len(want) and all(w in rec for w in want), (kind, rec)
