@@ -99,6 +99,15 @@ def test_incremental_claims_cover_every_write_and_keep_the_streams(monkeypatch, 
         assert all(len(kv._free[layer]) + held[layer] == kv._n_rows for layer in range(kv.L))
 
 
+@pytest.mark.parametrize("lookahead", [False, True])
+def test_the_ownership_check_fails_a_step_that_reads_an_unclaimed_block(monkeypatch, lookahead):
+    """The negative control: with incremental claims on and the per-step claim removed, the stand-in graph's ownership
+    check trips on the first replay, so the passing test above is not vacuous."""
+    monkeypatch.setattr(PagedModelRunner, "_claim_through", lambda self, slot, write_pos: None)
+    with pytest.raises(AssertionError, match="owns 0 blocks"):
+        _serve(monkeypatch, True, lookahead)
+
+
 def test_the_claim_reaches_the_write_positions_block_and_no_further(monkeypatch):
     r, kv, _ = _runner(monkeypatch, True)
     r.bind(0, 0, [1] * 32)
