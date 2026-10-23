@@ -88,8 +88,66 @@ def keeps_links(call: str) -> bool:
     return links
 
 
+_REMOTE_LEFT = re.compile(r"(?:^|\s|\()(?:ssh|\$\{?SSH\}?|box)(?:\s|$)")
+
+
+def _tar_extracts(words: list[str]) -> bool:
+    flags = [w for w in words[1:] if w.startswith("-")] + ([words[1]] if len(words) > 1 and not words[1].startswith("-") else [])
+    return any(w == "--extract" or (not w.startswith("--") and "x" in w.lstrip("-")) for w in flags)
+
+
+def _split(seg: str) -> list[str]:
+    try:
+        return shlex.split(seg, posix=True)
+    except ValueError:
+        return seg.split()
+
+
+def other_pulls(text: str) -> list[tuple[int, str]]:
+    """(logical line index, text) of each pull from a box that is not an rsync: a local tar EXTRACT fed by a pipeline
+    from ssh/$SSH/a box() helper, an scp whose source is host:path, or an `ssh ... cat ... > file`. A tar extract inside
+    a quoted remote command is a push (masked), and an archive unpacked from a local file is not a pull."""
+    out = []
+    for i, line in enumerate(_logical_lines(text)):
+        masked = _mask_quotes(line)
+        for m in re.finditer(r"\btar\b", masked):
+            if not _POS.search(masked[:m.start()]):
+                continue
+            left = masked[:m.start()]
+            end = re.search(r"&&|\|\||[;|)&]", masked[m.end():])
+            seg = line[m.start():m.end() + (end.start() if end else len(masked) - m.end())]
+            pipe = left.rfind("|")
+            if pipe >= 0 and left[pipe - 1:pipe] != "|" and _REMOTE_LEFT.search(left[:pipe]) and _tar_extracts(_split(seg)):
+                out.append((i, seg.strip()))
+        for m in re.finditer(r"\bscp\b", masked):
+            if not _POS.search(masked[:m.start()]):
+                continue
+            end = re.search(r"&&|\|\||[;|)&]", masked[m.end():])
+            words = [w for w in _split(line[m.start():m.end() + (end.start() if end else len(masked) - m.end())])[1:]
+                     if not w.startswith("-")]
+            if len(words) >= 2 and any(re.match(r"[^/\s]+:", w) for w in words[:-1]):
+                out.append((i, line.strip()))
+        if re.search(r"(?:^|[;&|({]|\bthen\s|\bdo\s)\s*(?:ssh|\$\{?SSH\}?)\s", masked) and re.search(r"\bcat\b", line) \
+                and re.search(r"(?<![<>&|0-9])>(?!&)", masked):
+            out.append((i, line.strip()))
+    return out
+
+
+def unrefused_pulls(text: str) -> list[str]:
+    """Non-rsync pulls with no `find ... -type l` (the post-fetch link refusal) on a later logical line, or after the
+    pull on its own line."""
+    lines = [_mask_quotes(x) for x in _logical_lines(text)]
+    refusal = re.compile(r"\bfind\b[^|;]*-type\s+l\b")
+    out = []
+    for i, seg in other_pulls(text):
+        after = lines[i][lines[i].find(seg[:20]) + len(seg[:20]):] if seg[:20] in lines[i] else ""
+        if not (refusal.search(after) or any(refusal.search(x) for x in lines[i + 1:])):
+            out.append(seg)
+    return out
+
+
 def offending(text: str) -> list[str]:
-    return [c for c in rsync_calls(text) if keeps_links(c)]
+    return [c for c in rsync_calls(text) if keeps_links(c)] + unrefused_pulls(text)
 
 
 def _scripts() -> list[Path]:
@@ -148,6 +206,30 @@ def test_the_matcher_finds_every_command_form_and_reads_the_flags_in_order():
         'echo "DRYRUN fetch: rsync -az root@h:/w/ d/"',
     ]
     for text in safe:
+        assert not offending(text), text
+
+
+def test_every_pull_form_is_found_and_needs_its_link_refusal():
+    pulls = [
+        '$SSH "tar -C $W -czf - ." | tar -C "$RUN_DIR/k29" -xzf - && fetched=1',            # k29_drive.sh:85
+        '$SSH "tar -C $W -cf - ." | tar -C "$RUN_DIR/sc1g_r" -xf - || exit 22',             # sc1g_r_drive.sh:51
+        'box_fetch(){ box "cd $W && tar -cf - ." \\\n      | tar -C "$1" -xif -; }',         # the older drivers' helper
+        'ssh "$HOST" "cd $W && tar -cf - out" | tar xf - -C "$LOCAL"',
+        'scp -P "$PORT" "root@$HOST:$W/out.tgz" "$RUN_DIR/"',
+        'ssh -p "$PORT" "root@$HOST" "cat $W/verdict.json" > "$RUN_DIR/verdict.json"',
+    ]
+    for text in pulls:
+        assert offending(text), text
+        assert not offending(text + '\nfind "$RUN_DIR" -type l | grep -q . && { say "links"; exit 22; }'), text
+    not_pulls = [
+        'tar -C "$STAGE" -cf - . | ssh "$QNAP" "cd $REMOTE && tar -xf -"',                  # a push: extract is remote
+        'tar xzf e4b_overlay.tgz -C ov',                                                    # a local archive
+        'curl -sL "$U" | tar xz -C src',                                                    # not from a box
+        'say "falling back to tar over ssh"',
+        'scp -P "$PORT" "$KIT" "root@$HOST:$W/"',                                           # an upload
+        'ssh "$HOST" "cat > $W/x" < local.txt',                                             # an upload
+    ]
+    for text in not_pulls:
         assert not offending(text), text
 
 
