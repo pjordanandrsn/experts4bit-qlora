@@ -89,9 +89,21 @@ def test_the_live_driver_fetches_without_links():
 
 
 def test_package_hold_on_registered_commits():
-    """SC2j Amendment 2's package hold reads OK on a commit against itself, and refuses across a staged-kit change
-    (1a25b209 -> 7b8f1f69 changed sc1_run.sh, and staged.sha256 with it)."""
+    """SC2j Amendment 3: the stack pinned to Amendment 1's merge (ea298854), the kit checked out at #2066's merge
+    (5c9579bb), whose package differs (a training-only change): OK only with E4B_SHA = ea298854 in full. Across a
+    staged-kit change (1a25b209 -> 7b8f1f69) it refuses even with the pin."""
     g = kh.Git(str(REPO))
-    assert kh.package_hold(g, kh.HOLD, kh.HOLD)["verdict"] == "OK"
-    r = kh.package_hold(g, kh.BASE, kh.HOLD)
+    pin, kit = "ea298854139fc6b5ea9bddcb392b3d82d3b9ef6d", "5c9579bbbb4ce8f85afd8d9e1f947bb8df23ffff"
+    assert kh.package_hold(g, pin, kit, e4b_sha=pin)["verdict"] == "OK"
+    for bad in (None, kit, pin[:8]):
+        assert kh.package_hold(g, pin, kit, e4b_sha=bad)["verdict"] == "REFUSE", bad
+    r = kh.package_hold(g, kh.BASE, kh.HOLD, e4b_sha=kh.BASE)
     assert r["verdict"] == "REFUSE" and any("staged.sha256" in w for w in r["why"])
+
+
+def test_verdict_stack_takes_the_lanes_pin(tmp_path):
+    """sc2j-r3's real records name 7b8f1f69: OK against --stack 7b8f1f69, VOID against SC2f/h/i's default."""
+    for f in ("versions.txt", "summary.txt"):
+        (tmp_path / f).write_text((FIX / f).read_text())
+    assert kh.verdict_stack(tmp_path, stack=kh.HOLD)["verdict"] == "OK"
+    assert kh.verdict_stack(tmp_path)["verdict"] == "VOID"
