@@ -72,7 +72,8 @@ hit one of these gaps.
      so a re-run after a started box that was not read has its own id. Also register retry ids (`-r1` to `-r8`) for any
      box that follows one that was created but did not start (NOT_RUN, or a refusal before the install). A refusal at
      create uses no id: the launcher receipts it under `<id>-refused-<ns>-<pid>` (with `environment.requested_run_id` =
-     the id), and the next attempt takes the same id again.
+     the id), and the next attempt takes the same id again. An ALARM (a possible orphan), or a create already sent to a
+     provider the sweeper tracks, keeps the id: its receipt is that id's record.
    - Ids are labels, not budget. No code may parse an id's number; the caps below govern alone.
    - If boxes that did not start ever use up `r8`, that is a launcher or market fault to fix, not a reason to add ids.
 3. **Outcome classes, and what each counts toward.** Each class is decided from the launcher's receipt and the
