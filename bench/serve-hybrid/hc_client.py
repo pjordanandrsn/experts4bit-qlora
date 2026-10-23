@@ -99,10 +99,24 @@ def tiers(args) -> int:
                           calibration=json.load(open(args.calib, encoding="utf-8")), profile_path=None,
                           batch=1, top_k=k, cpu_us_fixed=None, cpu_us_per_row=None)
     split = {t: len(man["tiers"][t]) for t in ("vram", "dram", "nvme")}
-    json.dump({"arm": args.arm, "vram_gb": args.vram_gb, "dram_gb": args.dram_gb, "experts": split,
-               "masses": man.get("masses")}, open(args.out, "w", encoding="utf-8"), indent=1)
-    print(f"[hc] {args.arm} solver split (experts): {split}", flush=True)
-    return 0
+    ok = tiers_as_expected(split, args.expect)
+    json.dump({"arm": args.arm, "vram_gb": args.vram_gb, "dram_gb": args.dram_gb, "experts": split, "expect": args.expect,
+               "as_expected": ok, "masses": man.get("masses")}, open(args.out, "w", encoding="utf-8"), indent=1)
+    print(f"[hc] {args.arm} solver split (experts): {split}; expected {args.expect}: {'yes' if ok else 'NO'}", flush=True)
+    return 0 if ok else 3
+
+
+def tiers_as_expected(split: dict, expect: str) -> bool:
+    """The arm's premise: ``three`` needs every tier non-empty (VRAM, DRAM and NVMe); ``nvme-only`` needs VRAM and NVMe
+    non-empty and DRAM empty. Anything else, or a missing tier, is not as expected."""
+    v, d, n = (split.get(t) for t in ("vram", "dram", "nvme"))
+    if not all(isinstance(x, int) for x in (v, d, n)):
+        return False
+    if expect == "three":
+        return v > 0 and d > 0 and n > 0
+    if expect == "nvme-only":
+        return v > 0 and d == 0 and n > 0
+    return False
 
 
 def self_test() -> int:
@@ -120,6 +134,15 @@ def self_test() -> int:
             n += 1
         else:
             raise AssertionError(f"compare_texts accepted {bad}")
+    for split, expect, want in (({"vram": 3236, "dram": 1213, "nvme": 1695}, "three", True),
+                                ({"vram": 6144, "dram": 0, "nvme": 0}, "three", False),
+                                ({"vram": 3236, "dram": 0, "nvme": 2908}, "three", False),
+                                ({"vram": 3236, "dram": 0, "nvme": 2908}, "nvme-only", True),
+                                ({"vram": 3236, "dram": 5, "nvme": 2903}, "nvme-only", False),
+                                ({"vram": 3236, "nvme": 2908}, "nvme-only", False),
+                                ({"vram": 1, "dram": 1, "nvme": 1}, "other", False)):
+        assert tiers_as_expected(split, expect) is want, (split, expect)
+        n += 1
     print(f"hc_client self-test OK ({n} checks)")
     return 0
 
@@ -142,6 +165,7 @@ def main(argv=None) -> int:
         t.add_argument(a, required=True)
     for name in ("--vram-gb", "--dram-gb"):
         t.add_argument(name, type=float, required=True)
+    t.add_argument("--expect", required=True, choices=("three", "nvme-only"))
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
