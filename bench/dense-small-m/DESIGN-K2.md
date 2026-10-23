@@ -1,7 +1,11 @@
-# K2: the int8 lm_head at 2 to 8 decode rows, a multi-row K36 GEMV (design note, zero rental)
+# K2: the int8 lm_head at 2 to 8 decode rows (design note, zero rental)
 
 **Status:** the serving roadmap's lever K, step K2, after K1 (`DESIGN.md`, e4b#2019). This is a design for review
-only: no package code and no rental until it is reviewed. A registration comes before any reading.
+only: no code and no rental until it is reviewed. A registration comes before any reading.
+
+**The ruling (after review):** K2b goes first. It routes the head's 2 to 8 rows to grouped-nf4-gemm's released K37
+`dense_i8.linear_i8`. K2a, a new multi-row K36 kernel with a bitwise row identity, is DEFERRED. Its full design and its
+review-1 conditions are kept in section 8, so nothing is lost.
 
 ## 1. Why
 
@@ -19,7 +23,109 @@ At 2 to 8 decode rows, the head therefore reads twice the bytes it reads at one 
 cuBLAS's bf16 GEMM there already runs at the byte floor (lever K's exploration, not quoted). So no kernel choice closes
 it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
 
-## 2. The kernel change (grouped-nf4-gemm, `kernel/dense_gemv.py`)
+## 2. Why K2b first
+
+- **What K2 must deliver is the bytes:** int8 at T >= 2, about 311 MB a step instead of 622 MB.
+- **grouped-nf4-gemm already ships an int8 path for 2 to 16 rows:** K37's `dense_i8.linear_i8` (0.49.0), on the same
+  `quantize_rows_int8` grid the head uses. e4b already serves it, for Mixtral's int8 attention projections
+  (`engines/int8_attn.py`, P149). So K2b needs no kernel change and no release wave.
+- **The bitwise bucket identity K2a would add buys no batch invariance at the system level.** K1 (o_proj and the
+  router, split-K per M) and lever B (K33 against K25) already make the decode step batch-variant by design. An
+  invariant head alone does not make the tokens bucket-independent.
+- **K2a comes back only if K2b misses at this shape** (section 5, the fallback rule), or if a later lane needs head
+  batch-invariance AND the rest of the step is invariant too.
+
+## 3. K2b: the e4b route (`engines/int8_head_bw.py`)
+
+- **The knob:** `E4B_INT8_HEAD_ROWS`, an opt-in upper bound on the rows the head routes to an int8 kernel.
+  - Unset or `1` is today's behaviour, and the default. Values 2 to 8 widen the route. Anything else is refused.
+  - It is refused unless `E4B_INT8_HEAD_BW` has put the head on its int8 grid. It widens that route and switches
+    nothing on by itself.
+- **The kernels:**
+  - one row keeps K36's `dense_gemv.gemv_i8_bw`, unchanged;
+  - 2 to `value` rows go to K37's `dense_i8.linear_i8(x, q, s)`, over the codes and scales the head already holds;
+  - more rows keep `F.linear` on the rounded grid.
+- **The gates:**
+  - **Unset (or `1`) never imports `dense_i8`**, so an older package is untouched.
+  - **With the knob, a grouped-nf4-gemm without `dense_i8.linear_i8` (older than 0.49.0) is refused at build by
+    name**, never dropped. e4b's floor is `>=0.43.0`, so that package can be installed.
+- **The plan:** `linear_i8` picks its plan from K37's `PLANS_SMALL`, whose shapes were read at Mixtral's 4096-wide
+  attention projections (`p149k-5090-8`). The head's 151936 x 2048 runs on `PLAN_SMALL_DEFAULT`, untimed until
+  section 5's reads.
+  - If another plan reads better at the head's shape, adding `(151936, 2048)` to `PLANS_SMALL` is a grouped-nf4-gemm
+    PR and a release, with no kernel change. The e4b route then needs that version for the knob, refused by name below
+    it.
+- **The forward:** `Int8HeadLinear.forward` routes `2 <= rows <= value` bf16 CUDA rows to `linear_i8`. Rows that are
+  not contiguous are copied (at most 8 rows of K elements), never passed to `F.linear`.
+- **The engagement record:** `routed` and `passed` per row count, as today, plus which kernel each routed row count
+  took. Under CUDA graphs, bucket 1 captures K36, buckets 2 to `value` capture `linear_i8`, and larger buckets capture
+  cuBLAS on the grid.
+- **No memory change:** the codes and scales already exist when `E4B_INT8_HEAD_BW` is on.
+
+## 4. K2b numerics: a tolerance, not an identity
+
+- **What changes:** today a 2..8-row head computes `F.linear(x, bf16(q * s))`, cuBLAS on the rounded grid. With the
+  knob it computes `bf16(s * acc)`, where `acc` is `x . q` accumulated in fp32 through `tl.dot`.
+  - Both are on P150's grid, and the codes are exact in bf16 (|q| <= 127).
+  - They differ in accumulation order and in where the scale is applied, within bf16's output rounding.
+  - **The served tokens can change at 2 to 8 requests.** So a default needs a served read with a quality bar, read
+    per bucket like K1 and B.
+- **The bar is the one the one-row head met:** P153's registered quality bars, unchanged (SANE: |bias| <= 0.02,
+  argmax >= 0.95, on P153's windows and gates).
+  - They apply at T = 2, 4 and 8, each bucket on its own, against the same server with the knob unset.
+  - K2b is held to exactly the standard that licensed the T == 1 head, never a looser one.
+- **What is NOT claimed:** a bucket identity. A row at 2..8 rows is not bitwise its one-row (K36) output, and K37 ships
+  under a tolerance contract for exactly that reason.
+- **A property to report, not a contract:** `_gemm_i8_small_kernel` always launches with `BLOCK_M = 16` and masks the
+  rows past M. So M = 2..16 is one compiled kernel, and a row's output is expected to be the same at every bucket from
+  2 to 16. The reads report it (saved hidden states, bucket T against bucket 2); nothing gates on it.
+
+## 5. Readings
+
+1. **The EXPLORE microbench, before any registration** (a cheap box, explore tier, never quoted). It informs the bar;
+   it is not a reading.
+   - At the head's shape, 151936 x 2048, M = 1..8, CUDA-graph timed.
+   - The arms: the bf16 head (`F.linear`); `linear_i8` at `PLAN_SMALL_DEFAULT` and at every plan K37's table offers;
+     K36 at M = 1; and the int8 byte floor.
+2. **The registered microbench** (one RTX 5090, 575 W): `linear_i8` against `F.linear` on the grid (the served path
+   at those rows) and against K36 at one row, at M = 2, 4 and 8, with the byte floor reported.
+   - **The proposed bar:** `linear_i8` at M = 2 and 4 within 1.25x of K36's one-row time (the bytes are the same),
+     and at most 0.70x of `F.linear`'s.
+   - **The fallback rule, fixed before data:** if `linear_i8` misses the bar at the head's shape at every plan K37
+     offers, K2b is NO_GO, and K2a (section 8) becomes the candidate. That is a decision of its own, never a silent
+     switch.
+3. **The served read**, on its own registration: W2 and W4 ABBA on the default Qwen3 server, the knob against unset,
+   and P153's quality bars per bucket.
+
+## 6. Tests (with the code PR)
+
+- **e4b (CPU, with stub kernels; GPU on a box):**
+  - the knob's parsing and refusals: the value, the head not on its grid, and a package without `dense_i8.linear_i8`
+    (refused by name);
+  - unset never imports `dense_i8` (a stub whose import raises);
+  - one row routed to K36, 2..value rows to `linear_i8`, and more passed to `F.linear`;
+  - the engagement counts, by kernel;
+  - on the GPU: `linear_i8`'s rows within K37's tolerance contract of `F.linear` on the grid, and, under CUDA graphs,
+    bucket-by-bucket capture equal to eager.
+
+## 7. What this note does not decide
+
+- Any served default: the served read with the quality bar comes first.
+- A head plan in K37's table: only after a read at the head's shape.
+- K2a: section 8 keeps it, deferred.
+
+## 8. Deferred: K2a, a multi-row K36 with a bitwise row identity
+
+This was the note's first design. It was reviewed (review 1: CLEAR with three conditions, all written in below), then
+deferred by the ruling in section 2. It is kept so nothing is lost. It returns only under section 5's fallback rule,
+or for a lane that needs head batch-invariance with the rest of the step invariant too.
+
+One correction for whoever picks it up: K36's `_gemv_i8_kernel` source is pinned by sha256 as P148's prototype
+(`kernel/test_dense_gemv_i8_interp.py`). So K2a would be a sibling kernel for 2..8 rows, leaving the one-row kernel
+byte-for-byte, and the identity would be tested against that pinned kernel. It would not be an `M_ROWS` parameter on
+the existing kernel.
+
+### 8.1 The kernel change (grouped-nf4-gemm, `kernel/dense_gemv.py`)
 
 `_gemv_i8_kernel` today loads, per program and K-step, one `[BLOCK_N, KC]` int8 tile of `q` and one `[KC]` slice of
 `x`. It accumulates `acc[n] += sum_k q[n, k] * x[k]` in fp32, then stores `bf16(acc * s)`.
@@ -45,7 +151,7 @@ it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
     value (an M-row call against M one-row calls on random rows). A failing (M, arch) is refused by name, never
     served.
 - **The plan:** the one-row plan (`PLANS_I8`, P148's) at every M. A plan per M could read faster at M = 8, but it would
-  break the row identity across M, which is the point (section 4). A per-M plan is a later lane's choice, never this
+  break the row identity across M, which is the point (8.3). A per-M plan is a later lane's choice, never this
   one's.
 - **Registers:** the `q` tile is converted to fp32 once per K-step (BLOCK_N x KC values across the program's threads,
   as today). The rows add one `[KC]` x slice and one `[BLOCK_N]` accumulator each, at up to 8 rows. A compile-time
@@ -54,26 +160,7 @@ it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
   refuses `M > 8` by name, and exports `GEMV_I8_MAX_ROWS = 8` so a caller can detect it. Every other refusal is
   unchanged.
 
-### Prior art: K37's `dense_i8.linear_i8` (released in grouped-nf4-gemm 0.49.0)
-
-grouped-nf4-gemm already serves int8 weights at 2 to 16 rows: K37's `linear_i8`, on the same `quantize_rows_int8`
-grid. e4b uses it for Mixtral's int8 attention projections (`engines/int8_attn.py`). It would keep the head's int8 bytes
-at 2 to 8 rows with no kernel change and no release. K2 does not take it as written, for two reasons:
-- **No row identity.** Its 2..16-row kernel (`_gemm_i8_small_kernel`, P149's) accumulates through `tl.dot` on a
-  16-row MMA tile. That is a different reduction from the one-row GEMV's `tl.sum`, so a row at M rows is not bitwise its
-  one-row output, and the head would stay batch-variant (section 4). K37 ships under a tolerance contract for exactly
-  this reason.
-- **No head plan.** Its plans were read at 4096-wide attention shapes (`p149k-5090-8`). The head's 151936 x 2048 would
-  run on `PLAN_SMALL_DEFAULT`, untimed.
-
-So the choice is between two routes:
-- **K2 as designed:** the bitwise identity, at the cost of a kernel PR and a release.
-- **The head on `linear_i8`:** the bytes now, at a tolerance.
-
-The kernel microbench (section 5, reading 1) reports `linear_i8` at the head's shape as a third arm, so the cost of the
-identity is measured, not assumed.
-
-## 3. The e4b route (`engines/int8_head_bw.py`)
+### 8.2 The e4b route (`engines/int8_head_bw.py`)
 
 - **The knob:** `E4B_INT8_HEAD_ROWS=8`, an opt-in upper bound on the rows the head routes to K36. Unset or `1` is
   today's behaviour, the default. Values 2 to 8 widen the route. Anything else is refused.
@@ -92,7 +179,7 @@ identity is measured, not assumed.
 - **No memory change:** the codes and scales already exist when `E4B_INT8_HEAD_BW` is on. The knob is refused unless
   the head is on its int8 grid with K36 (it widens K36's rows; it switches nothing on by itself).
 
-## 4. Numerics: what changes, and what becomes invariant
+### 8.3 Numerics: what changes, and what becomes invariant
 
 - **What changes:** today a 2..8-row head computes `F.linear(x, bf16(q * s))`: each weight rounded to bf16 per element,
   cuBLAS accumulation. With the knob it computes `bf16(s * fp32_sum(q * x))`, K36's one-row function, row by row. These
@@ -116,21 +203,7 @@ identity is measured, not assumed.
   smaller change than int8 against bf16: both are on the same grid. They stay registered as a floor. The head-logit
   identity above is the test that can fail.
 
-## 5. Readings (registrations, later)
-
-1. **The kernel's microbench** (a grouped-nf4-gemm K-lane, one RTX 5090, 575 W). At the head's shape and M = 2, 4 and 8:
-   K36 multi-row against cuBLAS bf16 on the grid (the served path at those rows), against K36 at one row, and against
-   K37's `linear_i8` (the released multi-row int8 path, section 2's prior art), with the byte floor reported.
-   - The proposed bar: the multi-row call at M = 2 and 4 within 1.25x of K36's one-row time (the bytes are the same)
-     and at most 0.70x of cuBLAS's.
-   - The contract tests (bitwise per row, the old M = 1 unchanged, registers) are its premise.
-   - **The fallback rule, fixed before data:** if K2's multi-row call is slower than `linear_i8` by more than the
-     registered bar, K2 is NO_GO. Moving the head onto `linear_i8` is then a separate decision with its own plan check
-     at the head's shape, never a silent switch.
-2. **The served read**, on its own registration: W2 and W4 ABBA on the default Qwen3 server, the knob against unset,
-   the quality bar per bucket as a floor, and the head-logit identity across buckets registered (section 4).
-
-## 6. The release dependency
+### 8.4 The release dependency
 
 K2's kernel lives in grouped-nf4-gemm, so it reaches serving in three steps:
 1. a grouped-nf4-gemm release carrying the multi-row K36;
@@ -142,7 +215,7 @@ Releases go one wave per Chicago day, with Jordan's yes. This note schedules non
 read a grouped-nf4-gemm commit before its release. The e4b route can merge before the bump, refusing by name when the
 installed package lacks `GEMV_I8_MAX_ROWS`.
 
-## 7. Tests (with the code PRs)
+### 8.5 Tests (with the code PRs)
 
 - **grouped-nf4-gemm (GPU, on sm_86 AND sm_120, which the bits require; the interpreter checks the indexing only):**
   - each row of an M-row call is bitwise its one-row call, at every M in 1..8 and on ragged N and K;
@@ -158,8 +231,16 @@ installed package lacks `GEMV_I8_MAX_ROWS`.
   - the engagement counts;
   - under CUDA graphs, bucket-by-bucket capture equals eager.
 
-## 8. What this note does not decide
+### 8.6 Its readings (as reviewed)
 
-- A per-M plan for the head: a later lane, after the identity-preserving plan reads.
-- Any served default: the served read with the quality bar comes first.
-- Other int8 dense projections (lever C's), which take K2's multi-row interface when they come.
+1. **The kernel's microbench** (a grouped-nf4-gemm K-lane, one RTX 5090, 575 W). At the head's shape and M = 2, 4 and 8:
+   K36 multi-row against cuBLAS bf16 on the grid (the served path at those rows), against K36 at one row, and against
+   K37's `linear_i8` (the released multi-row int8 path, K2b's kernel), with the byte floor reported.
+   - The proposed bar: the multi-row call at M = 2 and 4 within 1.25x of K36's one-row time (the bytes are the same)
+     and at most 0.70x of cuBLAS's.
+   - The contract tests (bitwise per row, the old M = 1 unchanged, registers) are its premise.
+   - **The fallback rule, fixed before data:** if K2's multi-row call is slower than `linear_i8` by more than the
+     registered bar, K2 is NO_GO. Moving the head onto `linear_i8` is then a separate decision with its own plan check
+     at the head's shape, never a silent switch.
+2. **The served read**, on its own registration: W2 and W4 ABBA on the default Qwen3 server, the knob against unset,
+   the quality bar per bucket as a floor, and the head-logit identity across buckets registered (8.3).
