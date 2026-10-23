@@ -104,8 +104,46 @@ def test_the_ownership_check_fails_a_step_that_reads_an_unclaimed_block(monkeypa
     """The negative control: with incremental claims on and the per-step claim removed, the stand-in graph's ownership
     check trips on the first replay, so the passing test above is not vacuous."""
     monkeypatch.setattr(PagedModelRunner, "_claim_through", lambda self, slot, write_pos: None)
+    monkeypatch.setattr(PagedModelRunner, "_claim_step", lambda self, write_pos: None)
     with pytest.raises(AssertionError, match="owns 0 blocks"):
         _serve(monkeypatch, True, lookahead)
+
+
+@pytest.mark.parametrize("prompt_len", [15, 16, 17, 32, 33])
+@pytest.mark.parametrize("incremental", [True, False])
+def test_the_flush_claims_the_prompt_and_its_first_decode_block(monkeypatch, prompt_len, incremental):
+    """Incremental: the prompt flush claims ceil((L + 1) / 16) blocks, the prompt's positions 0..L-1 and the first
+    decode's write at L (at L = 16 or 32 that opens a block). Claim-all: every block the slot can reach."""
+    r, kv, _ = _runner(monkeypatch, incremental)
+    r.bind(0, 0, list(range(1, prompt_len + 1)))
+    for layer in r.pool_layers:
+        k = torch.randn(prompt_len, kv.Hs[layer], kv.Ds[layer], dtype=torch.bfloat16)
+        r.ctx.staging[(layer, 0)] = ([k], [k.clone()])
+    r._flush_bulk(0, 0)
+    want = prompt_len // kv.bt + 1 if incremental else kv.blocks_per_seq
+    assert all(len(kv._rows[(layer, 0)]) == want for layer in r.pool_layers), (prompt_len, want)
+    assert int(kv.seq_lens[0, 0]) == prompt_len
+
+
+def test_claim_many_gives_the_rows_consecutive_claims_give_in_one_write(monkeypatch):
+    wants = {0: 2, 1: 0, 2: 5}
+    _, kv_a, _ = _runner(monkeypatch, True)
+    for seq, upto in wants.items():
+        kv_a.claim_blocks(seq, upto)
+    _, kv_b, _ = _runner(monkeypatch, True)
+    assert kv_b.claim_many(wants) == kv_b.L * sum(u + 1 for u in wants.values())
+    assert kv_a._rows == kv_b._rows and kv_a._free == kv_b._free
+    assert torch.equal(kv_a._bt_all, kv_b._bt_all)
+    assert kv_b.claim_many(wants) == 0                         # already owned: nothing written
+    assert kv_b.claim_many({0: 3}) == kv_b.L                    # one more block, every layer
+
+
+def test_claim_many_pops_nothing_when_the_step_does_not_fit(monkeypatch):
+    _, kv, _ = _runner(monkeypatch, True)
+    free_before = [list(f) for f in kv._free]
+    with pytest.raises(RuntimeError, match="out of KV blocks"):
+        kv.claim_many({seq: kv.blocks_per_seq for seq in range(kv.B)})   # one block more per slot than the pool has
+    assert kv._free == free_before and not any(seq < kv.B for (_, seq) in kv._rows)
 
 
 def test_the_claim_reaches_the_write_positions_block_and_no_further(monkeypatch):

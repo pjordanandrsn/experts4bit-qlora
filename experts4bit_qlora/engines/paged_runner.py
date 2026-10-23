@@ -726,6 +726,18 @@ class PagedModelRunner(StepRunner):
                 self.kv._ensure_blocks(layer, slot, last)
         self._graph_ready.add(slot)
 
+    def _claim_step(self, write_pos: dict) -> None:
+        """:meth:`_claim_through` for every slot of one step at once: one table write (``Fp8PagedKV.claim_many``) under
+        bulk KV, so a step whose slots cross block edges together costs one copy, not one per slot (and never waits on
+        the staging ring behind a queued step)."""
+        if not self.bulk_kv:
+            for slot, pos in write_pos.items():
+                self._claim_through(slot, pos)
+            return
+        cap = self.kv.blocks_per_seq - 1
+        self.kv.claim_many({slot: min(cap, int(pos) // self.kv.bt) for slot, pos in write_pos.items()}, self.pool_layers)
+        self._graph_ready.update(write_pos)
+
     def _ensure_graph_ready(self, slot: int) -> None:
         """A graph step addresses KV blocks from the device table and never
         allocates, so every block a decoding slot can reach is claimed once,
@@ -757,11 +769,10 @@ class PagedModelRunner(StepRunner):
             if tr is not None:
                 tr.count("first_decodes", sum(1 for s_ in slots if s_ not in self._graph_ready))
                 tr.count("dec_pieces")             # > 1: the step ran as consecutive replays of the largest bucket
-            incremental = getattr(self, "incremental_claims", False)
-            for r, s_ in zip(chunk, slots):
-                if incremental:
-                    self._claim_through(s_, self.pos_of[r] - 1)
-                else:
+            if getattr(self, "incremental_claims", False):
+                self._claim_step({s_: self.pos_of[r] - 1 for r, s_ in zip(chunk, slots)})
+            else:
+                for s_ in slots:
                     self._ensure_graph_ready(s_)
             if tr is not None:
                 tr.mark("dec_ready")
@@ -888,11 +899,10 @@ class PagedModelRunner(StepRunner):
             if tr is not None:
                 tr.count("first_decodes", sum(1 for s_ in slots if s_ not in self._graph_ready))
                 tr.count("dec_pieces")
-            incremental = getattr(self, "incremental_claims", False)
-            for r, s_ in zip(chunk, slots):
-                if incremental:
-                    self._claim_through(s_, self.pos_of[r] - 1 + inflight.get(r, 0))
-                else:
+            if getattr(self, "incremental_claims", False):
+                self._claim_step({s_: self.pos_of[r] - 1 + inflight.get(r, 0) for r, s_ in zip(chunk, slots)})
+            else:
+                for s_ in slots:
                     self._ensure_graph_ready(s_)
             if tr is not None:
                 tr.mark("dec_ready")
