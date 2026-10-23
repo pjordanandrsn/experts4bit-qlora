@@ -303,7 +303,7 @@ def test_the_probe_runs_before_the_install_and_refuses_with_rc_19():
     # only the probe's rc 19 is a host refusal; any other nonzero is a kit halt (21), never a refusal
     case = RUN[RUN.index('case "$DRV_RC" in'):RUN.index("esac", RUN.index('case "$DRV_RC" in'))]
     assert re.findall(r"^  (\S+)\)", case, re.M) == ["0", "19", "*"] and "finish 21;;" in case.split("*)")[1]
-    assert "merge commit (Amendment 2)." in PREREG                                    # every unstarted box launches from it
+    assert "merge commit (Amendment 3)." in PREREG                                    # every unstarted box launches from it
 
 
 def test_the_tripwire_ties_the_installed_sampler_to_the_probed_copy():
@@ -338,3 +338,12 @@ def test_three_consecutive_driver_peak_refusals_stop_the_card(tmp_path):
     assert other.returncode == 0 and "DRYRUN" in other.stdout, other.stdout + other.stderr
     unread = _dry_run(tmp_path / "d", "ho3-4090-r5", "777", earlier=[("ho3-4090-r2", None, True, 19)])
     assert unread.returncode == 78 and "unreadable" in unread.stdout, unread.stdout
+
+
+def test_the_fetch_never_imports_links():
+    """Amendment 3: every rsync in the driver skips links, and a fetched link refuses before anything reads the tree."""
+    rsyncs = re.findall(r"^\s*rsync\b[^\n]*", DRIVE, re.M)
+    assert rsyncs and all("--no-links" in r for r in rsyncs), rsyncs
+    check = DRIVE.index('find "$RUN_DIR/ho3" -type l -print -quit')
+    assert DRIVE.index("rsync -az --no-links") < check < DRIVE.index("HO3_RUN_NONCE\" 2>/dev/null")
+

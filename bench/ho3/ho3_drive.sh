@@ -184,12 +184,14 @@ while :; do
 done
 mkdir -p "$RUN_DIR/ho3" && [ -z "$(find "$RUN_DIR/ho3" -mindepth 1 -maxdepth 1 -print -quit)" ] || { say "fetch failed: local dir"; exit 22; }
 # The checkpoints stay on the box (the hub cache, outside $W), and so do the trained adapters (tensors); the receipts,
-# logs, phase stamps and the verdict travel.
-rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
+# logs, phase stamps and the verdict travel. A fetch never imports links (Amendment 3): a link left on a rented box
+# could point a store commit at a file on this controller, so --no-links skips any, and a link that still arrives refuses.
+rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
   --exclude 'run/adapter_*' --exclude '*.safetensors' --exclude '*.pt' \
   --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' \
   "root@$HOST:$W/" "$RUN_DIR/ho3/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/ho3" | wc -l | tr -d ' ') entries"
+[ -z "$(find "$RUN_DIR/ho3" -type l -print -quit)" ] || { say "fetch failed: a symlink arrived ($(find "$RUN_DIR/ho3" -type l -print -quit)); not committing it"; exit 22; }
 [ "$(cat "$RUN_DIR/ho3/HO3_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/ho3/TP_DONE.$NONCE" ] || {
   [ "${LANE_DEAD:-0}" = 1 ] && { say "lane DIED on the box: its process was gone with no HO3_EXIT_CODE and no TP_DONE -- artifacts fetched, nothing measured"; exit 25; }
