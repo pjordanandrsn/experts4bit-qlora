@@ -182,17 +182,21 @@ def test_the_pre_install_fit_meets_the_guard_with_boot_slack():
     guard_s = round(GUARD_H * 3600)
     assert fit == 13200 and fit_need == 16500 and guard_s == 17280
     assert guard_s - fit_need >= SSH_READY_S + STAGING_MARGIN_S, guard_s - fit_need       # slack 780 s
-    assert GUARD_H <= 5.9 and abs(GUARD_H * 1.05 + 93 * 0.011 - 6.06) < 0.005
+    assert GUARD_H <= 5.9 and abs(GUARD_H * 1.05 + (93 + 4.9) * 0.011 - 6.12) < 0.005   # the fetch + the probe's shard
     nonstart = (guard_s - fit_need) * 1.05 / 3600 + 4.9 * 0.011                # the boot term + the probe's shard
     assert nonstart <= 0.29
-    assert abs(2 * 6.06 + (len(RUN_IDS) - 2) * 0.29 - 14.44) < 0.005 and 14.44 <= 15.0   # the ids bound the boxes at 10
-    for s in ("13,200 s", "16,500 s", "Guard 4.8 h (17,280 s)", "780 s", "USD 6.06", "USD 0.29", "USD 14.44"):
+    assert abs(2 * 6.12 + (len(RUN_IDS) - 2) * 0.29 - 14.56) < 0.005 and 14.56 <= 15.0   # the ids bound the boxes at 10
+    for s in ("13,200 s", "16,500 s", "Guard 4.8 h (17,280 s)", "780 s", "97.9 GB", "USD 6.12", "USD 0.29", "USD 14.56"):
         assert s in PREREG, s
     for need in ("NEED_FETCH=3000", "NEED_BAKE=1500", "NEED_FIT=600", "NEED_ARM=900", "NEED_QOFF=2400",
                  "NEED_QON=900", "INSTALL_TO_GATE_S=600", "RESERVE=600", "MIN_DL_MB_S=40"):
         assert need in RUN, need
     i_fit, i_start = RUN.index('[ "$LEFT" -ge "$FIT_NEED" ]'), RUN.index(": > $W/STARTED")
     assert RUN.index("finish 19") < i_fit < i_start < RUN.index("python -m pip install")
+    # the probe's record is written on every box, refused or not, before the refusal reads it (the maintainer's (3))
+    i_rec = RUN.index("[ -s $W/download_probe.json ] ||")
+    assert RUN.index("json.dump(rec, open(os.environ[\"OUT\"]") < i_rec < RUN.index("finish 19")
+    assert "3 consecutive rc 19" in PREREG and "675 s" in PREREG and "`download_probe.json`" in PREREG
     assert i_start < RUN.index("python $W/p231_reduce.py")
 
 

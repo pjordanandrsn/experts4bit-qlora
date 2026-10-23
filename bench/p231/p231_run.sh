@@ -94,12 +94,18 @@ FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < ${MIN_RAM_GB} GiB"; echo "refused: ram ${RAM_GB:-?} GiB" > REFUSAL; finish 16; }
 # the download probe (P225's form): one sustained GET of the checkpoint's first shard from the endpoint the fetch uses,
-# until 256 MiB AND 20 s, or 60 s; a host below MIN_DL_MB_S, a non-2xx status or an error is refused (19), never a
-# strike: the 93 GB fetch after the start would not fit NEED_FETCH. The staged token goes to the resolve endpoint only
-# (an unredirected header), never to the CDN and never on a command line.
-DL=$(MIX=$MIX MIX_REV=$MIX_REV timeout 120 python - <<'PYD' 2>/dev/null | tail -1
+# until 256 MiB AND 20 s, or 60 s. A host below MIN_DL_MB_S, a non-2xx status or an error is refused (19, HOST_REFUSED,
+# never a strike): 93 GB at 40 MB/s is 2,325 s, inside NEED_FETCH's 3,000 s with 675 s to spare, so the floor is what
+# keeps the fetch inside its need. download_probe.json is written on EVERY box, refused or not: the bytes read (they
+# count in the box's download allowance) and the measured MB/s travel with the receipt, so the host registry learns the
+# edge speed from a refusal too. The staged token goes to the resolve endpoint only (an unredirected header), never to
+# the CDN and never on a command line.
+rm -f $W/download_probe.json
+DL=$(MIX=$MIX MIX_REV=$MIX_REV FLOOR=$MIN_DL_MB_S OUT=$W/download_probe.json timeout 120 python - <<'PYD' 2>/dev/null | tail -1
 import json, os, time, urllib.request
 m, rev, tok = os.environ["MIX"], os.environ["MIX_REV"], ""
+rec = {"model": m, "revision": rev, "floor_mb_s": int(os.environ["FLOOR"]), "status": None, "bytes": 0, "seconds": None,
+       "mb_s": None, "shard": None, "error": None, "when": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 try:
     tok = open("/root/.cache/huggingface/token").read().strip()
 except OSError:
@@ -109,26 +115,34 @@ def get(url, t):
     if tok:
         req.add_unredirected_header("Authorization", f"Bearer {tok}")
     return urllib.request.urlopen(req, timeout=t)
+t0 = None
 try:
     meta = json.load(get(f"https://huggingface.co/api/models/{m}/revision/{rev}", 30))
-    shard = sorted(s["rfilename"] for s in meta["siblings"] if s["rfilename"].endswith(".safetensors"))[0]
-    t0, n = time.time(), 0
-    with get(f"https://huggingface.co/{m}/resolve/{rev}/{shard}", 60) as r:
-        status = r.status
+    rec["shard"] = sorted(s["rfilename"] for s in meta["siblings"] if s["rfilename"].endswith(".safetensors"))[0]
+    t0 = time.time()
+    with get(f"https://huggingface.co/{m}/resolve/{rev}/{rec['shard']}", 60) as r:
+        rec["status"] = r.status
         while True:
             dt = time.time() - t0
-            if (n >= 256 << 20 and dt >= 20) or dt >= 60:
+            if (rec["bytes"] >= 256 << 20 and dt >= 20) or dt >= 60:
                 break
             b = r.read(1 << 20)
             if not b:
                 break
-            n += len(b)
-    dt = time.time() - t0
-    print(f"status={status} bytes={n} seconds={dt:.1f} mb_s={n / dt / 1e6:.1f}" if dt else f"status={status} mb_s=none")
+            rec["bytes"] += len(b)
 except Exception as e:  # noqa: BLE001 -- a refusal reason, recorded by name
-    print(f"status={getattr(e, 'code', None)} error={type(e).__name__} mb_s=none")
+    rec["status"] = rec["status"] or getattr(e, "code", None)
+    rec["error"] = f"{type(e).__name__}: {str(e)[:120]}"
+finally:
+    if t0 is not None:
+        rec["seconds"] = round(time.time() - t0, 2)
+        if rec["seconds"] and rec["error"] is None:
+            rec["mb_s"] = round(rec["bytes"] / rec["seconds"] / 1e6, 1)
+    json.dump(rec, open(os.environ["OUT"], "w"), indent=1)
+print(f"status={rec['status']} bytes={rec['bytes']} seconds={rec['seconds']} mb_s={rec['mb_s'] if rec['mb_s'] is not None else 'none'}")
 PYD
 )
+[ -s $W/download_probe.json ] || printf '{"status": null, "bytes": null, "mb_s": null, "error": "the probe wrote no record (killed at 120 s or did not run)"}\n' > $W/download_probe.json
 echo "DOWNLOAD ${DL:-none}" | tee -a summary.txt
 DL_MB_S=${DL##*mb_s=}; DL_MB_S=${DL_MB_S%%.*}
 case "$DL" in status=2[0-9][0-9]\ *) ;; *) DL_MB_S=0;; esac

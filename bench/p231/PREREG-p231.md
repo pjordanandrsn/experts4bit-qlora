@@ -170,10 +170,20 @@ id.
 **The start.** The runner writes `STARTED` once every pre-install check has passed (the refusals, the download probe
 and the pre-install fit), immediately before the first install command. A box is box-started from that marker.
 
-**The download probe** (before the start, P225's form): one sustained GET of the checkpoint's first shard from the
-endpoint the fetch uses, until 256 MiB and 20 s, or 60 s. Below **40 MB/s**, a non-2xx status or an error refuses the
-host (rc 19): the 93 GB fetch would not fit its 3,000 s need (93 GB at 40 MB/s is 2,325 s). The staged token goes to
-the resolve endpoint only, never to the CDN and never on a command line.
+**The download probe** (before the start, P225's form; added with the registration's GO): one sustained GET
+ of the checkpoint's first shard from the endpoint the fetch uses, until 256 MiB and 20 s, or 60 s. Below
+**40 MB/s**, a non-2xx status or an error refuses the host with rc 19: **HOST_REFUSED, never a strike**.
+- **The floor is tied to the fit.** The fetch's need is 3,000 s (`NEED_FETCH`). At 40 MB/s, 93 GB takes 2,325 s, which
+  leaves 675 s of the need to spare; the floor is the speed that keeps the fetch inside its need with that slack. (The
+  probe reads one stream; the fetch runs eight workers, so the probe errs low.)
+- **The stop, as HO3's:** after **3 consecutive rc 19** boxes the lane stops renting and reports the market's state on
+  the bus instead of renting on; it resumes only on the maintainer's word or a later market read. (This sits inside the
+  HOST_REFUSED cap below, which still governs.)
+- **The receipt:** `download_probe.json` is written on EVERY box, refused or not: the HTTP status, the bytes read, the
+  seconds, the measured MB/s, the shard and any error by name. It travels with the receipt, so the host registry
+  learns the edge speed from a refusal too. The probe's bytes count in the box's download allowance (see Budget).
+- **The token** goes to the resolve endpoint only (an unredirected header), never to the CDN and never on a command
+  line.
 
 **The classification is mechanical** (`p231_reduce.py --classify --work W`, run on every fetched box; it fails closed,
 exit 2, unless W holds exactly one exit-code file and `RUN_ID`, and a refused classify halts the lane until the box's
@@ -198,6 +208,7 @@ toward nothing.
 - **At most 2 box-started runs** (the reading and one rerun).
 - **Two strikes end the lane** with no reading. A strike is a started box without an answer, or two consecutive
   FIT_REFUSED boxes.
+- **The download stop:** 3 consecutive rc 19 boxes stop the renting, with a market report (the probe, above).
 - **HOST_REFUSED cap:** 4 refusals; then the lane posts the market's state and pauses, and resumes on a later market
   read with no amendment. A second trip (8 in all) ends the lane, UNRUNNABLE.
 - No top-up, no change of arms, bars, workloads or lengths after data.
@@ -215,11 +226,13 @@ toward nothing.
   **16,500 s** left.
 - **Guard 4.8 h (17,280 s).** The boot slack, the guard less the fit's need, is **780 s**: at least the launcher's ssh
   wait (`ssh_ready_s` 420 s) plus a 300 s margin for staging, the refusals and the download probe, as the test checks.
-- **Worst per box:** 4.8 h x USD 1.05 + 93 GB x USD 0.011 = **USD 6.06**, inside the USD 15 per-box rule.
+- **The download allowance:** 93 GB for the fetch plus the probe's bytes, at most one 4.9 GB shard: **97.9 GB** a box
+  (the launch's `--download-gb`).
+- **Worst per box:** 4.8 h x USD 1.05 + 97.9 GB x USD 0.011 = **USD 6.12**, inside the USD 15 per-box rule.
 - **Worst per box that does not start:** its boot term at the box rate plus the probe's download, at most one 4.9 GB
   shard: 780 s x USD 1.05/h + 4.9 GB x USD 0.011 = **USD 0.29**.
-- **Lane worst:** the ids bound the boxes at 10 (`-1`, `-2`, `r1` to `r8`), at most 2 of them started: 2 x USD 6.06 +
-  8 x USD 0.29 = **USD 14.44**.
+- **Lane worst:** the ids bound the boxes at 10 (`-1`, `-2`, `r1` to `r8`), at most 2 of them started: 2 x USD 6.12 +
+  8 x USD 0.29 = **USD 14.56**.
 - **Expected:** about 2.5 hours and about USD 3 for the reading (the fetch at the probe's floor or better, the bake,
   four arms and two quality phases).
 
@@ -244,6 +257,9 @@ toward nothing.
   53 ms W16 steps, and its quality table.
 - **The B2 design note's routing arithmetic** (e4b#2050): the weight bytes over the floor at M = 1, the basis for
   reporting W8 only.
+- **The probe, from a development host** (not a box): its code read Mixtral's pinned first shard at 88.7 MB/s over
+  20 s, a public repository's smaller shard to its end, and recorded an unknown repository as a 401 with the error by
+  name, writing `download_probe.json` each time.
 - **Locally:** the box's self-test (24 cases) and the reducer's (44), and `tests/test_p231.py`, pass. Triton does not
   install on the development hosts, so the premise's test counts are read from the sources at the launch commit.
 
@@ -258,7 +274,7 @@ toward nothing.
 ## Receipts
 
 Fetched to the run directory's `p231/` and committed to `bench/p231/receipts/<run>/`:
-- `fit.json`, `rows.json`, `arm_{B0a,B1a,B1b,B0b}.json`, `quality_{off,on}.json`, `verdict.json`, `summary.txt`,
+- `download_probe.json`, `fit.json`, `rows.json`, `arm_{B0a,B1a,B1b,B0b}.json`, `quality_{off,on}.json`, `verdict.json`, `summary.txt`,
   `forensics.txt`, `versions.txt`, `prompts.json`, `work/mixtral/bake.json`;
 - the logs, with `SHA256SUMS` over every file, and `STORE-ONLY.sha256` for the files kept only in the private receipt
   store.
