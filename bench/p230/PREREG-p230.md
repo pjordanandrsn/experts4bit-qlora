@@ -49,9 +49,10 @@ over those times. The whole-pass slope is reported beside it.
 **Recorded per arm:** every pass's wall, ttfts and token digest, and the last pass's tokens per row; the resolved server
 configuration and `graph_status`; `pdl_active` and `pdl_cap`; P112 Amendment 1's launch accounting of the build over
 int4_b32's switched kernels and K33 (each kernel's launches, those with PDL, compile launches, compiled variants and
-variants with PDL); memory.
+variants with PDL); the same launches **per decode bucket**, each tagged with the bucket being captured (the box wraps
+`PagedModelRunner._capture_bucket` for the build only), so the receipt reads where PDL engaged; memory.
 
-## The rule (`bench/p230/p230_reduce.py`, self-tested on 30 cases)
+## The rule (`bench/p230/p230_reduce.py`, self-tested on 36 cases)
 
 The verdict is the first of these that applies.
 
@@ -67,10 +68,13 @@ The verdict is the first of these that applies.
        variants; K33, `swiglu_rows` and `combine_rows` each launch in every build;
      - OFF carries no PDL anywhere. In DEF the cap splits the build (at least one handled launch carries PDL and at
        least one does not), and at least one handled K33 launch carries PDL.
-2. **NOISY.** A self-pair (OFF2/OFF1 or DEF2/DEF1, decode tok/s, either workload) falls outside **[0.995, 1.005]**, or
+     - **Per bucket, read from the capture:** in DEF, bucket 1 has PDL launches and bucket 16 has none; in OFF, no
+       bucket has any. So the W1 graph carries PDL and the W16 control does not, as read, not argued from the code.
+2. **FUNCTION_FAIL.** Any arm emits a token different from OFF1's on any row of either workload at either length, or
+   an arm's timed reps do not all digest the same. It is read BEFORE the timing rungs: token identity does not depend
+   on timing, so noise never hides a broken bitwise contract.
+3. **NOISY.** A self-pair (OFF2/OFF1 or DEF2/DEF1, decode tok/s, either workload) falls outside **[0.995, 1.005]**, or
    so does either DEF/OFF pair on W16 (the control: no PDL launch there).
-3. **FUNCTION_FAIL.** Any arm emits a token different from OFF1's on any row of either workload at either length, or
-   an arm's timed reps do not all digest the same.
 4. **KEEP.** g1 = min(DEF1/OFF1, DEF2/OFF2) on W1 is at least **1.005**.
 5. **SLOWER.** h1 = max(DEF1/OFF1, DEF2/OFF2) on W1 is at most **0.995**.
 6. **NULL** otherwise.
@@ -139,8 +143,9 @@ files are read by hand):
 |---|---|---|
 | 0 | (cannot occur) | an ANSWER: KEEP, NULL, SLOWER or FUNCTION_FAIL |
 | 13 free disk, 15 card / compute capability / VRAM, 16 host RAM, 18 CUDA unusable | **HOST_REFUSED**: no start; counts toward the refusal cap | (cannot occur) |
-| 9 staging, install or pins, 10 torch does not import, 28 the image's torch, 41 the guard does not fit the deadline, 78 run id / env / frozen knobs, 130 a signal, or any other code | **PRE_INSTALL_HALT**: no start, not capped; a kit, image or launch fault, so the lane halts until it is fixed | a started box WITHOUT an answer |
-| 27 (VOID or NOISY) and any other code | (cannot occur) | a started box WITHOUT an answer |
+| 41 the guard does not fit the deadline (a slow boot) | **FIT_REFUSED**: no start, a retry id; two CONSECUTIVE are one strike (bench/common's Guard fit) | (cannot occur) |
+| 9 staging, install or pins, 10 torch does not import, 28 the image's torch, 78 run id / env / frozen knobs, 130 a signal, or any other code | **PRE_INSTALL_HALT**: no start, not capped; a kit, image or launch fault, so the lane halts until it is fixed | a started box WITHOUT an answer: a strike |
+| 27 (VOID or NOISY) and any other code | (cannot occur) | a started box WITHOUT an answer: a strike |
 
 **NOT_RUN** (the launcher's pre-flight tore down a created instance before the runner ran: no `RUN_ID`, exit file or
 marker) is decided from the launcher's receipt, never classified by `--classify`; it counts toward no cap and uses one
@@ -148,8 +153,9 @@ id. A pre-create refusal (no instance) uses no id.
 
 **The stop (nonadaptive):**
 - The first ANSWER ends the lane.
-- **At most 2 box-started runs** (the reading and one rerun). A second started box without an answer ends the lane
-  with no reading.
+- **At most 2 box-started runs** (the reading and one rerun).
+- **Two strikes end the lane** with no reading. A strike is a started box without an answer, or two consecutive
+  FIT_REFUSED boxes.
 - **HOST_REFUSED cap:** 4 refusals; then the lane posts the market's state and pauses, and resumes on a later market
   read with no amendment. A second trip (8 in all) ends the lane, UNRUNNABLE.
 - No top-up, no change of arms, bars or lengths after data.
@@ -164,8 +170,12 @@ id. A pre-create refusal (no instance) uses no id.
 - **Guard 2.1 h (7,560 s).** The boot slack, the guard less the fit's need, is **1,048 s**: at least the launcher's ssh
   wait (`ssh_ready_s` 420 s) plus a 300 s staging margin, as the test checks, so a slow-ssh host cannot halt the lane at
   the fit.
-- **Worst per box:** 2.1 h x USD 1.05 + 66 GB x USD 0.011 = **USD 2.93**, inside the USD 15 per-box rule. **Lane worst:**
-  2 started boxes plus 8 refusals at about USD 0.10 each, about **USD 6.7**.
+- **Worst per box:** 2.1 h x USD 1.05 + 66 GB x USD 0.011 = **USD 2.93**, inside the USD 15 per-box rule.
+- **Worst per box that does not start:** its time to the refusal at the box rate. A FIT_REFUSED box has used more than
+  the 1,048 s slack, about USD 0.31; a NOT_RUN box up to about 600 s, USD 0.18; a HOST_REFUSED box less. Each is priced
+  here at USD 0.31.
+- **Lane worst:** the ids bound the boxes at 10 (`-1`, `-2`, `r1` to `r8`), at most 2 of them started: 2 x USD 2.93 +
+  8 x USD 0.31 = **USD 8.34**.
 - **Expected:** about 45 minutes and about USD 1.5 for the reading.
 
 ## Launch
@@ -182,7 +192,7 @@ id. A pre-create refusal (no instance) uses no id.
 - **P113's records** (`bench/p113/RESULTS-p113.md`): its self-pairs, the basis of the band above, and its readings on
   SC1's int4 configuration.
 - **The code census** (grouped-nf4-gemm v0.50.0): the switched launch sites and their row keys, as described under "Why".
-- **Locally:** the box's self-test (9 cases) and the reducer's (30), and `tests/test_p230.py`, pass. Triton does not
+- **Locally:** the box's self-test (10 cases) and the reducer's (36), and `tests/test_p230.py`, pass. Triton does not
   install on the development hosts, so the premise's test counts are read from the sources at the pinned commit.
 
 ## What this lane cannot say

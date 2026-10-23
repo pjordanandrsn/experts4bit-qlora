@@ -22,7 +22,9 @@ the cap there, so W16 is the control); SHORT and LONG new tokens; one warm pass,
 
 A Triton launch hook is armed for ``build_engine`` only (it captures the decode graphs) and disarmed before anything is
 timed: P112 Amendment 1's accounting of each switched kernel's launches, those with PDL, compile launches (no handle)
-and compiled variants, over int4_b32's switched kernels AND K33 (``nf4_grouped._gemv_nf4_bw``).
+and compiled variants, over int4_b32's switched kernels AND K33 (``nf4_grouped._gemv_nf4_bw``). Each launch is also
+tagged with the decode bucket being captured (``PagedModelRunner._capture_bucket`` is wrapped for the build only), so
+the receipt READS that bucket 1 carries PDL launches and bucket 16 none, rather than arguing it from the code.
 
     python p230_box.py --prompts prompts.json --out arm_OFF1.json --tag OFF1      (arm from P230_ARM; engine from env)
     python p230_box.py --prompts-only --model ID --revision SHA --out prompts.json
@@ -76,6 +78,24 @@ def pdl_accounting(launches, modules) -> dict:
                 row[2] += 1
             else:
                 row[1] += int(fn_pdl.get(fn, False))
+    return out
+
+
+def pdl_by_bucket(launches, modules) -> dict:
+    """``{bucket: [switched launches, handled launches with launch_pdl]}`` over launches tagged ``(name, fn, bucket)``;
+    launches outside a bucket's capture are filed under ``"none"``. A compile launch (no handle) never counts as PDL."""
+    fn_pdl = {}
+    for name in SWITCHED:
+        k = getattr(modules.get(name), name, None)
+        for _dev, (cache, *_rest) in (getattr(k, "device_caches", None) or {}).items():
+            for ck in cache.values():
+                fn_pdl[ck.function] = bool(getattr(ck.metadata, "launch_pdl", False))
+    out = {}
+    for name, fn, bucket in launches:
+        if name in SWITCHED:
+            row = out.setdefault(str(bucket) if bucket is not None else "none", [0, 0])
+            row[0] += 1
+            row[1] += int(fn is not None and fn_pdl.get(fn, False))
     return out
 
 
@@ -133,21 +153,33 @@ def arm_main(a) -> int:
     import triton
     import int4_b32
     import nf4_grouped
+    from experts4bit_qlora.engines import paged_runner
     modules = {**{n: int4_b32 for n in SWITCHED_INT4}, **{n: nf4_grouped for n in SWITCHED_NF4}}
-    seen = []
-    triton.knobs.runtime.launch_enter_hook = lambda md: seen.append((md.data["name"], md.data["function"]))
+    seen, cur = [], [None]
+    orig_capture = paged_runner.PagedModelRunner._capture_bucket
+
+    def _tagged_capture(self, b, warmup):                         # the bucket under capture, for the hook's tag
+        cur[0] = int(b)
+        try:
+            return orig_capture(self, b, warmup)
+        finally:
+            cur[0] = None
+    paged_runner.PagedModelRunner._capture_bucket = _tagged_capture
+    triton.knobs.runtime.launch_enter_hook = lambda md: seen.append((md.data["name"], md.data["function"], cur[0]))
     t0 = time.perf_counter()
     try:
         parts = build_engine(cfg)
     finally:
         triton.knobs.runtime.launch_enter_hook = None              # disarmed before anything is timed
+        paged_runner.PagedModelRunner._capture_bucket = orig_capture
     load_s = time.perf_counter() - t0
-    pdl = pdl_accounting(seen, modules)
+    pdl = pdl_accounting([(n, f) for n, f, _b in seen], modules)
+    by_bucket = pdl_by_bucket(seen, modules)
     info = parts.info
     rec = {"arm": arm, "tag": a.tag, "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"),
            "model": cfg.model, "revision": cfg.revision, "torch": torch.__version__, "load_s": round(load_s, 2),
            "pdl_active": bool(int4_b32.pdl_active("cuda")), "pdl_cap": int(int4_b32._PDL_CAP[0]),
-           "pdl_launches_build": pdl, "config": {"max_seqs": cfg.max_seqs, "buckets": list(cfg.buckets),
+           "pdl_launches_build": pdl, "pdl_by_bucket": by_bucket, "config": {"max_seqs": cfg.max_seqs, "buckets": list(cfg.buckets),
                                                  "placement": cfg.placement, "graphs": bool(cfg.graphs)},
            "kv_step_select": bool(getattr(parts.runner.kv, "_step_select", False)),
            "graph_status": ({str(k): v for k, v in info["graph_status"].items()} if info.get("graph_status") else None),
@@ -186,7 +218,8 @@ def arm_main(a) -> int:
     print("P230_ARM " + json.dumps({"arm": arm, "tag": a.tag, "pdl_active": rec["pdl_active"], "pdl_cap": rec["pdl_cap"],
                                     "load_s": rec["load_s"], "pdl_launches": sum(v[0] for v in pdl.values()),
                                     "pdl_with": sum(v[1] for v in pdl.values()),
-                                    "k33_launches": (pdl.get("_gemv_nf4_bw") or [0])[0], "config": rec["config"],
+                                    "k33_launches": (pdl.get("_gemv_nf4_bw") or [0])[0], "by_bucket": by_bucket,
+                                    "config": rec["config"],
                                     "graph_status": rec["graph_status"], "W16": rec["workloads"]["W16"]["decode_tok_s"],
                                     "W1": rec["workloads"]["W1"]["decode_tok_s"]}), flush=True)
     return 0
@@ -213,6 +246,9 @@ def self_test() -> int:
           ARMS["OFF"]["GNF4_PDL"] == "0", p109_box.WORKLOADS == {"W16": 16, "W1": 1}, p109_box.self_test() == 0,
           acct == {"_swiglu_rows": [3, 1, 1, 2, 1], "_gemv_nf4_bw": [2, 1, 1, 1, 1]},
           len(SWITCHED) == 14 and "_gemv_nf4_bw" in SWITCHED and "GNF4_PDL" not in LEVERS_UNSET,
+          pdl_by_bucket([("_swiglu_rows", None, 1), ("_swiglu_rows", 12, 1), ("_swiglu_rows", 11, 16),
+                         ("_gemv_nf4_bw", 21, 1), ("_gemv_nf4_bw", 21, None), ("other", 99, 1)], mods)
+          == {"1": [3, 2], "16": [1, 0], "none": [1, 1]},
           decode_only([6.0, 7.4], [[0.5, 5.0], [0.4, 6.1]]) == [1.0, 1.3],
           decode_only([6.0], [[0.5, None]]) is None and decode_only([1.0], [[1.2]]) is None]
     print(f"p230_box self-test {'OK' if all(ok) else 'FAILED'} ({sum(ok)}/{len(ok)} cases)")

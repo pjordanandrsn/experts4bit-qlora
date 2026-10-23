@@ -17,11 +17,14 @@ The verdict is the first of these that applies:
                   accounting form, with no more compile launches than variants; K33 (``_gemv_nf4_bw``),
                   ``_swiglu_rows`` and ``_combine_rows`` each launch in every build;
                 - in OFF nothing carries PDL; in DEF the cap splits the build (at least one handled launch carries PDL
-                  and at least one does not), and at least one handled K33 launch carries PDL.
+                  and at least one does not), and at least one handled K33 launch carries PDL;
+                - per bucket, read from the capture (each launch tagged with the bucket being captured): in DEF, bucket 1
+                  has PDL launches and bucket 16 has none; in OFF, no bucket has any.
+  FUNCTION_FAIL an arm emits a token different from OFF1's on any row of either workload at either length, or an arm's
+                timed reps do not all digest the same. Read BEFORE the timing rungs: token identity does not depend on
+                timing, so noise never hides a broken bitwise contract.
   NOISY         a self-pair (OFF2/OFF1 or DEF2/DEF1, decode tok/s, either workload) falls outside [0.995, 1.005], or
                 the W16 control does: either DEF/OFF pair on W16, where the cap launches nothing with PDL.
-  FUNCTION_FAIL an arm emits a token different from OFF1's on any row of either workload at either length, or an arm's
-                timed reps do not all digest the same.
   KEEP          g1 = min(DEF1/OFF1, DEF2/OFF2) on W1 >= 1.005.
   SLOWER        h1 = max(DEF1/OFF1, DEF2/OFF2) on W1 <= 0.995.
   NULL          otherwise.
@@ -30,9 +33,10 @@ KEEP, NULL, SLOWER and FUNCTION_FAIL are answers (the runner exits 0); VOID and 
 
 **The classification** (:func:`classify`, PREREG "Outcomes and the stop"): from the runner's exit code and whether it
 wrote ``STARTED`` (once every pre-install check has passed, before the first install command). Before the marker, a
-host fault (13, 15, 16, 18) is HOST_REFUSED (cap 4 a trip, 8 in all) and a kit or launch fault (9, 10, 28, 41, 78, 130,
-any other code) is PRE_INSTALL_HALT (the lane halts until it is fixed). After it, 0 is an ANSWER and any other code is a
-box-started run WITHOUT an answer. ``--classify --work W`` reads the box's work directory as the driver fetched it and
+host fault (13, 15, 16, 18) is HOST_REFUSED (cap 4 a trip, 8 in all); the guard fit (41) is FIT_REFUSED (no start, a
+retry id; two consecutive are one strike); a kit or launch fault (9, 10, 28, 78, 130, any other code) is
+PRE_INSTALL_HALT (the lane halts until it is fixed). After it, 0 is an ANSWER and any other code is a box-started run
+WITHOUT an answer (a strike). ``--classify --work W`` reads the box's work directory as the driver fetched it and
 FAILS CLOSED (exit 2, no class) unless W holds exactly one ``P230_EXIT_CODE.<nonce>`` and ``RUN_ID``. A box the
 launcher tore down before the runner ran (NOT_RUN) is decided from the launcher's receipt and never classified here.
 
@@ -58,9 +62,9 @@ REVS = {"Qwen/Qwen3-30B-A3B": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"}
 MUST_LAUNCH = ("_gemv_nf4_bw", "_swiglu_rows", "_combine_rows")
 ANSWERS = ("KEEP", "NULL", "SLOWER", "FUNCTION_FAIL")
 HOST_CODES = {13: "free disk", 15: "card, compute capability or VRAM", 16: "host RAM", 18: "CUDA unusable"}
+FIT_CODES = {41: "the guard does not fit the deadline (a slow boot)"}
 KIT_CODES = {9: "staging, install or hash pins", 10: "torch does not import (the image)",
-             28: "the image's torch is not the pinned build", 41: "the guard does not fit the deadline",
-             78: "run id, environment or frozen knobs", 130: "a signal"}
+             28: "the image's torch is not the pinned build", 78: "run id, environment or frozen knobs", 130: "a signal"}
 
 
 def _setting(t):
@@ -109,6 +113,16 @@ def _engagement(t, r):
             out.append(f"{t}: {name} has {compiles} compile launches but {variants} compiled variants")
         if s == "OFF" and (w or variants_pdl):
             out.append(f"{t}: {name} carried PDL with the switch off ({w} launches, {variants_pdl} variants)")
+    byb = r.get("pdl_by_bucket")
+    if not isinstance(byb, dict) or not all(isinstance(v, list) and len(v) == 2 for v in byb.values()):
+        out.append(f"{t}: no per-bucket accounting ({byb!r})")
+    else:
+        if s == "DEF" and not (byb.get("1") or [0, 0])[1]:
+            out.append(f"{t}: bucket 1 carried no PDL launch ({byb.get('1')})")
+        if s == "DEF" and (byb.get("16") or [0, 0])[1]:
+            out.append(f"{t}: bucket 16 carried {byb['16'][1]} PDL launch(es): the W16 control is not PDL-free")
+        if s == "OFF" and any(v[1] for v in byb.values()):
+            out.append(f"{t}: PDL launches with the switch off, by bucket {byb}")
     if s == "DEF":
         if not 0 < with_pdl < handled:
             out.append(f"{t}: the cap did not split the build ({with_pdl} of {handled} handled launches carried PDL)")
@@ -178,10 +192,10 @@ def reduce(arms: dict, e4b_sha: str) -> dict:
     noisy += [f"W16 control DEF/OFF pair {i + 1} = {v:.5f}" for i, v in enumerate(pairs["W16"])
               if not SELF_LO <= v <= SELF_HI]
     txt = f"W1 pairs {out['pair_ratios']['W1']} (g1 {out['g1']}, h1 {out['h1']}); W16 control {out['pair_ratios']['W16']}"
-    if noisy:
-        out.update(verdict="NOISY", reasons=noisy)
-    elif fn:
+    if fn:
         out.update(verdict="FUNCTION_FAIL", reasons=fn)
+    elif noisy:
+        out.update(verdict="NOISY", reasons=noisy)
     elif g1 >= KEEP_BAR:
         out.update(verdict="KEEP", reasons=[f"tokens identical on every row; {txt}"])
     elif h1 <= SLOWER_BAR:
@@ -199,11 +213,14 @@ def classify(rc: int, started: bool) -> dict:
         if rc in HOST_CODES:
             return {"event": "HOST_REFUSED", "started": False, "host_refused_cap": True, "halt": False,
                     "why": HOST_CODES[rc]}
+        if rc in FIT_CODES:
+            return {"event": "FIT_REFUSED", "started": False, "host_refused_cap": False, "halt": False,
+                    "why": FIT_CODES[rc] + "; two consecutive are one strike"}
         return {"event": "PRE_INSTALL_HALT", "started": False, "host_refused_cap": False, "halt": True,
                 "why": KIT_CODES.get(rc, f"unexpected pre-install exit {rc}")}
     if rc == 0:
         return {"event": "ANSWER", "started": True, "host_refused_cap": False, "halt": False, "why": "the verdict"}
-    why = "VOID or NOISY (the verdict)" if rc == 27 else f"exit {rc} after the start"
+    why = "VOID or NOISY (the verdict): a strike" if rc == 27 else f"exit {rc} after the start: a strike"
     return {"event": "NO_ANSWER", "started": True, "host_refused_cap": False, "halt": False, "why": why}
 
 
@@ -224,7 +241,7 @@ def read_box(work: str) -> dict:
 # ------------------------------------------------------------------ self-test --
 
 def _fake(tag, rate16, rate1, toks, *, e4b="a" * 40, graphs=None, pdl=None, cap=CAP_ROWS, acct=None, config=None,
-          digests=None, short=4, long_=8):
+          digests=None, short=4, long_=8, byb=None):
     s = _setting(tag)
     config = config or {"max_seqs": 16, "buckets": [1, 2, 4, 8, 16], "placement": "all-vram", "graphs": True}
     if graphs is None:
@@ -235,6 +252,10 @@ def _fake(tag, rate16, rate1, toks, *, e4b="a" * 40, graphs=None, pdl=None, cap=
                 "DEF": {"_gemv_nf4_bw": [960, 192, 4, 4, 2], "_swiglu_rows": [480, 96, 4, 4, 2],
                         "_combine_rows": [480, 96, 4, 4, 2]}}[s]
 
+    if byb is None:
+        byb = {"OFF": {"1": [4, 0], "2": [4, 0], "16": [4, 0], "none": [10, 0]},
+               "DEF": {"1": [4, 4], "2": [4, 0], "16": [4, 0], "none": [10, 0]}}[s]
+
     def wl(rate):
         return {"decode_tok_s": rate, "decode_ms_per_step": round(1000 / rate, 3) if rate else None,
                 "tokens": {str(short): [t[:short] for t in toks], str(long_): toks},
@@ -243,6 +264,7 @@ def _fake(tag, rate16, rate1, toks, *, e4b="a" * 40, graphs=None, pdl=None, cap=
     return {"tag": tag, "status": "ok", "e4b_sha": e4b, "gnf4_sha": GNF4_SHA, "model": "Qwen/Qwen3-30B-A3B",
             "revision": REVS["Qwen/Qwen3-30B-A3B"], "graph_status": graphs, "config": config,
             "pdl_active": (s == "DEF") if pdl is None else pdl, "pdl_cap": cap, "pdl_launches_build": acct,
+            "pdl_by_bucket": byb,
             "prompts_sha256": "p", "short": short, "long": long_, "reps": 3,
             "workloads": {"W16": wl(rate16), "W1": wl(rate1)}}
 
@@ -262,8 +284,9 @@ def _classify_cases() -> list:
         b = read_box(box(13, False))
         out.append(("disk before the start is HOST_REFUSED", classify(b["rc"], b["started"])["event"] == "HOST_REFUSED"))
         b = read_box(box(41, False))
-        out.append(("the fit is PRE_INSTALL_HALT", classify(b["rc"], b["started"])["event"] == "PRE_INSTALL_HALT"
-                    and classify(b["rc"], b["started"])["halt"]))
+        out.append(("the fit is FIT_REFUSED, never a halt", classify(b["rc"], b["started"])["event"] == "FIT_REFUSED"
+                    and not classify(b["rc"], b["started"])["halt"]))
+        out.append(("a kit fault halts", classify(9, False)["event"] == "PRE_INSTALL_HALT" and classify(9, False)["halt"]))
         b = read_box(box(0, True))
         out.append(("0 after the start is an ANSWER", classify(b["rc"], b["started"])["event"] == "ANSWER"))
         b = read_box(box(27, True))
@@ -327,6 +350,16 @@ def self_test() -> int:
     off = [list(r) for r in base]
     off[3][5] += 1
     cases.append(("a token moves", v(arms(DEF2=_fake("DEF2", *RATES["DEF"], off))) == "FUNCTION_FAIL"))
+    cases.append(("a token moves on a noisy box: FUNCTION_FAIL first",
+                  v(arms(DEF2=_fake("DEF2", *RATES["DEF"], off), OFF2=_fake("OFF2", 1700.0, 140.0 * 1.006, base)))
+                  == "FUNCTION_FAIL"))
+    cases.append(("bucket 16 carried PDL", v(arms(DEF1=_fake("DEF1", *RATES["DEF"], base,
+                                                            byb={"1": [4, 4], "16": [4, 1]}))) == "VOID"))
+    cases.append(("bucket 1 carried none", v(arms(DEF2=_fake("DEF2", *RATES["DEF"], base,
+                                                            byb={"1": [4, 0], "16": [4, 0]}))) == "VOID"))
+    cases.append(("off carried PDL in a bucket", v(arms(OFF1=_fake("OFF1", *RATES["OFF"], base,
+                                                                  byb={"1": [4, 1], "16": [4, 0]}))) == "VOID"))
+    cases.append(("no per-bucket record", v(arms(OFF2=_fake("OFF2", *RATES["OFF"], base, byb={"1": "x"}))) == "VOID"))
     cases.append(("reps differ", v(arms(DEF1=_fake("DEF1", *RATES["DEF"], base,
                                                    digests={"4": ["x"] * 3, "8": ["y", "z", "y"]}))) == "FUNCTION_FAIL"))
     r = reduce(arms(), "a" * 40)

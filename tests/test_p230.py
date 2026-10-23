@@ -119,6 +119,21 @@ def test_the_arms_are_a_palindrome_and_differ_only_in_the_switch():
     assert set(R.MUST_LAUNCH) <= set(B.SWITCHED) and "_gemv_nf4_bw" in B.SWITCHED_NF4
 
 
+def test_function_fail_is_read_before_the_timing_rungs():
+    src = (LANE / "p230_reduce.py").read_text(encoding="utf-8")
+    body = src[src.index("    if fn:\n        out.update(verdict=\"FUNCTION_FAIL\""):]
+    assert body.index("FUNCTION_FAIL") < body.index("NOISY") < body.index("KEEP")
+    assert PREREG.index("**FUNCTION_FAIL.**") < PREREG.index("**NOISY.**") < PREREG.index("**KEEP.**")
+
+
+def test_the_box_tags_each_launch_with_its_bucket_for_the_build_only():
+    src = (LANE / "p230_box.py").read_text(encoding="utf-8")
+    assert "paged_runner.PagedModelRunner._capture_bucket = _tagged_capture" in src
+    assert src.index("_capture_bucket = _tagged_capture") < src.index("parts = build_engine(cfg)") \
+        < src.index("paged_runner.PagedModelRunner._capture_bucket = orig_capture")
+    assert '"pdl_by_bucket": by_bucket' in src
+
+
 def test_the_pre_install_fit_meets_the_guard_with_boot_slack():
     fit = 450 + 1210 + 550 + 4 * 600 + 600
     fit_need = fit * 125 // 100
@@ -126,7 +141,8 @@ def test_the_pre_install_fit_meets_the_guard_with_boot_slack():
     assert fit == 5210 and fit_need == 6512 and guard_s == 7560
     assert guard_s - fit_need >= SSH_READY_S + STAGING_MARGIN_S, guard_s - fit_need       # slack 1,048 s
     assert GUARD_H <= 5.9 and abs(GUARD_H * 1.05 + 66 * 0.011 - 2.93) < 0.005
-    for s in ("5,210 s", "6,512 s", "Guard 2.1 h (7,560 s)", "1,048 s", "USD 2.93"):
+    assert abs(2 * 2.93 + (len(RUN_IDS) - 2) * 0.31 - 8.34) < 0.005          # the ids bound the boxes at 10
+    for s in ("5,210 s", "6,512 s", "Guard 2.1 h (7,560 s)", "1,048 s", "USD 2.93", "USD 8.34"):
         assert s in PREREG, s
     for need in ("NEED_FETCH=1210", "NEED_BAKE=550", "NEED_ARM=600", "INSTALL_TO_GATE_S=450", "RESERVE=600"):
         assert need in RUN, need
@@ -139,12 +155,14 @@ def test_every_exit_before_the_start_is_classified():
     pre = RUN[:RUN.index(": > $W/STARTED")]
     codes = {int(c) for c in re.findall(r"finish (\d+)", pre)} - {130}   # 130 is the trap's
     assert codes, "no pre-start exits found"
-    unknown = sorted(c for c in codes if c not in R.HOST_CODES and c not in R.KIT_CODES)
+    unknown = sorted(c for c in codes if c not in R.HOST_CODES and c not in R.FIT_CODES and c not in R.KIT_CODES)
     assert not unknown, f"pre-start exit codes the classification does not name: {unknown}"
-    assert {13, 15, 16, 18} == set(R.HOST_CODES) and {9, 10, 28, 41, 78, 130} <= set(R.KIT_CODES)
+    assert {13, 15, 16, 18} == set(R.HOST_CODES) and {41} == set(R.FIT_CODES) and {9, 10, 28, 78, 130} <= set(R.KIT_CODES)
     for rc in R.HOST_CODES:
         assert R.classify(rc, False)["event"] == "HOST_REFUSED"
-    assert R.classify(41, False)["event"] == "PRE_INSTALL_HALT" and R.classify(0, True)["event"] == "ANSWER"
+    fit = R.classify(41, False)
+    assert fit["event"] == "FIT_REFUSED" and not fit["halt"] and not fit["started"]     # a slow boot never halts the lane
+    assert R.classify(0, True)["event"] == "ANSWER"
     assert R.classify(27, True)["event"] == "NO_ANSWER"
 
 
