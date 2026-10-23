@@ -18,8 +18,9 @@ The verdict is the first of these that applies:
                   ``_swiglu_rows`` and ``_combine_rows`` each launch in every build;
                 - in OFF nothing carries PDL; in DEF the cap splits the build (at least one handled launch carries PDL
                   and at least one does not), and at least one handled K33 launch carries PDL;
-                - per bucket, read from the capture (each launch tagged with the bucket being captured): in DEF, bucket 1
-                  has PDL launches and bucket 16 has none; in OFF, no bucket has any.
+                - per bucket, read from the capture (each launch tagged with the bucket being captured): buckets 1 and 16
+                  both record switched launches in every arm; in DEF, bucket 1 has PDL launches and bucket 16 has none;
+                  in OFF, no bucket has any.
   FUNCTION_FAIL an arm emits a token different from OFF1's on any row of either workload at either length, or an arm's
                 timed reps do not all digest the same. Read BEFORE the timing rungs: token identity does not depend on
                 timing, so noise never hides a broken bitwise contract.
@@ -117,6 +118,9 @@ def _engagement(t, r):
     if not isinstance(byb, dict) or not all(isinstance(v, list) and len(v) == 2 for v in byb.values()):
         out.append(f"{t}: no per-bucket accounting ({byb!r})")
     else:
+        for b in ("1", "16"):                      # both captured, with switched launches: the control is positive
+            if not (byb.get(b) or [0, 0])[0]:
+                out.append(f"{t}: bucket {b} recorded no switched launch ({byb.get(b)})")
         if s == "DEF" and not (byb.get("1") or [0, 0])[1]:
             out.append(f"{t}: bucket 1 carried no PDL launch ({byb.get('1')})")
         if s == "DEF" and (byb.get("16") or [0, 0])[1]:
@@ -360,6 +364,10 @@ def self_test() -> int:
     cases.append(("off carried PDL in a bucket", v(arms(OFF1=_fake("OFF1", *RATES["OFF"], base,
                                                                   byb={"1": [4, 1], "16": [4, 0]}))) == "VOID"))
     cases.append(("no per-bucket record", v(arms(OFF2=_fake("OFF2", *RATES["OFF"], base, byb={"1": "x"}))) == "VOID"))
+    cases.append(("bucket 16 missing: not a vacuous control", v(arms(DEF1=_fake("DEF1", *RATES["DEF"], base,
+                                                                               byb={"1": [4, 4]}))) == "VOID"))
+    cases.append(("bucket 16 with no switched launch", v(arms(OFF1=_fake("OFF1", *RATES["OFF"], base,
+                                                                         byb={"1": [4, 0], "16": [0, 0]}))) == "VOID"))
     cases.append(("reps differ", v(arms(DEF1=_fake("DEF1", *RATES["DEF"], base,
                                                    digests={"4": ["x"] * 3, "8": ["y", "z", "y"]}))) == "FUNCTION_FAIL"))
     r = reduce(arms(), "a" * 40)

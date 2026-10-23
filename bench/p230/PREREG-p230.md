@@ -52,7 +52,7 @@ int4_b32's switched kernels and K33 (each kernel's launches, those with PDL, com
 variants with PDL); the same launches **per decode bucket**, each tagged with the bucket being captured (the box wraps
 `PagedModelRunner._capture_bucket` for the build only), so the receipt reads where PDL engaged; memory.
 
-## The rule (`bench/p230/p230_reduce.py`, self-tested on 36 cases)
+## The rule (`bench/p230/p230_reduce.py`, self-tested on 38 cases)
 
 The verdict is the first of these that applies.
 
@@ -68,7 +68,8 @@ The verdict is the first of these that applies.
        variants; K33, `swiglu_rows` and `combine_rows` each launch in every build;
      - OFF carries no PDL anywhere. In DEF the cap splits the build (at least one handled launch carries PDL and at
        least one does not), and at least one handled K33 launch carries PDL.
-     - **Per bucket, read from the capture:** in DEF, bucket 1 has PDL launches and bucket 16 has none; in OFF, no
+     - **Per bucket, read from the capture:** buckets 1 and 16 both record switched launches in every arm (the control
+       is a positive read, never an absence); in DEF, bucket 1 has PDL launches and bucket 16 has none; in OFF, no
        bucket has any. So the W1 graph carries PDL and the W16 control does not, as read, not argued from the code.
 2. **FUNCTION_FAIL.** Any arm emits a token different from OFF1's on any row of either workload at either length, or
    an arm's timed reps do not all digest the same. It is read BEFORE the timing rungs: token identity does not depend
@@ -192,7 +193,7 @@ id. A pre-create refusal (no instance) uses no id.
 - **P113's records** (`bench/p113/RESULTS-p113.md`): its self-pairs, the basis of the band above, and its readings on
   SC1's int4 configuration.
 - **The code census** (grouped-nf4-gemm v0.50.0): the switched launch sites and their row keys, as described under "Why".
-- **Locally:** the box's self-test (10 cases) and the reducer's (36), and `tests/test_p230.py`, pass. Triton does not
+- **Locally:** the box's self-test (10 cases) and the reducer's (38), and `tests/test_p230.py`, pass. Triton does not
   install on the development hosts, so the premise's test counts are read from the sources at the pinned commit.
 
 ## What this lane cannot say
