@@ -32,7 +32,8 @@ it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
   same axis, the same scale multiply and the same bf16 store.
 - **The contract:** each row of an M-row call is **bitwise** that row's own call through the one-row kernel (K36 at
   M = 1), at the same plan. This is the per-row identity lever B uses (B0's rows at T = 2..8 against T == 1, and B2's
-  multi-row GEMV against M = 1).
+  multi-row GEMV against M = 1). The M = 1 launch is the `M_ROWS = 1` instance of the same kernel, so today's one-row
+  results do not move by a bit (a test holds the old kernel's output against it).
 - **The contract is REQUIRED AND TESTED, never assumed** (review 1).
   - In the source it holds: K36 never splits K, uses no atomics, runs a 1-D grid over N with a sequential K-loop, and
     each row has its own accumulator.
@@ -42,9 +43,7 @@ it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
     not the bits.
   - At engine build, e4b also runs a bitwise probe on the device at the head's own shape, for every M up to the knob's
     value (an M-row call against M one-row calls on random rows). A failing (M, arch) is refused by name, never
-    served. The M = 1
-  launch is the `M_ROWS = 1` instance of the same kernel, so today's one-row results do not move by a bit (a test holds
-  the old kernel's output against it).
+    served.
 - **The plan:** the one-row plan (`PLANS_I8`, P148's) at every M. A plan per M could read faster at M = 8, but it would
   break the row identity across M, which is the point (section 4). A per-M plan is a later lane's choice, never this
   one's.
