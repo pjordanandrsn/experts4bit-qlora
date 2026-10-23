@@ -203,3 +203,45 @@ Amendment 1 says:
   `exclude`). A host with no recorded cap is not pinned for a shake. The box's own floor stays the backstop.
 - The runner and the driver accept the six shake ids and refuse any other. Nothing else changes, and no term of the
   reading moves.
+
+## Amendment 3 (2026-10-23, before any reading): the fetch imports no links; a download probe; retry ids
+
+**Why.** The reading is now run by the decode seat (the earlier seat was released on 2026-10-23); `p223-shake-4` was
+re-derived from its record, byte for byte (SHAKE, no instrument fault), before this amendment. Three things change before
+the reading, none of them a term of the read:
+- **The fetch imports no links** (the cross-lane rule of 2026-10-23, bench/common rule 8). The driver's fetch passes
+  `rsync --no-links`, so a symbolic link a rented box leaves in its work directory is never copied to the controller,
+  where the receipt writers would follow it.
+- **A download probe before the start.** The reading fetches the 93.4 GB checkpoint inside a 3,000 s need, which needs
+  at least 31 MB/s; on 2026-10-23 two RTX 5090 hosts read 20 and 30 MB/s. A slow host found after the start would be a
+  box-started failure, and two of those stop the lane.
+- **Retry ids.** A probe makes a host refusal routine, and each created box that is refused spends an id.
+
+**What changes.**
+- **The probe** is P231's (bench/p231/PREREG-p231.md), unchanged in method: one sustained GET of the checkpoint's first
+  shard from the endpoint the fetch uses, until 256 MiB and 20 s, or 60 s, before the guard fit and before any install.
+  - Below **40 MB/s**, a non-2xx status, or an error, the runner exits **rc 14: HOST_REFUSED, never a strike**. P223's
+    rc 19 is the guard fit, whose two consecutive refusals count as one strike, so the probe takes its own code.
+  - The floor is tied to the fit: 93.4 GB at 40 MB/s is 2,335 s, inside the 3,000 s fetch need with 665 s to spare.
+    The probe reads one stream and the fetch eight workers, so the probe errs low.
+  - `download_probe.json` (the status, bytes, seconds, MB/s, shard and any error) is written on **every** box, refused
+    or not, and travels with the receipt, so the host registry learns the edge speed from a refusal too.
+  - **3 consecutive rc 14** boxes stop the renting, with a market report on the bus; the launcher counts them from the
+    lane log before every create.
+  - The staged token goes to the resolve endpoint only, as an unredirected header, never to the CDN or a command line.
+- **The retry ids `p223-5090-r1` to `p223-5090-r8`** (bench/common rule 2): labels, not budget, for boxes that follow
+  one that did not start. The runner and the driver accept them beside `p223-5090-1` to `-3`.
+- **The fetch:** `p223_drive.sh` passes `--no-links`. The runner's new pin is in `staged-p223.sha256`.
+
+**Budget (bench/common rule 4).**
+- **Worst per box:** 3.5 h × USD 1.05 + (93.4 GB checkpoint + 5 GB install + up to 4.9 GB of probe) × USD 0.011 =
+  **USD 4.81** (was USD 4.76).
+- **Worst per box that does not start:** the boot term (the guard less the runner's pre-install need, 12,600 − 11,888 =
+  712 s) at USD 1.05/h, plus one probe shard: 712 s × USD 1.05/h + 4.9 GB × USD 0.011 = **USD 0.26**.
+- **Lane worst:** the ids bound the boxes at 11 (`-1` to `-3`, `r1` to `r8`), at most 2 of them started (two
+  box-started HARNESS_ERROR, VOID or NOISY reads stop the lane, unchanged): 2 × USD 4.81 + 9 × USD 0.26 =
+  **USD 11.98**, under the USD 15 envelope. If a measured non-start costs more, the lane is re-priced before the next
+  create.
+
+Nothing else changes: the arms, the read, the rule, the predictions, the fit table and the 3.5 h guard are as
+registered. The launch commit becomes this amendment's merge.
