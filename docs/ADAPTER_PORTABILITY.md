@@ -227,11 +227,15 @@ module, it compares each fingerprint the manifest records with the served base's
 - **experts:** the arena source above. A match reads `base_match.experts = verified (qfp-v1 ...)`. A mismatch is
   **refusal 12**. `E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts` serves it anyway, reported in `/health` as
   `mismatch (served under ...)`; `E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE` never covers a MEASURED mismatch.
-- **the default training form:** training double-quantizes the expert absmax by default and the arena stores fp32, so a
-  default-trained `/2` adapter is refusal 12 (F1). Its message says so: that is the dq-vs-fp32 case, not a different
-  model; retraining at `E4B_ABSMAX_DQ=0` resolves it. A follow-up records the base's fp32 source fingerprint at
-  training (the fp32 absmax hashed before compression), which proves BASE identity against the fp32 arena, never that
-  the served absmax equals the trained one.
+- **the double-quantized training form, and where it is reachable:** training double-quantizes the expert absmax
+  only under `expert_kernel=grouped_nf4`, which requires `train_experts=true` (the recipe refuses it otherwise). So a
+  dq-trained adapter always carries expert LoRA, and the paged server refuses it with **refusal 1** before this check
+  runs. An attention-only adapter, the kind this server serves, keeps the fp32 absmax by construction and verifies by
+  its plain fingerprint. The dq branch below (refusal 12 as the dq-vs-fp32 case, F1, with the override) is reachable
+  for a `/2` manifest whose expert LoRA is all zero, and serves the expert-serving path to come. Its tests guard that
+  path. A follow-up records the base's fp32 source fingerprint at training (the fp32 absmax hashed before
+  compression), which proves BASE identity against the fp32 arena, never that the served absmax equals the trained
+  one.
 - `/health` carries `adapter.fingerprints`: per scope, the trained and served sha256, the module counts, the seconds and
   the status.
 
