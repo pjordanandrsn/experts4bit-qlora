@@ -68,8 +68,9 @@ hit one of these gaps.
    it measures since the old one, with why the reading still stands.
 2. **Run ids.**
    - Every box has its own id and receipt, and an id is never reused, because the ledger holds one row per run.
-   - Register the reading ids (`<lane>-<card>-1` to `-N`) AND retry ids (`-r1` to `-r8`) for any box that follows one
-     that did not start.
+   - Register a reading id for EVERY box the cap allows to start (`<lane>-<card>-1` to `-N`, with N at least the cap),
+     so a re-run after a started box that was not read has its own id. Also register retry ids (`-r1` to `-r8`) for any
+     box that follows one that did not start.
    - Ids are labels, not budget. No code may parse an id's number; the caps below govern alone.
    - If boxes that did not start ever use up `r8`, that is a launcher or market fault to fix, not a reason to add ids.
 3. **Outcome classes, and what each counts toward.** Each class is decided from the launcher's receipt and the
