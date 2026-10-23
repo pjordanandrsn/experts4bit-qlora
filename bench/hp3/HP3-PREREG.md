@@ -329,9 +329,47 @@ at plausible noise. Every number in this section is an ESTIMATE.
    - A refusal at create uses no id: the launcher receipts it as `<id>-refused-*`, and the next attempt takes the same id.
    - No code parses an id's number.
 
+7. **A slow host shortens the read; it never voids it.** The 11 h guard leaves ~9 % headroom over the ~10.1 h of phases.
+   - **Decided by timing alone.** The seed count reads wall time and the deadline, never a loss, a receipt's result or a verdict,
+     so it is not an outcome-dependent stopping rule.
+   - **The plan.** Phase C is seed-major: at each seed, e4b, then Unsloth, then axolotl, for every framework that passed G1'. So
+     the seeds a box completes are always a PREFIX of 3410–3414, and none can be dropped selectively. After seed 3410 completes
+     for every framework, the runner measures that seed's wall time W, across all of its frameworks (e4b runs first and axolotl's
+     eager path is the slowest, so one arm would underestimate a seed).
+     - It sets n to the largest k in {5, 4, 3} with (k − 1) × W + 360 s × (frameworks) × k + 900 s ≤ the time left − 900 s. The
+       evaluator's pass is estimated at ~6 min a run.
+     - It writes `hp3/seed_plan.json` (n, the seeds, W, the time left, each k's need, `basis: timing`, the reason) BEFORE any
+       later seed or the evaluator's pass.
+   - **The read.** The box runs exactly n seeds, and `hp3_reduce.py verdict --seed-plan` reads the first n (df = n − 1).
+     - The verdict records `seed_count`, `seeds_read` and `seed_plan_reason` (e.g. "fit: 4 seeds at seed 3410's wall time 2400 s").
+     - A read on 3 or 4 seeds is a **reduced-power read**, stated as such in the record and every RESULTS line. It is never
+       upgraded later.
+     - A VOID run among the planned seeds still makes its pairs NOT_READ.
+   - **The refusals.** The reducer refuses a plan whose n is not 0, 3, 4 or 5, whose seeds are not that prefix, whose basis is
+     not timing, or whose file is newer than any evaluator output it reads.
+   - **Fewer than 3 seeds fit:** n = 0. The box stops after seed 3410, with no evaluator pass. Every pair reads NOT_READ,
+     host-limited, with a host refusal note. It is no strike, and the spend is minimal.
+   - **The power each count can read.** ESTIMATE, P(PARITY | true Δ = 0) under the registered verdict order, from
+     `bench/hp3/hp3_power.py`. The 3 and 5 columns are the table above; the 4 column is `--counts 4` on its own stream, at the
+     same RNG seed:
+
+     | σ_seed | ρ | 3 seeds | 4 seeds | 5 seeds |
+     |---|---|---|---|---|
+     | 0.001 | 0 | 0.86 | 0.91 | 0.92 |
+     | 0.002 | 0 | 0.40 | 0.66 | 0.81 |
+     | 0.002 | 0.5 | 0.70 | 0.91 | 0.96 |
+     | 0.003 | 0 | 0.17 | 0.28 | 0.44 |
+     | 0.003 | 0.5 | 0.39 | 0.64 | 0.82 |
+     | 0.005 | 0 | 0.05 | 0.07 | 0.10 |
+     | 0.005 | 0.82 | 0.48 | 0.73 | 0.88 |
+
+   - **Cost:** unchanged. The guard stays at 11 h: read $10.45, lane $14.65.
+
 **Unchanged:** everything else in this registration, including G1', 6(b), G2', the three-way read, the labels and the (R) fallback.
 
-**Ruling:** approved by the maintainer at 15:59Z, conditional on the evaluator's re-run of the simulation. The evaluator's checks:
+**Rulings:** part 7 was ruled by the maintainer at 2026-10-23 19:56Z and 19:57Z ((b) plus (c), before data), with the reviewer's
+two details (project from the first complete seed; record the count and its timing-only reason). The rest was approved by the
+maintainer at 15:59Z on 2026-10-21, conditional on the evaluator's re-run of the simulation. The evaluator's checks:
 (a) the margin formula PASS, (b) the paired t quantile PASS, (c) a discrepancy (0.40, not 0.45) that came from the pre-read's
 PARITY-only test and strengthens the case. This amendment merges before the read box is created.
 

@@ -2809,6 +2809,20 @@ hp3_fail(){ local AF=$1 FW=$2 TAG=$3 st=$4 cls v
   [ -n "$cls" ] || cls="R | the classifier printed nothing"
   case "$cls" in HOST_*) echo "HP3 ARM_FAILED $FW/$TAG $st: host-attributable (${cls%% |*}): the spare | ${cls#*| }";;
     *) echo "HP3 ARM_FAILED $FW/$TAG $st: ${cls%% |*} -> the (R) fallback signal | ${cls#*| }";; esac | tee -a summary.txt; }
+# hp3_seed_plan W NF (HP3 Amendment 1 part 7): after seed 3410 completes, the number of confirmation seeds n that fit, by TIMING alone:
+# need(k) = (k - 1) x W + 360 s x NF x k (the evaluator's pass, ~6 min a run) + 900 s (can_run's reserve), against left() - 900. n is the
+# largest k in {5, 4, 3} that fits, else 0 (a host-limited NOT_READ). It writes hp3/seed_plan.json BEFORE any later seed or the
+# evaluator's pass, and echoes n. No loss, receipt or verdict is read.
+hp3_seed_plan(){ local SW=$1 NF=$2 L k n=0 need=""
+  L=$(left)
+  for k in 5 4 3; do local nk=$(( (k - 1) * SW + 360 * NF * k + 900 ))
+    need="$need \"$k\": $nk,"; [ $n = 0 ] && [ $nk -le $(( L - 900 )) ] && n=$k; done
+  $PY_E4B -c "import json,sys,time; n,W,L,nf=map(int,sys.argv[2:6]); seeds=[3410,3411,3412,3413,3414][:n]
+json.dump({'n': n, 'seeds': seeds, 'basis': 'timing', 'seed1_wall_s': W, 'left_s': L, 'frameworks': nf, 'need_s': json.loads(sys.argv[6]),
+           'eval_s_per_run': 360, 'reserve_s': 900, 'written_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+           'reason': ('fit: %d seeds at seed 3410\\'s wall time %d s' % (n, W)) if n else 'host-limited: fewer than 3 seeds fit at seed 3410\\'s wall time %d s' % W},
+          open(sys.argv[1], 'w'), indent=1)" $W/hp3/seed_plan.json $n $SW $L $NF "{${need%,} }" || { echo 0; return 1; }
+  echo $n; }
 hp3_run(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 RC=$8 TOK=$9 TS=${10}; shift 10
   can_run 1500 $FAM/$FW/$TAG && HP3_VENV=1 arm $FAM $FW $TAG $ARM $AL "$MID" $REV 0 $RC $TOK $TS "$@"; }
 tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=${8:-0} TOK TS TOKC TSC rc s fw B RT OKF st x ALL=""
@@ -2869,8 +2883,19 @@ tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=$
   RT=$($PY_H3E -c "import json,sys; print(float(json.load(open(sys.argv[1]))['roundtrip_zero_centred_tol']))" $W/hp3/g1.json) \
     || { echo "HP3 G1_UNUSABLE (no 6(b) tolerance in g1.json)" | tee -a summary.txt; rm -rf $SC; return 0; }
   echo "HP3 G1' readable frameworks: $OKF; 6(b) VOIDs a run iff its adapter round trip exceeds $RT; no redraw" | tee -a summary.txt
-  local X="--hp1-export $W/hp1" BE=1 BU=1 BA=1
+  local X="--hp1-export $W/hp1" BE=1 BU=1 BA=1 T0 i=0 NPLAN=5 PLAN=() NF
+  NF=$(echo $OKF | wc -w | tr -d ' '); T0=$(date +%s)
   for s in $SEEDS; do
+    i=$((i + 1))
+    if [ "$SHAKE" != 1 ] && [ $i = 2 ]; then       # Amendment 1 part 7: the seed plan, from seed 3410's wall time across every framework
+      NPLAN=$(hp3_seed_plan $(( $(date +%s) - T0 )) $NF) || NPLAN=0
+      PLAN=(--seed-plan $W/hp3/seed_plan.json)
+      echo "HP3 SEED_PLAN n=$NPLAN ($($PY_E4B -c "import json,sys; print(json.load(open(sys.argv[1]))['reason'])" $W/hp3/seed_plan.json 2>/dev/null))" | tee -a summary.txt
+      if [ "$NPLAN" = 0 ]; then
+        echo "HP3 HOST_LIMITED: fewer than 3 complete seeds fit inside the guard; NOT_READ, a host refusal note, no strike" | tee -a summary.txt
+        rm -rf $SC; hp1_bulk_manifest "$W"; return 0; fi
+    fi
+    [ $i -gt $NPLAN ] && break
     case " $OKF " in *" e4b "*) B=""; [ $BE = 1 ] && { B="--hp1-export-base 1"; BE=0; }
       TC1_ARM_EXTRA_ENV="$E" hp3_run $AF e4b hp3_k00_s$s fused $EAL "$TM" $TR $RC $TLS $TS --attn-4bit 1 $(hp1_cell k00 $s) --seed $s --order-seed $s $X $B;; esac
     case " $OKF " in *" unsloth "*) B=""; [ $BU = 1 ] && { B="--hp1-export-base 1"; BU=0; }
@@ -2890,7 +2915,8 @@ tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=$
     --zero-report-only 1 --roundtrip-zero-centred $RT --out $W/hp3/eval_P.json > logs/hp3_eval_P.log 2>&1; tail -1 logs/hp3_eval_P.log
   rm -rf $SC
   hp1_bulk_manifest "$W"
-  $PY_H3E $W/hp3_reduce.py verdict $W/hp3/eval_P.json --g1 $W/hp3/g1.json --manifest $W/hp1/bulk_manifest.json "${RCP[@]}" --out $W/hp3/verdict.json 2>&1 | tee -a summary.txt
+  $PY_H3E $W/hp3_reduce.py verdict $W/hp3/eval_P.json --g1 $W/hp3/g1.json --manifest $W/hp1/bulk_manifest.json "${RCP[@]}" ${PLAN[@]+"${PLAN[@]}"} \
+    --out $W/hp3/verdict.json 2>&1 | tee -a summary.txt
   if [ "$SHAKE" = 1 ]; then      # the kit check: every run that exists is non-VOID (one seed, so the pairs themselves read NOT_READ)
     $PY_H3E -c "import json,sys; v=json.load(open(sys.argv[1]))['void']; bad={k: w for k, w in v.items() if w != 'absent'}
 print('HP3 SHAKEDOWN_OK' if not bad else 'HP3 SHAKEDOWN_FAILED ' + json.dumps(bad)); sys.exit(1 if bad else 0)" $W/hp3/verdict.json 2>&1 | tee -a summary.txt

@@ -17,7 +17,7 @@ import hp3_reduce as R  # noqa: E402
 
 H1 = R.H1
 CELLS = ((0.001, 0.0), (0.002, 0.0), (0.002, 0.5), (0.003, 0.0), (0.003, 0.5), (0.005, 0.0), (0.005, 0.82))
-SEED_COUNTS = (3, 5, 8)
+SEED_COUNTS = (3, 5, 8)   # the evaluator's columns; one RNG stream, so the quoted table reproduces only at this order
 
 
 def p_verdicts(sigma, rho, n, reps, rng):
@@ -35,22 +35,25 @@ def p_verdicts(sigma, rho, n, reps, rng):
     return {k: v / reps for k, v in counts.items()}
 
 
-def table(reps=4000, seed=20261021):
+def table(reps=4000, seed=20261021, counts=SEED_COUNTS):
     rng = random.Random(seed)
-    return {(s, r): {n: p_verdicts(s, r, n, reps, rng) for n in SEED_COUNTS} for s, r in CELLS}
+    return {(s, r): {n: p_verdicts(s, r, n, reps, rng) for n in counts} for s, r in CELLS}
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--reps", type=int, default=4000)
     ap.add_argument("--seed", type=int, default=20261021)
+    ap.add_argument("--counts", default=",".join(map(str, SEED_COUNTS)),
+                    help="seed counts, comma-separated (Amendment 1 part 7 quotes --counts 4 on its own stream)")
     a = ap.parse_args(argv)
-    t = table(a.reps, a.seed)
+    counts = tuple(int(x) for x in a.counts.split(","))
+    t = table(a.reps, a.seed, counts)
     print(f"ESTIMATE, P(PARITY | true Delta = 0), registered verdict order; {a.reps} reps, seed {a.seed}")
-    print("sigma  rho   " + "  ".join(f"n={n}" for n in SEED_COUNTS) + "   false-directional at n=" + "/".join(map(str, SEED_COUNTS)))
+    print("sigma  rho   " + "  ".join(f"n={n}" for n in counts) + "   false-directional at n=" + "/".join(map(str, counts)))
     for (s, r), row in t.items():
-        par = "  ".join(f"{row[n]['PARITY']:.2f}" for n in SEED_COUNTS)
-        fd = "/".join(f"{row[n]['BEATS'] + row[n]['BEHIND']:.3f}" for n in SEED_COUNTS)
+        par = "  ".join(f"{row[n]['PARITY']:.2f}" for n in counts)
+        fd = "/".join(f"{row[n]['BEATS'] + row[n]['BEHIND']:.3f}" for n in counts)
         print(f"{s:.3f}  {r:.2f}  {par}   {fd}")
     return 0
 

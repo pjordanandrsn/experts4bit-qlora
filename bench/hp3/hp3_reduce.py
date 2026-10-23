@@ -19,6 +19,7 @@ deltaN is reported with the in-loop term named. Then the three-way read. Exit 0 
 import argparse
 import json
 import math
+import os
 import statistics
 import sys
 from pathlib import Path
@@ -202,13 +203,32 @@ def seed_rho(a_ys, b_ys, seeds=SEEDS):
     return round(sum((p - mx) * (q - my) for p, q in zip(x, y)) / math.sqrt(sxx * syy), 4)
 
 
-def verdict(evs, g1rec, receipts):
-    """The verdict record from the confirmation evaluator output(s), the G1' record and the arm receipts {tag: receipt}."""
+PLAN_COUNTS = (3, 4, 5)   # Amendment 1 part 7: the seed counts a plan may name (0 = host-limited, nothing read)
+
+
+def plan_seeds(plan):
+    """(n, seeds, reason) from the runner's hp3/seed_plan.json (Amendment 1 part 7), or ValueError. The plan is decided by timing alone,
+    so it must say so; it names a PREFIX of SEEDS of length 3, 4 or 5, or 0 (host-limited)."""
+    if plan is None:
+        return len(SEEDS), list(SEEDS), "no seed plan: the registered five seeds"
+    n = plan.get("n")
+    if type(n) is not int or (n != 0 and n not in PLAN_COUNTS):
+        raise ValueError(f"seed plan n={n!r} is not 0, 3, 4 or 5")
+    if plan.get("basis") != "timing":
+        raise ValueError(f"seed plan basis {plan.get('basis')!r} is not 'timing'")
+    if plan.get("seeds") != list(SEEDS[:n]):
+        raise ValueError(f"seed plan seeds {plan.get('seeds')!r} are not the first {n} of {list(SEEDS)}")
+    return n, list(SEEDS[:n]), str(plan.get("reason") or "")
+
+
+def verdict(evs, g1rec, receipts, plan=None):
+    """The verdict record from the confirmation evaluator output(s), the G1' record, the arm receipts {tag: receipt} and the seed plan."""
+    n_seeds, seeds, plan_reason = plan_seeds(plan)
     arms = _runs(evs)
     ys, recs, voids, rho = {f: {} for f in FRAMEWORKS}, {f: [] for f in FRAMEWORKS}, {}, {f: {} for f in FRAMEWORKS}
     ok_fw = {f for f, st in (g1rec.get("frameworks") or {}).items() if st.get("g1") == "PASS"}
     for fw in sorted(ok_fw):
-        for s in SEEDS:
+        for s in seeds:
             a = arms.get((fw, s))
             why = _void(fw, a, receipts)
             if why:
@@ -218,9 +238,16 @@ def verdict(evs, g1rec, receipts):
             rho[fw][s] = a.get("evaluator_minus_inloop_final")
             recs[fw].append({"tag": a["tag"], "seed": s, "order": a.get("order"), "own_base_only": bool(a.get("own_base_only"))})
     out = {"reducer": "bench/hp3/hp3_reduce.py verdict", "scope": SCOPE, "labels": LABELS, "g1": g1rec.get("verdict"), "void": voids,
-           "y": {fw: {str(s): v for s, v in d.items()} for fw, d in ys.items() if d}, "pairs": {}}
+           "y": {fw: {str(s): v for s, v in d.items()} for fw, d in ys.items() if d}, "pairs": {},
+           "seed_count": n_seeds, "seeds_read": seeds, "seed_plan_reason": plan_reason,
+           "reduced_power": (f"a reduced-power read on {n_seeds} seeds (Amendment 1 part 7), never upgraded later" if 0 < n_seeds < len(SEEDS)
+                             else None)}
     for a, b in PAIRS:
         name = f"{a}-{b}"
+        if n_seeds == 0:
+            out["pairs"][name] = {"verdict": "NOT_READ", "scope": SCOPE,
+                                  "wording": WORDING["NOT_READ"].format(why=f"host-limited, no seed read ({plan_reason})")}
+            continue
         if a not in ok_fw or b not in ok_fw:
             closed = [f for f in (a, b) if f not in ok_fw]
             st = [(g1rec.get("frameworks") or {}).get(f, {}).get("g1", "ABSENT") for f in closed]
@@ -240,11 +267,11 @@ def verdict(evs, g1rec, receipts):
             continue
         sigma, sigma_df, _ = H1.pooled_sd([(f"P:{a}", list(ys[a].values())), (f"P:{b}", list(ys[b].values()))])
         m = min(max(sigma, H1.MARGIN_FLOOR), H1.MARGIN_CAP)
-        head = paired_reading(f"{a} vs {b}", ys[a], recs[a], ys[b], recs[b], sigma, m)
-        e = [rho[a][s] - rho[b][s] for s in SEEDS]
+        head = paired_reading(f"{a} vs {b}", ys[a], recs[a], ys[b], recs[b], sigma, m, seeds=seeds)
+        e = [rho[a][s] - rho[b][s] for s in seeds]
         out["pairs"][name] = {"verdict": head["verdict"], "wording": WORDING[head["verdict"]].format(a=a, b=b), "scope": SCOPE,
                               "m": m, "sigma_seed": sigma, "sigma_seed_df": sigma_df, "headline": head,
-                              "rho_seed_reported": seed_rho(ys[a], ys[b]),
+                              "rho_seed_reported": seed_rho(ys[a], ys[b], seeds=seeds),
                               "deltaN_reported": {"mean": round(statistics.mean(e), 6), "per_seed": e,
                                                   "term": "in-loop (the two frameworks' training forwards at step N)"}}
     vs = {k: p["verdict"] for k, p in out["pairs"].items()}
@@ -280,6 +307,7 @@ def main(argv=None):
     a2.add_argument("--g1", required=True)
     a2.add_argument("--arm-receipt", action="append", default=[], help="an axolotl confirmation arm's receipt (its tag inside)")
     a2.add_argument("--manifest", action="append", default=[])
+    a2.add_argument("--seed-plan", help="the runner's hp3/seed_plan.json (Amendment 1 part 7); it must predate every evaluator output")
     a2.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     try:
@@ -298,7 +326,13 @@ def main(argv=None):
         for p in a.arm_receipt:
             q = json.load(open(p))
             receipts[q.get("tag")] = q
-        rec, code = verdict([json.load(open(p)) for p in a.evals], json.load(open(a.g1)), receipts)
+        plan = None
+        if a.seed_plan:
+            late = [p for p in a.evals if os.path.getmtime(a.seed_plan) > os.path.getmtime(p)]
+            if late:
+                raise ValueError(f"the seed plan is newer than the evaluator output {late}: a plan written after the evaluator's pass")
+            plan = json.load(open(a.seed_plan))
+        rec, code = verdict([json.load(open(p)) for p in a.evals], json.load(open(a.g1)), receipts, plan)
         json.dump(rec, open(a.out, "w"), indent=1)
         print(f"HP3_VERDICT three_way={rec['three_way']['verdict']} "
               + " ".join(f"{k}={p['verdict']}" for k, p in rec["pairs"].items()) + f" ({SCOPE})")

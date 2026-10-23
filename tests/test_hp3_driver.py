@@ -33,7 +33,8 @@ def drive(tmp_path, **env):
                                      "H3_REASON=${STUB_H3REASON:-}; DS_ALPACA_SHA=d;")
                      .replace('echo "$1 $2 $3 UNS_VENV=${UNS_VENV:-}" >> "$W/venv.log";',
                               'echo "$1 $2 $3 UNS_VENV=${UNS_VENV:-}" >> "$W/venv.log"; echo "$1 $2 $3 HP3_VENV=${HP3_VENV:-}" >> "$W/h3venv.log";')
-                     .replace("5400 2400 3600 3600", "5400 2400 3600 5400 ${HP3_SHAKE:-0}"))
+                     .replace("5400 2400 3600 3600", "5400 2400 3600 5400 ${HP3_SHAKE:-0}")
+                     .replace("say(){", "left(){ echo ${STUB_LEFT:-100000}; }\nsay(){"))
         return D.drive(tmp_path, FAMILY_FN="tc1_hp3_family", **env)
     finally:
         D.FAKEPY, D.HARNESS = fakepy, harness
@@ -195,3 +196,31 @@ def test_a_shakedown_arm_that_does_not_run_signals_r_unless_its_class_is_a_host_
 def test_the_read_box_reports_a_calibration_failure_without_any_fallback_signal(tmp_path):
     _, summary = drive(tmp_path, FAMILY_FAM="qwen3hp3", FAIL_FAM="qwen3hp3", FAIL_STATUS="error")
     assert "HP3 CALIB_ARM_FAILED e4b error" in summary and "fallback" not in summary and "ARM_FAILED e4b/" not in summary
+
+
+def test_the_read_writes_its_seed_plan_before_seed_3411_and_hands_it_to_the_reducer(tmp_path):
+    """Amendment 1 part 7: after seed 3410, the plan (timing only) is written before any later seed's arm, and the verdict reads it."""
+    arms, summary = drive(tmp_path, FAMILY_FAM="qwen3hp3")
+    plan = json.loads((tmp_path / "hp3" / "seed_plan.json").read_text())
+    assert plan["n"] == 5 and plan["basis"] == "timing" and plan["seeds"] == [3410, 3411, 3412, 3413, 3414] and "HP3 SEED_PLAN n=5" in summary
+    first_3411 = tmp_path / "qwen3hp3_e4b_hp3_k00_s3411.json"
+    assert (tmp_path / "hp3" / "seed_plan.json").stat().st_mtime_ns <= first_3411.stat().st_mtime_ns
+    ver = next(ln for ln in (tmp_path / "py.log").read_text().splitlines() if "hp3_reduce.py verdict" in ln)
+    assert f"--seed-plan {tmp_path}/hp3/seed_plan.json" in ver
+
+
+def test_a_short_deadline_reads_four_seeds_and_a_shorter_one_stops_after_seed_3410(tmp_path):
+    (tmp_path / "four").mkdir()
+    arms, summary = drive(tmp_path / "four", FAMILY_FAM="qwen3hp3", STUB_LEFT="6400")     # need(5) 6300 > 5500 >= need(4) 5220
+    conf = [a[2] for a in arms if a[0] == "qwen3hp3" and not a[2].startswith("hp3cal")]
+    assert conf == [f"hp3_{r}_s{s}" for s in (3410, 3411, 3412, 3413) for r in ("k00", "unsloth", "axolotl")] and "HP3 SEED_PLAN n=4" in summary
+    (tmp_path / "none").mkdir()
+    arms, summary = drive(tmp_path / "none", FAMILY_FAM="qwen3hp3", STUB_LEFT="3000")
+    conf = [a[2] for a in arms if a[0] == "qwen3hp3" and not a[2].startswith("hp3cal")]
+    assert conf == ["hp3_k00_s3410", "hp3_unsloth_s3410", "hp3_axolotl_s3410"] and "HP3 HOST_LIMITED" in summary
+    assert "eval_P" not in (tmp_path / "none" / "py.log").read_text()
+
+
+def test_the_shakedown_writes_no_seed_plan(tmp_path):
+    _, summary = drive(tmp_path, FAMILY_FAM="qwen3hp3shake", HP3_SHAKE="1")
+    assert not (tmp_path / "hp3" / "seed_plan.json").exists() and "SEED_PLAN" not in summary

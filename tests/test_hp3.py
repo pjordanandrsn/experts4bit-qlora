@@ -206,3 +206,49 @@ def test_the_power_table_reproduces_the_amendments_quoted_cells():
     t = P.table(reps=4000, seed=20261021)
     assert [round(t[(0.002, 0.0)][n]["PARITY"], 2) for n in (3, 5, 8)] == [0.40, 0.81, 0.94]
     assert [round(t[(0.001, 0.0)][n]["PARITY"], 2) for n in (3, 5, 8)] == [0.86, 0.92, 0.94]
+    t4 = P.table(reps=4000, seed=20261021, counts=(4,))              # part 7's 4-seed column, its own stream
+    assert [round(t4[c][4]["PARITY"], 2) for c in ((0.002, 0.0), (0.003, 0.5), (0.005, 0.82))] == [0.66, 0.64, 0.73]
+
+
+def test_a_seed_plan_reads_its_prefix_and_names_the_reduced_power():
+    """Amendment 1 part 7: a plan of 4 seeds reads 3410-3413 (df 3) and says it is a reduced-power read."""
+    plan = {"n": 4, "seeds": [3410, 3411, 3412, 3413], "basis": "timing", "reason": "fit: 4 seeds at seed 3410's wall time 2400 s"}
+    out, code = R.verdict([_conf()], R.g1(_cal()), _receipts(), plan)
+    p = out["pairs"]["e4b-unsloth"]
+    assert code == R.EXIT_OK and out["seed_count"] == 4 and out["seeds_read"] == [3410, 3411, 3412, 3413]
+    assert p["headline"]["seeds"] == [3410, 3411, 3412, 3413] and p["headline"]["df"] == 3
+    assert "reduced-power read on 4 seeds" in out["reduced_power"] and out["seed_plan_reason"].startswith("fit: 4 seeds")
+    full, _ = R.verdict([_conf()], R.g1(_cal()), _receipts())
+    assert full["seed_count"] == 5 and full["reduced_power"] is None
+
+
+def test_a_host_limited_plan_reads_nothing_and_every_pair_is_not_read():
+    plan = {"n": 0, "seeds": [], "basis": "timing", "reason": "host-limited: fewer than 3 seeds fit at seed 3410's wall time 9000 s"}
+    out, code = R.verdict([_conf()], R.g1(_cal()), _receipts(), plan)
+    assert code == R.EXIT_INCOMPLETE and out["three_way"]["verdict"] == "NOT_READ"
+    assert all(p["verdict"] == "NOT_READ" and "host-limited" in p["wording"] for p in out["pairs"].values())
+
+
+def test_a_seed_plan_outside_the_registered_counts_or_not_by_timing_is_refused():
+    for bad in ({"n": 2, "seeds": [3410, 3411], "basis": "timing"}, {"n": 6, "seeds": list(range(3410, 3416)), "basis": "timing"},
+                {"n": 4, "seeds": [3410, 3411, 3412, 3414], "basis": "timing"}, {"n": 4, "seeds": [3410, 3411, 3412, 3413], "basis": "loss"},
+                {"n": "4", "seeds": [3410, 3411, 3412, 3413], "basis": "timing"}, {"seeds": [], "basis": "timing"}):
+        try:
+            R.plan_seeds(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted {bad}")
+
+
+def test_the_reducer_refuses_a_seed_plan_written_after_the_evaluators_pass(tmp_path):
+    import os
+    ev, g1, plan = tmp_path / "eval_P.json", tmp_path / "g1.json", tmp_path / "seed_plan.json"
+    g1.write_text(json.dumps(R.g1(_cal())))
+    plan.write_text(json.dumps({"n": 4, "seeds": [3410, 3411, 3412, 3413], "basis": "timing", "reason": "fit"}))
+    ev.write_text(json.dumps(_conf()))
+    os.utime(plan, (1000, 1000))
+    os.utime(ev, (2000, 2000))
+    args = ["verdict", str(ev), "--g1", str(g1), "--seed-plan", str(plan), "--out", str(tmp_path / "v.json")]
+    assert R.main(args) in (R.EXIT_OK, R.EXIT_INCOMPLETE) and json.loads((tmp_path / "v.json").read_text())["seed_count"] == 4
+    os.utime(plan, (3000, 3000))                                      # the plan now postdates the evaluator output
+    assert R.main(args) == R.EXIT_UNUSABLE
