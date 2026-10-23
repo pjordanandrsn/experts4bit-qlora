@@ -191,7 +191,14 @@ rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
   --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' \
   "root@$HOST:$W/" "$RUN_DIR/ho3/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/ho3" | wc -l | tr -d ' ') entries"
-[ -z "$(find "$RUN_DIR/ho3" -type l -print -quit)" ] || { say "fetch failed: a symlink arrived ($(find "$RUN_DIR/ho3" -type l -print -quit)); not committing it"; exit 22; }
+# A link that still arrives is recorded (path and target, never followed) in refused_links.txt and removed, so the run
+# dir holds no link and its receipt can still be committed; then the fetch refuses (exit 22).
+if [ -n "$(find "$RUN_DIR/ho3" -type l -print -quit)" ]; then
+  find "$RUN_DIR/ho3" -type l -print0 | while IFS= read -r -d '' l; do
+    printf '%q -> %q\n' "${l#"$RUN_DIR/ho3/"}" "$(readlink "$l")" >> "$RUN_DIR/ho3/refused_links.txt"; rm -f -- "$l"
+  done
+  say "fetch failed: $(wc -l < "$RUN_DIR/ho3/refused_links.txt" | tr -d ' ') symlink(s) arrived; recorded in refused_links.txt and removed"; exit 22
+fi
 [ "$(cat "$RUN_DIR/ho3/HO3_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/ho3/TP_DONE.$NONCE" ] || {
   [ "${LANE_DEAD:-0}" = 1 ] && { say "lane DIED on the box: its process was gone with no HO3_EXIT_CODE and no TP_DONE -- artifacts fetched, nothing measured"; exit 25; }

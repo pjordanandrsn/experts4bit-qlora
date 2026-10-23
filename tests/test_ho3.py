@@ -347,3 +347,23 @@ def test_the_fetch_never_imports_links():
     check = DRIVE.index('find "$RUN_DIR/ho3" -type l -print -quit')
     assert DRIVE.index("rsync -az --no-links") < check < DRIVE.index("HO3_RUN_NONCE\" 2>/dev/null")
 
+
+def test_a_fetched_link_is_recorded_removed_and_refused(tmp_path):
+    """The refusal block itself, run on a tree with links: each is recorded (never followed) and removed, then exit 22."""
+    start = DRIVE.index('if [ -n "$(find "$RUN_DIR/ho3" -type l -print -quit)" ]; then')
+    block = DRIVE[start:DRIVE.index("\nfi\n", start) + 4]
+    run = tmp_path / "run"
+    (run / "ho3" / "logs").mkdir(parents=True)
+    (run / "ho3" / "summary.txt").write_text("ok\n")
+    secret = tmp_path / "secret.env"
+    secret.write_text("TOKEN=x\n")
+    (run / "ho3" / "logs" / "a b.log").symlink_to(secret)
+    (run / "ho3" / "up").symlink_to("../../../etc")
+    script = 'say(){ echo "$*"; }\nRUN_DIR="$1"\n' + block + "echo passed\n"
+    r = subprocess.run(["bash", "-c", script, "x", str(run)], capture_output=True, text=True, timeout=30)
+    assert r.returncode == 22 and "2 symlink(s) arrived" in r.stdout, r.stdout + r.stderr
+    assert not [p for p in (run / "ho3").rglob("*") if p.is_symlink()]
+    rec = (run / "ho3" / "refused_links.txt").read_text()
+    assert "TOKEN" not in rec and str(secret) in rec and "../../../etc" in rec and rec.count("\n") == 2, rec
+    assert (run / "ho3" / "summary.txt").read_text() == "ok\n" and secret.read_text() == "TOKEN=x\n"
+

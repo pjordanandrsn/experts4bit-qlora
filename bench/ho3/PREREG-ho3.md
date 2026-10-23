@@ -53,8 +53,9 @@ launch commit for every box not yet started is this amendment's merge.
 
 The driver's fetch no longer imports links. A rented box is a third-party host: a symbolic link it left in its work
 directory, fetched as a link, could make a later store commit read a file on the controller instead. The fetch gains
-`--no-links`, and a fetched tree that still holds a link refuses with the fetch-failed exit (22) before anything reads
-it. Fetch-only: no package under test, row, rule, prediction, cap or id changes. The launch commit for every box not yet
+`--no-links`. A fetched tree that still holds a link refuses with the fetch-failed exit (22) before anything reads it:
+each link's path and target are recorded in `refused_links.txt` (the link is never followed) and the link is removed,
+so the evidence and the run's receipt can both be committed without a link in the store. Fetch-only: no package under test, row, rule, prediction, cap or id changes. The launch commit for every box not yet
 started is this amendment's merge.
 
 ## Stack and launch (bench/common rule 1)
