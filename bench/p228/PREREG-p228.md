@@ -118,7 +118,10 @@ called through `router_linear`. The bench therefore times e4b's real pinned path
   - A host with a recorded power cap of at least 575 W, read again on the box (rc 17 below it).
   - The pin and the expected and worst cost go on the bus before the create.
   - rent-watch is armed at the create (`--until`), and teardown is verified.
-- **Worst case:** at most $1.05/h, **guard 1.0 h**, at most 10 GB at <= $0.04/GB: 1.0 x $1.05 + 10 x $0.04 = **$1.45**.
+- **Worst case:** at most $1.05/h, **guard 1.0 h**, and a 10 GB download allowance at <= $0.04/GB:
+  1.0 x $1.05 + 10 x $0.04 = **$1.45**.
+  - The 10 GB is the download (the e4b install and its wheels), not the disk. The create asks for a 40 GB disk, and the
+    runner refuses under 20 GB free (rc 13). Amendment 2.
 - **The fit, with at least 25 % headroom.** Arithmetic, every term conservative:
   - **The selection:** 6 cells x up to 64 candidates (the heuristic request's bound; review, Amendment 1), each three
     graph calls of up to 384 ctypes launches (about 0.3 s), plus 40 replays of up to 4 ms (0.16 s). About 177 s.
@@ -167,3 +170,9 @@ called through `router_linear`. The bench therefore times e4b's real pinned path
   - `tests/test_p228.py` reduces it to SHAKEDOWN with every structural check passed.
   - Five departures from it each VOID `o_proj` alone.
   - A mutant without the "block B timed the pin block A's rule names" check accepts one of them.
+
+## Amendment 2 (2026-10-23, before any reading): wording only
+
+- **The budget's 10 GB term** is the download allowance, not the disk. The create asks for a 40 GB disk, and the
+  runner refuses under 20 GB free (rc 13). The worst case ($1.45), the guard and every constant are unchanged. P229's
+  review found the wording; this lane carries the same correction.
