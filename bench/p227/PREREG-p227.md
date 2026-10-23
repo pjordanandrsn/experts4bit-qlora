@@ -310,6 +310,9 @@ P222's, with the arms above. Everything not named here is P222's.
     - A single rc 41 is not a strike; two consecutive rc 41 count as one strike under the cross-lane rule
       (Amendment 2), unchanged.
     - A refusal at create and a pre-flight teardown count toward nothing.
+    - The same applies to the per-family stop ("Two consecutive runs in which a family is not read stop the lane for
+      that family", The rule): it counts only runs whose runner reached the reading, so an rc 17 box, an rc 41 box, a
+      refusal at create and a pre-flight teardown never count toward it.
     - Decided pre-data: no P227 box has run. Why: rc 17 is the host's power floor and rc 41 the guard fit, both
       refusals before any install; the stop exists to end a lane whose kit cannot produce a reading, not to let capped
       hosts end it.
