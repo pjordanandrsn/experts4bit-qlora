@@ -57,8 +57,8 @@ NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "ref
 PASS="P225_RUN_ID=$RUN_ID P225_RUN_NONCE=$NONCE P225_DEADLINE_EPOCH=$DEADLINE P225_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
 # Explicit IDs only: the reading (-1) and two spares (-2, -3); the shakedowns (-1..-3, and -4..-6 from Amendment 4).
 case "$RUN_ID" in
-  p225-5090-1|p225-5090-2|p225-5090-3) :;;
-  *) say "refusing unregistered run ID: $RUN_ID (is not p225-5090-N)"; exit 78;;
+  p225-5090-1|p225-5090-2|p225-5090-3|p225-5090-r1|p225-5090-r2|p225-5090-r3|p225-5090-r4) :;;   # Amendment 1: r1..r4, the refusal-retry ids
+  *) say "refusing unregistered run ID: $RUN_ID (is not p225-5090-N or p225-5090-rN)"; exit 78;;
 esac
 if [ "${P225_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p225_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p225"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/p225; deadline $DEADLINE"

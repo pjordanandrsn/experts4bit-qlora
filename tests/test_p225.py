@@ -312,6 +312,16 @@ def test_run_ids_agree_across_runner_driver_and_prereg():
     assert "`p225-5090-1`" in PREREG
 
 
+def test_amendment_1_adds_exactly_the_four_refusal_retry_ids():
+    retry = [f"p225-5090-r{i}" for i in (1, 2, 3, 4)]
+    for rid in retry:
+        assert f"{rid}|" in RUN or f"{rid})" in RUN
+        assert f"{rid}|" in DRIVE or f"{rid})" in DRIVE
+    assert "p225-5090-r5" not in RUN and "p225-5090-r5" not in DRIVE        # exactly the registered refusal cap of 4
+    assert "p225-5090-4" not in RUN and "p225-5090-4" not in DRIVE          # the 3-box-started cap is not widened
+    assert "**`p225-5090-r1` to `p225-5090-r4`**, exactly the registered" in PREREG
+
+
 def test_no_shakedown_and_no_fixture_generation():
     assert "SHAKE=0" in RUN and "fixture_base" not in RUN and "FIXTURE" not in RUN
     assert "fixture_base.py" not in DRIVE

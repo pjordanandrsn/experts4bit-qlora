@@ -22,7 +22,8 @@ CANARY_SHA256=91c24ea851fec34c4e74cb589a0e42cbed2e0b84f1af813f013a57f8cda7da07  
 INSTALL_TO_GATE_S=450   # the install and the self-tests (P224's)
 MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39   # the SC1 pin, as P224
 case "$P225_RUN_ID" in
-  p225-5090-1|p225-5090-2|p225-5090-3) TIER=a;;        # the 30-Mops floor (the ruling); no fallback tier at this N
+  p225-5090-1|p225-5090-2|p225-5090-3|p225-5090-r1|p225-5090-r2|p225-5090-r3|p225-5090-r4) TIER=a;;   # the 30-Mops floor (the ruling); no fallback tier
+  # at this N; r1..r4 are Amendment 1's refusal-retry ids, the same tier and terms (one per registered HOST_REFUSED)
   *) say "unregistered run ID: $P225_RUN_ID"; finish 78;;
 esac
 # ---- every fixed need and alarm (PREREG "The alarms"; p225_derive.py writes them, tests/test_p225.py parses them)
