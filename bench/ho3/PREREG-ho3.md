@@ -19,6 +19,30 @@ one, and a model fetch then raises `TypeError` on some hosts. The install gains 
 fetch is retried once before the box refuses. No package under test, row, rule, prediction or cap changes. The staged
 `ho3_run.sh` hash moves with it, so the launch commit is this amendment's merge.
 
+## Amendment 2 (pre-data for every box not yet started, 2026-10-23)
+
+Registered at `e4230f82` (Amendment 1, #2047). Two boxes have been read under it, and this amendment changes neither: the
+RTX 4090's first box read VOID, because its host listed no per-process memory in `nvidia-smi --query-compute-apps` and
+every row took zero driver samples (strike 1 in Part A, counted as registered). The RTX 5090's first box read COVERED.
+
+The runner gains one host refusal before the install. `ho3_drvprobe.py` runs Loggetta 0.6.2's own `DriverMemorySampler`,
+the code that fills each row's driver peak, on a process holding 256 MiB on the GPU for 5 s. It refuses with rc 19 when
+the sampler takes no sample, or reads a peak below 256 MiB. The sampler is staged as `loggetta_measure.py`, Loggetta
+0.6.2's `loggetta/measure.py` byte for byte, and pinned in `staged-ho3.sha256`. After the install, the tripwire checks that
+the installed `loggetta.measure` is that file, so the probe and the rows run the same code. The probe's self-test runs the
+sampler against seven `nvidia-smi` outputs, among them the empty one this lane's VOID box returned, a process listed under
+another pid, and memory reported as `[N/A]`.
+
+- rc 19 is a host refusal before the install (bench/common rule 3). It starts no box and counts toward nothing.
+  `ho3_reduce.py --classify` holds this runner's pre-install exits, and its self-test now holds 12 of HO3's cases.
+- After three consecutive rc 19 on one card, the driver refuses that card's next box: stop and report, so a run of hosts
+  that hide per-process memory cannot become a rental loop.
+- The pin screen skips machines the host registry already marks as hiding per-process memory.
+
+No package under test, row, rule, prediction, cap or id changes. A box refused here costs its time to the refusal, as an
+rc 41 box does, and the lane worst already prices that time for every id beyond the caps. The staged hashes move, so the
+launch commit for every box not yet started is this amendment's merge.
+
 ## Stack and launch (bench/common rule 1)
 
 - **Launch commit:** every box's kit and driver launch from the latest amendment's merge commit (Amendment 1).
@@ -88,7 +112,7 @@ UNREAD only when the runner recorded a deadline skip for it (`SKIPPED train <row
 family with an UNREAD row and no VOID row reads UNREAD; the box reads VOID if either family is VOID, else UNREAD if either
 is UNREAD.
 
-`bench/ho3/ho3_reduce.py --self-test` holds HO2's 17 cases and 11 of HO3's; `tests/test_ho3.py` the rest.
+`bench/ho3/ho3_reduce.py --self-test` holds HO2's 17 cases and 12 of HO3's (Amendment 2 adds the pre-install classes); `tests/test_ho3.py` the rest.
 
 ## Run ids, outcomes, caps and the stop (bench/common rules 2–4)
 

@@ -6,6 +6,7 @@ is recorded as a finding beside the row and never changes the row's outcome. A r
 needs its host peak inside the host estimate (HOST_UNDER otherwise). It computes no band.
 
     python ho3_reduce.py --dir RUN_DIR --run-id ho3-5090-1 --launch SHA --e4b SHA --gnf4 SHA --loggetta SHA --out verdict_ho3.json
+    python ho3_reduce.py --classify RC   # bench/common rule 3's class of a runner exit that precedes the install
     python ho3_reduce.py --self-test
 """
 from __future__ import annotations
@@ -36,6 +37,22 @@ TAGS = tuple(f"{f}_{s}" for f in FAMILIES for s in SEQS)
 #: what a row must be; the tests read a real receipt against its own run's values through this
 REGISTRATION = {"families": FAMILIES, "data": ALPACA, "format": "text", "steps": STEPS, "micro_batch": MICRO_BATCH, "cards": CARDS,
                 "plans": REGISTERED_PLANS}
+#: bench/common rule 3 for the runner's exits BEFORE its install (ho3_run.sh, before `phase_start install`): none started a
+#: box. The host refusals count toward nothing (HO3 registers no refusal cap): the card (15), the disk (13), the host RAM
+#: (16), CUDA (18) and, from Amendment 2, the driver peak the rows could not sample (19). The guard fit (41) is no strike
+#: alone; two consecutive are one. Every other exit is decided from the launcher's receipt by bench/common's table.
+PRE_INSTALL = {13: "HOST_REFUSED", 15: "HOST_REFUSED", 16: "HOST_REFUSED", 18: "HOST_REFUSED", 19: "HOST_REFUSED",
+               41: "GUARD_FIT"}
+
+
+def classify(rc: int) -> dict:
+    cls = PRE_INSTALL.get(rc)
+    if cls is None:
+        return {"rc": rc, "class": None, "why": "not a pre-install refusal: bench/common's table decides from the receipt"}
+    return {"rc": rc, "class": cls, "started": False, "strike": False,
+            "counts_toward": "nothing" if cls == "HOST_REFUSED" else "two consecutive count as one strike"}
+
+
 #: the plan lines a receipt on file would have supplied; with none on file each reads "inferred" (planner.py's defaults)
 OVERHEADS = ("allocator reserve", "CUDA context", "process baseline")
 
@@ -274,12 +291,17 @@ def self_test():
     # (7) A retry id names its card the same way; an A4000 box never reads as a 4090's.
     assert reduce(b, "ho3-a4000-r3", pins)["verdict"] == "COVERED"
     assert reduce(b, "ho3-4090-1", pins)["verdict"] == "VOID"
-    print("ho3 reducer self-test OK (17 HO2 cases + 11 HO3 cases)")
+    # (8) Amendment 2: the driver-peak refusal (rc 19) is a host refusal before the install, counting toward nothing.
+    c = classify(19)
+    assert c["class"] == "HOST_REFUSED" and not c["started"] and not c["strike"] and c["counts_toward"] == "nothing", c
+    assert classify(41)["class"] == "GUARD_FIT" and classify(0)["class"] is None and classify(9)["class"] is None
+    print("ho3 reducer self-test OK (17 HO2 cases + 12 HO3 cases)")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--self-test", action="store_true")
+    ap.add_argument("--classify", type=int, metavar="RC")
     ap.add_argument("--dir")
     ap.add_argument("--run-id")
     ap.add_argument("--launch")
@@ -290,6 +312,9 @@ def main():
     a = ap.parse_args()
     if a.self_test:
         self_test()
+        return 0
+    if a.classify is not None:
+        print(json.dumps(classify(a.classify), sort_keys=True))
         return 0
     v = reduce(load(a.dir), a.run_id, {"launch": a.launch, "e4b": a.e4b, "gnf4": a.gnf4, "loggetta": a.loggetta},
                skipped=load_skipped(a.dir))

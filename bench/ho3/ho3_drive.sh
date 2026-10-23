@@ -19,7 +19,7 @@ source "$LANE_HELPER" || { say "refusing: missing lane liveness helper"; exit 78
 # The staging: this lane's runner and reducer, and the phase stamps. staged-ho3.sha256 pins every one by the name the
 # box sees.
 COMMON="$REPO/bench/common"
-STAGE="$HERE/ho3_run.sh $HERE/ho3_reduce.py $COMMON/phases.sh $HERE/staged-ho3.sha256"
+STAGE="$HERE/ho3_run.sh $HERE/ho3_reduce.py $HERE/ho3_drvprobe.py $HERE/loggetta_measure.py $COMMON/phases.sh $HERE/staged-ho3.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged-ho3.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same map as tests/test_ho3.py, checked in CI).
@@ -27,7 +27,7 @@ sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
 while read -r want name; do
   case "$want" in \#*|"") continue;; esac
   case "$name" in
-    ho3_run.sh|ho3_reduce.py) src="$HERE/$name";;
+    ho3_run.sh|ho3_reduce.py|ho3_drvprobe.py|loggetta_measure.py) src="$HERE/$name";;
     phases.sh) src="$COMMON/$name";;
     *) say "refusing: staged-ho3.sha256 names $name, which this driver does not stage"; exit 78;;
   esac
@@ -78,6 +78,38 @@ case "$RUN_ID" in
     done
     ;;
 esac
+# Amendment 2: three consecutive driver-peak refusals (the runner's rc 19) on one card stop that card: stop and report,
+# never a rental loop. Earlier boxes of this card are ordered by the launcher's instance.json "at"; an earlier box that
+# ran this runner but whose exit or time is unreadable refuses (fail closed).
+CARD=${RUN_ID#ho3-}; CARD=${CARD%%-*}
+RUNS_ROOT=$(cd "$RUN_DIR/../.." 2>/dev/null && pwd) || { say "refusing: cannot read the runs root above $RUN_DIR"; exit 78; }
+TAIL19=$(python3 - "$RUNS_ROOT" "$CARD" "$RUN_DIR" <<'PYC'
+import glob, json, os, sys
+root, card, here = sys.argv[1], sys.argv[2], os.path.realpath(sys.argv[3])
+boxes = []
+for d in glob.glob(f"{root}/*/ho3-{card}-*"):
+    if os.path.realpath(d) == here or not os.path.isdir(f"{d}/ho3"):
+        continue
+    codes = glob.glob(f"{d}/ho3/HO3_EXIT_CODE.*")
+    try:
+        at = json.load(open(f"{d}/instance.json"))["at"]
+        rc = open(codes[0]).read().strip() if len(codes) == 1 else "none"
+    except (OSError, KeyError, ValueError):
+        print(f"unreadable {os.path.basename(d)}"); sys.exit()
+    boxes.append((at, rc))
+n = 0
+for _, rc in sorted(boxes, reverse=True):
+    if rc != "19":
+        break
+    n += 1
+print(n)
+PYC
+)
+case "$TAIL19" in
+  unreadable*) say "refusing: earlier $CARD box ${TAIL19#unreadable } ran this runner but its exit or time is unreadable"; exit 78;;
+  ''|*[!0-9]*) say "refusing: cannot count earlier driver-peak refusals ($TAIL19)"; exit 78;;
+esac
+[ "$TAIL19" -lt 3 ] || { say "refusing: $TAIL19 consecutive driver-peak refusals (rc 19) on the $CARD card -- stop and report (Amendment 2)"; exit 78; }
 if [ "${HO3_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash ho3_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/ho3"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/ho3; deadline $DEADLINE"
 $SSH "test ! -e $W && mkdir -p $W/logs /root/.cache/huggingface" || { say "stage failed: remote work directory exists"; exit 20; }
