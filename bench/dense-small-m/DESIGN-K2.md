@@ -54,6 +54,25 @@ it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
   refuses `M > 8` by name, and exports `GEMV_I8_MAX_ROWS = 8` so a caller can detect it. Every other refusal is
   unchanged.
 
+### Prior art: K37's `dense_i8.linear_i8` (released in grouped-nf4-gemm 0.49.0)
+
+grouped-nf4-gemm already serves int8 weights at 2 to 16 rows: K37's `linear_i8`, on the same `quantize_rows_int8`
+grid. e4b uses it for Mixtral's int8 attention projections (`engines/int8_attn.py`). It would keep the head's int8 bytes
+at 2 to 8 rows with no kernel change and no release. K2 does not take it as written, for two reasons:
+- **No row identity.** Its 2..16-row kernel (`_gemm_i8_small_kernel`, P149's) accumulates through `tl.dot` on a
+  16-row MMA tile. That is a different reduction from the one-row GEMV's `tl.sum`, so a row at M rows is not bitwise its
+  one-row output, and the head would stay batch-variant (section 4). K37 ships under a tolerance contract for exactly
+  this reason.
+- **No head plan.** Its plans were read at 4096-wide attention shapes (`p149k-5090-8`). The head's 151936 x 2048 would
+  run on `PLAN_SMALL_DEFAULT`, untimed.
+
+So the choice is between two routes:
+- **K2 as designed:** the bitwise identity, at the cost of a kernel PR and a release.
+- **The head on `linear_i8`:** the bytes now, at a tolerance.
+
+The kernel microbench (section 5, reading 1) reports `linear_i8` at the head's shape as a third arm, so the cost of the
+identity is measured, not assumed.
+
 ## 3. The e4b route (`engines/int8_head_bw.py`)
 
 - **The knob:** `E4B_INT8_HEAD_ROWS=8`, an opt-in upper bound on the rows the head routes to K36. Unset or `1` is
@@ -100,8 +119,8 @@ it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
 ## 5. Readings (registrations, later)
 
 1. **The kernel's microbench** (a grouped-nf4-gemm K-lane, one RTX 5090, 575 W). At the head's shape and M = 2, 4 and 8:
-   K36 multi-row against cuBLAS bf16 on the grid (the served path at those rows) and against K36 at one row, with the
-   byte floor reported.
+   K36 multi-row against cuBLAS bf16 on the grid (the served path at those rows), against K36 at one row, and against
+   K37's `linear_i8` (the released multi-row int8 path, section 2's prior art), with the byte floor reported.
    - The proposed bar: the multi-row call at M = 2 and 4 within 1.25x of K36's one-row time (the bytes are the same)
      and at most 0.70x of cuBLAS's.
    - The contract tests (bitwise per row, the old M = 1 unchanged, registers) are its premise.
