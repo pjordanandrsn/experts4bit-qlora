@@ -85,8 +85,16 @@ same tokens as claim-all on one fixed schedule. It is not a speed claim. Explore
 ## The rule (`bench/sc2/sc2j_reduce.py`, self-tested)
 
 **Gates.** A failure names the server or the phase.
-1. **ROUTES, ENGAGED, PROMPTS.** As SC2e's (`sc2c_reduce.routes_bad`, `sc2e_reduce.engagement`, the arm's largest
-   bucket), on every server; PROMPTS per ladder (512 tokens on Q2, 2,048 on Q3). Otherwise VOID.
+1. **ROUTES, ENGAGED, PROMPTS**, on every server, each VOID otherwise.
+   - ROUTES as SC2e's (`sc2c_reduce.routes_bad`).
+   - ENGAGED is SC2e's engagement at the server's own width, failing closed on every field it reads:
+     - the prefill graph on at T 512, with replays = every prompt admitted;
+     - `eager_reasons` present, with `later_chunk` the only nonzero reason, equal to `eager_chunks` and to 3 × the Q3
+       prompts admitted (a 2,048-token prompt runs its first chunk on the graph and three later chunks eagerly);
+     - `kv_bookkeeping` present with every field (bulk for every prompt, nothing per layer);
+     - `graph_stats` carrying every bucket of the width, each with `eager_steps` present and 0, and the widest
+       replayed.
+   - PROMPTS per ladder: 512 tokens on Q2, 2,048 on Q3.
 2. **POOL.** Every server's start `/health` reads its arm, as in the table. Otherwise VOID.
 3. **WIDTH.** Every `sh` server's `engine.max_seqs` is strictly above both of its draw's `ca` servers'. Otherwise
    UNREAD: the box's memory did not open a wider width, and nothing is read.
@@ -178,7 +186,7 @@ the reserved blocks and the waits per ladder. The pool's derivation as G3 record
 ## Shakedown, proof and budget (bench/common rules 2-5)
 
 **$0 shakedown.**
-- The self-tests of the reducer (`sc2j_reduce.py`, 21 cases), the contract arm (`sc2j_contract.py`, 10) and the long
+- The self-tests of the reducer (`sc2j_reduce.py`, 31 cases), the contract arm (`sc2j_contract.py`, 10) and the long
   prompt pool (`sc2j_prompts.py`).
 - The box's checks on fixtures (`tests/test_sc2j_box.py`): the POOL check executed on every departure, the tripwire,
   the lane's constants held equal across files, Guard Fit's static form, the cap and ids, and the wiring.

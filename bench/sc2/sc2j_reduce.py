@@ -127,33 +127,67 @@ def admitted(d, t) -> int:
     return sum(len(x["requests"]) for x in (_load(d, n + ".json") for n in run_names(t)) if x)
 
 
-def engagement_bad(t, end, prompts) -> list:
-    """ENGAGED (SC2e's check at the server's own width): the prefill graph on, replays = every prompt admitted (a
-    2,048-token Q3 prompt is four chunks: its first replays, its later chunks run eagerly as ``later_chunk``), bulk KV
-    for every prompt, the widest bucket replayed, no eager decode step."""
+LATER_PER_Q3 = Q3_PROMPT // T - 1          # a 2,048-token prompt in 512-token chunks: one replayed, three later
+
+
+def engagement_bad(t, end, prompts, q3_prompts=None) -> list:
+    """ENGAGED (SC2e's check at the server's own width), failing closed on every field it reads:
+    - the prefill graph on at T 512, replays = every prompt admitted, ``eager_reasons`` present with ``later_chunk``
+      the only nonzero reason, and ``eager_chunks`` present and equal to it (a 2,048-token Q3 prompt runs its first
+      chunk on the graph and its three later chunks eagerly, so ``later_chunk`` = 3 × the Q3 prompts admitted);
+    - ``kv_bookkeeping`` present with every field: bulk for every prompt, nothing per layer;
+    - ``graph_stats`` carrying EVERY bucket of the server's width, each with ``eager_steps`` present and 0, and the
+      widest replayed at least once."""
     if end is None:
         return [f"{t}: no end /health"]
     why = []
-    g = end.get("prefill_graph") or {}
-    er = g.get("eager_reasons") or {}
-    other = {k: v for k, v in er.items() if k != "later_chunk" and v}
-    if g.get("status") != "on" or g.get("T") != T or (prompts is not None and g.get("replays") != prompts) or other:
-        why.append(f"{t}: prefill_graph {g!r} (want on, T {T}, replays {prompts}, eager only later_chunk)")
-    k = end.get("kv_bookkeeping")
-    if not isinstance(k, dict) or "flush_bulk" not in k:
-        why.append(f"{t}: no built kv_bookkeeping block ({k!r})")
+    g = end.get("prefill_graph")
+    if not isinstance(g, dict):
+        why.append(f"{t}: no prefill_graph block ({g!r})")
     else:
-        n = prompts if prompts is not None else k.get("flush_bulk", 0)
-        if k.get("bulk") is not True or k.get("flush_bulk") != n or k.get("flush_layers") or not n:
-            why.append(f"{t}: kv_bookkeeping {k!r} (want bulk, flush_bulk {n})")
+        er = g.get("eager_reasons")
+        if g.get("status") != "on" or g.get("T") != T or prompts is None or g.get("replays") != prompts:
+            why.append(f"{t}: prefill_graph status {g.get('status')!r}, T {g.get('T')!r}, replays {g.get('replays')!r} "
+                       f"(want on, {T}, {prompts})")
+        if not isinstance(er, dict) or "later_chunk" not in er:
+            why.append(f"{t}: prefill_graph eager_reasons {er!r} (want a record with later_chunk)")
+        else:
+            other = {k: v for k, v in er.items() if k != "later_chunk" and v != 0}
+            if other:
+                why.append(f"{t}: eager prefill chunks other than later_chunk {other!r}")
+            if g.get("eager_chunks") is None or g.get("eager_chunks") != er.get("later_chunk"):
+                why.append(f"{t}: eager_chunks {g.get('eager_chunks')!r} != later_chunk {er.get('later_chunk')!r}")
+            if q3_prompts is not None and er.get("later_chunk") != LATER_PER_Q3 * q3_prompts:
+                why.append(f"{t}: later_chunk {er.get('later_chunk')!r} != {LATER_PER_Q3} x {q3_prompts} Q3 prompts")
+    k = end.get("kv_bookkeeping")
+    n = prompts
+    want = {"requested": True, "bulk": True, "flush_layers": 0, "flush_bulk": n, "ready_layers": 0, "ready_bulk": 0,
+            "ready_at_flush": n}
+    if not isinstance(k, dict):
+        why.append(f"{t}: no kv_bookkeeping block ({k!r})")
+    else:
+        bad = {x: k.get(x, "<missing>") for x, v in want.items() if x not in k or k[x] != v}
+        if bad or not n:
+            why.append(f"{t}: kv_bookkeeping {bad or k!r} (want {want})")
     e = end.get("engine") or {}
-    top = str(max(e.get("buckets") or [0]))
+    width = e.get("max_seqs")
     gs = e.get("graph_stats")
-    if not isinstance(gs, dict) or (gs.get(top) or {}).get("replays", 0) < 1:
-        why.append(f"{t}: bucket {top} never replayed ({gs!r})")
-    elif any(v.get("eager_steps") for v in gs.values()):
-        why.append(f"{t}: eager decode steps {gs!r}")
+    if not isinstance(width, int) or width < 1:
+        why.append(f"{t}: end /health engine.max_seqs {width!r}")
+    elif not isinstance(gs, dict):
+        why.append(f"{t}: no graph_stats ({gs!r})")
+    else:
+        for b in auto_buckets(width):
+            v = gs.get(str(b))
+            if not isinstance(v, dict) or "eager_steps" not in v or v["eager_steps"] != 0:
+                why.append(f"{t}: graph_stats bucket {b} {v!r} (want present with eager_steps 0)")
+        if (gs.get(str(width)) or {}).get("replays", 0) < 1:
+            why.append(f"{t}: bucket {width} never replayed ({gs.get(str(width))!r})")
     return why
+
+
+def q3_admitted(d, t) -> int:
+    return sum(len(x["requests"]) for x in (_load(d, f"{t}_q3r{rtag(r)}.json") for r in Q3_RATES) if x)
 
 
 def prompts_bad(d, t) -> list:
@@ -258,7 +292,7 @@ def reduce(d: str) -> dict:
             cls, why = missing(d, t, f"{t}: no end /health")
             (unread if cls == "UNREAD" else void).append(why)
         else:
-            void += [f"ENGAGED {x}" for x in engagement_bad(t, ends[(a, D)], admitted(d, t))]
+            void += [f"ENGAGED {x}" for x in engagement_bad(t, ends[(a, D)], admitted(d, t), q3_admitted(d, t))]
         for r in Q2_RATES:
             if _load(d, f"{t}_r{r}.json") is None:
                 cls, why = missing(d, t, f"{t}: no Q2 run at {r} req/s", label=f"{t} rate {r}")
@@ -407,10 +441,11 @@ def _health(arm, width, D=1, end=False, prompts=10):
     h = {"engine": e, "levers": {"kv": {"scratch_slots": width}, "attn_split_cap": {"plans": plans}},
          "prefill_routes": dict(sc2c_reduce.ROUTES, seen={"moe": {"int4_k19|gt256": 1}, "prefill_attn": {"flash": 1}})}
     if end:
-        h["prefill_graph"] = {"status": "on", "T": T, "replays": prompts, "eager_chunks": 0,
-                              "eager_reasons": {"later_chunk": 6}}
+        later = 3 * len(Q3_RATES)                 # the fixture runs one Q3 request a rung
+        h["prefill_graph"] = {"status": "on", "T": T, "replays": prompts, "eager_chunks": later,
+                              "eager_reasons": {"later_chunk": later, "short_chunk": 0}}
         h["kv_bookkeeping"] = {"requested": True, "bulk": True, "flush_layers": 0, "flush_bulk": prompts,
-                               "ready_layers": 0, "ready_bulk": 0, "ready_at_flush": prompts}
+                               "flush_bulk_fallback": 0, "ready_layers": 0, "ready_bulk": 0, "ready_at_flush": prompts}
     return h
 
 
@@ -420,7 +455,7 @@ def _summary(att_, tok=1000.0):
 
 
 def _fixture(d, *, ca_att=None, sh_att=None, q3_ca=None, q3_sh=None, widths=None, pressure_rise=(5, 5), drop_plans=False,
-             drop_end=None, skips=(), drop_run=None,
+             drop_end=None, skips=(), drop_run=None, end_mut=None,
              contract="OK", quality="AT_PARITY", plans=None, sh_serial="t", pool_override=None, toks_sh=2000.0,
              q3_sh_d2=None):
     os.makedirs(os.path.join(d, "quality"), exist_ok=True)
@@ -461,7 +496,10 @@ def _fixture(d, *, ca_att=None, sh_att=None, q3_ca=None, q3_sh=None, widths=None
                 hs["levers"].pop("attn_split_cap", None)
             w(f"health_{t}_start.json", hs)
             if drop_end != (a, D):
-                w(f"health_{t}_end.json", _health("sh" if a == "sh" else "ca", widths[a], D, end=True, prompts=nreq))
+                he = _health("sh" if a == "sh" else "ca", widths[a], D, end=True, prompts=nreq)
+                if end_mut and (a, D) == ("sh", 1):
+                    end_mut(he)
+                w(f"health_{t}_end.json", he)
     w("contract.json", {"verdict": contract, "why": [] if contract == "OK" else ["x"]})
     with open(os.path.join(d, "summary.txt"), "w") as f:
         for lab in skips:
@@ -502,6 +540,19 @@ def self_test() -> int:
          skips=("e4b_sh_d2",))
     case("a Q2 run missing, no skip recorded", "VOID", drop_run=("sh", 2, 16))
     case("a Q2 run skipped at the deadline", "UNREAD", drop_run=("sh", 2, 16), skips=("e4b_sh_d2 rate 16",))
+    # ENGAGED fails closed on every input it reads (rule 7)
+    case("graph_stats bucket 8 removed", "VOID", end_mut=lambda h: h["engine"]["graph_stats"].pop("8"))
+    case("graph_stats bucket 16 emptied", "VOID", end_mut=lambda h: h["engine"]["graph_stats"].update({"16": {}}))
+    case("eager_steps removed from bucket 2", "VOID", end_mut=lambda h: h["engine"]["graph_stats"]["2"].pop("eager_steps"))
+    case("an eager decode step at bucket 4", "VOID", end_mut=lambda h: h["engine"]["graph_stats"]["4"].update(eager_steps=1))
+    case("flush_layers removed", "VOID", end_mut=lambda h: h["kv_bookkeeping"].pop("flush_layers"))
+    case("eager_reasons removed", "VOID", end_mut=lambda h: h["prefill_graph"].pop("eager_reasons"))
+    case("eager_reasons emptied", "VOID", end_mut=lambda h: h["prefill_graph"].update(eager_reasons={}))
+    case("eager_chunks removed", "VOID", end_mut=lambda h: h["prefill_graph"].pop("eager_chunks"))
+    case("a short_chunk eager prefill", "VOID",
+         end_mut=lambda h: h["prefill_graph"].update(eager_chunks=13, eager_reasons={"later_chunk": 12, "short_chunk": 1}))
+    case("later_chunk not 3 x the Q3 prompts", "VOID",
+         end_mut=lambda h: h["prefill_graph"].update(eager_chunks=9, eager_reasons={"later_chunk": 9, "short_chunk": 0}))
     fails = 0
     for name, got, want, why in cases:
         ok = got == want

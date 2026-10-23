@@ -181,3 +181,36 @@ def test_the_controller_dry_runs_box_q(tmp_path, prove):
     for name in ("sc2j_box_q.sh", "sc2j_reduce.py", "sc2j_contract.py", "sc2j_prompts.py", "g3_smoke.py", "p117_reduce.py"):
         assert name in out.stdout, name
     assert " SC1_BOX=Q " in out.stdout
+
+
+FIX = REPO / "tests" / "fixtures" / "sc2i_shake1"
+
+
+def test_engaged_passes_a_real_engaged_end_record():
+    """A real end /health of an engaged 64-slot server (SC2i's shakedown, base arm: 90 prompts, no Q3) passes the
+    fail-closed ENGAGED check; the same record's lc128 sibling, whose short first chunks ran eagerly, does not."""
+    base = json.loads((FIX / "health_prove_base_end.json").read_text())
+    assert RED.engagement_bad("prove_base", base, 90, 0) == []
+    lc = json.loads((FIX / "health_prove_lc128_end.json").read_text())
+    why = RED.engagement_bad("prove_lc128", lc, 90, 0)
+    assert any("short_chunk" in x for x in why), why
+
+
+@pytest.mark.parametrize("path,how", [
+    (("engine", "graph_stats", "8"), "del"), (("engine", "graph_stats", "2", "eager_steps"), "del"),
+    (("kv_bookkeeping", "flush_layers"), "del"), (("prefill_graph", "eager_reasons"), "del"),
+    (("prefill_graph", "eager_chunks"), "del"), (("prefill_graph", "eager_reasons"), "empty"),
+    (("engine", "graph_stats", "64"), "null"), (("kv_bookkeeping",), "null"),
+])
+def test_engaged_fails_closed_on_the_real_record(path, how):
+    h = json.loads((FIX / "health_prove_base_end.json").read_text())
+    node = h
+    for k in path[:-1]:
+        node = node[k]
+    if how == "del":
+        del node[path[-1]]
+    elif how == "empty":
+        node[path[-1]] = {}
+    else:
+        node[path[-1]] = None
+    assert RED.engagement_bad("prove_base", h, 90, 0), (path, how)
