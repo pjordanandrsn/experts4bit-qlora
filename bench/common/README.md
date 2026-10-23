@@ -58,10 +58,14 @@ lane registered after this section merges states all six in its PREREG. Existing
 including their own classification rules (P225's hand reading of a refused classify, for one), and amend it only if they
 hit one of these gaps.
 
-1. **One launch commit.** Every box of a reading launches from one named commit: the registration's merge commit, or
-   the latest amendment's. Later merges to main then cannot change the system under test. A lane that moves to a newer
-   commit first lists, in a pre-run note, every change to the default path it measures since the old one, with why the
-   reading still stands. (SC2 at 36cdd2d4, P225 at 8fe4cd2d, P227/P229 at b7146363, P228 at 67faee63.)
+1. **One launch commit, and one pinned stack.** The PREREG names both, and later merges to main can change neither:
+   - the **launch commit**: the commit every box's kit and driver launch from (the registration's merge, or the latest
+     amendment's). SC2 at 36cdd2d4, P225 at 8fe4cd2d, P227/P229 at b7146363, P228 at 67faee63;
+   - the **stack under test**: the e4b, kernel and loggetta commits (and the versions) the box installs. Usually it is
+     the launch commit itself. A replication pins the replicated lane's stack instead, so its boxes differ only in the
+     machine.
+   A lane that moves to a newer launch commit or stack first lists, in a pre-run note, every change to the default path
+   it measures since the old one, with why the reading still stands.
 2. **Run ids.**
    - Every box has its own id and receipt, and an id is never reused, because the ledger holds one row per run.
    - Register the reading ids (`<lane>-<card>-1` to `-N`) AND retry ids (`-r1` to `-r8`) for any box that follows one
