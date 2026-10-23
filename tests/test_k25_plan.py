@@ -3,9 +3,11 @@
 per projection. ``today`` (also when unset and no family default applies) is the route's
 plan for both projections, unchanged; ``c1`` is P156's first carried pair, read by P160 under K39's decode, and is
 served ONLY under ``lut="prmt"``: any other decode is refused at build and in the forward, never run (the tree at c1's
-shapes is slower, P155). An asked-for ``c1`` is never dropped with K25. On CPU with the route tests' kernel stubs; the
+shapes is slower, P155). ``m1`` is lane P222's selected pair M, opt-in on every family, with c1's contract (P222 read
+it under no other decode). An asked-for plan is never dropped with K25. On CPU with the route tests' kernel stubs; the
 bits are ``test_k25_lut_gpu.py``'s."""
 import importlib.util
+import json
 import pathlib
 
 import pytest
@@ -60,7 +62,7 @@ def test_today_is_the_routes_plan_for_both_projections(monkeypatch, env):
 @pytest.mark.parametrize("value", ["c2", "C1x", "1", "tree", "prmt"])
 def test_an_unknown_plan_is_refused(monkeypatch, value):
     monkeypatch.setenv("E4B_K25_PLAN", value)
-    with pytest.raises(ValueError, match=r"E4B_K25_PLAN=.*expected 'today' or 'c1'"):
+    with pytest.raises(ValueError, match=r"E4B_K25_PLAN=.*expected one of 'today', 'c1', 'm1'"):
         hr._k25_plan_raw()
 
 
@@ -171,6 +173,107 @@ def test_today_with_a_kernel_package_without_k25_still_falls_back_under_auto(mon
     calls = _install_stubs(monkeypatch, with_k25=False)
     _run(24)
     assert calls["k25_plan"] == [] and hr.K25_PLAN_SEEN == {}
+
+
+# m1: lane P222's selected pair M (opt-in, no family default). The same contract as c1's: served under prmt only.
+
+def _p222_m():
+    path = pathlib.Path(__file__).resolve().parents[1] / "bench" / "p222" / "receipts" / "p222-5090-5" / "bench_p222.json"
+    return json.loads(path.read_text(encoding="utf-8"))["m"]
+
+
+def test_m1_is_p222s_selected_pair_byte_for_byte():
+    """The plan served is the plan P222's box recorded as M, never re-typed."""
+    m = _p222_m()
+    assert hr._K25_PLANS["m1"] == (m["gu"], m["dn"])
+
+
+def test_every_plan_but_today_is_prmt_only_and_none_is_a_default_but_c1():
+    assert set(hr._K25_PLAN_PRMT_ONLY) == set(hr._K25_PLANS) - {"today"}
+    assert hr.K25_PLAN_DEFAULT_FAMILIES == {"qwen3_moe": "c1"}                    # m1 is opt-in
+
+
+@pytest.mark.parametrize("mode", [None, "1"], ids=["auto", "k25-on"])
+def test_m1_under_explicit_prmt_gives_each_projection_its_own_shape(monkeypatch, mode):
+    m = _p222_m()
+    _set_mode(monkeypatch, mode)
+    monkeypatch.setenv("E4B_K25_LUT", "prmt")
+    monkeypatch.setenv("E4B_K25_PLAN", " M1 ")
+    calls = _install_stubs(monkeypatch, prmt=True)
+    out, ref = _run(24)
+    assert _shapes(calls) == [m["gu"], m["dn"]], calls["k25_plan"]                # gate_up first, then down
+    assert [p["lut"] for p in calls["k25_plan"]] == ["prmt", "prmt"]
+    assert [p["dot_bf16"] for p in calls["k25_plan"]] == [False, False]
+    assert hr.K25_PLAN_SEEN == {"m1|le256": 1} and hr.K25_LUT_SEEN == {"prmt|le256": 1}
+    assert (out.float() - ref).abs().max() < 0.05
+
+
+@pytest.mark.parametrize("mt", ["mixtral", "qwen3_moe"])
+def test_m1_under_explicit_prmt_resolves_at_build_on_any_family(monkeypatch, mt):
+    m = _p222_m()
+    monkeypatch.setenv("E4B_K25_LUT", "prmt")
+    monkeypatch.setenv("E4B_K25_PLAN", "m1")
+    calls = _install_stubs(monkeypatch, prmt=True)
+    r = hr.resolve_k25_plan(hr.resolve_k25_lut(mt), model_type=mt)
+    assert r == {"env": "m1", "plan": "m1", "why": None, "source": "explicit", "gu": m["gu"], "dn": m["dn"]}
+    _run(24)
+    assert _shapes(calls) == [m["gu"], m["dn"]] and hr.K25_PLAN_SEEN == {"m1|le256": 1}
+
+
+@pytest.mark.parametrize("mt", ["mixtral", "qwen3_moe", None])
+def test_unset_plan_never_resolves_m1(monkeypatch, mt):
+    monkeypatch.setenv("E4B_K25_LUT", "prmt")
+    calls = _install_stubs(monkeypatch, prmt=True)
+    r = hr.resolve_k25_plan(hr.resolve_k25_lut(mt), model_type=mt)
+    assert r["env"] is None and r["plan"] == ("c1" if mt == "qwen3_moe" else "today")
+    _run(24)
+    assert "m1|le256" not in hr.K25_PLAN_SEEN and _p222_m()["dn"] not in _shapes(calls)
+
+
+def test_m1_under_an_explicit_tree_is_refused_before_the_family_and_in_the_forward(monkeypatch):
+    monkeypatch.setenv("E4B_K25_LUT", "tree")
+    monkeypatch.setenv("E4B_K25_PLAN", "m1")
+    calls = _install_stubs(monkeypatch, prmt=True)
+    with pytest.raises(RuntimeError, match=r"E4B_K25_PLAN=m1 is lane P222's plan for K39's decode.*'tree'.*"
+                                           r"P222 read m1 under no other decode"):
+        hr.resolve_k25_plan(hr.resolve_k25_lut(), family_known=False)
+    with pytest.raises(RuntimeError, match=r"E4B_K25_PLAN=m1 .*'tree' \(E4B_K25_LUT=tree\)"):
+        _run(24)
+    assert calls["k25_plan"] == []                                               # never run at the tree
+
+
+@pytest.mark.parametrize("mt", ["mixtral", "olmoe", None])
+def test_m1_on_a_family_whose_default_is_the_tree_is_refused_once_the_family_is_known(monkeypatch, mt):
+    monkeypatch.setenv("E4B_K25_PLAN", "m1")
+    calls = _install_stubs(monkeypatch, prmt=True)
+    assert hr.resolve_k25_plan(hr.resolve_k25_lut(), family_known=False)["plan"] == "m1"
+    with pytest.raises(RuntimeError, match=r"E4B_K25_PLAN=m1 .*'tree' \(default-off: no read licenses"):
+        hr.resolve_k25_plan(hr.resolve_k25_lut(mt))
+    with pytest.raises(RuntimeError, match=r"E4B_K25_PLAN=m1 .*'tree' \(unset E4B_K25_LUT, as resolved at build\)"):
+        _run(24)
+    assert calls["k25_plan"] == []
+
+
+def test_m1_with_k25_off_is_refused_before_the_family(monkeypatch):
+    _set_mode(monkeypatch, "0")
+    monkeypatch.setenv("E4B_K25_PLAN", "m1")
+    _install_stubs(monkeypatch, prmt=True)
+    with pytest.raises(RuntimeError, match=r"E4B_K25_PLAN=m1 names K25's plan, but K25 does not run here "
+                                           r"\(E4B_NF4_GROUPED_SMALLM=0\)"):
+        hr.resolve_k25_plan(hr.resolve_k25_lut(), family_known=False)
+
+
+@pytest.mark.parametrize("mode", [None, "auto"], ids=["unset", "auto"])
+def test_m1_with_a_kernel_package_without_k25_is_refused_under_auto(monkeypatch, mode):
+    _set_mode(monkeypatch, mode)
+    monkeypatch.setenv("E4B_K25_PLAN", "m1")
+    _install_stubs(monkeypatch, with_k25=False)
+    with pytest.raises(RuntimeError, match=r"E4B_K25_PLAN=m1 names K25's plan, but K25 does not run here "
+                                           r"\(the kernel package predates K25\)"):
+        hr.resolve_k25_plan(hr.resolve_k25_lut("mixtral"))
+    with pytest.raises(RuntimeError, match=r"E4B_K25_PLAN=m1 names K25's plan, but the installed kernel package has "
+                                           r"no K25"):
+        _run(24)
 
 
 def test_prefill_rows_take_no_plan_and_are_not_counted(monkeypatch):

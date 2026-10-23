@@ -29,6 +29,15 @@ is not contiguous is copied (one row of K elements), never passed to ``F.linear`
 another dtype) goes to ``F.linear`` on the rounded weight. Under CUDA graphs bucket 1 captures the kernel and larger
 buckets capture cuBLAS on the grid.
 
+``E4B_INT8_HEAD_ROWS`` (K2b, ``bench/dense-small-m/DESIGN-K2.md``) widens the int8 route to 2..value rows (value <= 8):
+those calls go to grouped-nf4-gemm K37's ``dense_i8.linear_i8`` over the SAME codes and scales, instead of
+``F.linear`` on the bf16 rounding (two bytes an element, twice the int8 head's). One row keeps K36, and more rows keep
+``F.linear``. ``linear_i8`` accumulates ``x . q`` in fp32 through ``tl.dot`` and stores ``bf16(s * acc)``: on the same
+grid as every other row count, under K37's tolerance contract, never bitwise a row's one-row output. Unset or ``1``
+is today's route and never imports ``dense_i8``. Set, it needs the head swapped (``E4B_INT8_HEAD_BW`` resolved on) and
+a grouped-nf4-gemm with K37 (0.49.0 or later); each is refused by name. :func:`apply_int8_head_rows` records, per row
+count it routes, the plan ``linear_i8`` runs at the head's shape (K37's table, else its untimed default).
+
 Refused: another mode, a grouped-nf4-gemm without K36, a model with no ``nn.Linear`` output head (an int4 head is an
 ``Int4Linear``), a head tied to the input embeddings (rounding it would round the embeddings), a bias, and a weight that
 is not bf16 ``[N, K]`` with contiguous rows. The engagement record (:func:`engagement`) is ``DenseGemvLinear``'s form:
@@ -41,6 +50,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 ENV = "E4B_INT8_HEAD_BW"
+ROWS_ENV = "E4B_INT8_HEAD_ROWS"
+#: the most rows ``E4B_INT8_HEAD_ROWS`` may route to K37: the most its reads cover (DESIGN-K2.md section 5), never more
+MAX_ROWS = 8
 #: rows per step when the head is quantized and rounded: bounds the fp32 temporaries (a whole Qwen3 head in fp32 is
 #: 1.2 GB per temporary); the grid is row-wise, so the result is the whole call's, bit for bit
 CHUNK_ROWS = 16384
@@ -63,6 +75,8 @@ class Int8HeadLinear(nn.Linear):
         self.register_buffer("q", q, persistent=False)   # int8 [N, K]: not in the state dict
         self.register_buffer("s", s, persistent=False)   # fp32 [N]
         self._gemv = gemv
+        self.rows_max = 1                                # E4B_INT8_HEAD_ROWS: rows 2..rows_max go to self._linear (K37)
+        self._linear = None
         self.routed: dict = {}                           # rows -> calls routed through the kernel
         self.passed: dict = {}                           # rows -> calls passed to F.linear
 
@@ -74,6 +88,13 @@ class Int8HeadLinear(nn.Linear):
             if not xr.is_contiguous():
                 xr = xr.contiguous()                     # one row of K elements: copied, never a fallback
             out = self._gemv(xr, self.q, self.s)
+            return out.reshape(*x.shape[:-1], self.out_features)
+        if 2 <= rows <= self.rows_max and x.dtype == torch.bfloat16 and _on_device(x):
+            self.routed[rows] = self.routed.get(rows, 0) + 1
+            xr = x.reshape(rows, self.in_features)
+            if not xr.is_contiguous():
+                xr = xr.contiguous()                     # at most MAX_ROWS rows of K elements: copied, never a fallback
+            out = self._linear(xr, self.q, self.s)
             return out.reshape(*x.shape[:-1], self.out_features)
         self.passed[rows] = self.passed.get(rows, 0) + 1
         return F.linear(x, self.weight)
@@ -115,6 +136,47 @@ def kernel_missing() -> str | None:
     except RuntimeError as e:
         return f"grouped-nf4-gemm without dense_gemv.gemv_i8_bw (K36, 0.48.0 or later): {e.__cause__}"
     return None
+
+
+def rows_value(value: str) -> int:
+    """``E4B_INT8_HEAD_ROWS`` as the server reads it: unset, empty or ``1`` is ``1`` (today's route); ``2`` to
+    :data:`MAX_ROWS` widen it. Anything else is refused."""
+    v = (value or "").strip()
+    if v in ("", "1"):
+        return 1
+    if v.isdigit() and 2 <= int(v) <= MAX_ROWS:
+        return int(v)
+    raise ValueError(f"{ROWS_ENV}={value!r}: expected 1 to {MAX_ROWS} (unset: 1, one row on K36 and more on F.linear)")
+
+
+def rows_kernel():
+    """``(linear_i8, plan)`` from grouped-nf4-gemm's ``dense_i8`` (K37, first released in 0.49.0)."""
+    try:
+        from dense_i8 import linear_i8, plan
+    except ImportError as e:
+        raise RuntimeError(f"{ROWS_ENV} needs grouped-nf4-gemm with dense_i8.linear_i8 (K37, 0.49.0 or later): {e}") from e
+    return linear_i8, plan
+
+
+def apply_int8_head_rows(model, value: int, *, linear=None, plan=None) -> dict:
+    """Widen the swapped head's int8 route to 2..``value`` rows through K37's ``linear_i8`` (``rows_kernel``), and
+    return the record. ``value == 1`` changes nothing and imports nothing. Refused: a value outside 1..MAX_ROWS, a head
+    that is not an :class:`Int8HeadLinear` (``E4B_INT8_HEAD_BW`` did not resolve on), and a package without K37."""
+    if not (isinstance(value, int) and 1 <= value <= MAX_ROWS):
+        raise ValueError(f"{ROWS_ENV}={value!r}: 1 to {MAX_ROWS}")
+    if value == 1:
+        return {"rows_max": 1}
+    head = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
+    if not isinstance(head, Int8HeadLinear):
+        raise RuntimeError(f"{ROWS_ENV}={value}: the output head is {type(head).__name__}, not the int8 head "
+                           f"({ENV} did not resolve on); this knob only widens that head's route")
+    if linear is None:
+        linear, plan = rows_kernel()
+    head._linear = linear
+    head.rows_max = value
+    n, k = head.out_features, head.in_features
+    return {"rows_max": value, "kernel": "dense_i8.linear_i8 (K37)",
+            "plan": {str(m): list(plan(n, k, m)) for m in range(2, value + 1)} if plan is not None else None}
 
 
 def head_refusal(model) -> str | None:
@@ -159,8 +221,9 @@ def apply_int8_head_bw(model, mode: str, *, gemv=None, quantize=None) -> dict:
 
 
 def engagement(model) -> dict:
-    """Per row count, how many swapped heads routed through the kernel and how many passed to ``F.linear`` (after a
-    build, the graph captures and their warm-ups are those calls)."""
+    """Per row count, how many swapped heads routed through a kernel and how many passed to ``F.linear`` (after a
+    build, the graph captures and their warm-ups are those calls); with ``E4B_INT8_HEAD_ROWS`` above 1, also which
+    kernel each routed row count took."""
     mods = [m for m in model.modules() if isinstance(m, Int8HeadLinear)]
     routed, passed = {}, {}
     for m in mods:
@@ -168,5 +231,8 @@ def engagement(model) -> dict:
             routed[r] = routed.get(r, 0) + 1
         for r in m.passed:
             passed[r] = passed.get(r, 0) + 1
-    return {"modules": len(mods), "routed_modules_by_rows": {str(k): v for k, v in sorted(routed.items())},
-            "passed_modules_by_rows": {str(k): v for k, v in sorted(passed.items())}}
+    rec = {"modules": len(mods), "routed_modules_by_rows": {str(k): v for k, v in sorted(routed.items())},
+           "passed_modules_by_rows": {str(k): v for k, v in sorted(passed.items())}}
+    if any(m.rows_max > 1 for m in mods):              # E4B_INT8_HEAD_ROWS: which kernel each routed row count took
+        rec["routed_kernel_by_rows"] = {str(k): "K36 gemv_i8_bw" if k == 1 else "K37 linear_i8" for k in sorted(routed)}
+    return rec
