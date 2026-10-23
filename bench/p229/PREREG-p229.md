@@ -96,11 +96,16 @@ head. K2b routes 2..N rows to K37's `linear_i8` over the same codes.
   - A host with a recorded power cap of at least 575 W, read again on the box (rc 17 below it).
   - The pin and the expected and worst cost go on the bus before the create.
   - rent-watch is armed at the create (`--until`), and teardown is verified.
-- **Worst case:** at most $1.05/h, **guard 1.0 h**, at most 10 GB at <= $0.04/GB: 1.0 x $1.05 + 10 x $0.04 = **$1.45**.
+- **Worst case:** at most $1.05/h, **guard 1.0 h**, and a 10 GB download allowance at <= $0.04/GB:
+  1.0 x $1.05 + 10 x $0.04 = **$1.45**.
+  - The 10 GB is the download (two pip installs and their wheels), not the disk. The create asks for a 40 GB disk, and
+    the runner refuses under 20 GB free (rc 13).
 - **The fit, with at least 25 % headroom.** Arithmetic, every term conservative:
-  - **The reading:** 3 cells x 60 reps x 80 replays (40 timed, 40 spacer) of up to 1 ms = 14.4 s, plus five captures a
-    cell and K37's and K36's Triton compiles (up to 60 s each). About 120 s with the copy rate and the engagement.
-  - **Total:** about 120 s; x2, raised to the floor: `NEED_BENCH` = **600 s**. `INSTALL_TO_GATE_S` = **900 s** (two
+  - **The reading:** 3 cells x 60 reps x 80 replays (40 timed, 40 spacer) of up to 1 ms = 14.4 s, plus K37's and
+    K36's Triton compiles (up to 60 s each: 120 s), plus five captures a cell, the copy rate, the head's swap and the
+    engagement (up to 45 s together).
+  - **Total:** about 180 s (14.4 + 120 + 45, rounded up); x2 = 360 s, raised to the 600 s floor:
+    `NEED_BENCH` = **600 s**. `INSTALL_TO_GATE_S` = **900 s** (two
     installs and the two-part premise), `RESERVE` = 600 s.
   - **The runner's check:** `FIT` = 900 + 600 + 600 = 2100 s, and `FIT_NEED` = 2100 x 1.25 = 2625 s. Short of that is
     rc 41.
@@ -127,6 +132,12 @@ head. K2b routes 2..N rows to K37's `linear_i8` over the same codes.
 3. The reading runs at the merge commit.
 4. On GO_ROWS_N with N below 8, a code PR first lowers the route's `MAX_ROWS` to N, refusing larger values by name.
    The knob never routes more rows than were read, and the cap never moves by default.
+   - On GO_ROWS_4 or GO_ROWS_2 that PR sets `MAX_ROWS` to 4 or 2. On NO_GO it refuses every value above 1. The default
+     stays 1 in every case.
+   - **Why the unread row counts (3, 5, 6, 7) are licensed with their neighbours:** K37's 2..16-row kernel takes M as
+     a runtime argument inside one `BLOCK_M = 16` tile. Every M from 2 to 16 is the same compiled kernel at the same
+     plan (the route record shows the plan per M), so the head's bytes and the tile's work do not change between read
+     row counts.
 5. On GO_ROWS_N, the served read is registered next: W2, W4 and W8 (up to N) ABBA on the default Qwen3 server, the
    knob against unset, P153's quality bars per bucket. It comes before any default.
 6. On NO_GO, K2a is put to the maintainer as a decision of its own.
