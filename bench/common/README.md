@@ -54,8 +54,9 @@ FIT=$((INSTALL_TO_GATE_S + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PC
 ## Registration rules (new lanes)
 
 Each rule below was added to a lane by a pre-data amendment on 2026-10-23, after a box hit the gap it closes. Every
-lane registered after this section merges states all six in its PREREG. Existing lanes keep their registered text, and
-amend it only if they hit one of these gaps.
+lane registered after this section merges states all six in its PREREG. Existing lanes keep their registered text,
+including their own classification rules (P225's hand reading of a refused classify, for one), and amend it only if they
+hit one of these gaps.
 
 1. **One launch commit.** Every box of a reading launches from one named commit: the registration's merge commit, or
    the latest amendment's. Later merges to main then cannot change the system under test. A lane that moves to a newer
@@ -75,12 +76,13 @@ amend it only if they hit one of these gaps.
    | refused at create | the provider refused; nothing was created ($0) | no | nothing |
    | NOT_RUN | the launcher's pre-flight tore the instance down before the runner ran (no RUN_ID, exit file or marker) | no | nothing |
    | refused before the install | the runner's own refusal before its first install: the power floor (rc 17), the guard fit (rc 41), a host refusal | no | a host refusal counts toward the lane's refusal cap, if it registers one; a single rc 41 is no strike, two consecutive count as one (Guard fit) |
-   | started | the runner passed those refusals and began its install | yes | the started-box cap and the stop, whatever its outcome after that (read, HARNESS_ERROR, VOID, a fault mid-install or mid-run) |
+   | started | the runner passed those refusals and began its install | yes | the started-box cap, always; the stop only when NOT read (HARNESS_ERROR, VOID, a fault mid-install or mid-run). A read ends or advances the lane by its own rule |
 
 4. **A started-box cap.** The PREREG states the most boxes that may START, and each box's worst case. The lane's worst
    is that number times the box worst, plus any refused boxes' cost. Retry ids never add a started box: they only
-   replace ids used by boxes that did not start. The stop counts started boxes only, so a capped host cannot end a
-   lane and alternating faults cannot dodge the stop.
+   replace ids used by boxes that did not start. The stop exists to end a lane that keeps failing to produce a reading,
+   so it counts started boxes that were NOT read (a read box never counts toward it). A capped host therefore cannot end
+   a lane, and alternating faults cannot dodge the stop.
 5. **Boot slack.** A box's deadline runs from the create, and the launcher alone may wait `ssh_ready_s` (420 s on
    Vast) for ssh before it stages the kit. So the boot term in Guard fit's static check is at least `ssh_ready_s` plus
    a staging margin of 120 s or more: guard - FIT_NEED >= 540 s on Vast. The lane's test asserts it. A boot term below
