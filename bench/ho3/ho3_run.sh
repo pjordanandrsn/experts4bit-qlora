@@ -80,7 +80,7 @@ pipx(){ local log=$1 secs=$2; shift 2
   say "pip failed ($(tail -1 $log | cut -c1-120)) -- one retry in 20 s"; sleep 20
   perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" >> $log 2>&1; }
 pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_STACK_SHA" \
-  "transformers==5.17.0" "bitsandbytes==0.50.2" "datasets>=2.14" accelerate sentencepiece safetensors "huggingface_hub>=0.23" numpy \
+  "transformers==5.17.0" "bitsandbytes==0.50.2" "datasets>=2.14" accelerate sentencepiece safetensors "huggingface_hub>=0.23" "brotli>=1.2.0" numpy \
   || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
 pipx logs/pip_gnf4.log 900 --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" || { say "PIP FAIL (gnf4)"; finish 9; }
 pipx logs/pip_logg.log 900 --no-deps "git+https://github.com/pjordanandrsn/loggetta.git@$LOGGETTA_SHA" || { say "PIP FAIL (loggetta)"; finish 9; }
@@ -113,7 +113,12 @@ can_run $NEED_FETCH fetch || finish 40
 phase_start fetch setup
 for spec in "$LFM2 $LFM2_REV" "$ERNIE $ERNIE_REV"; do
   set -- $spec
-  SNAP=$(perl -e "alarm $(alarm 2700); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$1', revision='$2', max_workers=8))" 2>> logs/fetch.log | tail -1)
+  # one retry: a fetch that fails once (an edge or a resumable download) is tried again before the box is refused
+  for attempt in 1 2; do
+    SNAP=$(perl -e "alarm $(alarm 2700); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$1', revision='$2', max_workers=8))" 2>> logs/fetch.log | tail -1)
+    [ -d "$SNAP" ] && break
+    say "fetch $1 attempt $attempt failed ($(tail -1 logs/fetch.log | cut -c1-120))"; sleep 20
+  done
   [ -d "$SNAP" ] || { tail -2 logs/fetch.log; say "DL FAIL $1"; finish 11; }
   echo "FETCHED $1@$2" | tee -a summary.txt
 done

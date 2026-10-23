@@ -20,7 +20,9 @@ ran with the experts on the device, so HO3 also measures the first rows with the
   - grouped-nf4-gemm `a83f6bb3` (0.49.0), Loggetta `9348f8b8` (0.6.2);
   - transformers 5.17.0, bitsandbytes 0.50.2, the image's torch 2.8.0+cu128.
 - The install, the tripwire and the four `loggetta train` rows are HO2's, unchanged (`tests/test_ho3.py` checks them
-  against `bench/ho2/ho2_run.sh`).
+  against `bench/ho2/ho2_run.sh`), with two fetch-only additions that touch no measured code: `brotli>=1.2.0` in the
+  install (an unpinned `huggingface_hub` needs it to decode a br-encoded download, and the image's is older) and one
+  retry of a failed checkpoint fetch.
 
 ## Rows
 
