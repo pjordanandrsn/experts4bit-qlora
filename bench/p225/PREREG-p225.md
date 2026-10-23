@@ -297,6 +297,9 @@ them; nothing else changes.
   the refusal cap as registered; a NOT_RUN box counts toward no cap.
 - A retry box that passes the screen and starts takes the next unused box-started slot. The 3-box-started cap, the
   strike rules, the stop and the HOST_REFUSED cap are unchanged; nothing is widened.
+- NOT_RUN is decided from the launcher's receipt (its pre-flight teardown), before any fetch. It is never classified by
+  `p225_reduce.py --classify` or the hand-reading table, and it is not PRE_INSTALL_HALT (whose "no marker" reading
+  applies only to a box whose runner ran).
 - If NOT_RUN boxes ever use up `r8`, that is a launcher fault to fix, not a reason to add ids.
 - It is pre-data: no box has started. A box launched after it merges launches from its merge commit, since the
   runner's bytes (and their staged pin) change.
