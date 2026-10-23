@@ -227,10 +227,26 @@ module, it compares each fingerprint the manifest records with the served base's
 - **experts:** the arena source above. A match reads `base_match.experts = verified (qfp-v1 ...)`. A mismatch is
   **refusal 12**. `E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts` serves it anyway, reported in `/health` as
   `mismatch (served under ...)`; `E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE` never covers a MEASURED mismatch.
-- **the default training form:** training double-quantizes the expert absmax by default and the arena stores fp32, so a
-  default-trained `/2` adapter is refusal 12 (F1). Its message says so: that is the dq-vs-fp32 case, not a different
-  model; retraining at `E4B_ABSMAX_DQ=0`, or the coming serve-side reconstruction (the server re-applying training's
-  compression to the arena's fp32 absmax), resolves it.
+- **the default training form, and the fp32 source fingerprint:** training double-quantizes the expert absmax by
+  default and the arena stores fp32 (F1), so a default-trained adapter's expert fingerprint never equals the arena's.
+  So `compress_expert_absmax_` hashes each stack's FULL fp32 absmax BEFORE compressing it, and the experts fingerprint
+  carries `fp32_source`: `{"sha256", "absmax_by_stack"}`, the same qfp-v1 digest with each compressed stack's fp32
+  absmax (every other line unchanged), and that absmax's hash per `<stack>.<which>`. It is the fingerprint the base
+  had in fp32, so the server compares it with the arena's `sha256` exactly:
+  - **equal:** `base_match.experts = verified (source, qfp-v1 ...); trained on double-quantized absmax, served on fp32
+    absmax`, served WITHOUT an override. It proves the served BASE is the trained one. It does NOT prove served ==
+    trained: the served absmax is fp32 and the trained one was double-quantized, a declared recipe difference whose
+    quality effect is UNREAD (D0's cells repack a merged expert delta; they do not read an adapter served on the other
+    absmax form, so they do not bound it). That read is a lane of its own.
+  - **different:** refusal 12, naming the first stack whose absmax differs; the arena was not baked from this base.
+  - **absent** (a `/2` manifest written before the record): refusal 12 as the dq-vs-fp32 case; retraining with a
+    release that records it, or at `E4B_ABSMAX_DQ=0`, verifies.
+
+  Why a recorded hash and not a re-compression on the server: the compression's offset is `flat.mean()` on the
+  training device, and torch's CUDA reduction splits by the device's SM count, so its fp32 rounding can differ between
+  GPU models; the offset is added to every dequantized value. An absmax is a max over 64 weights: exact and
+  order-free, so the fp32 absmax's hash is the same wherever it is computed (training's quantizer and the bake reach
+  the same bytes, tested on a real `bake_nf4` arena).
 - `/health` carries `adapter.fingerprints`: per scope, the trained and served sha256, the module counts, the seconds and
   the status.
 

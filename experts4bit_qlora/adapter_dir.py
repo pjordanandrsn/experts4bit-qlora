@@ -215,10 +215,27 @@ def _verify_v2_fields(manifest, attention, scale, bad) -> None:
         secs = fp.get("seconds")
         if not (isinstance(secs, (int, float)) and not isinstance(secs, bool) and secs >= 0):
             raise bad(f"fingerprints.{scope}.seconds {secs!r} is not a measured duration")
+        if "fp32_source" in fp:
+            _verify_fp32_source(fp, scope, bad)
     applied = manifest["lora_scale_applied"]
     held = applied.get("attention") if isinstance(applied, dict) else None
     if attention and (held is None or abs(float(held) - scale) > 1e-12):
         raise bad(f"lora_scale_applied.attention {held!r} is not the setup's alpha/r {scale!r}")
+
+
+def _verify_fp32_source(fp, scope, bad) -> None:
+    """An expert fingerprint's optional ``fp32_source`` (the base's qfp-v1 with each compressed stack's fp32 absmax,
+    recorded before compression) is well formed: a sha256, and one sha256 per line of the scope, keyed by stack."""
+    src = fp["fp32_source"]
+    if scope != "experts" or not isinstance(src, dict):
+        raise bad(f"fingerprints.{scope}.fp32_source is defined for the experts scope only, as an object")
+    if not (isinstance(src.get("sha256"), str) and _SHA256.fullmatch(src["sha256"])):
+        raise bad(f"fingerprints.{scope}.fp32_source.sha256 is not a sha256")
+    by = src.get("absmax_by_stack")
+    if not (isinstance(by, dict) and len(by) == fp["modules"]
+            and all(isinstance(k, str) and isinstance(v, str) and _SHA256.fullmatch(v) for k, v in by.items())):
+        raise bad(f"fingerprints.{scope}.fp32_source.absmax_by_stack must map each of the scope's {fp['modules']} "
+                  f"lines to a sha256")
 
 
 def arena_source_revision(arena_index: dict) -> str | None:
@@ -231,6 +248,8 @@ UNVERIFIED_BASE_SCOPES = ("experts",)
 #: (``E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH``); attention has none: its mismatch (11) is never overridden
 BASE_MISMATCH_SCOPES = ("experts",)
 ACCEPT_BASE_MISMATCH_ENV = "E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH"
+#: the expert status when the manifest's fp32 source fingerprint, not the trained-form one, equals the arena's
+SOURCE_VERIFIED = "verified (source)"
 
 
 def parse_accept_unverified_base(raw: str) -> frozenset:
@@ -276,9 +295,14 @@ def fingerprint_check(ad: AdapterDir, model, arena: str, *, accept_base_mismatch
     """``(refusals, report)``: the SERVED base's qfp-v1 against the adapter's recorded one, per scope the /2 manifest
     records. Called after the load and BEFORE :func:`merge_attention_lora` (the merge rewrites the attention weights)
     and before any lever. ``report[scope]`` is ``{"scheme", "trained", "served", "modules", "seconds", "status"}``,
-    status ``verified`` | ``mismatch`` | ``mismatch (served under E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts)``.
-    Refusal 11: the attention base differs (never overridden). Refusal 12: the expert base differs, unless the operator
-    names ``experts`` in ``E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH``. ``fingerprint`` is
+    status ``verified`` | ``verified (source)`` | ``mismatch`` |
+    ``mismatch (served under E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts)``. ``verified (source)``: the expert
+    fingerprint differs only because training compressed the absmax, and the manifest's ``fp32_source`` (the base's
+    fingerprint with the fp32 absmax, recorded before compression) equals the arena's. It proves the served BASE is the
+    trained one and serves without an override; the served absmax is fp32 and the trained one was double-quantized, a
+    declared recipe difference whose quality effect is not read here. Refusal 11: the attention base differs (never
+    overridden). Refusal 12: the expert base differs, unless the operator names ``experts`` in
+    ``E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH``. ``fingerprint`` is
     :func:`.adapter_schema.quant_fingerprint` (a test may pass its own)."""
     if fingerprint is None:
         from .adapter_schema import quant_fingerprint as fingerprint
@@ -301,19 +325,44 @@ def fingerprint_check(ad: AdapterDir, model, arena: str, *, accept_base_mismatch
                                  f"against {str(want.get('sha256'))[:16]} trained ({got.get('modules')} vs "
                                  f"{want.get('modules')} modules). The attention LoRA would be merged into weights it "
                                  f"was not trained on; this refusal has no override"))
-        elif "experts" in accept_base_mismatch:
+            continue
+        src = want.get("fp32_source") if isinstance(want.get("fp32_source"), dict) else None
+        if src is not None and src.get("sha256") == got["sha256"] and got.get("scheme_id") == want.get("scheme_id"):
+            # the base is the trained one: training compressed its absmax, and recorded the fp32 absmax first
+            row["status"] = SOURCE_VERIFIED
+            row["fp32_source"] = src["sha256"]
+            row["trained_absmax"] = (ad.manifest.get("expert_absmax") or {}).get("form")
+            continue
+        if "experts" in accept_base_mismatch:
             row["status"] = f"mismatch (served under {ACCEPT_BASE_MISMATCH_ENV}=experts)"
         else:
-            why = (" The manifest records a double-quantized expert absmax (training's default) and the arena stores "
-                   "fp32: this is the dq-vs-fp32 absmax case (docs/ADAPTER_PORTABILITY.md F1), not a different model. "
-                   "Retraining at E4B_ABSMAX_DQ=0, or the coming serve-side reconstruction, resolves it."
-                   if _dq_trained(ad) else
-                   " The arena was not baked from the base this adapter was trained on (or with another recipe).")
+            if src is not None:
+                first = _first_stack_differing(src.get("absmax_by_stack"), got.get("absmax_by_stack"))
+                why = (f" The adapter records its base's fp32 source fingerprint too ({str(src.get('sha256'))[:16]}) "
+                       f"and the arena matches neither: it was not baked from the base this adapter was trained on, or not "
+                       f"with the same recipe"
+                       + (f" (the first stack whose absmax differs: {first})." if first else "."))
+            elif _dq_trained(ad):
+                why = (" The manifest records a double-quantized expert absmax (training's default) and no fp32 source "
+                       "fingerprint, and the arena stores fp32: this is the dq-vs-fp32 absmax case "
+                       "(docs/ADAPTER_PORTABILITY.md F1), not necessarily a different model. Retraining with this "
+                       "release (it records the fp32 source fingerprint, so the base verifies) or at E4B_ABSMAX_DQ=0 "
+                       "resolves it.")
+            else:
+                why = " The arena was not baked from the base this adapter was trained on (or with another recipe)."
             refusals.append((12, f"the served expert base is not the adapter's: qfp-v1 {got['sha256'][:16]} served "
                                  f"against {str(want.get('sha256'))[:16]} trained.{why} To serve it anyway, set "
                                  f"{ACCEPT_BASE_MISMATCH_ENV}=experts (reported in /health as a served mismatch); "
                                  f"E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE does not cover a measured mismatch"))
     return refusals, report
+
+
+def _first_stack_differing(trained, served) -> str | None:
+    """The first ``<stack>.<which>`` (sorted) whose recorded absmax hash differs between two ``absmax_by_stack``
+    maps, or that one of them lacks; None when either map is missing."""
+    if not (isinstance(trained, dict) and isinstance(served, dict)):
+        return None
+    return next((k for k in sorted(set(trained) | set(served)) if trained.get(k) != served.get(k)), None)
 
 
 def _expert_base_unverified(ad: AdapterDir) -> str:
@@ -337,8 +386,14 @@ def base_match(ad: AdapterDir, refusals=(), fingerprints=None) -> dict:
         attn += f"; base verified (qfp-v1 {fps['attention']['served'][:16]})"
     ex = fps.get("experts")
     if ex is not None:
-        experts = (f"verified (qfp-v1 {ex['served'][:16]})" if ex["status"] == "verified"
-                   else f"{ex['status']}: qfp-v1 {ex['served'][:16]} served, {str(ex['trained'])[:16]} trained")
+        if ex["status"] == "verified":
+            experts = f"verified (qfp-v1 {ex['served'][:16]})"
+        elif ex["status"] == SOURCE_VERIFIED:
+            # the BASE is proven, never "served == trained": the served absmax is fp32, the trained one compressed
+            experts = (f"verified (source, qfp-v1 {ex['served'][:16]}); trained on "
+                       f"{ex.get('trained_absmax') or 'double-quantized'} absmax, served on fp32 absmax")
+        else:
+            experts = f"{ex['status']}: qfp-v1 {ex['served'][:16]} served, {str(ex['trained'])[:16]} trained"
     elif _v2_scope_fingerprint(ad, "experts") is not None:
         experts = "pending (the manifest's qfp-v1 is compared with the served arena at load)"
     else:
