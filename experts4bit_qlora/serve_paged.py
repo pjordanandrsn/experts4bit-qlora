@@ -78,7 +78,10 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
   step's total prefill budget is ``max_prefill_tokens_per_step`` (default = chunk, the harness's
   ``--chunk``). The scheduler prefers prefill over decode within a step and each chunk is its own
   batch-1 forward, so resident decoders see one prefill forward of extra latency per step while a
-  prompt is ingesting -- the TTFT/ITL trade the chunk size sets.
+  prompt is ingesting -- the TTFT/ITL trade the chunk size sets. Two opt-in knobs reshape that trade while any
+  decode row is live: ``E4B_PAGED_PREFILL_EVERY=N`` puts prefill on at most one step in N, and
+  ``E4B_PAGED_LOADED_CHUNK_TOKENS`` caps the chunk and the step's budget (both default to today's plans; see
+  :class:`~.engines.scheduler.ContinuousScheduler`).
 * **Capacity.** Admission is bounded by ``max_seqs`` AND free KV slots (``kv_slots = max_seqs``);
   a request past capacity WAITS in the scheduler's FIFO queue and its TTFT includes that wait
   (``Request.arrival`` is stamped at HTTP arrival and handed to ``add_request(now=...)``). There
@@ -696,6 +699,8 @@ class PagedServeConfig:
     max_tokens_per_seq: int = 4096       # E4B_PAGED_MAX_TOKENS_PER_SEQ: prompt + output per sequence
     chunk_tokens: int = 512              # E4B_PAGED_CHUNK_TOKENS
     max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
+    prefill_every: int = 1               # E4B_PAGED_PREFILL_EVERY: while decoding, prefill on at most 1 step in N
+    loaded_chunk_tokens: int = 0         # E4B_PAGED_LOADED_CHUNK_TOKENS: while decoding, chunk + budget cap; 0 = off
     graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
     prefill_graph: str = "auto"          # E4B_PAGED_PREFILL_GRAPH: auto (default) / 1 / 0 (_prefill_graph_env)
     last_logits: bool = False            # E4B_PAGED_LAST_LOGITS: opt-in prefill head at one position
@@ -753,6 +758,8 @@ class PagedServeConfig:
             max_tokens_per_seq=int(env("E4B_PAGED_MAX_TOKENS_PER_SEQ", "4096")),
             chunk_tokens=int(env("E4B_PAGED_CHUNK_TOKENS", "512")),
             max_prefill_tokens=int(env("E4B_PAGED_MAX_PREFILL_TOKENS", "0")),
+            prefill_every=int(env("E4B_PAGED_PREFILL_EVERY", "1") or "1"),
+            loaded_chunk_tokens=int(env("E4B_PAGED_LOADED_CHUNK_TOKENS", "0") or "0"),
             graphs=_graphs_env(env("E4B_PAGED_GRAPHS", "auto"), env("E4B_PAGED_DEVICE", "cuda"),
                                env("E4B_PAGED_PLACEMENT", "all-vram"), _capability(env("E4B_PAGED_DEVICE", "cuda"))),
             prefill_graph=_prefill_graph_env(env("E4B_PAGED_PREFILL_GRAPH", "auto")),
@@ -801,6 +808,10 @@ class PagedServeConfig:
             raise ValueError("E4B_PAGED_CHUNK_TOKENS must be >= 1")
         if self.max_prefill_tokens < 0:
             raise ValueError("E4B_PAGED_MAX_PREFILL_TOKENS must be >= 0 (0 = chunk_tokens)")
+        if self.prefill_every < 1:
+            raise ValueError("E4B_PAGED_PREFILL_EVERY must be >= 1 (1 = prefill on every step, the default)")
+        if self.loaded_chunk_tokens < 0:
+            raise ValueError("E4B_PAGED_LOADED_CHUNK_TOKENS must be >= 0 (0 = off, the default)")
         from .serve_recipe import default_buckets, usable_buckets
         if isinstance(self.buckets, str):
             if self.buckets.strip().lower() != "auto":
@@ -1079,7 +1090,8 @@ class PagedEngine:
                     tr.mark("ops")
                 try:
                     plan = sched.step()
-                except Exception as e:  # noqa: BLE001
+                    self._dispatch()
+                except Exception as e:  # noqa: BLE001 -- a failed step or hand-off is the server's state
                     self.error = f"{type(e).__name__}: {e}"
                     self.state = "error"
                     log(f"engine step FAILED: {self.error}")
@@ -1090,7 +1102,6 @@ class PagedEngine:
                     if tr is not None:
                         tr.close()
                     return
-                self._dispatch()
                 if tr is not None:
                     if plan.is_empty:
                         tr.discard()
@@ -1139,40 +1150,63 @@ class PagedEngine:
             if stream.rid is not None and stream.rid in self._streams:
                 sched.abort(stream.rid)
 
-    def _push(self, stream: PagedStream, item) -> None:
+    def _push(self, stream: PagedStream, item, batch: Optional[list] = None) -> None:
+        """Hand ``item`` to ``stream``'s event-loop queue. With ``batch`` the hand-off is appended there and the caller
+        wakes the loop once for the lot (:meth:`_dispatch`); without it the loop is woken now."""
         if item[0] in (_DONE, _ERROR):
             if stream.finished:
                 return
             stream.finished = True
             with self._cv:
                 self._inflight = max(0, self._inflight - 1)
+        if batch is not None:
+            batch.append((stream.queue, item))
+        else:
+            self._wake(stream.queue.put_nowait, item)
+
+    def _wake(self, fn, arg) -> None:
         loop = self._loop
         try:
             if loop is not None and not loop.is_closed():
-                loop.call_soon_threadsafe(stream.queue.put_nowait, item)
+                loop.call_soon_threadsafe(fn, arg)
         except RuntimeError:     # loop closed under us (shutdown): nobody is listening
             pass
 
+    @staticmethod
+    def _fanout(items: list) -> None:
+        """On the event loop: one step's hand-offs, in the engine's order (the queues are unbounded, so none raises)."""
+        for queue, item in items:
+            queue.put_nowait(item)
+
     def _dispatch(self) -> None:
+        """One step's tokens and finishes to their streams, with ONE cross-thread wakeup for the step. A wakeup per
+        stream was the largest piece of the exposed host gap at 64 slots (``dispatch`` in
+        ``bench/h2h-2026-10-02/sc2e/decode64/README.md``, section (c))."""
         sched = self.parts.scheduler
-        for rid, req in sched.active.items():
-            st = self._streams.get(rid)
-            if st is not None and len(req.out) > st.sent:
-                self._push(st, (_TOKENS, req.out[st.sent:]))
-                st.sent = len(req.out)
-        for lst, idx_attr in ((sched.done, "_done_idx"), (sched.aborted, "_abort_idx")):
-            i = getattr(self, idx_attr)
-            while i < len(lst):
-                req = lst[i]
-                i += 1
-                st = self._streams.pop(req.rid, None)
-                if st is None:
-                    continue
-                rest = req.out[st.sent:]
-                st.sent = len(req.out)
-                rec = self._record(req, st)
-                self._push(st, (_DONE, (rest, req.finish_reason or "length", rec)))
-            setattr(self, idx_attr, i)
+        out: list = []
+        try:
+            for rid, req in sched.active.items():
+                st = self._streams.get(rid)
+                if st is not None and len(req.out) > st.sent:
+                    self._push(st, (_TOKENS, req.out[st.sent:]), out)
+                    st.sent = len(req.out)
+            for lst, idx_attr in ((sched.done, "_done_idx"), (sched.aborted, "_abort_idx")):
+                i = getattr(self, idx_attr)
+                while i < len(lst):
+                    req = lst[i]
+                    i += 1
+                    st = self._streams.get(req.rid)
+                    if st is None:
+                        continue
+                    rec = self._record(req, st)       # before the pop: a stream whose record fails is still failed
+                    del self._streams[req.rid]
+                    rest = req.out[st.sent:]
+                    st.sent = len(req.out)
+                    self._push(st, (_DONE, (rest, req.finish_reason or "length", rec)), out)
+                setattr(self, idx_attr, i)
+        finally:   # what was handed off before a failure still reaches its streams (they are already marked finished)
+            if out:
+                self._wake(self._fanout, out)
 
     def _record(self, req: Request, st: PagedStream) -> dict:
         rec = {
@@ -1880,7 +1914,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     engage_prefill_graph(runner, cfg)
     sched = ContinuousScheduler(runner=runner, max_seqs=cfg.max_seqs, kv_slots=cfg.max_seqs,
                                 chunk_tokens=cfg.chunk_tokens, max_prefill_tokens_per_step=cfg.prefill_budget,
-                                lookahead=cfg.decode_lookahead)
+                                lookahead=cfg.decode_lookahead, prefill_every=cfg.prefill_every,
+                                loaded_chunk_tokens=cfg.loaded_chunk_tokens)
     info = {"moe_layers": L, "experts": E, "top_k": k, "model_type": getattr(model.config, "model_type", None),
             "int4_expert_layers": int4_layers, "int4_store_kinds": kinds, "int4_attn_projections": int4_attn,
             "kv": {"n_kv_heads": hkv, "head_dim": hd, "k_groups": cfg.kv_groups, "scratch_slots": scratch,
@@ -2175,6 +2210,7 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
                 "max_seqs": cfg.max_seqs, "kv_slots": cfg.max_seqs, "max_tokens_per_seq": cfg.max_tokens_per_seq,
                 "max_seqs_requested": cfg.max_seqs_requested, "max_seqs_resolution": cfg.max_seqs_resolution or None,
                 "chunk_tokens": cfg.chunk_tokens, "max_prefill_tokens_per_step": cfg.prefill_budget,
+                "prefill_every": cfg.prefill_every, "loaded_chunk_tokens": cfg.loaded_chunk_tokens,
                 "graphs": cfg.graphs, "buckets": list(cfg.buckets), "buckets_requested": cfg.buckets_requested,
                 "graph_status": info.pop("graph_status", None), "graph_stats": _graph_stats(parts),
                 "placement": cfg.placement, "fuse_qkv": _fuse_qkv_health(cfg, info),

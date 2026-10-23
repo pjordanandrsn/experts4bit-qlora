@@ -438,10 +438,21 @@ _K25_PLAN = {"block_n": 32, "kc": 64, "warps": 4, "stages": 3, "lut": "tree", "d
 #: decode, at Qwen3-30B-A3B's W16 shapes on one RTX 5090, every rep bit-identical; ``bench/p160``). It is a plan for K39's
 #: decode ONLY: the select tree at these shapes runs slower than at today's (P155: 255 registers), so an explicit ``c1``
 #: under any decode but ``prmt`` is refused, never run. Lane P161 read it in the served step, and qwen3_moe takes it by
-#: default (:data:`K25_PLAN_DEFAULT_FAMILIES`).
+#: default (:data:`K25_PLAN_DEFAULT_FAMILIES`). ``m1`` is lane P222's selected pair M (``bench/p222/RESULTS-p222.md``,
+#: a microbench at Mixtral-8x7B's W16 shapes on one RTX 5090; the record is ``receipts/p222-5090-5/bench_p222.json``'s
+#: ``"m"``): c1's gate_up with a down plan of its own. It is OPT-IN, no family takes it by default, and like c1 it is a
+#: plan for K39's decode ONLY (:data:`_K25_PLAN_PRMT_ONLY`).
 _K25_PLANS: dict = {
     "today": ({}, {}),
     "c1": ({"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, {"block_n": 128, "kc": 128, "warps": 8, "stages": 3}),
+    "m1": ({"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, {"block_n": 32, "kc": 256, "warps": 4, "stages": 2}),
+}
+#: Every plan but ``today`` is served under K39's decode (K25's ``lut="prmt"``) ONLY, as ``{name: (whose plan it is, why
+#: it never runs under another decode)}``: an explicit one under another decode, or with K25 off or absent, is refused,
+#: never run (:func:`_k25_plan_refusal`).
+_K25_PLAN_PRMT_ONLY: dict = {
+    "c1": ("lane P160's plan", "The tree at c1's shapes is slower than at today's (P155)"),
+    "m1": ("lane P222's plan", "P222 read m1 under no other decode (its tree arm was dropped, Amendment 1)"),
 }
 #: Lane P161's default for ``E4B_K25_PLAN`` (``bench/p161/RESULTS-p161.md``): an UNSET knob resolves to ``c1`` on a
 #: model_type here, at engine build (:func:`resolve_k25_plan`), where K25's decode resolved to ``prmt`` (the decode c1
@@ -532,26 +543,28 @@ def _k25_plan(nf4_smallm_mod) -> dict:
 
 
 def _k25_plan_raw():
-    """``E4B_K25_PLAN`` as set: ``today`` or ``c1``, or None when unset or empty (the per-family default,
-    :data:`_K25_PLAN_DEFAULT`). Anything else is refused."""
+    """``E4B_K25_PLAN`` as set: a name in :data:`_K25_PLANS` (``today``, ``c1`` or ``m1``), or None when unset or empty
+    (the per-family default, :data:`_K25_PLAN_DEFAULT`). Anything else is refused."""
     v = os.environ.get("E4B_K25_PLAN", "").strip().lower()
     if not v:
         return None
     if v not in _K25_PLANS:
-        raise ValueError(f"E4B_K25_PLAN={v!r}: expected 'today' or 'c1'")
+        raise ValueError(f"E4B_K25_PLAN={v!r}: expected one of " + ", ".join(repr(n) for n in _K25_PLANS))
     return v
 
 
-def _k25_c1_refusal(lut, why) -> RuntimeError:
-    return RuntimeError(f"E4B_K25_PLAN=c1 is lane P160's plan for K39's decode (K25's lut='prmt'), but K25's decode here "
-                        f"is {lut!r} ({why}). The tree at c1's shapes is slower than at today's (P155), so it is never "
-                        "run: set E4B_K25_LUT=prmt where the kernel package and device carry it, or E4B_K25_PLAN=today")
+def _k25_plan_refusal(name, lut, why) -> RuntimeError:
+    whose, slower = _K25_PLAN_PRMT_ONLY[name]
+    return RuntimeError(f"E4B_K25_PLAN={name} is {whose} for K39's decode (K25's lut='prmt'), but K25's decode here "
+                        f"is {lut!r} ({why}). {slower}, so it is never run: set E4B_K25_LUT=prmt where the kernel "
+                        "package and device carry it, or E4B_K25_PLAN=today")
 
 
 def _k25_plans(nf4_smallm_mod) -> tuple:
     """``(gate_up's plan, down's plan, the plan's name)``: :func:`_k25_plan` with ``E4B_K25_PLAN``'s block shapes
-    (:data:`_K25_PLANS`; unset is the build's per-family default, :data:`_K25_PLAN_DEFAULT`). An explicit ``c1`` under a
-    decode other than ``prmt`` is refused, never run; a default ``c1`` there serves ``today`` (a default never refuses).
+    (:data:`_K25_PLANS`; unset is the build's per-family default, :data:`_K25_PLAN_DEFAULT`). An explicit plan other than
+    ``today`` (``c1``, ``m1``) under a decode other than ``prmt`` is refused, never run; a default ``c1`` there serves
+    ``today`` (a default never refuses).
     The name is what :data:`K25_PLAN_SEEN` counts, so the record is the plan resolved here."""
     base = _k25_plan(nf4_smallm_mod)
     raw = _k25_plan_raw()
@@ -560,7 +573,8 @@ def _k25_plans(nf4_smallm_mod) -> tuple:
         name = "today"
     if name != "today" and base["lut"] != "prmt":
         raw = _k25_lut_raw()
-        raise _k25_c1_refusal(base["lut"], f"E4B_K25_LUT={raw}" if raw else "unset E4B_K25_LUT, as resolved at build")
+        raise _k25_plan_refusal(name, base["lut"],
+                                f"E4B_K25_LUT={raw}" if raw else "unset E4B_K25_LUT, as resolved at build")
     gu, dn = _K25_PLANS[name]
     return dict(base, **gu), dict(base, **dn), name
 
@@ -616,12 +630,12 @@ def resolve_k25_lut(model_type=None) -> dict:
 
 def resolve_k25_plan(k25_lut: dict, family_known: bool = True, model_type=None) -> dict:
     """``E4B_K25_PLAN`` resolved at engine build from :func:`resolve_k25_lut`'s result ``k25_lut``, before any weight
-    loads. Returns ``{"env": the raw value or None, "plan": "today" | "c1", or None when K25 is off or absent, "why": the
-    reason when None, "source": "explicit" | "default-allowlisted" | "default-off: <why>" | "unresolved: <why>",
-    "gu" / "dn": each projection's block shape}``.
+    loads. Returns ``{"env": the raw value or None, "plan": a name in :data:`_K25_PLANS`, or None when K25 is off or
+    absent, "why": the reason when None, "source": "explicit" | "default-allowlisted" | "default-off: <why>" |
+    "unresolved: <why>", "gu" / "dn": each projection's block shape}``.
 
-    - **Explicit:** ``c1`` is refused when K25 is off or absent, and when K25's decode is not ``prmt`` (as the forward
-      refuses it, :func:`_k25_plans`).
+    - **Explicit:** any plan but ``today`` (``c1``, ``m1``) is refused when K25 is off or absent, and when K25's decode
+      is not ``prmt`` (as the forward refuses it, :func:`_k25_plans`).
     - **Unset:** the per-family default (:data:`K25_PLAN_DEFAULT_FAMILIES`, lane P161): ``c1`` where ``model_type`` is
       listed and K25's decode resolved to ``prmt``; otherwise ``today``, with the reason. Never a refusal. The resolution
       is kept in :data:`_K25_PLAN_DEFAULT` for the forward.
@@ -647,11 +661,11 @@ def resolve_k25_plan(k25_lut: dict, family_known: bool = True, model_type=None) 
             name, source = want, "default-allowlisted"
             _K25_PLAN_DEFAULT[0] = want
     if lut is None:
-        if raw == "c1":
-            raise RuntimeError(f"E4B_K25_PLAN=c1 names K25's plan, but K25 does not run here ({k25_lut.get('why')})")
+        if raw is not None and raw != "today":
+            raise RuntimeError(f"E4B_K25_PLAN={raw} names K25's plan, but K25 does not run here ({k25_lut.get('why')})")
         return {"env": raw, "plan": None, "why": k25_lut.get("why"), "source": source}
     if raw is not None and name != "today" and lut != "prmt" and (family_known or k25_lut.get("env") is not None):
-        raise _k25_c1_refusal(lut, k25_lut.get("source"))
+        raise _k25_plan_refusal(name, lut, k25_lut.get("source"))
     base = {k: _K25_PLAN[k] for k in ("block_n", "kc", "warps", "stages")}
     gu, dn = _K25_PLANS[name]
     return {"env": raw, "plan": name, "why": None, "source": source, "gu": dict(base, **gu), "dn": dict(base, **dn)}
@@ -851,7 +865,7 @@ def _seen_k25_lut(lut: str, rows: int) -> None:
     K25_LUT_SEEN[key] = K25_LUT_SEEN.get(key, 0) + 1
 
 
-#: K25's calls by ``E4B_K25_PLAN`` plan, as ``{"<plan>|<rows>": calls}`` (``today`` or ``c1``, :func:`_k25_plans`),
+#: K25's calls by ``E4B_K25_PLAN`` plan, as ``{"<plan>|<rows>": calls}`` (``today``, ``c1`` or ``m1``, :func:`_k25_plans`),
 #: counted beside :data:`K25_LUT_SEEN`. It is what an ``E4B_K25_PLAN`` read asserts: the arm's plan, and no other.
 K25_PLAN_SEEN: dict = {}
 
@@ -1070,9 +1084,9 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "(nf4_smallm.gemm_nf4_grouped_smallm, grouped-nf4-gemm#429)") from e
             if _k25_lut_raw() == "prmt":  # an asked-for prmt is never dropped with K25, even under auto
                 raise _k25_without_kernel(e) from e
-            if _k25_plan_raw() == "c1":   # nor an asked-for c1
-                raise RuntimeError("E4B_K25_PLAN=c1 names K25's plan, but the installed kernel package has no K25 "
-                                   f"(nf4_smallm.gemm_nf4_grouped_smallm): {e}") from e
+            if _k25_plan_raw() not in (None, "today"):   # nor an asked-for plan (c1, m1)
+                raise RuntimeError(f"E4B_K25_PLAN={_k25_plan_raw()} names K25's plan, but the installed kernel package "
+                                   f"has no K25 (nf4_smallm.gemm_nf4_grouped_smallm): {e}") from e
             _k25 = None                   # auto: the kernel package predates K25 -> today's NF4 route
     _small = _k19 if _k19 is not None else _k25
     _fused_tiles = None

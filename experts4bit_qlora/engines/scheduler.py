@@ -163,16 +163,43 @@ class ContinuousScheduler:
     admission is the synchronous path's. Sequences, tokens and finish
     reasons are the synchronous path's; a sequence that stops on a stop id
     frees its slot one step later.
+
+    Two prefill/decode interleave knobs (serving roadmap lever A1). Both
+    apply only while a decode row is live, and their defaults compose
+    exactly today's plans:
+
+    * ``prefill_every`` (``E4B_PAGED_PREFILL_EVERY``, default 1): a step
+      carries prefill work only if the previous ``prefill_every - 1``
+      steps carried none, so live decodes take at most one prefill stall
+      every N steps. The next chunk waits at most ``N - 1`` steps for its
+      turn, so a given prompt waits about ``N`` steps per chunk owed ahead
+      of it (its own and those of prompts admitted before it); with no
+      decode row live, prefill runs every step as before.
+    * ``loaded_chunk_tokens`` (``E4B_PAGED_LOADED_CHUNK_TOKENS``, default
+      0 = off): caps both the chunk and the step's prefill budget, so one
+      long chunk becomes several short stalls. A first chunk shorter than
+      the prefill graph's ``T`` runs eagerly (the runner counts it as a
+      ``short_chunk``); chunking a prompt differently can change its
+      tokens, as any change of ``chunk_tokens`` can.
     """
 
     def __init__(self, *, runner: StepRunner, max_seqs: int = 8,
                  kv_slots: int | None = None, chunk_tokens: int = 512,
                  max_prefill_tokens_per_step: int | None = None,
-                 clock=time.monotonic, lookahead: bool = False):
+                 clock=time.monotonic, lookahead: bool = False,
+                 prefill_every: int = 1, loaded_chunk_tokens: int = 0):
         if max_seqs < 1:
             raise ValueError("max_seqs must be >= 1")
         if chunk_tokens < 1:
             raise ValueError("chunk_tokens must be >= 1")
+        if int(prefill_every) < 1:
+            raise ValueError("prefill_every must be >= 1 (1 = prefill on every step, today's plans)")
+        if int(loaded_chunk_tokens) < 0:
+            raise ValueError("loaded_chunk_tokens must be >= 0 (0 = off)")
+        self.prefill_every = int(prefill_every)
+        self.loaded_chunk_tokens = int(loaded_chunk_tokens)
+        self._since_prefill = self.prefill_every     # steps since the last one that carried prefill (saturates)
+        self.prefill_deferred = 0                    # steps that held pending prefill back under prefill_every
         self.runner = runner
         self.max_seqs = max_seqs
         self.kv_slots = max_seqs if kv_slots is None else kv_slots
@@ -279,11 +306,19 @@ class ContinuousScheduler:
         excellent aggregate throughput and unbounded TTFT."""
         self._admit()
         plan = StepPlan()
-        budget = self.max_prefill_tokens
+        chunk, budget = self.chunk_tokens, self.max_prefill_tokens
+        loaded = any(req.phase is Phase.DECODE for req in self.active.values())
+        if loaded and self.loaded_chunk_tokens:
+            chunk = min(chunk, self.loaded_chunk_tokens)
+            budget = min(budget, self.loaded_chunk_tokens)
+        if loaded and self._since_prefill < self.prefill_every - 1:
+            if any(req.phase is Phase.PREFILL for req in self.active.values()):
+                self.prefill_deferred += 1
+            budget = 0
         for req in self.active.values():
             if req.phase is not Phase.PREFILL or budget <= 0:
                 continue
-            take = min(self.chunk_tokens, budget,
+            take = min(chunk, budget,
                        req.prompt_len - req.prompt_pos)
             if take > 0:
                 plan.prefill.append((req.rid, req.prompt_pos, take))
@@ -291,6 +326,7 @@ class ContinuousScheduler:
         for req in self.active.values():
             if req.phase is Phase.DECODE:
                 plan.decode.append(req.rid)
+        self._since_prefill = 0 if plan.prefill else min(self._since_prefill + 1, self.prefill_every)
         return plan
 
     # ------------------------------------------------------------- step --
@@ -506,6 +542,7 @@ class ContinuousScheduler:
             "per_stream_tok_s_mean": (sum(per_stream) / len(per_stream)
                                       if per_stream else None),
             "kv_slots_free": len(self._free_slots),
+            **({"prefill_deferred": self.prefill_deferred} if self.prefill_every > 1 else {}),
             **({"lookahead_discarded": self.lookahead_discarded} if self.lookahead else {}),
             **({"spec_dropped": self.spec_dropped} if self.speculative else {}),
         }

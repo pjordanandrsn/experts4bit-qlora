@@ -79,7 +79,10 @@ over HF `generate`. It exists so that request-level serving benchmarks (TTFT, in
 and throughput under Poisson arrivals, as `vllm bench serve` and `sglang.bench_serving` drive them)
 can be run against e4b exactly as they are run against vLLM, SGLang and llama.cpp. **It is the
 server the serving campaign benchmarks against**; it is not the shared-GPU availability deployment
-above, and it serves no adapters.
+above. It serves at most ONE trained adapter, merged at load (`E4B_PAGED_ADAPTER=<dir>`, from 0.57.0): it verifies the
+adapter directory before it reads any weight, merges the attention LoRA into the bf16 projections so the adapter adds
+no per-token work, and refuses to start, naming each reason, rather than serve the base model in its place. Expert LoRA
+is refused for now; [`ADAPTER_PORTABILITY.md`](ADAPTER_PORTABILITY.md) states which pairings are exact.
 
 ```bash
 pip install "experts4bit-qlora[serve,fast]"
@@ -272,7 +275,7 @@ Its cost is a few `perf_counter` calls and up to six CUDA events a step.
 
 Engine knobs: `E4B_PAGED_MAX_SEQS` (`auto`, below; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
 prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`
-(512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_GRAPHS` (`auto`, the default:
+(512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_PREFILL_EVERY` (1; while a decode row is live, prefill on at most one step in N) + `E4B_PAGED_LOADED_CHUNK_TOKENS` (0 = off; while a decode row is live, caps the chunk and the step's budget), `E4B_PAGED_GRAPHS` (`auto`, the default:
 bucketed CUDA-graph decode on scratch slots on a CUDA device of sm_89 or newer at `all-vram`; `0` eager, `1` forced) +
 `E4B_PAGED_BUCKETS` (`1,2,4,8,16`, trimmed to `max_seqs`; `auto` follows `max_seqs`, below), `E4B_PAGED_TRACE=<path>`
 (one JSON line per finished request: arrival, admitted_at, first_token_at, finished_at, prompt_len,
@@ -427,7 +430,11 @@ decode in 0.50.0. On an older package each resolves off, recorded.
   (`e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20`, [`bench/p161/RESULTS-p161.md`](../bench/p161/RESULTS-p161.md):
   one RTX 5090, Qwen3-30B-A3B). Unset, it resolves to `c1` only where K25's decode resolved to `prmt`, and to `today`
   otherwise (an older kernel package, ROCm, `E4B_K25_LUT=tree`), recorded, never a crash. `today` opts out; an explicit
-  `c1` under any other decode is refused. Reported in `levers.k25_plan`; which plan each K25 call took is
+  `c1` under any other decode is refused. `m1` is opt-in on every family (no default takes it): lane P222's selected
+  pair ([`bench/p222/RESULTS-p222.md`](../bench/p222/RESULTS-p222.md)), gate_up as `c1`'s and down at
+  `{block_n 32, kc 256, warps 4, stages 2}`, with `c1`'s refusals (only under `prmt`; refused with K25 off or absent).
+  It has a microbench read only (at Mixtral-8x7B's W16 shapes, one RTX 5090); no served speed is claimed for it.
+  Reported in `levers.k25_plan`; which plan each K25 call took (`today`, `c1` or `m1`) is
   `prefill_routes.seen.moe_k25_plan`.
 
 **Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves
