@@ -62,7 +62,8 @@ def _head(value):
 def test_the_record_names_k37_and_the_plan_it_runs_at_this_shape():
     import dense_i8
     _, rec = _head(8)
-    assert rec == {"rows_max": 8, "kernel": "dense_i8.linear_i8 (K37)", "plan": list(dense_i8.plan(VOCAB, HIDDEN, 2))}
+    assert rec == {"rows_max": 8, "kernel": "dense_i8.linear_i8 (K37)",
+                   "plan": {str(m): list(dense_i8.plan(VOCAB, HIDDEN, m)) for m in range(2, 9)}}
 
 
 @pytest.mark.parametrize("rows", [1, 2, 3, 8])

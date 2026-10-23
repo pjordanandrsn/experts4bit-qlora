@@ -35,8 +35,8 @@ those calls go to grouped-nf4-gemm K37's ``dense_i8.linear_i8`` over the SAME co
 ``F.linear``. ``linear_i8`` accumulates ``x . q`` in fp32 through ``tl.dot`` and stores ``bf16(s * acc)``: on the same
 grid as every other row count, under K37's tolerance contract, never bitwise a row's one-row output. Unset or ``1``
 is today's route and never imports ``dense_i8``. Set, it needs the head swapped (``E4B_INT8_HEAD_BW`` resolved on) and
-a grouped-nf4-gemm with K37 (0.49.0 or later); each is refused by name. :func:`apply_int8_head_rows` records the plan
-``linear_i8`` runs at the head's shape (K37's table, else its untimed default).
+a grouped-nf4-gemm with K37 (0.49.0 or later); each is refused by name. :func:`apply_int8_head_rows` records, per row
+count it routes, the plan ``linear_i8`` runs at the head's shape (K37's table, else its untimed default).
 
 Refused: another mode, a grouped-nf4-gemm without K36, a model with no ``nn.Linear`` output head (an int4 head is an
 ``Int4Linear``), a head tied to the input embeddings (rounding it would round the embeddings), a bias, and a weight that
@@ -176,7 +176,7 @@ def apply_int8_head_rows(model, value: int, *, linear=None, plan=None) -> dict:
     head.rows_max = value
     n, k = head.out_features, head.in_features
     return {"rows_max": value, "kernel": "dense_i8.linear_i8 (K37)",
-            "plan": list(plan(n, k, 2)) if plan is not None else None}
+            "plan": {str(m): list(plan(n, k, m)) for m in range(2, value + 1)} if plan is not None else None}
 
 
 def head_refusal(model) -> str | None:

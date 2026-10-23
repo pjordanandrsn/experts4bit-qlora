@@ -258,7 +258,7 @@ class _RowsStub:
 
 
 def _plan(n, k, m):
-    return (32, 256, 4)
+    return (32, 256, 4) if m < 6 else (64, 128, 8)          # a plan that differs by M: the record keeps each
 
 
 @pytest.mark.parametrize("value,want", [("", 1), ("1", 1), (" 1 ", 1), ("2", 2), ("4", 4), ("8", 8), (" 8 ", 8)])
@@ -309,7 +309,12 @@ def test_rows_take_k37_from_a_package_that_has_it(monkeypatch):
     m = _Toy()
     _apply(m)
     rec = ih.apply_int8_head_rows(m, 8)
-    assert rec == {"rows_max": 8, "kernel": "dense_i8.linear_i8 (K37)", "plan": [32, 256, 4]}
+    assert rec == {"rows_max": 8, "kernel": "dense_i8.linear_i8 (K37)",
+                   "plan": {"2": [32, 256, 4], "3": [32, 256, 4], "4": [32, 256, 4], "5": [32, 256, 4],
+                            "6": [64, 128, 8], "7": [64, 128, 8], "8": [64, 128, 8]}}
+    m4 = _Toy()
+    _apply(m4)
+    assert ih.apply_int8_head_rows(m4, 4)["plan"] == {"2": [32, 256, 4], "3": [32, 256, 4], "4": [32, 256, 4]}
     assert m.lm_head._linear is fake.linear_i8 and m.lm_head.rows_max == 8
 
 
