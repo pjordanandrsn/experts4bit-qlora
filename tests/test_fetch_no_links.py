@@ -24,9 +24,14 @@ SKIP_DIRS = {".git", "build", ".venv", "node_modules"}
 _POS = re.compile(r"(?:^|[;&|({!`]|\$\(|\b(?:if|then|do|else|elif|while|until|nohup|exec|time|command|sudo)\s)\s*$")
 
 
+_QUOTED_VAR = re.compile(r"""(["'])(\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)\1""")
+
+
 def _mask_quotes(s: str) -> str:
     """The same string with every quoted span's contents replaced by 'x' (offsets kept), so a word inside quotes is
-    never read as a command: say "rsync failed", --rsync-path="nice rsync"."""
+    never read as a command: say "rsync failed", --rsync-path="nice rsync". A quoted word that is only a variable
+    ("$SSH") is a command word, not text: its quotes become spaces, so "$SSH" "tar ..." | tar -x reads as a pull."""
+    s = _QUOTED_VAR.sub(lambda m: " " + m.group(2) + " ", s)
     out, q = [], None
     for ch in s:
         if q:
@@ -105,8 +110,10 @@ def _split(seg: str) -> list[str]:
 
 def other_pulls(text: str) -> list[tuple[int, str]]:
     """(logical line index, text) of each pull from a box that is not an rsync: a local tar EXTRACT fed by a pipeline
-    from ssh/$SSH/a box() helper, an scp whose source is host:path, or an `ssh ... cat ... > file`. A tar extract inside
-    a quoted remote command is a push (masked), and an archive unpacked from a local file is not a pull."""
+    from ssh/$SSH/a box() helper, an scp whose source is host:path, or an ssh/$SSH whose stdout is redirected to a file
+    (`ssh ... cat x > f`, and the two-step `$SSH "tar -cf - ." > x.tar` whose local `tar -xf x.tar` this cannot tie back
+    to the box). A tar extract inside a quoted remote command is a push (masked), an archive unpacked from a local file
+    is not a pull, and a redirect to /dev/null or an fd (`>&2`) writes no file."""
     out = []
     for i, line in enumerate(_logical_lines(text)):
         masked = _mask_quotes(line)
@@ -127,8 +134,8 @@ def other_pulls(text: str) -> list[tuple[int, str]]:
                      if not w.startswith("-")]
             if len(words) >= 2 and any(re.match(r"[^/\s]+:", w) for w in words[:-1]):
                 out.append((i, line.strip()))
-        if re.search(r"(?:^|[;&|({]|\bthen\s|\bdo\s)\s*(?:ssh|\$\{?SSH\}?)\s", masked) and re.search(r"\bcat\b", line) \
-                and re.search(r"(?<![<>&|0-9])>(?!&)", masked):
+        if re.search(r"(?:^|[;&|({]|\bthen\s|\bdo\s)\s*(?:ssh|\$\{?SSH\}?)\s", masked) and any(
+                not re.match(r"\s*/dev/null\b", masked[r.end():]) for r in re.finditer(r"(?<![<>&|0-9])>>?(?!&)", masked)):
             out.append((i, line.strip()))
     return out
 
@@ -217,6 +224,10 @@ def test_every_pull_form_is_found_and_needs_its_link_refusal():
         'ssh "$HOST" "cd $W && tar -cf - out" | tar xf - -C "$LOCAL"',
         'scp -P "$PORT" "root@$HOST:$W/out.tgz" "$RUN_DIR/"',
         'ssh -p "$PORT" "root@$HOST" "cat $W/verdict.json" > "$RUN_DIR/verdict.json"',
+        '$SSH "tar -C $W -cf - ." > "$RUN_DIR/k.tar" && tar -C "$RUN_DIR" -xf "$RUN_DIR/k.tar"',   # two-step: the
+        '$SSH "tar -C $W -cf - ." > "$RUN_DIR/k.tar"\ntar -C "$RUN_DIR" -xf "$RUN_DIR/k.tar"',    # redirect is the pull
+        '"$SSH" "tar -C $W -cf - ." | tar -C "$RUN_DIR" -xf -',                               # a quoted $SSH
+        '"${SSH}" "tar -C $W -cf - ." | tar -C "$RUN_DIR" -xf -',
     ]
     for text in pulls:
         assert offending(text), text
@@ -228,6 +239,10 @@ def test_every_pull_form_is_found_and_needs_its_link_refusal():
         'say "falling back to tar over ssh"',
         'scp -P "$PORT" "$KIT" "root@$HOST:$W/"',                                           # an upload
         'ssh "$HOST" "cat > $W/x" < local.txt',                                             # an upload
+        '$SSH "nvidia-smi -L" > /dev/null || exit 3',                                       # no file written
+        '$SSH "true" >/dev/null 2>&1',
+        '$SSH "echo hi" >&2',
+        '"$SSH" "tar -C $W -xf -" < kit.tar',                                               # a push, quoted $SSH
     ]
     for text in not_pulls:
         assert not offending(text), text
