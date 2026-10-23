@@ -142,12 +142,14 @@ q_quality(){ local MODEL=$1 R=$2 ARENA=$3 LEV=$4 WIN=$5 CONT=$6 QD=$W/sc2/qualit
   else echo "premise failed" > $QD/summary.txt; fi
   tail -1 logs/sc2j_premise.log | sed 's/^/SC2J_QUALITY premise: /' | tee -a summary.txt
   # shellcheck disable=SC2086  # assignment lists by design
-  env -u E4B_PAGED_KV_POOL -u E4B_PAGED_BUCKETS PYTHONPATH= E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$R E4B_PAGED_ARENA=$ARENA \
+  env -u E4B_PAGED_KV_POOL -u E4B_PAGED_BUCKETS PYTHONPATH= GNF4_SHA=$GNF4_SHA E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$R E4B_PAGED_ARENA=$ARENA \
       E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_GRAPHS=0 E4B_PAGED_MAX_SEQS=1 E4B_PAGED_MAX_TOKENS_PER_SEQ=768 \
       E4B_PAGED_PREFILL_GRAPH=0 $ROUTEENV $LEV \
       perl -e "alarm $(arm_alarm 2400); exec @ARGV" "$PY" $W/p117_box.py --out $QD/box.json --windows "$WIN" --cont "$CONT" \
       > logs/sc2j_quality.log 2>&1 || { tail -5 logs/sc2j_quality.log; line "SC2J QUALITY box failed"; }
-  "$PY" $W/p117_reduce.py --dir $QD --out $QD/verdict.json --e4b-sha "$E4B_SHA" 2>&1 | tail -3 | sed 's/^/SC2J_QUALITY /' | tee -a summary.txt
+  # P117's reducer and bar at box Q's two stack constants (SC2j Amendment 1): box Q's grouped-nf4-gemm, SC2j's windows
+  "$PY" $W/sc2j_quality.py --dir $QD --out $QD/verdict.json --e4b-sha "$E4B_SHA" --gnf4-sha "$GNF4_SHA" 2>&1 | tail -3 \
+      | sed 's/^/SC2J_QUALITY /' | tee -a summary.txt
   "$PY" - $QD/plans.json "$CONT" <<'PYP' | tee -a summary.txt
 import json, math, sys
 import torch, fp8_paged_attn
@@ -178,7 +180,7 @@ box_q(){ local s
 # VALID), and the QUALITY arm on 8 windows. WIDTH is not read here: Granite fits 64 slots under both pools.
 prove_q(){ local a s
   have sc2client || { say "PROVE: aiohttp / fastapi / uvicorn did not install -- NOT PROVED"; rec 23; return; }
-  for s in sc2_driver.py sc2_reduce.py sc2_identity.py sc2j_reduce.py sc2j_contract.py sc2j_prompts.py p117_reduce.py; do
+  for s in sc2_driver.py sc2_reduce.py sc2_identity.py sc2j_reduce.py sc2j_contract.py sc2j_prompts.py p117_reduce.py sc2j_quality.py; do
     "$PY" $W/$s --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { rec 23; return; }
   done
   l_tripwire; n_tripwire; q_tripwire
