@@ -16,6 +16,7 @@ identical grid**, never "int8 against bf16". The bf16 head is read too, reported
 | the bar on the pair a default flip needs: the knob against unset on the default server | [The rule](#the-rule-p232_reducepy-fixed-before-data) |
 | what the bar is on, and its tolerance, fixed before data and justified from K37's numerics | [The quality bar](#the-quality-bar-and-why) |
 | the bf16 comparison reported with P153's bars, never ruling | [Reported](#reported-never-ruling) |
+| a named tripwire, well inside the PASS bar, that holds a default PR for a written look | [The rule](#the-rule-p232_reducepy-fixed-before-data), rung 6 |
 | a bar at every row count the knob would route (2, 4, 8), a default capped at what passes | [The rule](#the-rule-p232_reducepy-fixed-before-data) |
 
 ## Why
@@ -107,6 +108,12 @@ The first rung that applies decides.
      then make `E4B_INT8_HEAD_ROWS` `qwen3_moe`'s default at that value, citing this read and P229. A MISS at 4 caps it
      at 2 even if 8 passes.
    - **NO_FLIP:** T = 2 misses. The knob stays opt-in, a reading, not a failure of K37.
+6. **TRIPWIRE, reported and named, never changing the verdict.** The PASS bar sits about 20x above the predicted gap, so
+   a K37 defect several times larger than expected would still pass it. The wire fires at any T if **|mean NLL(K) -
+   mean NLL(R)| > 0.005 nats**, or **argmax agreement < 0.98**, or **the K-against-R KL above 3x the R self-pair
+   floor** (the KL of phase R's `rep` arm against R, measure_phase's floor draw). If it fires, the verdict still reads as
+   the rungs above say, but **no default-flip PR may open until a short written look explains it**, reviewed as usual.
+   The reducer prints `TRIPWIRE` with every condition that fired, or `TRIPWIRE none`.
 
 ## Reported, never ruling
 
@@ -158,5 +165,5 @@ The first rung that applies decides.
    reducer's mutants) is a code PR on its own review.
 3. The shakedown may run on the kit's head.
 4. The reading runs at the kit's merge, after the P228 reading.
-5. On FLIP_ROWS_N, a separate PR may set the default to N for `qwen3_moe`, citing this read. On NO_FLIP the knob stays
-   opt-in, and the reading is recorded as such.
+5. On FLIP_ROWS_N, a separate PR may set the default to N for `qwen3_moe`, citing this read, unless the TRIPWIRE fired:
+   then that PR waits for the written look. On NO_FLIP the knob stays opt-in, and the reading is recorded as such.
