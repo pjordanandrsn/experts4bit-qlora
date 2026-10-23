@@ -44,7 +44,7 @@ adapter score at **parity** on held-out loss, read by one evaluator, or **better
 e4b vs Unsloth, e4b vs axolotl and Unsloth vs axolotl.
 
 - **Recipe:** HP2's (HP1's field recipe): 200 steps, r = alpha = 16, the registered Alpaca rows, HP1's 48 held-out rows, seeds
-  3410–3412 paired by `order_sha`.
+  3410–3412 paired by `order_sha` *(superseded by Amendment 1: seeds 3410–3414)*.
 - **e4b:** K00, the shipped settings, as HP2.
 - **Unsloth:** its own default path on the build, as a user gets it. The MoE backend it selects is recorded (HPN's t28 build ran
   native_torch and HP2's cu130 build ran grouped_mm).
@@ -169,7 +169,7 @@ paired by seed and `order_sha`.
 - The margin is m = min(max(σ_seed, 0.005), 0.02), with σ_seed as HP2 defines it (`hp1_reduce.pooled_sd` over the pair's seeds).
 - **G2'** is HP2's realized-margin TOST on Δ alone. HP2's δ0 term is dropped: on identical bases Δ_base = 0 exactly, which G1'
   has already checked.
-- A pair needs all three seeds of both frameworks non-VOID to be read. Otherwise it reads NOT_READ, naming the VOID runs.
+- A pair needs all three seeds *(superseded by Amendment 1: all five)* of both frameworks non-VOID to be read. Otherwise it reads NOT_READ, naming the VOID runs.
 
 **Bands and wording (HP2's, unchanged):**
 - **BEATS / BEHIND:** the 90 % interval excludes 0 on that side and |Δ̄| > σ_seed.
@@ -224,8 +224,8 @@ its own registered question. The three-way summary is a statement about that tab
   - G1' on real records;
   - one 4-step confirmation run per framework, with 6(b) and the engagement check;
   - the reducer's `g1` and `verdict` on those real records.
-- Guard 2.5 h at a cap of $0.40/h, plus about 20 GB downloaded at $0.011/GB, gives a worst case of **$1.22**. One attempt, and one
-  spare after a harness fix.
+- Guard 2.5 h at a cap of $0.40/h, plus about 20 GB downloaded at $0.011/GB, gives a worst case of **$1.22**
+  *(superseded by Amendment 1: $2.10, with the 100 GB download term)*. One attempt, and one spare after a harness fix.
 
 **2. The read:** one RTX 5090 (HP2's class; the build-sensitive quantize kernel is also arch-sensitive), at the full 48 layers,
 under the registered host rule (driver ≥580, RAM ≥98 GB, disk ≥220 GB).
@@ -234,16 +234,17 @@ under the registered host rule (driver ≥580, RAM ≥98 GB, disk ≥220 GB).
 |---|---|---|
 | A | three installs (venv-e4b, venv-unsloth, venv-axolotl, all on the matched build), fetch, the resolver check | ~1.0 h |
 | B | calibration: one step per framework on the 300 rows, three exports, three zero-adapter passes → **G1'** | ~1.2 h |
-| C | confirmation: seeds 3410–3412 per framework that passed G1' (≤9 runs, with axolotl's eager path the slowest) | ~3.4 h |
-| D | the evaluator's pass on the confirmation runs → 6(b), the pair verdicts, the three-way read | ~0.9 h |
+| C | confirmation: seeds 3410–3412 per framework that passed G1' (≤9 runs, with axolotl's eager path the slowest) | ~3.4 h *(superseded by Amendment 1: 3410–3414, ≤15 runs, ~6.4 h)* |
+| D | the evaluator's pass on the confirmation runs → 6(b), the pair verdicts, the three-way read | ~0.9 h *(superseded by Amendment 1: ~1.5 h)* |
 
-- That totals about 6.5 h. A whole-box CLOSE at G1' tears down at about 2.2 h.
+- That totals about 6.5 h *(superseded by Amendment 1: about 10.1 h)*. A whole-box CLOSE at G1' tears down at about 2.2 h.
 - **The deciding-depth rule (HPN's floor rule, applied to one depth):** the registered depth is the full 48 layers. An arm that
   cannot run at 48 on the read card is recorded as a depth limit, and its pairs read NOT_READ. No shallower depth substitutes for
   it.
-- Guard 8 h at $0.85/h, plus 90 GB at $0.011/GB, gives a worst case of **$7.79**. One box-started attempt and one pre-create spare.
+- Guard 8 h at $0.85/h, plus 90 GB at $0.011/GB, gives a worst case of **$7.79** *(superseded by Amendment 1: guard 11 h, $10.45)*. One box-started attempt and one pre-create spare.
 
-**Lane worst case:** 2 × $1.22 (shakedown and spare) + $7.79 = **$10.23**, under the lane's $15.
+**Lane worst case:** 2 × $1.22 (shakedown and spare) + $7.79 = **$10.23**, under the lane's $15 *(superseded by Amendment 1:
+$14.65)*.
 
 ## Rulings taken (maintainer, before any HP3 data)
 
@@ -272,6 +273,60 @@ under the registered host rule (driver ≥580, RAM ≥98 GB, disk ≥220 GB).
 5. 2026-10-21 14:23Z, on the harness review, before any data: a shakedown arm that installs and imports but fails to run is the
    (R) trigger, unless its captured error text is one of the three pre-named host classes ("The fallback" above), which use the
    spare. If the spare also fails host-attributably, the lane stops with no (R) and no read.
+
+## Amendment 1 (2026-10-21, before any HP3 data): five seeds per framework
+
+**Why.** A power pre-read ($0, from prior records, never an HP3 number) found that 3 seeds read PARITY about as often as a coin flip
+at plausible noise. Every number in this section is an ESTIMATE.
+- **No prior record measures σ_seed or the seed-level ρ.** All 33 committed 200-step Qwen3-30B-A3B arms ran seed 3407 (21 e4b, 12
+  axolotl, 0 Unsloth), and the private receipt store adds only 60-step arms at seed 0.
+- **What prior records do give is a fixed-seed floor.** Six TC1 RTX 5090 boxes (`tc1-5090-35/36/40/46/47/48`; seed 3407; 200
+  steps; 16 in-loop rows):
+  - across boxes, e4b's sd is 0.00078 (n = 7) and axolotl's 0.00070 (n = 6);
+  - same-box redraws give sd/√2 of 0.00098–0.00124;
+  - corr(e4b, axolotl) across boxes is −0.16, and their paired difference has sd 0.00115.
+
+  So σ_seed ≥ ~0.001. These are in-loop numbers on 16 rows; HP3 reads the evaluator on 48.
+- **The table.** P(PARITY | true Δ = 0) for one pair under this registration's own verdict rule, with BEATS / BEHIND tested before
+  PARITY, m = min(max(σ_pooled, 0.005), 0.02) and a 90 % t-interval on the paired difference. It is the evaluator's independent
+  re-implementation (4000 reps, seed 20261021), reproduced to the digit by `bench/hp3/hp3_power.py`:
+
+| σ_seed | ρ | 3 seeds | 5 seeds | 8 seeds |
+|---|---|---|---|---|
+| 0.001 | 0 | 0.86 | 0.92 | 0.94 |
+| 0.002 | 0 | 0.40 | 0.81 | 0.94 |
+| 0.002 | 0.5 | 0.70 | 0.96 | 0.98 |
+| 0.003 | 0 | 0.17 | 0.44 | 0.81 |
+| 0.003 | 0.5 | 0.39 | 0.82 | 0.98 |
+| 0.005 | 0 | 0.05 | 0.10 | 0.27 |
+| 0.005 | 0.82 | 0.48 | 0.88 | 0.99 |
+
+- **REPORTED context, a property of the HP2/HP3 rule and not a defect to fix.** Under true parity at small σ, the BEATS / BEHIND
+  step makes a false directional call 5.4–9.0 % of the time at ρ = 0 (`hp3_power.py`'s last column). That caps P(PARITY) near
+  0.92–0.94 even when the noise is low.
+- **Cost.** 8 seeds would run about 14.3 h, so a ~15.5 h guard: 15.5 × $0.85 + 100 GB × $0.011 + 2 × $2.10 ≈ $18, over the lane's
+  $15. 5 is the largest count that fits.
+
+**The change.**
+1. **Seeds:** 3410–3414 per framework that passes G1', each seed paired by `order_sha`. A pair needs all five seeds of both
+   frameworks non-VOID to be read. The verdict rule, its order, the margin and the 90 % t-interval (now df = 4) are unchanged.
+   `hp3_reduce.paired_reading` is `hp1_reduce.paired_reading`'s rule over HP3's seeds, and a test checks they are equal at HP1's
+   three seeds.
+2. **ρ is REPORTED only:** each pair's verdict records `rho_seed_reported`, the correlation over seeds between the two frameworks'
+   row means. It gates nothing.
+3. **The read box:** a guard of 11 h at $0.85/h, plus the launcher's 100 GB × $0.011 download reservation, gives a worst case of
+   **$10.45**. The phases are estimated at ~10.1 h: A ~1.0, B ~1.2, C ~6.4 for ≤15 runs with axolotl's eager path the slowest, and
+   D ~1.5.
+4. **The shakedown:** unchanged (one seed, 4 steps). Each attempt's worst case is 2.5 h × $0.40 + 100 GB × $0.011 = **$2.10**.
+5. **Lane worst case:** 2 × $2.10 + $10.45 = **$14.65**, under the lane's $15.
+   - The approval at 15:59Z quoted $12.78. That figure carried 20 GB (shakedown) and 90 GB (read) download terms rather than the
+     launcher's 100 GB reservation. This amendment states the reservation.
+
+**Unchanged:** everything else in this registration, including G1', 6(b), G2', the three-way read, the labels and the (R) fallback.
+
+**Ruling:** approved by the maintainer at 15:59Z, conditional on the evaluator's re-run of the simulation. The evaluator's checks:
+(a) the margin formula PASS, (b) the paired t quantile PASS, (c) a discrepancy (0.40, not 0.45) that came from the pre-read's
+PARITY-only test and strengthens the case. This amendment merges before the read box is created.
 
 ## Harness
 

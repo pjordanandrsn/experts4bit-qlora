@@ -90,7 +90,8 @@ def test_an_absent_framework_reads_absent_and_its_pairs_not_read():
 
 # ---- the verdict: synthetic confirmation runs in hp1_eval's arm format
 
-Y = {"e4b": (0.7701, 0.7712, 0.7695), "unsloth": (0.7703, 0.7709, 0.7698), "axolotl": (0.7699, 0.7714, 0.7696)}
+Y = {"e4b": (0.7701, 0.7712, 0.7695, 0.7704, 0.7708), "unsloth": (0.7703, 0.7709, 0.7698, 0.7702, 0.7710),
+     "axolotl": (0.7699, 0.7714, 0.7696, 0.7706, 0.7705)}
 
 
 def _conf(ys=Y, rt=0.0004):
@@ -132,7 +133,7 @@ def test_axolotl_on_its_kernel_path_or_without_a_receipt_voids_its_runs():
 
 def test_a_round_trip_outside_the_match_band_voids_the_run():
     conf = _conf()
-    conf["arms"][4]["adapter_roundtrip"] = 0.0101                     # unsloth seed 3411
+    conf["arms"][6]["adapter_roundtrip"] = 0.0101                     # unsloth seed 3411 (five e4b runs come first)
     out, _ = R.verdict([conf], R.g1(_cal()), _receipts())
     assert out["void"] == {"unsloth seed 3411": "6(b): |adapter_roundtrip| 0.010100 > 0.01"}
     assert out["pairs"]["e4b-unsloth"]["verdict"] == "NOT_READ" and out["pairs"]["e4b-axolotl"]["verdict"] == "PARITY"
@@ -158,7 +159,8 @@ def test_a_run_without_its_in_loop_step_n_number_voids_with_its_reason():
 
 
 def test_an_ordered_three_way_and_the_order_check():
-    ys = {"e4b": (0.700, 0.701, 0.702), "unsloth": (0.760, 0.762, 0.761), "axolotl": (0.820, 0.823, 0.821)}
+    ys = {"e4b": (0.700, 0.701, 0.702, 0.700, 0.701), "unsloth": (0.760, 0.762, 0.761, 0.760, 0.763),
+          "axolotl": (0.820, 0.823, 0.821, 0.822, 0.820)}
     out, code = R.verdict([_conf(ys)], R.g1(_cal()), _receipts())
     assert [out["pairs"][k]["verdict"] for k in ("e4b-unsloth", "e4b-axolotl", "unsloth-axolotl")] == ["BEATS", "BEATS", "BEATS"]
     assert out["three_way"]["verdict"] == "ORDERED" and code == R.EXIT_OK
@@ -167,6 +169,40 @@ def test_an_ordered_three_way_and_the_order_check():
 
 
 def test_mixed_verdicts_read_mixed():
-    ys = {"e4b": (0.700, 0.701, 0.702), "unsloth": (0.760, 0.762, 0.761), "axolotl": (0.7601, 0.7622, 0.7608)}
+    ys = {"e4b": (0.700, 0.701, 0.702, 0.700, 0.701), "unsloth": (0.760, 0.762, 0.761, 0.760, 0.763),
+          "axolotl": (0.7601, 0.7622, 0.7608, 0.7603, 0.7627)}
     out, _ = R.verdict([_conf(ys)], R.g1(_cal()), _receipts())
     assert out["pairs"]["unsloth-axolotl"]["verdict"] in ("PARITY", "INCONCLUSIVE") and out["three_way"]["verdict"] == "MIXED"
+
+
+def test_hp3s_paired_reading_is_hp1s_rule_at_hp1s_three_seeds():
+    """Amendment 1 gives HP3 its own seed list; the verdict rule must be HP1's, unchanged. At HP1's three seeds every field equals
+    hp1_reduce.paired_reading's, for a BEATS, a PARITY and an INCONCLUSIVE case."""
+    h1 = R.H1.CONFIRMATION_SEEDS
+    recs = [{"tag": "t", "own_base_only": False}]
+    for a, b, sig, m in (((0.70, 0.701, 0.702), (0.76, 0.762, 0.761), 0.001, 0.005),
+                         ((0.7701, 0.7712, 0.7695), (0.7703, 0.7709, 0.7698), 0.0007, 0.005),
+                         ((0.770, 0.790, 0.760), (0.771, 0.770, 0.772), 0.01, 0.01),
+                         ((0.7670, 0.7669, 0.7671), (0.7700, 0.7700, 0.7700), 0.001, 0.005)):   # BEATS and inside +-m: order decides
+        ya, yb = dict(zip(h1, a)), dict(zip(h1, b))
+        assert R.paired_reading("x", ya, recs, yb, recs, sig, m, seeds=h1) == R.H1.paired_reading("x", ya, recs, yb, recs, sig, m)
+    ya, yb = dict(zip(h1, (0.7670, 0.7669, 0.7671))), dict(zip(h1, (0.77, 0.77, 0.77)))
+    assert R.paired_reading("x", ya, recs, yb, recs, 0.001, 0.005, seeds=h1)["verdict"] == "BEATS"     # BEATS is tested before PARITY
+    assert R.SEEDS == (3410, 3411, 3412, 3413, 3414)
+
+
+def test_the_verdict_reports_the_seed_rho_and_reads_all_five_seeds():
+    out, _ = R.verdict([_conf()], R.g1(_cal()), _receipts())
+    p = out["pairs"]["e4b-unsloth"]
+    assert p["headline"]["seeds"] == list(R.SEEDS) and p["headline"]["df"] == 4
+    assert isinstance(p["rho_seed_reported"], float) and -1 <= p["rho_seed_reported"] <= 1
+    assert R.seed_rho({1: 1.0, 2: 1.0}, {1: 0.5, 2: 0.7}, seeds=(1, 2)) is None          # no spread on one side: not reported
+    assert R.seed_rho({1: 1.0, 2: 2.0, 3: 3.0}, {1: 2.0, 2: 4.0, 3: 6.0}, seeds=(1, 2, 3)) == 1.0
+
+
+def test_the_power_table_reproduces_the_amendments_quoted_cells():
+    """Amendment 1 quotes the evaluator's registered-order table; bench/hp3/hp3_power.py reproduces it at the evaluator's RNG seed."""
+    import hp3_power as P
+    t = P.table(reps=4000, seed=20261021)
+    assert [round(t[(0.002, 0.0)][n]["PARITY"], 2) for n in (3, 5, 8)] == [0.40, 0.81, 0.94]
+    assert [round(t[(0.001, 0.0)][n]["PARITY"], 2) for n in (3, 5, 8)] == [0.86, 0.92, 0.94]

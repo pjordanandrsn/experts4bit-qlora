@@ -26,7 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "hp1"))   # in the repo
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tc1"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))                 # on the box, the staged files sit side by side
-import hp1_reduce as H1  # noqa: E402  (paired_reading, pooled_sd, order_problems, manifest_problems, t_ppf: tested in HP1)
+import hp1_reduce as H1  # noqa: E402  (pooled_sd, order_problems, manifest_problems, t_ppf, _mean, _ss: tested in HP1)
 import axo1767_reduce as AX  # noqa: E402  (engagement: AXO1767 Amendment 1's check, tested there)
 
 SCOPE = "parity of the exported adapters under one evaluator on byte-identical bases"
@@ -41,7 +41,7 @@ REFERENCE = "e4b"
 PAIRS = (("e4b", "unsloth"), ("e4b", "axolotl"), ("unsloth", "axolotl"))
 CAL_TAGS = {"e4b": "hp3cal_e4b_k00_s3407", "unsloth": "hp3cal_unsloth_s3407", "axolotl": "hp3cal_axolotl_s3407"}
 RUN_PREFIX = {"e4b": "hp3_k00_s", "unsloth": "hp3_unsloth_s", "axolotl": "hp3_axolotl_s"}
-SEEDS = H1.CONFIRMATION_SEEDS
+SEEDS = (3410, 3411, 3412, 3413, 3414)   # Amendment 1: five confirmation seeds per framework (was HP1's 3410-3412)
 EXIT_OK, EXIT_UNUSABLE, EXIT_INCOMPLETE, EXIT_G1_CLOSE = 0, 2, 3, 4
 
 WORDING = {
@@ -165,6 +165,43 @@ def _order(ranks):
     return any(all(p.index(w) < p.index(lo) for w, lo in ranks) for p in itertools.permutations(FRAMEWORKS))
 
 
+def paired_reading(name, a_ys, a_recs, b_ys, b_recs, sigma, margin, seeds=SEEDS):
+    """hp1_reduce.paired_reading's rule, unchanged, over HP3's seeds (HP1's reads HP1_CONFIRMATION_SEEDS, three): Delta_s = y(a, s) -
+    y(b, s); CI90 by t(df n-1); BEATS / BEHIND (interval clear of 0 and |mean| > sigma) before PARITY (TOST within +-margin), else
+    INCONCLUSIVE. tests/test_hp3.py checks it equals hp1_reduce.paired_reading at HP1's three seeds."""
+    seeds = list(seeds)
+    deltas = [a_ys[s] - b_ys[s] for s in seeds]
+    k = len(deltas)
+    mean = H1._mean(deltas)
+    sd = math.sqrt(H1._ss(deltas) / (k - 1))
+    se = sd / math.sqrt(k)
+    tq = H1.t_ppf(H1.CI_TAIL, k - 1)
+    lo, hi = mean - tq * se, mean + tq * se
+    if hi < 0 and abs(mean) > sigma:
+        verdict = "BEATS"
+    elif lo > 0 and abs(mean) > sigma:
+        verdict = "BEHIND"
+    elif lo >= -margin and hi <= margin:
+        verdict = "PARITY"
+    else:
+        verdict = "INCONCLUSIVE"
+    obo = sorted(r["tag"] for r in a_recs + b_recs if r["own_base_only"])
+    return {"reading": name, "seeds": seeds, "deltas": dict(zip(map(str, seeds), deltas)), "mean": mean, "sd": sd, "se": se,
+            "df": k - 1, "t_crit": tq, "ci90": [lo, hi], "m": margin, "sigma_seed": sigma, "verdict": verdict,
+            "any_own_base_only": bool(obo), "own_base_only": obo}
+
+
+def seed_rho(a_ys, b_ys, seeds=SEEDS):
+    """Amendment 1, REPORTED only: the correlation over seeds between the two frameworks' row means (the seed pairing the paired
+    difference relies on). None when either side has no spread."""
+    x, y = [a_ys[s] for s in seeds], [b_ys[s] for s in seeds]
+    mx, my = statistics.mean(x), statistics.mean(y)
+    sxx, syy = sum((v - mx) ** 2 for v in x), sum((v - my) ** 2 for v in y)
+    if sxx == 0 or syy == 0:
+        return None
+    return round(sum((p - mx) * (q - my) for p, q in zip(x, y)) / math.sqrt(sxx * syy), 4)
+
+
 def verdict(evs, g1rec, receipts):
     """The verdict record from the confirmation evaluator output(s), the G1' record and the arm receipts {tag: receipt}."""
     arms = _runs(evs)
@@ -203,10 +240,11 @@ def verdict(evs, g1rec, receipts):
             continue
         sigma, sigma_df, _ = H1.pooled_sd([(f"P:{a}", list(ys[a].values())), (f"P:{b}", list(ys[b].values()))])
         m = min(max(sigma, H1.MARGIN_FLOOR), H1.MARGIN_CAP)
-        head = H1.paired_reading(f"{a} vs {b}", ys[a], recs[a], ys[b], recs[b], sigma, m)
+        head = paired_reading(f"{a} vs {b}", ys[a], recs[a], ys[b], recs[b], sigma, m)
         e = [rho[a][s] - rho[b][s] for s in SEEDS]
         out["pairs"][name] = {"verdict": head["verdict"], "wording": WORDING[head["verdict"]].format(a=a, b=b), "scope": SCOPE,
                               "m": m, "sigma_seed": sigma, "sigma_seed_df": sigma_df, "headline": head,
+                              "rho_seed_reported": seed_rho(ys[a], ys[b]),
                               "deltaN_reported": {"mean": round(statistics.mean(e), 6), "per_seed": e,
                                                   "term": "in-loop (the two frameworks' training forwards at step N)"}}
     vs = {k: p["verdict"] for k, p in out["pairs"].items()}

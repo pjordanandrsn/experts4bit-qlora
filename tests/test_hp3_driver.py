@@ -43,7 +43,7 @@ def test_the_read_runs_calibration_then_three_seeds_with_e4b_first_every_arm_in_
     arms, summary = drive(tmp_path, FAMILY_FAM="qwen3hp3")
     t = [a[2] for a in arms if a[0] == "qwen3hp3"]
     assert t[:3] == ["hp3cal_e4b_k00_s3407", "hp3cal_unsloth_s3407", "hp3cal_axolotl_s3407"]
-    assert t[3:] == [f"hp3_{r}_s{s}" for s in (3410, 3411, 3412) for r in ("k00", "unsloth", "axolotl")]
+    assert t[3:] == [f"hp3_{r}_s{s}" for s in (3410, 3411, 3412, 3413, 3414) for r in ("k00", "unsloth", "axolotl")]
     assert all(ln.endswith("HP3_VENV=1") for ln in (tmp_path / "h3venv.log").read_text().splitlines())
     exporters = [a[2] for a in arms if a[0] == "qwen3hp3" and "--hp1-export-base" in a and not a[2].startswith("hp3cal")]
     assert exporters == ["hp3_k00_s3410", "hp3_unsloth_s3410", "hp3_axolotl_s3410"]
@@ -59,7 +59,7 @@ def test_axolotl_trains_kernels_off_and_its_receipts_reach_the_reducer(tmp_path)
             assert a[i + 1] == "off" and a[a.index("--axolotl-best") + 1] == "0", a
     py = (tmp_path / "py.log").read_text()
     ver = next(ln for ln in py.splitlines() if "hp3_reduce.py verdict" in ln)
-    assert all(f"--arm-receipt {tmp_path}/qwen3hp3_axolotl_hp3_axolotl_s{s}.json" in ver for s in (3410, 3411, 3412))
+    assert all(f"--arm-receipt {tmp_path}/qwen3hp3_axolotl_hp3_axolotl_s{s}.json" in ver for s in (3410, 3411, 3412, 3413, 3414))
     g1_eval = next(ln for ln in py.splitlines() if "hp1_eval.py" in ln and "eval_cal" in ln)
     assert all(f"base_{fw}_qwen3hp3" in g1_eval for fw in ("e4b", "unsloth", "axolotl"))
 
@@ -95,7 +95,7 @@ def test_a_partial_g1_reads_the_surviving_pairs_on_the_read_and_signals_the_fall
     (tmp_path / "r").mkdir()
     arms, summary = drive(tmp_path / "r", FAMILY_FAM="qwen3hp3", STUB_H3G1="partial")
     conf = [a for a in arms if not a[2].startswith("hp3cal")]
-    assert len(conf) == 6 and not [a for a in conf if a[1] == "axolotl"]
+    assert len(conf) == 10 and not [a for a in conf if a[1] == "axolotl"]
     (tmp_path / "s").mkdir()
     arms, summary = drive(tmp_path / "s", FAMILY_FAM="qwen3hp3shake", HP3_SHAKE="1", STUB_H3G1="partial")
     assert not [a for a in arms if not a[2].startswith("hp3cal")]

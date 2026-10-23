@@ -2793,7 +2793,7 @@ tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
 # tc1_hp3_family FAM MID REV FAL EAL UAL AAL SHAKE -- HP3 (bench/hp3/HP3-PREREG.md). Every arm runs in its framework's HP3 venv, all on the
 # one matched build (H3_OK, hp3/build.json). Phase B is one calibration step per framework on rows 97-396, each base exported. The one
 # evaluator, in venv-hp3-e4b, then reads each base with a zero adapter, and hp3_reduce.py g1 applies G1'. Exit 4 (a whole-box CLOSE)
-# ends the draw. Phase C runs confirmation seeds 3410-3412 for each framework that passed G1', with e4b first at each seed; the first
+# ends the draw. Phase C runs confirmation seeds 3410-3414 (Amendment 1) for each framework that passed G1', with e4b first at each seed; the first
 # run per framework re-exports its base. axolotl runs kernels OFF (--axolotl-kernels off --axolotl-best 0), as the prereg's label (ii)
 # says. Phase D is the evaluator's pass and hp3_reduce.py verdict, with the axolotl receipts for the engagement check.
 # No redraw: a VOID run makes its pairs NOT_READ.
@@ -2812,8 +2812,9 @@ hp3_fail(){ local AF=$1 FW=$2 TAG=$3 st=$4 cls v
 hp3_run(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 RC=$8 TOK=$9 TS=${10}; shift 10
   can_run 1500 $FAM/$FW/$TAG && HP3_VENV=1 arm $FAM $FW $TAG $ARM $AL "$MID" $REV 0 $RC $TOK $TS "$@"; }
 tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=${8:-0} TOK TS TOKC TSC rc s fw B RT OKF st x ALL=""
-  local CE=hp3cal_e4b_k00_s3407 CU=hp3cal_unsloth_s3407 CA=hp3cal_axolotl_s3407 SEEDS=$HP1_CONF_SEEDS RC=hp3 PR=() RCP=() SIG=""
-  [ "$SHAKE" = 1 ] && { SEEDS=${HP1_CONF_SEEDS%% *}; RC=hp3shake; SIG=" -> the (R) fallback signal"; }
+  # HP3 Amendment 1: five confirmation seeds per framework, a literal (never HP1's TC1_HP1_CONF_SEEDS knob); the shakedown runs the first
+  local CE=hp3cal_e4b_k00_s3407 CU=hp3cal_unsloth_s3407 CA=hp3cal_axolotl_s3407 SEEDS="3410 3411 3412 3413 3414" RC=hp3 PR=() RCP=() SIG=""
+  [ "$SHAKE" = 1 ] && { SEEDS=3410; RC=hp3shake; SIG=" -> the (R) fallback signal"; }
   say "===== HP3 family $FAM ($MID @ $REV; $([ "$SHAKE" = 1 ] && echo "SHAKEDOWN, never data: the 2-layer cut" || echo "the read: all 48 layers"); seeds [$SEEDS]; alarms e4b $EAL unsloth $UAL axolotl $AAL)"
   HP1_AX_DROP=1
   [ "$H3_OK" = 1 ] || { echo "HP3 BUILD_FAILED: $H3_REASON$SIG" | tee -a summary.txt; return 0; }
