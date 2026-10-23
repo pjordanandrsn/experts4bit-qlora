@@ -275,7 +275,7 @@ Its cost is a few `perf_counter` calls and up to six CUDA events a step.
 
 Engine knobs: `E4B_PAGED_MAX_SEQS` (`auto`, below; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
 prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`
-(512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_GRAPHS` (`auto`, the default:
+(512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_PREFILL_EVERY` (1; while a decode row is live, prefill on at most one step in N) + `E4B_PAGED_LOADED_CHUNK_TOKENS` (0 = off; while a decode row is live, caps the chunk and the step's budget), `E4B_PAGED_GRAPHS` (`auto`, the default:
 bucketed CUDA-graph decode on scratch slots on a CUDA device of sm_89 or newer at `all-vram`; `0` eager, `1` forced) +
 `E4B_PAGED_BUCKETS` (`1,2,4,8,16`, trimmed to `max_seqs`; `auto` follows `max_seqs`, below), `E4B_PAGED_TRACE=<path>`
 (one JSON line per finished request: arrival, admitted_at, first_token_at, finished_at, prompt_len,
