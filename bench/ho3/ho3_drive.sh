@@ -194,10 +194,15 @@ say "fetched $(ls "$RUN_DIR/ho3" | wc -l | tr -d ' ') entries"
 # A link that still arrives is recorded (path and target, never followed) in refused_links.txt and removed, so the run
 # dir holds no link and its receipt can still be committed; then the fetch refuses (exit 22).
 if [ -n "$(find "$RUN_DIR/ho3" -type l -print -quit)" ]; then
+  RL="$RUN_DIR/ho3/refused_links.txt"; NOTE=""
+  # the box controls the fetched tree: a refused_links.txt it shipped (a file or a link) is removed unread, never appended to
+  if [ -L "$RL" ]; then NOTE="# the box shipped refused_links.txt as a link (-> $(readlink "$RL")); replaced"
+  elif [ -e "$RL" ]; then NOTE="# the box shipped its own refused_links.txt ($(wc -c < "$RL" | tr -d ' ') bytes); replaced"; fi
+  rm -f -- "$RL"; : > "$RL"; [ -z "$NOTE" ] || printf '%s\n' "$NOTE" >> "$RL"
   find "$RUN_DIR/ho3" -type l -print0 | while IFS= read -r -d '' l; do
-    printf '%q -> %q\n' "${l#"$RUN_DIR/ho3/"}" "$(readlink "$l")" >> "$RUN_DIR/ho3/refused_links.txt"; rm -f -- "$l"
+    printf '%q -> %q\n' "${l#"$RUN_DIR/ho3/"}" "$(readlink "$l")" >> "$RL"; rm -f -- "$l"
   done
-  say "fetch failed: $(wc -l < "$RUN_DIR/ho3/refused_links.txt" | tr -d ' ') symlink(s) arrived; recorded in refused_links.txt and removed"; exit 22
+  say "fetch failed: $(grep -vc '^#' "$RL" | tr -d ' ') symlink(s) arrived; recorded in refused_links.txt and removed"; exit 22
 fi
 [ "$(cat "$RUN_DIR/ho3/HO3_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/ho3/TP_DONE.$NONCE" ] || {

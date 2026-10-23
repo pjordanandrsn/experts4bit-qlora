@@ -367,3 +367,26 @@ def test_a_fetched_link_is_recorded_removed_and_refused(tmp_path):
     assert "TOKEN" not in rec and str(secret) in rec and "../../../etc" in rec and rec.count("\n") == 2, rec
     assert (run / "ho3" / "summary.txt").read_text() == "ok\n" and secret.read_text() == "TOKEN=x\n"
 
+
+def test_a_box_supplied_refused_links_file_is_replaced_never_followed(tmp_path):
+    """The box controls the fetched tree: its own refused_links.txt (a file, or a link to a controller file) is replaced."""
+    start = DRIVE.index('if [ -n "$(find "$RUN_DIR/ho3" -type l -print -quit)" ]; then')
+    block = DRIVE[start:DRIVE.index("\nfi\n", start) + 4]
+    script = 'say(){ echo "$*"; }\nRUN_DIR="$1"\n' + block
+    for kind in ("file", "link"):
+        run = tmp_path / kind / "run"
+        (run / "ho3").mkdir(parents=True)
+        target = tmp_path / kind / "controller.txt"
+        target.write_text("keep\n")
+        rl = run / "ho3" / "refused_links.txt"
+        if kind == "file":
+            rl.write_text("forged -> nothing\n")
+            (run / "ho3" / "x").symlink_to(target)
+        else:
+            rl.symlink_to(target)
+        r = subprocess.run(["bash", "-c", script, "x", str(run)], capture_output=True, text=True, timeout=30)
+        assert r.returncode == 22, r.stdout + r.stderr
+        assert target.read_text() == "keep\n" and not rl.is_symlink() and not [p for p in run.rglob("*") if p.is_symlink()]
+        rec = rl.read_text()
+        assert "forged" not in rec and rec.startswith("# the box shipped"), rec
+
