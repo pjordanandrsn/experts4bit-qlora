@@ -227,8 +227,14 @@ module, it compares each fingerprint the manifest records with the served base's
 - **experts:** the arena source above. A match reads `base_match.experts = verified (qfp-v1 ...)`. A mismatch is
   **refusal 12**. `E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts` serves it anyway, reported in `/health` as
   `mismatch (served under ...)`; `E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE` never covers a MEASURED mismatch.
-- **the default training form, and the fp32 source fingerprint:** training double-quantizes the expert absmax by
-  default and the arena stores fp32 (F1), so a default-trained adapter's expert fingerprint never equals the arena's.
+- **the double-quantized training form, and where it is reachable:** training double-quantizes the expert absmax
+  only under `expert_kernel=grouped_nf4`, which requires `train_experts=true` (the recipe refuses it otherwise). So a
+  dq-trained adapter always carries expert LoRA, and the paged server refuses it with **refusal 1** before this check
+  runs. An attention-only adapter, the kind this server serves, keeps the fp32 absmax by construction and verifies by
+  its plain fingerprint. The dq branch below (refusal 12 as the dq-vs-fp32 case, F1, with the override) is reachable
+  for a `/2` manifest whose expert LoRA is all zero, and serves the expert-serving path to come. Its tests guard that
+  path.
+- **the fp32 source fingerprint:** a dq-trained adapter's expert fingerprint never equals the fp32 arena's (F1).
   So `compress_expert_absmax_` hashes each stack's FULL fp32 absmax BEFORE compressing it, and the experts fingerprint
   carries `fp32_source`: `{"sha256", "absmax_by_stack"}`, the same qfp-v1 digest with each compressed stack's fp32
   absmax (every other line unchanged), and that absmax's hash per `<stack>.<which>`. It is the fingerprint the base

@@ -1,7 +1,8 @@
 ### Added
 
-- A default-trained (double-quantized expert absmax) backend-adapter/2 adapter now VERIFIES its expert base on the
-  paged server. `compress_expert_absmax_` hashes each stack's full fp32 absmax before compressing it, and
+- A double-quantized-absmax backend-adapter/2 manifest's expert base now VERIFIES against an fp32 arena. Such an adapter
+  always carries expert LoRA, so the paged server still refuses it first with refusal 1; this check serves a `/2` with
+  zero expert LoRA and the expert-serving path to come. `compress_expert_absmax_` hashes each stack's full fp32 absmax before compressing it, and
   `quant_fingerprint(model, "experts")` carries `fp32_source` (the base's qfp-v1 digest with those fp32 absmax, plus
   the hash per stack). The server compares it with its fp32 arena exactly: equal reads `base_match.experts = verified
   (source, ...); trained on double-quantized absmax, served on fp32 absmax` and serves without an override; different
