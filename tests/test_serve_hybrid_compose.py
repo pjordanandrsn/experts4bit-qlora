@@ -74,8 +74,10 @@ def test_a_tiered_layer_syncs_before_any_branch_on_the_routing():
     between = src[start:sync]
     assert not re.search(r"^\s*(if|elif|while|for)\b", between, re.M), between
     # the only earlier exits are the collapse, the residual re-entry and the diet; none of them is on the tiered path
-    # that serve_paged builds (dispatch_diet=False), and the residual re-entry calls this same forward without it
-    assert src.index("if self.dispatch_diet:") < start
+    # that serve_paged builds (dispatch_diet=False), and the residual re-entry calls this same forward without it. A new
+    # exit above the mask (a sync-free static-flag path, diet-shaped) would bypass the sync, so the list is exact.
+    exits = [ln.strip().split("(")[0] for ln in src[:start].splitlines() if ln.strip().startswith("return")]
+    assert exits == ["return self._forward_collapsed", "return _HotResidency.forward", "return self._forward_diet"], exits
 
 
 def test_serve_paged_builds_the_tier_without_the_diet_or_prefetch():
