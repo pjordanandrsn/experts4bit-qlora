@@ -2823,7 +2823,7 @@ hp3_fail(){ local AF=$1 FW=$2 TAG=$3 st=$4 cls v
 # hp3_seed_plan W NF (HP3 Amendment 1 part 7): after seed 3410 completes, the number of confirmation seeds n that fit, by TIMING alone:
 # need(k) = (k - 1) x W + 360 s x NF x k (the evaluator's pass, ~6 min a run) + 900 s (can_run's reserve), against left() - 900. n is the
 # largest k in {5, 4, 3} that fits, else 0 (a host-limited NOT_READ). It writes hp3/seed_plan.json BEFORE any later seed or the
-# evaluator's pass, and echoes n. No loss, receipt or verdict is read.
+# evaluator's pass, and echoes n; a failed write echoes UNWRITABLE and returns 1 (a harness fault). No loss, receipt or verdict is read.
 hp3_seed_plan(){ local SW=$1 NF=$2 L k n=0 need=""
   L=$(left)
   for k in 5 4 3; do local nk=$(( (k - 1) * SW + 360 * NF * k + 900 ))
@@ -2832,7 +2832,7 @@ hp3_seed_plan(){ local SW=$1 NF=$2 L k n=0 need=""
 json.dump({'n': n, 'seeds': seeds, 'basis': 'timing', 'seed1_wall_s': W, 'left_s': L, 'frameworks': nf, 'need_s': json.loads(sys.argv[6]),
            'eval_s_per_run': 360, 'reserve_s': 900, 'written_at_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
            'reason': ('fit: %d seeds at seed 3410\\'s wall time %d s' % (n, W)) if n else 'host-limited: fewer than 3 seeds fit at seed 3410\\'s wall time %d s' % W},
-          open(sys.argv[1], 'w'), indent=1)" $W/hp3/seed_plan.json $n $SW $L $NF "{${need%,} }" || { echo 0; return 1; }
+          open(sys.argv[1], 'w'), indent=1)" $W/hp3/seed_plan.json $n $SW $L $NF "{${need%,} }" || { echo UNWRITABLE; return 1; }
   echo $n; }
 hp3_run(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 RC=$8 TOK=$9 TS=${10}; shift 10
   can_run 1500 $FAM/$FW/$TAG && HP3_VENV=1 arm $FAM $FW $TAG $ARM $AL "$MID" $REV 0 $RC $TOK $TS "$@"; }
@@ -2899,7 +2899,10 @@ tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=$
   for s in $SEEDS; do
     i=$((i + 1))
     if [ "$SHAKE" != 1 ] && [ $i = 2 ]; then       # Amendment 1 part 7: the seed plan, from seed 3410's wall time across every framework
-      NPLAN=$(hp3_seed_plan $(( $(date +%s) - T0 )) $NF) || NPLAN=0
+      if ! NPLAN=$(hp3_seed_plan $(( $(date +%s) - T0 )) $NF); then
+        # a harness fault, never the host's (the maintainer, 2026-10-23 20:58Z): no read, and the record names the harness
+        echo "HP3 SEED_PLAN_UNWRITABLE: hp3/seed_plan.json could not be written (a harness fault, not host-limited); NOT_READ" | tee -a summary.txt
+        rm -rf $SC; hp1_bulk_manifest "$W"; return 0; fi
       PLAN=(--seed-plan $W/hp3/seed_plan.json)
       echo "HP3 SEED_PLAN n=$NPLAN ($($PY_E4B -c "import json,sys; print(json.load(open(sys.argv[1]))['reason'])" $W/hp3/seed_plan.json 2>/dev/null))" | tee -a summary.txt
       if [ "$NPLAN" = 0 ]; then

@@ -360,6 +360,8 @@ at plausible noise. Every number in this section is an ESTIMATE.
      - HP1, HP2, HPN and the shakedown never pass `--seed-plan`, so their evaluator output is unchanged.
    - **Fewer than 3 seeds fit:** n = 0. The box stops after seed 3410, with no evaluator pass. Every pair reads NOT_READ,
      host-limited, with a host refusal note. It is no strike, and the spend is minimal.
+   - **A plan that cannot be written** (a harness fault, never the host's): the box prints `HP3 SEED_PLAN_UNWRITABLE` and stops
+     after seed 3410, with no evaluator pass. Every pair reads NOT_READ, and the record names the harness, never HOST_LIMITED.
    - **The power each count can read.** ESTIMATE, P(PARITY | true Δ = 0) under the registered verdict order, from
      `bench/hp3/hp3_power.py`. The 3 and 5 columns are the table above; the 4 column is `--counts 4` on its own stream, at the
      same RNG seed:

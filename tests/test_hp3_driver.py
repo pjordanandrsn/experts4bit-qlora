@@ -20,6 +20,7 @@ HP3_PY = r"""  *"hp3_reduce.py g1"*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*
       ax) echo '{"void": {"axolotl seed 3410": "engagement: kernels on", "e4b seed 3411": "absent"}}' > "$out";;
       *) echo '{"void": {"e4b seed 3411": "absent", "e4b seed 3412": "absent"}}' > "$out";;
     esac; echo "HP3_VERDICT three_way=NOT_READ";;
+  *seed_plan.json*"import json,sys,time"*|*"import json,sys,time"*seed_plan.json*) [ -n "${STUB_PLAN_FAIL:-}" ] && exit 1; python3 -c "${@:2}";;
   *"hp3_build.py classify"*) echo "${STUB_CLASS:-R | RuntimeError: an unsupported op}";;
 """
 
@@ -253,3 +254,42 @@ def test_the_box_refuses_a_card_whose_memory_is_outside_its_class_band(tmp_path)
     assert rc == 14 and "gpu_mem=49140MiB class=4090" in summary
     assert _membox(tmp_path, "A4000", 8192)[0] == 14 and _membox(tmp_path, "3090", 24576)[0] == 14   # no band registered: refuse
     assert _membox(tmp_path, "4090", 49140, fams="qwen3")[0] == 0              # other tokens are untouched
+
+
+def _seed_plan(tmp_path, wall, nf, left):
+    """hp3_seed_plan sourced alone from tc1_run.sh with left() stubbed: (rc, stdout, plan)."""
+    import subprocess
+    src = (D.REPO / "bench" / "tc1" / "tc1_run.sh").read_text()
+    fn = src[src.index("hp3_seed_plan(){"):src.index("  echo $n; }") + len("  echo $n; }")]
+    (tmp_path / "hp3").mkdir(exist_ok=True)
+    (tmp_path / "t.sh").write_text(f"W={tmp_path}; PY_E4B=python3\nleft(){{ echo {left}; }}\n" + fn + f"\nhp3_seed_plan {wall} {nf}\n")
+    p = subprocess.run(["bash", "t.sh"], cwd=tmp_path, capture_output=True, text=True, timeout=60)
+    f = tmp_path / "hp3" / "seed_plan.json"
+    return p.returncode, p.stdout.strip(), (json.loads(f.read_text()) if f.exists() else None)
+
+
+def test_the_seed_plan_counts_seed_3410s_wall_time():
+    """The evaluator's required test (2026-10-23 20:57Z): at W = 1200 s, NF = 3 the needs are 11100 / 8820 / 6540, so left 9800 reads
+    4, 9000 reads 3 and 7000 reads 0. Without the W term 9000 would read 5, so this kills that mutant (stub seeds take ~0 s)."""
+    import tempfile
+    for left, want in ((20000, 5), (9800, 4), (9000, 3), (7000, 0)):
+        with tempfile.TemporaryDirectory() as d:
+            rc, out, plan = _seed_plan(Path(d), 1200, 3, left)
+            assert rc == 0 and out == str(want), (left, out)
+            assert plan["need_s"] == {"5": 11100, "4": 8820, "3": 6540} and plan["seed1_wall_s"] == 1200 and plan["n"] == want
+            assert plan["seeds"] == [3410, 3411, 3412, 3413, 3414][:want] and "written_at_utc" in plan
+
+
+def test_an_unwritable_seed_plan_is_a_harness_fault_never_host_limited(tmp_path):
+    """The maintainer 20:58Z: a plan-write failure prints SEED_PLAN_UNWRITABLE (a NOT_READ naming the harness), never HOST_LIMITED."""
+    arms, summary = drive(tmp_path, FAMILY_FAM="qwen3hp3", STUB_PLAN_FAIL="1")
+    assert "HP3 SEED_PLAN_UNWRITABLE" in summary and "HOST_LIMITED" not in summary
+    conf = [a[2] for a in arms if a[0] == "qwen3hp3" and not a[2].startswith("hp3cal")]
+    assert conf == ["hp3_k00_s3410", "hp3_unsloth_s3410", "hp3_axolotl_s3410"] and "eval_P" not in (tmp_path / "py.log").read_text()
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        (Path(d) / "hp3").mkdir()
+        (Path(d) / "hp3").chmod(0o500)                                          # the plan file cannot be created
+        rc, out, _ = _seed_plan(Path(d), 600, 3, 100000)
+        (Path(d) / "hp3").chmod(0o700)
+        assert rc == 1 and out == "UNWRITABLE"
