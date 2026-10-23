@@ -329,10 +329,18 @@ def test_the_bucket_gates_on_other_lanes_real_records():
 def test_the_fetch_imports_no_links():
     """Amendment 1 (bench/common rule 8): every rsync in the driver passes --no-links, so a link left on a rented box is
     never copied to the controller, where the receipt writers would follow it."""
-    calls = [ln for ln in _joined_lines(DRIVE) if re.match(r"\s*rsync\b", ln)]
+    # rsync in command position anywhere on a comment-stripped line: line start, after ! ; && || | ( or $(
+    cmd = re.compile(r"(?:^|[;&|!(]\s*|\$\(\s*|\bif\s+|\bthen\s+)\s*rsync\b")
+
+    def rsync_calls(text):
+        return [ln for ln in _joined_lines(text) if cmd.search(ln.split("#", 1)[0])]
+    for form in ("if ! rsync -az a b", "x=$(rsync -az a b)", "true && rsync -az a b", "rsync -az a b"):
+        assert rsync_calls(form) == [form], form               # the matcher sees every command position
+    assert rsync_calls("# rsync -az in a comment") == []
+    calls = rsync_calls(DRIVE)
     assert calls, "the driver's fetch is an rsync"
     for ln in calls:
-        assert "--no-links" in ln.split(), ln
+        assert "--no-links" in ln.split("#", 1)[0].split(), ln
     assert "## Amendment 1 (pre-data): the fetch imports no links" in PREREG
 
 
