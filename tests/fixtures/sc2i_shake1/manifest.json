@@ -12,5 +12,5 @@
   "stats_prove_lc128_end.json": "b29f801d6d598aba9bf7df83eefa1979b0b8ccea341f227c098cc5fe9d40145b",
   "summary.txt": "9ed1b43218668eb012b6edc93c8231031fa5656bf14d5a94fd634ef58748bd80"
  },
- "source": "adertha-agents receipt store, receipts/experts4bit-qlora/2026-10-23/sc2i-shake-1/sc1 (EXPLORE shakedown of box P's proof, Granite-3.1-3b-a800m, one RTX 5090, e4b 665f5ede, grouped-nf4-gemm 41ef086e)"
+ "source": "the project's private receipt store, run sc2i-shake-1 (EXPLORE shakedown of box P's proof, Granite-3.1-3b-a800m, one RTX 5090, e4b 665f5ede, grouped-nf4-gemm 41ef086e)"
 }

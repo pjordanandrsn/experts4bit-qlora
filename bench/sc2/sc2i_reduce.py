@@ -32,7 +32,8 @@ The reducer licenses nothing: a FASTER arm is a candidate for a quality read, ne
 ``base`` = 0.
 
 **Reported, no bar:** TPOT p99 and TTFT p50 at 8 and 12 req/s against ``ref``; ``prefill_deferred``; the drift
-``base_b - base_a``; text agreement with ``base_a`` at 12 req/s (where the knobs act).
+``base_b - base_a``; text agreement with ``base_a`` at 12 req/s (where the knobs act), beside ``base_a`` against
+``base_b`` at 12 req/s as its floor (the same seeds, a different schedule).
 
   sc2i_reduce.py --dir DIR [--out verdict.json]
   sc2i_reduce.py --knobs HEALTH.json ARM [--proof]     (box P's start check; exit 1 on a departure)
@@ -278,6 +279,10 @@ def reduce(d: str) -> dict:
             rep["vs_ref"][t] = {f"{m}_r{r}": _get(d, t, f"r{r}", m) for m in ("tpot_p99_s", "ttft_p50_s") for r in (8, 12)}
             rep["vs_ref"][t]["text_agreement_vs_base_a_r12"] = _agreement(
                 _load(d, f"{tag('base', k, 'base_a')}_r12.json"), _load(d, f"{t}_r12.json"))
+    # the floor for the agreement numbers: two base servers of one draw run the same seeds but not the same schedule
+    rep["base_pair_text_agreement_r12"] = {f"d{k}": _agreement(_load(d, f"{tag('base', k, 'base_a')}_r12.json"),
+                                                               _load(d, f"{tag('base', k, 'base_b')}_r12.json"))
+                                           for k in DRAWS}
     out["outcome"] = {"void": void, "verdicts": {a: out["arms"][a]["verdict"] for a in KNOB_ARMS}}
     return out
 

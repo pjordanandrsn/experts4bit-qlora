@@ -103,7 +103,8 @@ bar on prompts chunked as the arm chunks them), and only that read can open a de
 
 **Reported, no bar:** TPOT p99 and TTFT p50 at 8 and 12 req/s for each arm against `ref`; `prefill_deferred` per server;
 per draw the drift `base_b − base_a`; the text agreement of each knob arm with `base_a` at 12 req/s (serially the knobs
-never act, so serial texts would agree by construction).
+never act, so serial texts would agree by construction), beside `base_a` against `base_b` at 12 req/s as its floor:
+the same seeds, but a different schedule.
 
 ## Shakedown, proof and budget
 
