@@ -70,8 +70,8 @@ fraction of changed values. Step 2 is held-out loss on 64 unseen rows (7,642 sco
 
 ## What follows
 
-The outcome is not one of the registered branches: they assume NF4 from Q is LOST, and here every cell is RETAINED. The
-ruling on it:
+The outcome is not one of the registered branches: they assume NF4 from Q is LOST, and here every cell is RETAINED.
+What follows from it:
 - Path (a), a merged re-quantized arena, is viable on this fixture even from the trained NF4 base.
 - The registered cross-format served read goes ahead, to price the repack on the served model. It is a separate
   registration, with the tools' hashes committed before its run.
