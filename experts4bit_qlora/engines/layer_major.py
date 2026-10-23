@@ -191,5 +191,7 @@ def layer_major_step(model, batches, weights, handles=None):
                 "from this transformers version. No backward ran. Use the stock accumulation loop"
             )
         _VERIFIED.add(model)
-    sum(w * loss for w, loss in zip(weights, losses)).backward()
+    from .train_determinism import deterministic_backward
+    with deterministic_backward():                          # E4B_TRAIN_DETERMINISTIC=1: strict mode for the backward only
+        sum(w * loss for w, loss in zip(weights, losses)).backward()
     return [loss.detach() for loss in losses]
