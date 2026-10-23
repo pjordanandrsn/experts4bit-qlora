@@ -252,8 +252,7 @@ head. K2b routes 2..N rows to K37's `linear_i8` over the same codes.
     next. The cap is not changed here; the full-window tally is reported on the bus.
 - **The admission, from this amendment:**
   - A machine whose LATEST recorded power cap (the host registry at the receipt store's HEAD) is below 575 W is never
-    pinned, whatever the record's age. That is the launcher's own exclusion (`vast_min_power_limit_w`,
-    adertha-agents#268).
+    pinned, whatever the record's age. That is the launcher's own exclusion (`vast_min_power_limit_w`).
   - A machine whose latest record is 575 W or more, at any age, is admitted, and so is a machine with no record. A
     stale positive record is better evidence than none, and the box's own read decides either way. The ranking is: read
     within 3 days first, then older records at 575 W or more, then no record.
