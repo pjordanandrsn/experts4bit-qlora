@@ -142,8 +142,17 @@ def test_the_runner_captures_before_it_times_and_finishes_on_the_verdict():
     i_cap, i_bench = RUN.index("python $W/p226_capture.py --prompts"), RUN.index("python $W/p226_bench.py --picks")
     assert i_cap < i_bench < RUN.index("python $W/p226_reduce.py --bench")
     assert 'case "$V" in GO|NO_GO) finish 0;; *) say "P226 $V -- no reading"; finish 27;; esac' in RUN
-    for need in ("NEED_FETCH=1210", "NEED_BAKE=550", "NEED_CAPTURE=900", "NEED_BENCH=2400"):
+    for need in ("NEED_FETCH=1210", "NEED_BAKE=550", "NEED_CAPTURE=900", "NEED_BENCH=1800"):
         assert need in RUN, need
+
+
+def test_the_pre_install_fit_meets_the_guard_with_headroom():
+    fit = 450 + 1210 + 550 + 900 + 1800 + 600
+    assert fit == 5510 and fit * 125 // 100 == 6887 and (300 + fit) * 1.25 <= 2.1 * 3600
+    assert abs(2.1 * 1.05 + 66 * 0.011 - 2.93) < 0.005
+    for s in ("5,510 s", "6,887 s", "7,263 s", "Guard 2.1 h (7,560 s)", "USD 2.93"):
+        assert s in PREREG, s
+    assert RUN.index('[ "$LEFT" -ge "$FIT_NEED" ]') < RUN.index("python -m pip install")
 
 
 def test_a_missing_bench_record_writes_a_void_verdict_and_exits_27(tmp_path):

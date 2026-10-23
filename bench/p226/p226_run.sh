@@ -18,8 +18,10 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78
 STARTED_AT=$(date +%s)   # the arena must be written after this (the box's own bake, not a shipped file)
 GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949 # grouped-nf4-gemm v0.50.0 (gnf4#572): K39's prmt decode; P160's pin
 # the needs (PREREG "Cost"): the slowest measured fetch (806 s) and bake (362 s) x 1.5; the capture (load, 32 prefills,
-# 160+ eager steps with hooks) and the bench (P156's 462 s and P160's 260 s at 16 rows, about 2x at 32) with margin
-NEED_FETCH=1210; NEED_BAKE=550; NEED_CAPTURE=900; NEED_BENCH=2400
+# 160+ eager steps with hooks); the bench: P160's 260 s at 16 rows, about 520 s at 32, x 3.5 (P156's 462 s inside it)
+NEED_FETCH=1210; NEED_BAKE=550; NEED_CAPTURE=900; NEED_BENCH=1800
+INSTALL_TO_GATE_S=450   # the two installs and the self-tests (P224's allowance)
+RESERVE=600             # can_run's margin after a step: the reduce, the fetch-back and the teardown
 MIN_POWER_W=575   # P149's power floor (P152's, kept): a capped board refuses before the install, rc 17
 GPU_CLASS=5090; MIN_RAM_GB=60
 case "$P226_RUN_ID" in
@@ -87,6 +89,12 @@ FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB (the checkpoint, the NF4 snapshot and arena)"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
 RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB:-?} GiB host RAM < ${MIN_RAM_GB} GiB"; echo "refused: ram ${RAM_GB:-?} GiB" > REFUSAL; finish 16; }
+# ---- the pre-install fit check (bench/common/README.md, "Guard fit"): before any install and any staged script
+FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
+FIT=$((INSTALL_TO_GATE_S + NEED_FETCH + NEED_BAKE + NEED_CAPTURE + NEED_BENCH + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P226_DEADLINE_EPOCH - $(date +%s)))
+# rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
+[ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
+echo "GUARD_FIT fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s" | tee -a summary.txt
 # the time-left check: FIT (the step's need plus the 600 s reserve) is computed once, compared, and printed as compared
 can_run(){ local need=$1 now fit left; now=$(date +%s); fit=$((need + 600)); left=$((P226_DEADLINE_EPOCH - now)); [ "$fit" -le "$left" ] || { say "STOP-2: $2 needs ${fit}s (${need}s + the 600 s reserve), only ${left}s left -- skipped (host-limited)"; echo "SKIPPED $2 needs ${fit}s, ${left}s left" >> summary.txt; return 1; }; }
 step_alarm(){ local cap=$1 left=$(( P226_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }

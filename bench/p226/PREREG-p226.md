@@ -111,9 +111,13 @@ outputs are compared with C's, bit for bit.
 
 ## Cost and the stop
 
-- Needs: fetch 1,210 s and bake 550 s (the slowest measured, x 1.5), the capture 900 s, the bench 2,400 s (P156's 462 s
-  and P160's 260 s at 16 rows, about double at 32, with margin). The runner refuses a step that cannot fit before the
-  deadline. Guard about 2 h; worst about USD 2.1 + 66 GB x USD 0.011, under the USD 3 the maintainer set.
+- Needs: fetch 1,210 s and bake 550 s (the slowest measured, x 1.5), the capture 900 s, the bench 1,800 s (P160's 260 s
+  at 16 rows, about 520 s at 32, x 3.5; P156's 462 s is inside it). The runner refuses a step that cannot fit before the
+  deadline.
+- **The pre-install fit** (the repository's guard-fit rule), before any install: FIT = install 450 + 1,210 + 550 + 900 +
+  1,800 + the 600 s reserve = 5,510 s; FIT_NEED = 5,510 x 1.25 = 6,887 s, else rc 41 (a refusal before the install, not a
+  strike). Static: (boot 300 s + 5,510 s) x 1.25 = 7,263 s <= the guard.
+- Guard 2.1 h (7,560 s); worst 2.1 x USD 1.05 + 66 GB x USD 0.011 = USD 2.93, under the USD 3 the maintainer set.
 - Run ids `p226-5090-1` to `-3`. The first GO or NO_GO ends the lane; two box-started VOIDs end it at STOP. No top-up and
   no step change after data.
 - Rentals follow the standing rules: host pinned, USD 15 per box, `rent-watch` armed at create, teardown verified gone.
