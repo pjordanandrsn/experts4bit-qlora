@@ -221,3 +221,62 @@ def test_claim_many_refuses_a_slot_with_mismatched_layers_before_popping(monkeyp
     with pytest.raises(RuntimeError, match="different block counts"):
         kv.claim_many({0: 1, 1: 3})
     assert kv._free == free_before and torch.equal(kv._bt_all, bt_before)
+
+
+def _wide_serve(monkeypatch, incremental, lookahead):
+    """8 slots on buckets 1, 2, 4: a step of more than 4 rows runs as consecutive replays of bucket 4 (the multi-piece
+    path). Returns the streams, and the claim_many calls made per decode step."""
+    monkeypatch.setenv("E4B_KV_STEP_SELECT", "1")
+    kv = Fp8PagedKV(2, 2, 32, batch=8, max_tokens_per_seq=MAX_TOKENS, device="cpu", scratch_slots=4)
+    r = PagedModelRunner(torch.nn.Module(), kv, device="cpu", bulk_kv=True)
+    r.incremental_claims = incremental
+    r.enable_decode_graphs((1, 2, 4), capture=False, verbose=False)
+    hist = torch.zeros(kv.B + kv.n_scratch, dtype=torch.long)
+    seen = []
+    for b in (1, 2, 4):
+        r._graphs[b] = OwnershipCheckingDecode(r, b, hist, seen)
+
+    def prefill(chunks):
+        first = {}
+        for rid, start, take in chunks:
+            slot, n = r.slot_of[rid], len(r.tokens[rid])
+            if start + take >= n:
+                kv.seq_lens[:, slot] = n
+                hist[slot] = sum((i + 1) * t for i, t in enumerate(r.tokens[rid])) % 2_147_483_647
+                first[rid] = int(hist[slot]) % V
+                r.tokens[rid].append(first[rid])
+                r.pos_of[rid] = n + 1
+        return first
+
+    r.run_prefill = prefill
+    calls, per_step = [], []
+    real = kv.claim_many
+    monkeypatch.setattr(kv, "claim_many", lambda wants, layers=None: (calls.append(len(wants)), real(wants, layers))[1])
+    for name in ("_run_decode_bucketed", "issue_decode"):
+        if hasattr(r, name):
+            inner = getattr(r, name)
+
+            def wrapped(*a, _inner=inner, **k):
+                before = len(calls)
+                out = _inner(*a, **k)
+                per_step.append(len(calls) - before)
+                return out
+            monkeypatch.setattr(r, name, wrapped)
+    s = ContinuousScheduler(runner=r, max_seqs=8, kv_slots=8, chunk_tokens=64, lookahead=lookahead)
+    prompts = [[(5 * i + j) % 90 + 3 for j in range(7 + 3 * i)] for i in range(8)]
+    rids = [s.add_request(p, 30 + 2 * i) for i, p in enumerate(prompts)]
+    s.run_until_idle(max_steps=5000)
+    done = {q.rid: q.out for q in s.done}
+    return [done[i] for i in rids], per_step, calls
+
+
+@pytest.mark.parametrize("lookahead", [False, True])
+def test_a_step_wider_than_the_largest_bucket_claims_once(monkeypatch, lookahead):
+    """The multi-piece path makes ONE claim per decode step over every piece's slots, never one per piece (a claim
+    per piece took alternate buffers of the staging ring, so under the lookahead the next step's second piece waited
+    on this step's first replay). Tokens equal claim-all's, and some step really ran in pieces."""
+    ref, _, _ = _wide_serve(monkeypatch, False, lookahead)
+    out, per_step, calls = _wide_serve(monkeypatch, True, lookahead)
+    assert out == ref
+    assert per_step and max(per_step) == 1, per_step                 # at most one claim_many per step
+    assert max(calls) > 4                                             # a claim spanned more slots than one bucket holds
