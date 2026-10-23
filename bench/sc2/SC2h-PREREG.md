@@ -230,8 +230,9 @@ The 0.54.0 pin was never read.
 
 **The changes**, as SC2f's Amendment 3, which this lane follows step for step:
 - **e4b.** The launch commit is the first `main` commit containing both `v0.57.0` and e4b#2011's merge, with the same
-  record and the same mechanical default check (`bench/sc2/sc2_defaults.py`: dumps at `v0.57.0` and at the launch commit,
-  any diff refuses unless SC2f Amendment 3 or a later amendment names the lever). It must be the commit SC2f's reading ran, unless SC2f's
+  record and the same mechanical default check (`bench/sc2/sc2_defaults.py`: the resolved levers and the source scan, at
+  `v0.57.0` and at the launch commit). Any diff refuses unless it passes under SC2f Amendment 3's two allowance rules,
+  `--allow LEVER=reason`. It must be the commit SC2f's reading ran, unless SC2f's
   run recorded a refusal that a later commit fixes; a different commit is named in the launch note.
   - e4b#2011 removes most of the per-stream dispatch from the host gap this lane's lookahead hides, so this lane's `base`
     arm has less gap to hide than the registration's model assumed.

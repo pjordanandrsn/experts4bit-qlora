@@ -322,16 +322,25 @@ in 66 seconds. Nothing was created and nothing was charged. Three fixes followed
   (the paged server's single event-loop wakeup per step). Its `experts4bit_qlora/` tree, its diff against `v0.57.0`'s, and
   every commit between the two are recorded at launch.
   - **The default check is mechanical** (`bench/sc2/sc2_defaults.py`, `tests/test_sc2_defaults.py`). Before the
-    create, the controller dumps every serving lever's RESOLVED value on CPU, with every `E4B_*` / `GNF4_*` variable
-    cleared, for `qwen3_moe`. The dump covers the server's config, the decode fusions, the prefill glue, the attention
-    split cap, the int8 head at Qwen3-30B-A3B's shape, and the expert-path routes. It is taken twice, at `v0.57.0` (the
-    reference) and at the launch commit, beside the same grouped-nf4-gemm. `sc2_defaults.py diff` exits 1 naming every
-    lever whose value differs or that exists in only one tree, and that refusal stops the launch. A lever may pass only
-    if this amendment or a later one names it with its reason. Named now, should their PRs have merged by the launch:
-    - `config.prefill_every` and `config.loaded_chunk_tokens` (e4b#2017): opt-in, with defaults whose plans equal the
-      earlier planner's, call for call (tested).
+    create, the controller dumps the serving defaults twice, beside the same grouped-nf4-gemm: at `v0.57.0` (the
+    reference) and at the launch commit. Each dump is taken on CPU, with every `E4B_*` / `GNF4_*` variable cleared, for
+    `qwen3_moe`, in two parts:
+    - **The resolved levers:** the server's config, the decode fusions, the prefill glue, the attention split cap, the
+      int8 head at Qwen3-30B-A3B's shape, and the expert-path routes. This part catches resolved logic.
+    - **A source scan:** every `E4B_*` / `GNF4_*` environment read in the package with its default literal, including
+      reads through a module constant, and every such name the source mentions. This part catches inline defaults with
+      no resolver and knobs added after the tag.
 
-    Nothing else is allowed. The two dumps and the diff's output are committed with the run.
+    `sc2_defaults.py diff` exits 1 naming every lever whose value differs or that exists in only one tree, and that
+    refusal stops the launch. Two kinds of lever may pass, each by `--allow LEVER=reason`:
+    - **A knob merged since the tag that is opt-in, defaults off, and is unset in this lane's arms.** Its reason reads
+      "opt-in, default off, unset in this lane", checked against its PR and the lane's arm environment.
+    - **Named here:** `config.prefill_every`, `config.loaded_chunk_tokens`, `env.E4B_PAGED_PREFILL_EVERY` and
+      `env.E4B_PAGED_LOADED_CHUNK_TOKENS` (e4b#2017), should it have merged. They are opt-in, with defaults whose plans
+      equal the earlier planner's call for call (tested), and unset in this lane.
+
+    A changed default of a lever that both trees have is never allowed at launch; it needs a further amendment. The two
+    dumps, the diff's output and every `--allow` with its reason are committed with the run.
   - The tripwire is unchanged (rc 9 without both of P130's defaults).
 - **What moved under the arms, and what that does to the comparison.** Serving defaults that changed between 0.54.0 and
   0.57.0 on `qwen3_moe`:

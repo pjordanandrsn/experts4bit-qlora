@@ -2,9 +2,11 @@
 
 - Both lanes were registered on e4b 0.54.0 and never read. They now run on the first `main` commit containing both
   `v0.57.0` and e4b#2011 (the paged server's single wakeup per step). That commit's diff against the tag and its commits
-  are recorded at launch. `bench/sc2/sc2_defaults.py` dumps every serving lever's resolved value on CPU at `v0.57.0` and
-  at the launch commit, and any difference refuses the launch by name unless an amendment allows that lever
-  (`tests/test_sc2_defaults.py`).
+  are recorded at launch. `bench/sc2/sc2_defaults.py` dumps the serving defaults on CPU at `v0.57.0` and at the launch
+  commit: the resolved levers, plus a source scan of every `E4B_*` / `GNF4_*` environment read with its default. Any
+  difference refuses the launch by name. The exceptions are `--allow LEVER=reason` for an opt-in knob merged since the
+  tag that defaults off and is unset in the lane, and the four levers of #2017 named in the amendment
+  (`tests/test_sc2_defaults.py`, including two fake trees).
   Each amendment says which moved defaults reach its int4 server (both arms alike) and why the comparison still reads its
   knob alone. This changes the system under test; the old pin was never read.
 - grouped-nf4-gemm moves to v0.50.0 (`41ef086e`) for boxes N and O (`bench/sc1/sc1_run.sh`, re-pinned in

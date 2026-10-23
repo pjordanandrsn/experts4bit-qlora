@@ -9,23 +9,27 @@ with every ``E4B_*`` / ``GNF4_*`` variable cleared, what each serving lever reso
 - the per-family resolutions for ``qwen3_moe``: the decode fusions, the prefill glue, the attention split cap, and the
   int8 lm_head at Qwen3-30B-A3B's head shape;
 - the expert-path routes ``engines.hot_residency`` resolves from the environment (K19, the int4 prefill, the lean glue
-  and dispatch, the wide tiles, the tile programs, K21, K25 and its decode and plan, T == 1 device grouping).
+  and dispatch, the wide tiles, the tile programs, K21, K25 and its decode and plan, T == 1 device grouping);
+- a source scan (``scan``): every ``E4B_*`` / ``GNF4_*`` environment read in the package with its default literal, and
+  every such name the source mentions, so an inline default with no resolver, or a knob added later, is a lever too.
 
 A lever that a tree lacks, or whose resolver raises, records that fact as its value. ``diff A B`` compares two dumps
-and exits 1 naming every lever whose value differs or that exists in only one, unless ``--allow LEVER`` names it. The
+and exits 1 naming every lever whose value differs or that exists in only one, unless ``--allow LEVER=reason`` names it. The
 lane's amendment names any lever it allows. Nothing here needs a GPU; the grouped-nf4-gemm installed beside the tree is
 recorded, and the two dumps must record the same one.
 
     PYTHONPATH=<ref checkout>    python bench/sc2/sc2_defaults.py dump --out ref.json
     PYTHONPATH=<launch checkout> python bench/sc2/sc2_defaults.py dump --out launch.json
-    python bench/sc2/sc2_defaults.py diff ref.json launch.json [--allow LEVER ...]
+    python bench/sc2/sc2_defaults.py diff ref.json launch.json [--allow LEVER=reason ...]
     python bench/sc2/sc2_defaults.py --self-test
 """
 import argparse
+import ast
 import dataclasses
 import json
 import os
 import sys
+from pathlib import Path
 
 MODEL_TYPE = "qwen3_moe"
 HEAD_SHAPE = (151936, 2048)          # Qwen3-30B-A3B's lm_head (vocab x hidden)
@@ -47,6 +51,53 @@ def _call(fn, *a, **k):
         return _jsonable(fn(*a, **k))
     except Exception as e:  # noqa: BLE001 -- a raising resolver is a value the diff compares
         return f"RAISES {type(e).__name__}: {str(e)[:200]}"
+
+
+PREFIXES = ("E4B_", "GNF4_")
+
+
+def _const_names(tree) -> dict:
+    """Module-level ``NAME = "E4B_..."`` constants, so ``os.environ.get(NAME, ...)`` resolves to its variable."""
+    out = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and node.value.value.startswith(PREFIXES):
+                    out[t.id] = node.value.value
+    return out
+
+
+def scan(pkg_dir) -> dict:
+    """Every ``E4B_*`` / ``GNF4_*`` environment read in the package's source with its default's source text, and every
+    such name the source mentions at all. A read is a call whose first argument is (or names a constant equal to) such
+    a string and whose callee is ``*.get`` / ``getenv`` / ``env`` / ``_env``; the default is the second argument's
+    ``ast.unparse`` (``None`` when absent). Inline defaults with no resolver, and knobs added later, show up here."""
+    reads: dict = {}
+    names: set = set()
+    for path in sorted(Path(pkg_dir).rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        consts = _const_names(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.startswith(PREFIXES) \
+                    and node.value.replace("_", "").isalnum() and node.value.upper() == node.value:
+                names.add(node.value)
+            if not isinstance(node, ast.Call) or not node.args:
+                continue
+            f = node.func
+            callee = f.attr if isinstance(f, ast.Attribute) else (f.id if isinstance(f, ast.Name) else None)
+            if callee not in ("get", "getenv", "env", "_env"):
+                continue
+            a0 = node.args[0]
+            name = (a0.value if isinstance(a0, ast.Constant) and isinstance(a0.value, str)
+                    else consts.get(a0.id) if isinstance(a0, ast.Name) else None)
+            if not name or not name.startswith(PREFIXES):
+                continue
+            default = ast.unparse(node.args[1]) if len(node.args) > 1 else "None"
+            reads.setdefault(name, set()).add(default)
+    return {"reads": {k: sorted(v) for k, v in sorted(reads.items())}, "names": sorted(names)}
 
 
 def dump() -> dict:
@@ -84,12 +135,29 @@ def dump() -> dict:
         gnf4 = md.version("grouped-nf4-gemm")
     except Exception:  # noqa: BLE001
         gnf4 = None
+    src = scan(os.path.dirname(e.__file__))
+    for name, defaults in src["reads"].items():
+        out[f"env.{name}"] = defaults
+    for name in src["names"]:
+        out.setdefault(f"env.{name}", "NAMED")      # a name the source mentions without a direct read with a default
     return {"e4b_version": getattr(e, "__version__", None), "e4b_file": os.path.dirname(e.__file__),
             "grouped_nf4_gemm": gnf4, "model_type": MODEL_TYPE, "levers": out}
 
 
+def parse_allow(items) -> dict:
+    """``--allow LEVER=reason`` -> ``{lever: reason}``; a missing or empty reason is refused (the reason is the record)."""
+    out = {}
+    for it in items:
+        lever, sep, reason = str(it).partition("=")
+        if not sep or not lever.strip() or not reason.strip():
+            raise ValueError(f"--allow needs LEVER=reason, got {it!r}")
+        out[lever.strip()] = reason.strip()
+    return out
+
+
 def diff(a: dict, b: dict, allow=()) -> dict:
-    allow = set(allow)
+    reasons = allow if isinstance(allow, dict) else {k: "" for k in allow}
+    allow = set(reasons)
     la, lb = a["levers"], b["levers"]
     changed = sorted(k for k in set(la) & set(lb) if la[k] != lb[k])
     only_a, only_b = sorted(set(la) - set(lb)), sorted(set(lb) - set(la))
@@ -98,8 +166,17 @@ def diff(a: dict, b: dict, allow=()) -> dict:
     why = []
     if a.get("grouped_nf4_gemm") != b.get("grouped_nf4_gemm"):
         why.append(f"grouped-nf4-gemm differs: {a.get('grouped_nf4_gemm')} vs {b.get('grouped_nf4_gemm')}")
-    return {"ok": not refused and not why, "refused": refused, "allowed": sorted(set(named) & allow),
+    return {"ok": not refused and not why, "refused": refused,
+            "allowed": {k: reasons[k] for k in sorted(set(named) & allow)},
             "changed": {k: [la[k], lb[k]] for k in changed}, "only_ref": only_a, "only_launch": only_b, "why": why}
+
+
+def _raises(fn) -> bool:
+    try:
+        fn()
+    except ValueError:
+        return True
+    return False
 
 
 def self_test() -> int:
@@ -119,6 +196,10 @@ def self_test() -> int:
         ("a lever gone refuses by name", diff(added, base)["refused"] == ["config.prefill_every"]),
         ("--allow passes exactly the named lever", diff(base, added, ["config.prefill_every"])["ok"]
          and not diff(base, moved, ["config.prefill_every"])["ok"]),
+        ("--allow keeps its reason", diff(base, added, parse_allow(["config.prefill_every=opt-in, default off"]))
+         ["allowed"] == {"config.prefill_every": "opt-in, default off"}),
+        ("--allow without a reason is refused", _raises(lambda: parse_allow(["config.prefill_every"]))
+         and _raises(lambda: parse_allow(["config.prefill_every= "]))),
         ("a different kernels package refuses", not diff(base, other_gnf4)["ok"]),
         ("a raising resolver is a value", _call(lambda: 1 / 0).startswith("RAISES ZeroDivisionError")),
     ]
@@ -151,7 +232,7 @@ def main(argv=None) -> int:
             ra = json.load(f)
         with open(a.launch) as f:
             rb = json.load(f)
-        r = diff(ra, rb, a.allow)
+        r = diff(ra, rb, parse_allow(a.allow))
         print("SC2_DEFAULTS_DIFF " + json.dumps(r, sort_keys=True))
         return 0 if r["ok"] else 1
     ap.print_help()
