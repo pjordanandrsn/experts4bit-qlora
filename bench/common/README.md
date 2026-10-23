@@ -70,7 +70,7 @@ hit one of these gaps.
    - Every box has its own id and receipt, and an id is never reused, because the ledger holds one row per run.
    - Register the reading ids (`<lane>-<card>-1` to `-N`) AND retry ids (`-r1` to `-r8`) for any box that follows one
      that did not start.
-   - Ids are labels, not budget. No code parses an id's number, and the caps below govern alone.
+   - Ids are labels, not budget. No code may parse an id's number; the caps below govern alone.
    - If boxes that did not start ever use up `r8`, that is a launcher or market fault to fix, not a reason to add ids.
 3. **Outcome classes, and what each counts toward.** Each class is decided from the launcher's receipt and the
    runner's exit, never classified by hand:
@@ -79,14 +79,20 @@ hit one of these gaps.
    |---|---|---|---|
    | refused at create | the provider refused; nothing was created ($0) | no | nothing |
    | NOT_RUN | the launcher's pre-flight tore the instance down before the runner ran (no RUN_ID, exit file or marker) | no | nothing |
-   | refused before the install | the runner's own refusal before its first install: the power floor (rc 17), the guard fit (rc 41), a host refusal | no | a host refusal counts toward the lane's refusal cap, if it registers one; a single rc 41 is no strike, two consecutive count as one (Guard fit) |
+   | refused before the install | the runner's own refusal before its first install: the power floor (rc 17), the guard fit (rc 41), a host refusal | no | a host refusal counts toward the lane's refusal cap, if it registers one. A single rc 41 is no strike; two consecutive rc 41 count as one strike toward the stop (Guard fit) |
    | started | the runner passed those refusals and began its install | yes | the started-box cap, always; the stop only when NOT read (HARNESS_ERROR, VOID, a fault mid-install or mid-run). A read ends or advances the lane by its own rule |
 
-4. **A started-box cap.** The PREREG states the most boxes that may START, and each box's worst case. The lane's worst
-   is that number times the box worst, plus any refused boxes' cost. Retry ids never add a started box: they only
-   replace ids used by boxes that did not start. The stop exists to end a lane that keeps failing to produce a reading,
-   so it counts started boxes that were NOT read (a read box never counts toward it). A capped host therefore cannot end
-   a lane, and alternating faults cannot dodge the stop.
+4. **A started-box cap, a stop, and a bounded worst.**
+   - The PREREG states the most boxes that may START (the cap) and each box's worst case. Retry ids never add a started
+     box: they only replace ids used by boxes that did not start.
+   - The stop ends a lane that keeps failing to produce a reading. It counts STRIKES: a started box that was not read is
+     one strike, and two consecutive rc 41 are one strike (Guard fit). A read box is never a strike. The PREREG states
+     how many strikes stop the lane. A capped host therefore cannot end a lane, and alternating faults cannot dodge
+     the stop.
+   - The lane's worst is bounded by its ids: at most N + 8 boxes (N reading ids plus r1 to r8), of which at most the
+     cap start. So the lane worst = cap x the box worst + (N + 8 - cap) x the worst of a box that does not start. That
+     is its time to the refusal at the box rate (at most rule 5's boot term, plus the fit check), plus any download
+     before it. A refusal at create costs $0; a NOT_RUN or rc 17/41 box costs its time to the refusal.
 5. **Boot slack.** A box's deadline runs from the create, and the launcher alone may wait `ssh_ready_s` (420 s on
    Vast) for ssh before it stages the kit. So the boot term in Guard fit's static check is at least `ssh_ready_s` plus
    a staging margin of 120 s or more: guard - FIT_NEED >= 540 s on Vast. The lane's test asserts it. A boot term below
@@ -96,7 +102,8 @@ hit one of these gaps.
    - read with `git show <frozen>:<path>`, where `<frozen>` is the commit at which those pins were last asserted
      equal, usually the read's merge;
    - an unreadable frozen commit fails under `CI=true` and skips in a shallow clone;
-   - the test names the frozen commit in a constant with a comment (`P224_FROZEN`, `HO2_FROZEN`).
+   - the test names the frozen commit in a constant with a comment, as `tests/test_p224.py`'s `P224_FROZEN` does
+     (`HO2_FROZEN` follows with e4b#2030).
 
    A later move of a shared pin (CI's kernel pin, a shared staged file) then neither re-pins nor fails a closed lane.
    A lane still OPEN that a shared move would break needs an amendment, not a frozen read.
