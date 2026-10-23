@@ -221,3 +221,40 @@ deadline drops draw 2's last servers first; a server lost to the deadline makes 
 ## Amendments
 
 None yet.
+
+### Amendment 1 (registered before any SC2h run): the release under test, the kernels pin, the price ceiling, a new owner, and the order of three lanes
+
+**Why.** SC2h was registered on e4b 0.54.0 and never read; no SC2h box was ever created. The lane changed owner on
+2026-10-23 and now runs as part of the serving roadmap, where the decode lookahead at 64 slots is lever F2. The release pin moves with SC2f's. **This changes the system under test.**
+The 0.54.0 pin was never read.
+
+**The changes**, as SC2f's Amendment 3, which this lane follows step for step:
+- **e4b.** The launch commit is the first `main` commit containing both `v0.57.0` and e4b#2011's merge, with the same
+  record and the same mechanical default check (`bench/sc2/sc2_defaults.py`: the resolved levers and the source scan, at
+  `v0.57.0` and at the launch commit). Any diff refuses unless it passes under SC2f Amendment 3's two allowance rules,
+  `--allow LEVER=reason`. It must be the commit SC2f's reading ran, unless SC2f's
+  run recorded a refusal that a later commit fixes; a different commit is named in the launch note.
+  - e4b#2011 removes most of the per-stream dispatch from the host gap this lane's lookahead hides, so this lane's `base`
+    arm has less gap to hide than the registration's model assumed.
+  - The model's numbers above are SC2e's and stay a ceiling. No outcome cut moves, and the read reports the `base` arm's
+    measured host gap beside the saving.
+  - **What moved under the arms.** The serving defaults that changed since 0.54.0 are listed in SC2f Amendment 3. On this
+    lane's int4 s64a server the int8 head at one request, the attention split cap and #2011 reach the step; the NF4 routes
+    do not. All of them apply to both arms alike, since none is P118's knob. So `la` against `base` still reads the
+    lookahead alone, against a host gap that #2011 has shrunk.
+- **grouped-nf4-gemm.** v0.50.0 (`41ef086e`), as SC2f's.
+- **Price ceiling.** $1.05 an hour.
+  - Worst cases at $1.05/h plus download at ≤ $0.011/GB: a proof, 1.0 h ≤ $1.05 + ~$0.10 = $1.15; the reading, 4.0 h ≤
+    $4.20 + ~$0.73 = $4.93.
+  - Lane total, as registered (two proofs, one reading, one re-run), with the re-run counted as a reading: 2 × $1.15 +
+    2 × $4.93 = **$12.16** (was $7.50 at $0.75/h).
+  - Each run is under the standing single-run tier ($15).
+- **Host and order.** The host continuity rule, the separate boxes, the per-lane verdict and strike accounting, the watcher
+  at create and the 48-hour screen deadline are SC2f Amendment 3's.
+  - Box O launches only after SC2f's verdict is committed: `sc1_drive.sh` stages it as `SC2H_SC2F_VERDICT`, as
+    registered.
+  - The box launches through the guarded launcher (offer freshness and the same-pin ghost retry).
+- **Run ids.** `sc2h-prove-1` onward and `sc2h-5090-1` onward, as registered.
+
+**Unchanged:** the arms, the knob, the knee rule on SC2f's verdict, the ladder, the statistics, the predictions, the
+outcomes, the box, the proof, the guards and the $0 shakedown.

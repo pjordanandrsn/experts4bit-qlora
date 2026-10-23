@@ -297,3 +297,85 @@ refused every create with `no_such_ask`: `sc2f-prove-1` to `-4`, $0, nothing cre
 - the science: the arms, both knobs, the ladder, the knee block, the statistics, the predictions, the outcomes and FLIPS
   (Amendment 1);
 - the running of it: the box, the proof and its 1.0 h guard, the reading's guard and budget, and the $0 shakedown.
+
+### Amendment 3 (registered before any SC2f run): the release under test, the kernels pin, the price ceiling, a new owner, and the order of three lanes
+
+**Why.** SC2f was registered on e4b 0.54.0 and never read: no reading box was created, and the four proofs
+(`sc2f-prove-1` to `-4`, 2026-10-18, $0) were refused at create. The lane changed owner on 2026-10-23 and now runs as
+part of the serving roadmap, on the release after 0.56.1, so the release pin moves. **This changes the system under test.** The 0.54.0 pin was never read,
+so nothing is lost and no reading crosses releases.
+
+**The four refused proofs, read before this amendment.** Each refused for one cause: a ghost listing. Machine 26157,
+the only bar machine listed, offered `54055665`, and the provider answered every create with `no_such_ask`, four times
+in 66 seconds. Nothing was created and nothing was charged. Three fixes followed, and one cause is still live:
+- Amendment 2 replaced the single ACK pin with a walk over up to three bar machines.
+- The launcher now refuses an offer listed for under two minutes before it holds it. It also retries a ghost once, on the
+  same pin, 180 s later, inside the same run id. Both live in the guarded launcher (`tools/pod-launch.sh`), so **every
+  SC2f box launches through it**; a direct provider create gets neither.
+- **Still live: the market half.** On 2026-10-23 at 00:03Z the bar, recomputed from the receipt store (clean runs ≥ 2,
+  every recorded power limit 575 W, no host failure, no capped block), named 13 machines. After this lane's exclusions
+  and the launcher's power exclusions, 9 remain. A read-only screen of six machine-filtered reads found **no candidate**:
+  one bar machine was listed, above the price ceiling and power-excluded. So the rule below is: no candidate, no launch.
+
+**The changes.**
+- **e4b.** The launch commit is the first `main` commit that contains both the `v0.57.0` tag and the merge of e4b#2011
+  (the paged server's single event-loop wakeup per step). Its `experts4bit_qlora/` tree, its diff against `v0.57.0`'s, and
+  every commit between the two are recorded at launch.
+  - **The default check is mechanical** (`bench/sc2/sc2_defaults.py`, `tests/test_sc2_defaults.py`). Before the
+    create, the controller dumps the serving defaults twice, beside the same grouped-nf4-gemm: at `v0.57.0` (the
+    reference) and at the launch commit. Each dump is taken on CPU, with every `E4B_*` / `GNF4_*` variable cleared, for
+    `qwen3_moe`, in two parts:
+    - **The resolved levers:** the server's config, the decode fusions, the prefill glue, the attention split cap, the
+      int8 head at Qwen3-30B-A3B's shape, and the expert-path routes. This part catches resolved logic.
+    - **A source scan:** every `E4B_*` / `GNF4_*` environment read in the package with its default literal, including
+      reads through a module constant, and every such name the source mentions. This part catches inline defaults with
+      no resolver and knobs added after the tag.
+
+    `sc2_defaults.py diff` exits 1 naming every lever whose value differs or that exists in only one tree, and that
+    refusal stops the launch. Two kinds of lever may pass, each by `--allow LEVER=reason`:
+    - **A knob merged since the tag that is opt-in, defaults off, and is unset in this lane's arms.** Its reason reads
+      "opt-in, default off, unset in this lane", checked against its PR and the lane's arm environment.
+    - **Named here:** `config.prefill_every`, `config.loaded_chunk_tokens`, `env.E4B_PAGED_PREFILL_EVERY` and
+      `env.E4B_PAGED_LOADED_CHUNK_TOKENS` (e4b#2017), should it have merged. They are opt-in, with defaults whose plans
+      equal the earlier planner's call for call (tested), and unset in this lane.
+
+    A changed default of a lever that both trees have is never allowed at launch; it needs a further amendment. The two
+    dumps, the diff's output and every `--allow` with its reason are committed with the run.
+  - The tripwire is unchanged (rc 9 without both of P130's defaults).
+- **What moved under the arms, and what that does to the comparison.** Serving defaults that changed between 0.54.0 and
+  0.57.0 on `qwen3_moe`:
+  - grouped-nf4-gemm's single-request bandwidth GEMV (0.55.0);
+  - K25's `prmt` decode, the int8 lm_head at one request, and the 16-split cap on the paged attention decode (0.56.0);
+  - K25's `c1` plan (0.56.1);
+  - #2011's single wakeup per step (the launch commit).
+
+  This lane's server is SC2e's s64a on the **int4** expert store (K19), so the NF4 routes (the bandwidth GEMV, K25's decode
+  and plan) are not on its expert path. The head, the attention cap and the dispatch change are. They apply to **both**
+  arms alike, because neither is one of P130's two knobs. So `on` against `off` still reads exactly P130's two prefill
+  defaults, now on a base whose decode and host time are smaller. The absolute ceilings are this release's, and no
+  number compares with SC2e's (as registered: no ratio crosses lanes).
+- **grouped-nf4-gemm.** v0.50.0 (`41ef086e6a3e2be5b158ff1bb38e0de67862a949`), the latest release, installed from git as on
+  box L (`bench/sc1/sc1_run.sh`, boxes N and O). If a newer release ships before the launch, a further amendment moves it.
+- **Price ceiling.** $1.05 an hour, the program's RTX 5090 policy rate on 2026-10-23, was $0.85. The ceiling is a spend
+  rule, not a scientific term.
+  - Worst cases at $1.05/h plus download at ≤ $0.011/GB: a proof, 1.0 h ≤ $1.05 + ~$0.10 = $1.15; the reading, 3.5 h ≤
+    $3.68 + ~$0.73 = $4.41.
+  - Lane total, as registered (two proofs, one reading, one re-run), with the re-run counted as a reading: 2 × $1.15 +
+    2 × $4.41 = **$11.11** (was $7 at $0.75/h).
+  - Each run sits under the standing single-run tier ($15).
+- **Host continuity across three lanes.** SC2f, SC2h and SC2i (A1's interleave knobs) run in that order, on **separate
+  boxes**, each its lane's registered box: N here, O for SC2h, and SC2i's own. SC2h then reads SC2f's committed verdict
+  as registered.
+  - The three pin the **same machine** while it stays listed and passes this lane's bar.
+  - If it does not re-list, each lane's own bar decides. There is no substitution outside the bar, and no waiting on the
+    earlier host past the screen deadline below.
+  - Each box arms the independent deadline watcher at create.
+  - The three lanes' running worst total is posted on the bus before the first create.
+  - Each lane keeps its own verdict and its own strike count. A harness or infrastructure failure before a lane's first
+    arm starts is not that lane's strike.
+- **Screen deadline.** After the `v0.57.0` tag, a read-only screen may run at $0 for at most 48 hours. With no candidate
+  at the end, the market data goes to the maintainer before any change to the bar is proposed. The bar itself is unchanged.
+- **Run ids.** Unchanged from Amendment 2: `sc2f-prove-11` onward and `sc2f-5090-1` onward.
+
+**Unchanged:** the arms, both knobs, FLIPS (Amendment 1), the bar and its exclusions (Amendment 2), the ladder, the knee
+block, the statistics, the predictions, the outcomes, the box, the proof, the guards and the $0 shakedown.
