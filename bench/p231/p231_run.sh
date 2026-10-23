@@ -32,9 +32,10 @@ INSTALL_TO_GATE_S=600   # the two installs, the self-tests and both premises
 RESERVE=600             # can_run's margin after a step: the reduce, the fetch-back and the teardown
 GPU_CLASS=5090; MIN_DISK_GB=220; MIN_RAM_GB=60; MIN_DL_MB_S=40   # 93 GB at 40 MB/s is 2,325 s, inside NEED_FETCH
 case "$P231_RUN_ID" in
-  p231-5090-1|p231-5090-2|p231-5090-r1|p231-5090-r2|p231-5090-r3|p231-5090-r4|p231-5090-r5|p231-5090-r6|p231-5090-r7|p231-5090-r8) SHAKE=0;;
-  # Amendment 2: an explore shakedown runs this runner through the installs, the tripwire and the self-tests, then stops
-  # (rc 0) before the premise; nothing is fetched, it is never a reading and never counts toward the box-started cap
+  p231-5090-1|p231-5090-2|p231-5090-3|p231-5090-r1|p231-5090-r2|p231-5090-r3|p231-5090-r4|p231-5090-r5|p231-5090-r6|p231-5090-r7|p231-5090-r8) SHAKE=0;;
+  # Amendments 2 and 3: an explore shakedown runs this runner through the installs, the tripwire, the self-tests and
+  # BOTH premises (they need no checkpoint), then stops (rc 0) before the fetch; it is never a reading and never counts
+  # toward the box-started cap
   p231-shake-1|p231-shake-2|p231-shake-3) SHAKE=1;;
   *) say "unregistered run ID: $P231_RUN_ID"; finish 78;;
 esac
@@ -154,7 +155,7 @@ case "$DL" in status=2[0-9][0-9]\ *) ;; *) DL_MB_S=0;; esac
 # ---- the pre-install fit check (bench/common/README.md, "Guard fit"): before any install and any staged script
 FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
 FIT=$((INSTALL_TO_GATE_S + NEED_FETCH + NEED_BAKE + NEED_FIT + 4 * NEED_ARM + NEED_QOFF + NEED_QON + RESERVE))
-[ "$SHAKE" = 1 ] && FIT=$((INSTALL_TO_GATE_S + RESERVE))   # Amendment 2: a shakedown stops before the premise
+[ "$SHAKE" = 1 ] && FIT=$((INSTALL_TO_GATE_S + RESERVE))   # Amendments 2 and 3: a shakedown stops after the premises, before the fetch
 FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P231_DEADLINE_EPOCH - $(date +%s)))
 # rc 41: a refusal before the install, not a start; two consecutive headroom refusals count as one strike
 [ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
@@ -236,8 +237,6 @@ cat versions.txt | tee -a summary.txt
 python $W/p231_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 21; }
 python $W/p231_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BOX SELF-TEST FAILED"; finish 21; }
 python $W/p115_quality.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "QUALITY SELF-TEST FAILED"; finish 21; }
-# Amendment 2: a shakedown stops here, before the premise and before anything is fetched (rc 0, never a reading)
-[ "$SHAKE" = 1 ] && { echo "SHAKE OK: the installs, the tripwire (the routing block's real resolve on this card) and the self-tests passed; stopping before the premise" | tee -a summary.txt; finish 0; }
 # ---- the premise, on THIS card, before anything is fetched: e4b's graph buckets (read from the junit report), then the
 # ROWS premise (B1's expert call bitwise per row at T = 1, 2 and 4); a failure HALTS the lane until it is amended (25)
 (cd $W && PYTHONPATH='' perl -e 'alarm 900; exec @ARGV' python -m pytest test_decode_graph_buckets.py -q -rs -p no:cacheprovider --junitxml=$W/logs/premise_served.xml) > logs/premise.log 2>&1
@@ -252,6 +251,9 @@ else
   tail -4 logs/rows.log | cut -c1-300 | tee -a summary.txt
   echo "premise failed" | tee -a summary.txt; say "PREMISE FAILED on this card -- the lane halts until amended"; echo "premise failed rc=$rc/$ps/$pr" > REFUSAL; finish 25
 fi
+# Amendment 3: a shakedown stops here, AFTER both premises (neither needs the checkpoint) and before anything is fetched
+# (rc 0, never a reading), so a premise fault costs a shake, never a reading box
+[ "$SHAKE" = 1 ] && { echo "SHAKE OK: the installs, the tripwire (the routing block's real resolve on this card), the self-tests and both premises (served and rows) passed; stopping before the fetch" | tee -a summary.txt; finish 0; }
 # ---- the checkpoint, its NF4 arena (P39's k8_bake.py) and the prompts
 FREE_GB=$(df -BG --output=avail "$W" | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED before fetch: disk ${FREE_GB:-?} GB"; finish 13; }
