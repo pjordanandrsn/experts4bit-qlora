@@ -195,13 +195,14 @@ GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "BOX REFUSED: gpu '$GPU_NAME' is not the registered class ($GPU_CLASS)"; echo "BOX_REFUSED gpu=$GPU_NAME" >> summary.txt; finish 12;; esac
 # HP3 Amendment 1 part 8 begin -- the card's MEMORY, not only its name (the reviewer, 2026-10-23, after a name-only screen pinned a
 # 48 GB modded RTX 4090): for the HP3 tokens, memory.total must fall in the class's band (MiB), else a host refusal before any staging
+# (rc 18: the launcher's "a lane's other registered host floor"; 14 is egress there)
 case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*)
   GPU_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -dc 0-9)
   case "$GPU_CLASS" in A4000) MEMBAND=15000:17000;; L4) MEMBAND=22000:24576;; 4090) MEMBAND=23000:25000;; L40S) MEMBAND=44000:49152;;
     5090) MEMBAND=31000:33000;; *) MEMBAND="";; esac
   if [ -z "$MEMBAND" ] || [ -z "$GPU_MIB" ] || [ "$GPU_MIB" -lt "${MEMBAND%%:*}" ] || [ "$GPU_MIB" -gt "${MEMBAND##*:}" ]; then
     say "BOX REFUSED: gpu memory ${GPU_MIB:-unread} MiB is outside the $GPU_CLASS band (${MEMBAND:-none registered}) -- host-limited"
-    echo "BOX_REFUSED gpu_mem=${GPU_MIB:-unread}MiB class=$GPU_CLASS band=${MEMBAND:-none}" >> summary.txt; finish 14; fi;;
+    echo "BOX_REFUSED gpu_mem=${GPU_MIB:-unread}MiB class=$GPU_CLASS band=${MEMBAND:-none}" >> summary.txt; finish 18; fi;;
 esac
 # HP3 Amendment 1 part 8 end
 # K: the class label the arm records (TC1_BOX_CLASS): "RTX <n>" for a numeric class, the class string itself otherwise (H100 NVL / SXM / PCIE pass the substring check above)

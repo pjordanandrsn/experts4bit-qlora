@@ -246,13 +246,13 @@ def _membox(tmp_path, cls, mib, fams="qwen3hp3shake"):
 
 
 def test_the_box_refuses_a_card_whose_memory_is_outside_its_class_band(tmp_path):
-    """Amendment 1 part 8: TC1_GPU_CLASS from the pin covers the name; memory.total must fall in the class band too (rc 14, a
-    host refusal before any staging, so the spare)."""
+    """Amendment 1 part 8: TC1_GPU_CLASS from the pin covers the name; memory.total must fall in the class band too (rc 18, the
+    launcher's other host floor; a host refusal before any staging, so the spare)."""
     for cls, mib in (("A4000", 16376), ("L4", 23034), ("4090", 24564), ("L40S", 46068), ("5090", 32607)):
         assert _membox(tmp_path, cls, mib)[0] == 0, cls
     rc, summary = _membox(tmp_path, "4090", 49140)                             # a modded 48 GB 4090
-    assert rc == 14 and "gpu_mem=49140MiB class=4090" in summary
-    assert _membox(tmp_path, "A4000", 8192)[0] == 14 and _membox(tmp_path, "3090", 24576)[0] == 14   # no band registered: refuse
+    assert rc == 18 and "gpu_mem=49140MiB class=4090" in summary
+    assert _membox(tmp_path, "A4000", 8192)[0] == 18 and _membox(tmp_path, "3090", 24576)[0] == 18   # no band registered: refuse
     assert _membox(tmp_path, "4090", 49140, fams="qwen3")[0] == 0              # other tokens are untouched
 
 
