@@ -94,9 +94,10 @@ note (about USD 0.5 a box): one profiled step at the matched set on a 5090.
   matched set on one 5090.
 - **Arms:** eager, and the prototype. Mirrored order, a fixed batch, the profile per arm.
 - **Kill criteria, fixed before the box:**
-  - **Wall time.** The layer's wall time (forward + recompute + backward, synced) on the slow-CPU host falls by less than
-    20 % against eager, or its device time rises by more than 5 %. Capture cuts host time almost by definition, so host
-    time is never the measure. Device time is read beside it because A's over-provisioned early-exit tiles add device work.
+  - **Wall time.** The layer's wall time (forward + recompute + backward, synced) on the fast-CPU host (the slow-CPU host
+    reported beside it, each named) falls by less than 20 % against eager, or its device time rises by more than 5 %.
+    Capture cuts host time almost by definition, so host time is never the measure. Device time is read beside it
+    because A's over-provisioned early-exit tiles add device work.
   - **Memory.** Reserved memory (`max_memory_reserved`, or the device's used bytes) rises by more than 0.5 GB at the
     matched set. A graph's private pool appears as reserved segments, which peak allocated memory can understate, and the
     24 GB frontier is closer than 0.5 GB. `TC1_STEP_MEM` (e4b#2003) records this per step, folded across phase resets.
@@ -104,6 +105,8 @@ note (about USD 0.5 a box): one profiled step at the matched set on a 5090.
     - B and C run or fuse the same math, so their gradients must be BITWISE equal to eager. A band would hide a capture
       bug such as a stale static buffer.
     - Only A, whose device grid can change the reduction order, is held to the fused path's run-to-run band.
+- Before the box, the plan states each target's projected step-wall ceiling, min(host saved, step wall − device) + device
+  saved, and nothing is built whose ceiling misses the later lane's bar.
 - **Then:** a pass on all three sends the option to a registered lane at the field recipe, under the TC1 protocol.
   Otherwise T-B parks with the census as its record.
 
