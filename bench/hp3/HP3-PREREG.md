@@ -376,6 +376,14 @@ at plausible noise. Every number in this section is an ESTIMATE.
 
    - **Cost:** unchanged. The guard stays at 11 h: read $10.45, lane $14.65.
 
+8. **The card's memory, not only its name** (the reviewer, 2026-10-23, after a name-only screen elsewhere pinned a 48 GB modded RTX
+   4090).
+   - The box checks `memory.total` right after the card-class check, for both HP3 tokens, against the class's band in MiB:
+     RTX A4000 15000–17000, L4 22000–24576, RTX 4090 23000–25000, L40S 44000–49152, RTX 5090 31000–33000.
+   - Outside its band, or a class with no band, the box refuses with rc 14 before any staging. That is a pre-install host check,
+     so it is host-attributable and uses the spare (ruling 4(C)), never the (R) trigger.
+   - The shakedown's screen applies the same bands to each offer's `gpu_ram`.
+
 **Unchanged:** everything else in this registration, including G1', 6(b), G2', the three-way read, the labels and the (R) fallback.
 
 **Rulings:** part 7 was ruled by the maintainer at 2026-10-23 19:56Z and 19:57Z ((b) plus (c), before data), with the reviewer's

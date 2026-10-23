@@ -228,3 +228,28 @@ def test_the_shakedown_writes_no_seed_plan(tmp_path):
     _, summary = drive(tmp_path, FAMILY_FAM="qwen3hp3shake", HP3_SHAKE="1")
     assert not (tmp_path / "hp3" / "seed_plan.json").exists() and "SEED_PLAN" not in summary
     assert "--seed-plan" not in (tmp_path / "py.log").read_text()                  # the shakedown never hands a plan to the evaluator
+
+
+def _membox(tmp_path, cls, mib, fams="qwen3hp3shake"):
+    """Run tc1_run.sh's part-8 block alone, with a fake nvidia-smi reporting `mib`; returns (rc, summary)."""
+    import subprocess
+    src = (D.REPO / "bench" / "tc1" / "tc1_run.sh").read_text()
+    block = src[src.index("# HP3 Amendment 1 part 8 begin"):src.index("# HP3 Amendment 1 part 8 end")]
+    (tmp_path / "bin").mkdir(exist_ok=True)
+    (tmp_path / "bin" / "nvidia-smi").write_text(f"#!/bin/sh\necho {mib}\n")
+    (tmp_path / "bin" / "nvidia-smi").chmod(0o755)
+    (tmp_path / "t.sh").write_text("say(){ :; }\nfinish(){ exit $1; }\n: > summary.txt\n" + block + "\nexit 0\n")
+    env = {"PATH": f"{tmp_path / 'bin'}:/usr/bin:/bin", "FAMILIES": fams, "GPU_CLASS": cls}
+    p = subprocess.run(["bash", "t.sh"], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60)
+    return p.returncode, (tmp_path / "summary.txt").read_text()
+
+
+def test_the_box_refuses_a_card_whose_memory_is_outside_its_class_band(tmp_path):
+    """Amendment 1 part 8: TC1_GPU_CLASS from the pin covers the name; memory.total must fall in the class band too (rc 14, a
+    host refusal before any staging, so the spare)."""
+    for cls, mib in (("A4000", 16376), ("L4", 23034), ("4090", 24564), ("L40S", 46068), ("5090", 32607)):
+        assert _membox(tmp_path, cls, mib)[0] == 0, cls
+    rc, summary = _membox(tmp_path, "4090", 49140)                             # a modded 48 GB 4090
+    assert rc == 14 and "gpu_mem=49140MiB class=4090" in summary
+    assert _membox(tmp_path, "A4000", 8192)[0] == 14 and _membox(tmp_path, "3090", 24576)[0] == 14   # no band registered: refuse
+    assert _membox(tmp_path, "4090", 49140, fams="qwen3")[0] == 0              # other tokens are untouched
