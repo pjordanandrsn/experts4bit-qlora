@@ -187,3 +187,52 @@ head. K2b routes 2..N rows to K37's `linear_i8` over the same codes.
 - No command on the box, threshold, cost or output changes. The drive is not a staged file, so no pin moves; the
   shakedowns ran through a direct launcher that set `E4B_SHA`, which is why they did not see it.
 
+## Amendment 4 (2026-10-23, before any reading): retry run ids for boxes that did not start
+
+- The registration names three reading ids, `p229-5090-1` to `-3`. Every box needs its own id and receipt (the ledger
+  holds one row per run, so an id is never reused), but a box that does not start uses an id without being read.
+  `p229-5090-1` refused itself on the box before the install (rc 17: the board's power limit read 525 W against the
+  575 W floor; not a strike, under the registered rc 17 rule). `p229-5090-2` was refused at create (the provider still
+  listed the offer; nothing was created, $0), recorded under the row below. So `-1` to `-3` can run out before a box
+  has started.
+- This amendment adds the retry ids **`p229-5090-r1` to `p229-5090-r8`**, for ANY box that follows one that did not
+  start, at the same tier and terms. A box that did not start is one of:
+  - a refusal at create (nothing created);
+  - a pre-flight teardown (the launcher tore a created instance down before the runner ran; P225's NOT_RUN);
+  - the box's own refusal before the install (rc 17 and the like).
+- The runner's and the drive's id cases accept them. This PREREG states no allowance for boxes that do not start, so N
+  is 8, P225's.
+- **The ids are labels, not budget.**
+  - Started-box accounting is by outcome, never by id: no code parses an id's number.
+  - The registered caps, the strike rules and the stop govern alone. Nothing is widened.
+- **A box STARTS when its runner passes the refusals before the install (rc 17, rc 41, and the host refusals rc 10,
+  13, 15, 16, 18 and 28) and begins the install**, whatever its outcome after that (read, HARNESS_ERROR, VOID, a
+  mid-install or mid-run fault). One definition serves the cap and the stop. **Only started boxes count toward the cap
+  and toward any stop; a box that did not start (a refusal at create, a pre-flight teardown, rc 17, a single rc 41)
+  counts toward none of them; the registered rc 41 pair rule is unchanged.**
+- **At most three boxes start.** The retry ids never add a started box; they only replace ids used by boxes that did
+  not start. This keeps the registered budget: 3 x $1.45.
+- **What the stop counts (line 125's text did not settle rc 17, so this settles it):**
+  - "Two consecutive runs that are not read stop the lane" (Budget) counts started boxes only. A started box that is
+    not read counts, including one that faults mid-install, so alternating faults cannot dodge the stop.
+  - An rc 17 box never counts toward the stop, whatever label the launcher's receipt carries.
+  - A single rc 41 is not a strike; two consecutive rc 41 count as one strike under the cross-lane rule (line 174),
+    unchanged.
+  - A refusal at create and a pre-flight teardown count toward nothing.
+  - `p229-5090-1` (rc 17) counts 0.
+  - Decided pre-data (no reading exists), after `-1`'s rc 17. Why: rc 17 is the host's power floor and rc 41 the guard
+    fit, both refusals before any install; the stop exists to end a lane whose kit cannot produce a reading, not to let
+    capped hosts end it.
+- **A new outcome row, decided from the launcher's receipt and never classified:**
+
+  | outcome | when | a reading? | a strike? |
+  |---|---|---|---|
+  | **refused at create** (Amendment 4) | the provider refused the create, so nothing was created ($0) | no | no; counts toward no cap, uses one id |
+
+- If boxes that did not start ever use up `r8`, that is a launcher or market fault to fix, not a reason to add ids.
+- **The slack, checked (a test, no kit change):** the box's deadline runs from the create, so a slow-ssh host must not
+  halt the lane at the fit check. guard - FIT_NEED = 3600 - 2625 = 975 s, at least pod-launch's longest ssh wait
+  (420 s) plus a 120 s staging margin. `tests/test_p229.py` asserts it.
+- Pre-data: no reading exists. The runner's bytes change (the id case only), so its staged pin moves. A box launched
+  before this amendment merges uses `-1` to `-3` from the earlier commit; a box launched after it launches from its
+  merge commit.

@@ -10,7 +10,7 @@ say(){ echo "[$(date -u +%FT%TZ)] [p229_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set"; exit 78; }
 done
-case "$E4B_RENT_RUN_ID" in p229-5090-[1-3]|p229-shake-[1-3]) :;; *) say "refusing unregistered run ID: $E4B_RENT_RUN_ID"; exit 78;; esac
+case "$E4B_RENT_RUN_ID" in p229-5090-[1-3]|p229-5090-r[1-8]|p229-shake-[1-3]) :;; *) say "refusing unregistered run ID: $E4B_RENT_RUN_ID"; exit 78;; esac
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 # The launch commit is the e4b this driver ships from: derived from the clean checkout HEAD, never an input (pod-launch
 # proves that HEAD is the manifest's heads.e4b; P226's form). An override is refused; so is a dirty tree.
