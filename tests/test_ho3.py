@@ -3,10 +3,12 @@
 mutants it must kill; the staged pins; the stack under test pinned to HO2's exactly (never the launch commit or CI's current
 pins); the registered plans agreeing across the reducer and the registration; the run ids across runner, driver and
 registration; each card's fit inside its guard with the boot slack bench/common requires; HO2's machines refused; a real
-Loggetta receipt read through the reducer."""
+Loggetta receipt read through the reducer; Amendment 2's driver-peak probe (Loggetta 0.6.2's own sampler, before the
+install, rc 19 a host refusal counting toward nothing, three in a row stop the card)."""
 import hashlib
 import importlib.util
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -22,7 +24,10 @@ RUN = (LANE / "ho3_run.sh").read_text(encoding="utf-8")
 DRIVE = (LANE / "ho3_drive.sh").read_text(encoding="utf-8")
 REDUCE = (LANE / "ho3_reduce.py").read_text(encoding="utf-8")
 HO2_RUN = (HO2 / "ho2_run.sh").read_text(encoding="utf-8")
-SOURCES = {"ho3_run.sh": LANE, "ho3_reduce.py": LANE, "phases.sh": REPO / "bench" / "common"}
+SOURCES = {"ho3_run.sh": LANE, "ho3_reduce.py": LANE, "ho3_drvprobe.py": LANE, "loggetta_measure.py": LANE,
+           "phases.sh": REPO / "bench" / "common"}
+#: Loggetta 0.6.2's loggetta/measure.py (release commit 9348f8b8, the runner's LOGGETTA_SHA), staged byte for byte
+LOGGETTA_062_MEASURE_SHA256 = "360363898e265a83aeefa252e96baab8082ce4431a30da9936ada6d1004b4596"
 #: each card's guard (PREREG "Boxes") and bench/common's boot slack on Vast (ssh_ready_s 420 + a 120 s staging margin)
 GUARD_S = {"5090": 7200, "4090": 7200, "a4000": 11400}
 BOOT_SLACK_S, HEADROOM = 540, 1.25
@@ -101,11 +106,22 @@ def test_the_stack_under_test_is_ho2s_exactly():
     assert 'WANT_E4B=$E4B_STACK_SHA' in RUN and "2.8.0+cu128" in RUN
 
 
+AMEND2_TRIPWIRE = (
+    "# the probe ran the rows' sampler: the installed loggetta.measure is the staged copy, byte for byte (Amendment 2)\n"
+    "import hashlib, loggetta.measure  # noqa: E401\n"
+    '_h = lambda f: hashlib.sha256(open(f, "rb").read()).hexdigest()\n'
+    'assert _h(loggetta.measure.__file__) == _h("/root/ho3/loggetta_measure.py"), "installed loggetta.measure is not the probed copy"\n'
+)
+
+
 def test_the_tripwire_is_the_one_ho2_ran_on_this_stack():
     def trip(text):
         i = text.index('say "TRIPWIRE FAIL"')
         return text[i:text.index("\nPYT\n", i)]
-    assert trip(RUN).replace("/root/ho3/", "/root/ho2/") == trip(HO2_RUN)
+    # HO2's tripwire plus one counted edit (Amendment 2): the installed loggetta.measure is the probed copy
+    amend = AMEND2_TRIPWIRE
+    assert trip(RUN).count(amend) == 1
+    assert trip(RUN).replace(amend, "").replace("/root/ho3/", "/root/ho2/") == trip(HO2_RUN)
 
 
 def test_a_failed_fetch_is_retried_once_before_the_box_refuses():
@@ -166,15 +182,18 @@ def test_a_deadline_overrun_is_recorded_as_a_skip_the_reducer_reads():
 
 
 def _dry_run(tmp_path, run_id, machine, earlier=()):
-    """The driver's $0 dry run in a fake runs root: ``earlier`` lists (run id, machine or None, ran) for boxes before it."""
+    """The driver's $0 dry run in a fake runs root: ``earlier`` lists (run id, machine or None, ran[, the runner's exit])
+    for boxes before it, in launch order (the launcher's instance.json "at")."""
     root = tmp_path / "runs" / "2026-10-24"
-    for rid, m, ran in earlier:
+    for i, (rid, m, ran, *rc) in enumerate(earlier):
         d = root / rid
         d.mkdir(parents=True)
         if m is not None:
-            (d / "instance.json").write_text(json.dumps({"machine_id": m}))
+            (d / "instance.json").write_text(json.dumps({"machine_id": m, "at": f"2026-10-24T10:{i:02d}:00Z"}))
         if ran:
             (d / "ho3").mkdir()
+            if rc:
+                (d / "ho3" / f"HO3_EXIT_CODE.{'0' * 64}").write_text(f"{rc[0]}\n")
     me = root / run_id
     me.mkdir(parents=True)
     (me / "instance.json").write_text(json.dumps({"machine_id": machine}))
@@ -217,3 +236,105 @@ def test_a_real_loggetta_receipt_reads_through_the_reducer():
     assert row["plan_matches_registration"] and row["plan_diff"] is None                         # no plan registered for it
     row, why = red.row_of("lfm2_1024", r, "a4000")
     assert row is None and "card 'NVIDIA RTX A2000 12GB'" in why
+
+
+# ---- Amendment 2: the driver-peak probe
+
+def _drvprobe(path=LANE / "ho3_drvprobe.py"):
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec = importlib.util.spec_from_file_location("ho3_drvprobe", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    finally:
+        sys.path.remove(str(path.parent))
+
+
+def test_the_staged_sampler_is_loggetta_062s_own():
+    raw = (LANE / "loggetta_measure.py").read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == LOGGETTA_062_MEASURE_SHA256
+    assert _var(RUN, "LOGGETTA_SHA") == "9348f8b865f9e429f0628ae6e5be412787447331"
+    assert "if p.strip() == pid and mib.strip().isdigit():" in raw.decode()        # the rows' own match rule
+
+
+def test_drvprobe_self_test_passes():
+    r = _self_test(LANE / "ho3_drvprobe.py")
+    assert r.returncode == 0 and "self-test OK (7 fixtures)" in r.stdout, r.stdout + r.stderr
+
+
+def test_probe_and_sampler_agree_on_the_same_fixtures():
+    """The probe's decision IS the sampler's result: a row's sampler takes no sample exactly where the probe refuses."""
+    mod = _drvprobe()
+    pid = os.getpid()
+    for name, out, want in mod.FIXTURES:
+        text = out.format(pid=pid, other=pid + 7919)
+        samples, peak = mod._with_smi(text)
+        assert mod.decide(samples, peak)[0] is want, name
+        assert (samples > 0 and peak >= mod.ALLOC_BYTES) is want, name    # what the rows' sampler itself reads
+    samples, _ = mod._with_smi("")                                        # ho3-4090-r1's host: no per-process rows
+    assert samples == 0 and not mod.decide(samples, 0)[0]
+
+
+PROBE_MUTANTS = [
+    ("ho3_drvprobe.py", "if peak < ALLOC_BYTES:", "if False:"),                                   # a peak below the allocation passes
+    ("loggetta_measure.py", "if p.strip() == pid and mib.strip().isdigit():", "if mib.strip().isdigit():"),  # any process's row
+]
+
+
+@pytest.mark.parametrize("i", range(len(PROBE_MUTANTS)))
+def test_drvprobe_self_test_kills_the_mutants(i, tmp_path):
+    target, old, new = PROBE_MUTANTS[i]
+    for f in ("ho3_drvprobe.py", "loggetta_measure.py"):
+        text = (LANE / f).read_text(encoding="utf-8")
+        if f == target:
+            assert text.count(old) == 1, old
+            text = text.replace(old, new)
+        (tmp_path / f).write_text(text, encoding="utf-8")
+    assert _self_test(tmp_path / "ho3_drvprobe.py").returncode != 0, f"mutant survived: {old!r}"
+
+
+def test_the_probe_runs_before_the_install_and_refuses_with_rc_19():
+    probe = RUN.index("python $W/ho3_drvprobe.py | tee -a summary.txt")
+    assert RUN.index("python $W/ho3_drvprobe.py --self-test") < probe
+    assert RUN.index('-ge "$MIN_RAM_GB"') < probe < RUN.index("phase_start install") < RUN.index("pip install")
+    assert RUN.index('finish 41; }') < probe       # after the guard fit: it runs another file (tests/test_lane_guard_fit.py)
+    assert 'echo "refused: driver peak not sampleable" > REFUSAL; finish 19;;' in RUN
+    # only the probe's rc 19 is a host refusal; any other nonzero is a kit halt (21), never a refusal
+    case = RUN[RUN.index('case "$DRV_RC" in'):RUN.index("esac", RUN.index('case "$DRV_RC" in'))]
+    assert re.findall(r"^  (\S+)\)", case, re.M) == ["0", "19", "*"] and "finish 21;;" in case.split("*)")[1]
+    assert "merge commit (Amendment 2)." in PREREG                                    # every unstarted box launches from it
+
+
+def test_the_tripwire_ties_the_installed_sampler_to_the_probed_copy():
+    trip = RUN[RUN.index("PYT' || {"):RUN.index("\nPYT\n")]
+    assert '_h(loggetta.measure.__file__) == _h("/root/ho3/loggetta_measure.py")' in trip
+
+
+def test_every_pre_install_exit_is_classified():
+    red = _reducer()
+    before = RUN[:RUN.index("phase_start install")]
+    exits = {int(n) for n in re.findall(r"finish (\d+)", before)}
+    kit_faults = {9, 10, 21, 78, 130}    # staging, a dud box, a self-test, configuration, a signal: bench/common decides
+    assert set(red.PRE_INSTALL) <= exits and exits - set(red.PRE_INSTALL) == kit_faults, exits
+
+
+def test_rc_19_is_a_host_refusal_that_counts_toward_nothing():
+    r = subprocess.run([sys.executable, str(LANE / "ho3_reduce.py"), "--classify", "19"], capture_output=True, text=True, timeout=60)
+    c = json.loads(r.stdout)
+    assert c == {"rc": 19, "class": "HOST_REFUSED", "started": False, "strike": False, "counts_toward": "nothing"}, c
+    assert "rc 19 is a host refusal before the install" in PREREG and "counts toward nothing" in PREREG
+
+
+@pytest.mark.skipif(not _clean_checkout(), reason="the driver refuses a dirty checkout before its machine checks")
+def test_three_consecutive_driver_peak_refusals_stop_the_card(tmp_path):
+    three = [("ho3-4090-r2", "1", True, 19), ("ho3-4090-r3", "2", True, 19), ("ho3-4090-r4", "3", True, 19)]
+    stop = _dry_run(tmp_path / "a", "ho3-4090-r5", "777", earlier=three)
+    assert stop.returncode == 78 and "3 consecutive driver-peak refusals" in stop.stdout, stop.stdout
+    broken = [three[0], ("ho3-4090-2", "4", True, 0), *three[1:]]
+    ok = _dry_run(tmp_path / "b", "ho3-4090-r5", "777", earlier=broken)
+    assert ok.returncode == 0 and "DRYRUN" in ok.stdout, ok.stdout + ok.stderr
+    other = _dry_run(tmp_path / "c", "ho3-5090-r5", "777", earlier=three)    # another card's refusals never stop this one
+    assert other.returncode == 0 and "DRYRUN" in other.stdout, other.stdout + other.stderr
+    unread = _dry_run(tmp_path / "d", "ho3-4090-r5", "777", earlier=[("ho3-4090-r2", None, True, 19)])
+    assert unread.returncode == 78 and "unreadable" in unread.stdout, unread.stdout

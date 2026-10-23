@@ -44,9 +44,9 @@ unset E4B_ABSMAX_DQ E4B_TRAIN_FUSE_QKV E4B_CHUNKED_LM_LOSS E4B_CHUNKED_EVAL_LOSS
 echo "KNOBS launch=$E4B_SHA e4b_stack=$E4B_STACK_SHA gnf4=$GNF4_SHA loggetta=$LOGGETTA_SHA alpaca=$ALPACA_REV class=$GPU_CLASS need_work=$NEED_WORK" | tee -a summary.txt
 case "$LOGGETTA_SHA" in *[!0-9a-f]*|"") say "refusing: LOGGETTA_SHA is not a pinned commit ($LOGGETTA_SHA)"; finish 78;; esac
 # ---- staged pieces, byte-for-byte
-for f in ho3_reduce.py phases.sh staged-ho3.sha256; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
+for f in ho3_reduce.py ho3_drvprobe.py loggetta_measure.py phases.sh staged-ho3.sha256; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged-ho3.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/ho3/staged-ho3.sha256"; finish 9; }
-# ---- refusals before anything is installed: CUDA, the card, the disk, the host RAM, the guard fit
+# ---- refusals before anything is installed: CUDA, the card, the disk, the host RAM, the guard fit, the driver peak
 CUDA_PROBE=$(python -c "import torch; print('ok' if torch.cuda.is_available() and torch.cuda.device_count() > 0 else 'no-cuda ' + torch.__version__)" 2>/dev/null | tail -1)
 echo "CUDA_PROBE ${CUDA_PROBE:-none}" | tee -a summary.txt
 case "$CUDA_PROBE" in ok) ;; no-cuda*) echo "refused: cuda unusable" > REFUSAL; finish 18;; *) say "DUD BOX"; finish 10;; esac
@@ -66,6 +66,17 @@ FIT=$((INSTALL_TO_GATE_S + NEED_WORK + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM
 # rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
 [ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
 echo "GUARD_FIT fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s" | tee -a summary.txt
+# rc 19, the driver-peak probe (Amendment 2): after the fit check (it runs another file) and before the install. HO2's
+# rule needs each row's sampled driver peak. ho3_drvprobe.py runs Loggetta 0.6.2's own DriverMemorySampler
+# (loggetta_measure.py, staged; the tripwire checks the installed module against it) on a process holding 256 MiB, and
+# refuses a host that gives it no sample: a host refusal before the install.
+python $W/ho3_drvprobe.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "DRVPROBE SELF-TEST FAILED"; finish 21; }
+python $W/ho3_drvprobe.py | tee -a summary.txt; DRV_RC=${PIPESTATUS[0]}
+case "$DRV_RC" in
+  0) ;;
+  19) say "REFUSED: the driver peak cannot be sampled on this host"; echo "refused: driver peak not sampleable" > REFUSAL; finish 19;;
+  *) say "DRVPROBE FAILED (rc $DRV_RC): a kit fault, not a host refusal"; finish 21;;
+esac
 source $W/phases.sh || finish 9
 export PHASES_FILE=$W/run/phases.jsonl
 can_run(){ local need=$1 left; left=$((HO3_DEADLINE_EPOCH - $(date +%s))); [ $((need + RESERVE)) -le "$left" ] || { say "STOP-2: $2 needs $((need + RESERVE))s, ${left}s left -- skipped"; echo "SKIPPED $2" >> summary.txt; return 1; }; }
@@ -101,6 +112,10 @@ import experts4bit_qlora.lora, nf4_qlora  # noqa: F401,E401
 from nf4_route import MIN_CAPABILITY, route_for  # noqa: F401
 import loggetta.data, loggetta.backends.experts4bit, loggetta.backends.experts4bit_train  # noqa: F401,E401
 assert torch.__version__ == "2.8.0+cu128", torch.__version__
+# the probe ran the rows' sampler: the installed loggetta.measure is the staged copy, byte for byte (Amendment 2)
+import hashlib, loggetta.measure  # noqa: E401
+_h = lambda f: hashlib.sha256(open(f, "rb").read()).hexdigest()
+assert _h(loggetta.measure.__file__) == _h("/root/ho3/loggetta_measure.py"), "installed loggetta.measure is not the probed copy"
 open("/root/ho3/versions.txt", "w").write("".join(f"{n} {md.version(n)}\n" for n in
      ("experts4bit-qlora", "grouped-nf4-gemm", "loggetta", "torch", "transformers", "bitsandbytes", "datasets")) + f"cc {torch.cuda.get_device_capability()}\n")
 print("tripwire OK")
