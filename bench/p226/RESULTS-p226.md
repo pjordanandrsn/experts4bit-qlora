@@ -18,7 +18,7 @@ c1 by at least 5 % at 256 rows, on 32 independent requests' routing, under P160'
 | **K1**, the selection's first | 64/256/8/3 / 128/128/8/4 | **0.9676** | **0.9669**; clock-adjusted 0.9644 | **< 1.05: NO_GO** |
 | K2 (reported) | 64/256/4/3 / 32/256/4/2 | 0.9643 | 0.9636 | |
 | K3 (reported) | 32/256/2/2 / 128/128/4/2 | 0.9797 | 0.9792 | |
-| D, K25's built-in plan (reported) | 32/64/4/3 / 32/64/4/3 | 1.7712 | 1.7676 | |
+| D, K25's built-in plan (reported) | 32/64/4/3 / 32/64/4/3 | not C/arm: **D/C 1.7712** (D is the slower) | D/C 1.7676 | |
 
 - **No plan the selection carried is faster than c1 at 256 rows.** All three are slower, so a different choice of carried
   plan could not have produced a GO.
