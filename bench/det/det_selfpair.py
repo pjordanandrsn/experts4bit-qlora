@@ -50,16 +50,25 @@ def backends_from_names(names):
 
 
 def decide(r: dict) -> dict:
+    """Fails closed: every count must equal its expected value exactly (absence or a shortfall is VOID, never a pass)."""
     void = []
-    for k in ("det_gather_calls", "compared_steps", "backends", "recompute_checked", "step_wall_ms"):
-        if r.get(k) in (None, [], {}):
+    for k in ("det_gather_calls", "compared_steps", "expected_compared", "backends", "recompute_checked",
+              "expected_recompute", "step_wall_ms", "recompute_split_bad"):
+        if r.get(k) is None or (k in ("backends", "step_wall_ms") and not r.get(k)):
             void.append(f"{k} missing")
     if r.get("raised"):
         void.append(f"strict mode raised: {r['raised']}")
-    if not void and r["det_gather_calls"] <= 0:
-        void.append("E4B_TRAIN_DET_GATHER did not engage")
-    if not void and r["recompute_checked"] and not r["recompute_equal"]:
-        void.append("a recomputed layer output differs from its forward: the checkpoint replayed another computation")
+    if not void:
+        if r["det_gather_calls"] <= 0:
+            void.append("E4B_TRAIN_DET_GATHER did not engage")
+        if r["compared_steps"] != r["expected_compared"] or r["expected_compared"] <= 0:
+            void.append(f"compared {r['compared_steps']} steps, expected {r['expected_compared']}")
+        if r["recompute_checked"] != r["expected_recompute"] or r["expected_recompute"] <= 0:
+            void.append(f"recompute checked on {r['recompute_checked']} micro-batches, expected {r['expected_recompute']}")
+        if r["recompute_split_bad"]:
+            void.append(f"forward/recompute hook split not (accum, accum): {r['recompute_split_bad'][:3]}")
+        if not r["recompute_equal"]:
+            void.append("a recomputed layer output differs from its forward: the checkpoint replayed another computation")
     if void:
         return {"verdict": "VOID", "why": void}
     if r["mismatches"]:
@@ -71,19 +80,31 @@ def self_test() -> int:
     assert backends_from_names(["aten::_scaled_dot_product_flash_attention", "aten::_scaled_dot_product_flash_attention_backward",
                                 "aten::mm"]) == {"flash": 2}
     assert backends_from_names(["aten::_scaled_dot_product_attention_math", "aten::bmm"]) == {"math": 1}
-    ok = {"det_gather_calls": 8, "compared_steps": 5, "backends": {"flash": 4}, "recompute_checked": 4,
-          "recompute_equal": True, "step_wall_ms": [1.0], "mismatches": [], "raised": None}
+    ok = {"det_gather_calls": 8, "compared_steps": 5, "expected_compared": 5, "backends": {"flash": 4},
+          "recompute_checked": 24, "expected_recompute": 24, "recompute_split_bad": [], "recompute_equal": True,
+          "step_wall_ms": [1.0], "mismatches": [], "raised": None}
     assert decide(ok)["verdict"] == "SELF_IDENTICAL"
     assert decide({**ok, "mismatches": ["x: 1e-5"]})["verdict"] == "NOT_SELF_IDENTICAL"
-    for k in ("det_gather_calls", "compared_steps", "backends", "recompute_checked", "step_wall_ms"):
+    n = 0
+    for k in ("det_gather_calls", "compared_steps", "expected_compared", "backends", "recompute_checked",
+              "expected_recompute", "step_wall_ms", "recompute_split_bad"):
         bad = dict(ok)
         bad[k] = None
-        assert decide(bad)["verdict"] == "VOID", k
-    assert decide({**ok, "det_gather_calls": 0})["verdict"] == "VOID"
-    assert decide({**ok, "raised": "aten::nll_loss"})["verdict"] == "VOID"
-    assert decide({**ok, "recompute_equal": False})["verdict"] == "VOID"
-    assert decide({**ok, "backends": {}})["verdict"] == "VOID"
-    print("det self-test: the backend reader, 3 verdicts and 9 fail-closed cases passed")
+        assert decide(bad)["verdict"] == "VOID", k                       # each input removed
+        n += 1
+    cases = [{"det_gather_calls": 0}, {"raised": "aten::nll_loss"}, {"recompute_equal": False}, {"backends": {}},
+             {"step_wall_ms": []},
+             {"compared_steps": 0},                                        # nothing compared (review-desk, fail-open 1)
+             {"compared_steps": 4},                                        # a shortfall
+             {"recompute_checked": 0},                                     # the hook never split (fail-open 2)
+             {"recompute_checked": 0, "recompute_equal": False},
+             {"recompute_checked": 20},                                    # a shortfall
+             {"recompute_split_bad": [(8, 0)]},                            # every output landed in fwd
+             {"expected_compared": 0, "compared_steps": 0}, {"expected_recompute": 0, "recompute_checked": 0}]
+    for c in cases:
+        assert decide({**ok, **c})["verdict"] == "VOID", c
+        n += 1
+    print(f"det self-test: the backend reader, 2 verdicts and {n} fail-closed cases passed")
     return 0
 
 
@@ -227,8 +248,9 @@ def main():
            "gpu": torch.cuda.get_device_name(), "sm": "sm_%d%d" % torch.cuda.get_device_capability(),
            "torch": torch.__version__, "cublas_workspace_config": os.environ.get("CUBLAS_WORKSPACE_CONFIG"),
            "fill_uninitialized_memory": bool(torch.utils.deterministic.fill_uninitialized_memory)}
-    rec = {"det_gather_calls": None, "compared_steps": 0, "backends": None, "recompute_checked": 0, "recompute_equal": True,
-           "step_wall_ms": [], "mismatches": [], "raised": None, "warnings": []}
+    rec = {"det_gather_calls": None, "compared_steps": 0, "expected_compared": 2 * a.reps - 1, "backends": None,
+           "recompute_checked": 0, "expected_recompute": 2 * a.reps * a.accum, "recompute_split_bad": [],
+           "recompute_equal": True, "step_wall_ms": [], "mismatches": [], "raised": None, "warnings": []}
     try:
         for _ in range(2):                        # warm: Triton compiles, plan memos, the allocator
             step()
@@ -260,6 +282,8 @@ def main():
                     rec["recompute_checked"] += a.accum
                     if not all(torch.equal(f, r) for f, r in zip(seen["fwd"], seen["re"])):
                         rec["recompute_equal"] = False
+                else:                                     # recorded, never skipped: decide() reads it as VOID
+                    rec["recompute_split_bad"].append((len(seen["fwd"]), len(seen["re"])))
         rec["reserved_peak"] = torch.cuda.max_memory_reserved()
         rec["det_gather_calls"] = fast.FAST_TRAIN_STATS["det_gather"] - g0
         names, dev = [], 0.0
