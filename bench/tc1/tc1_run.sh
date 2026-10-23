@@ -185,7 +185,7 @@ echo "BOX $TC1_BOX families: $FAMILIES; e4b $E4B_SHA gnf4 $GNF4_SHA; run $TC1_RU
 case "$PACK" in 0|1) ;; *) say "refusing: TC1_PACK must be 0 or 1 (got '$PACK')"; echo "BOX_REFUSED pack=$PACK" >> summary.txt; finish 78;; esac
 for _f in $FAMILIES; do
   case "$_f" in
-    qwen3samestack4k|qwen3samestack4kce|qwen3samestack4kce2|qwen3memc4k|qwen3padbk|qwen3samestack4kd|qwen3padbk28|qwen3prof28|qwen3ladder28|qwen3memc4kb|qwen3dqpack|qwen3memc4kt|qwen3ckptoff|qwen3evalce|qwen3combck|qwen3ckptre4k|qwen3memc4kr|qwen3cbk|qwen3pos67|qwen3pos68) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
+    qwen3ho1p|qwen3samestack4k|qwen3samestack4kce|qwen3samestack4kce2|qwen3memc4k|qwen3padbk|qwen3samestack4kd|qwen3padbk28|qwen3prof28|qwen3ladder28|qwen3memc4kb|qwen3dqpack|qwen3memc4kt|qwen3ckptoff|qwen3evalce|qwen3combck|qwen3ckptre4k|qwen3memc4kr|qwen3cbk|qwen3pos67|qwen3pos68) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
     *) [ "$PACK" = 0 ] || { say "refusing: TC1_PACK=1 packs every family on the box and $_f is a field-recipe token (packed-regime tokens: qwen3samestack4k, qwen3samestack4kce, qwen3samestack4kce2, qwen3memc4k, qwen3padbk, qwen3samestack4kd, qwen3padbk28, qwen3prof28, qwen3ladder28, qwen3memc4kb, qwen3dqpack, qwen3memc4kt, qwen3ckptoff, qwen3evalce, qwen3combck, qwen3ckptre4k, qwen3memc4kr, qwen3cbk, qwen3pos67, qwen3pos68)"; echo "BOX_REFUSED $_f pack=$PACK" >> summary.txt; finish 78; };;
   esac
 done
@@ -2131,6 +2131,20 @@ tc1_ckptofff_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
 # tc1_fieldbk_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 49 (2026-10-06): grouped-nf4-gemm's bucketed LoRA-delta padding
 # (NF4_QLORA_PAD_BUCKETS=1, grouped-nf4-gemm#490) off vs on at TC1's FIELD recipe (amendment 48 read it on packed rows) -- the shipped and the
 # matched arm, two draws a side in ABBA order, every arm in venv-unsloth at e4b's defaults: whether the short rows pay for the extra launches.
+# tc1_ho1x_family FAM MID REV FETCH_AL E4B_AL SUFFIX -- EXPLORE (Map 1 HO1 replan, 2026-10-23; never a reading, no public number):
+# the fused Qwen3-30B-A3B setups HO1 graded, re-measured at TODAY's e4b and grouped-nf4-gemm, to set beside today's plan. One shipped
+# (native) and one matched (fp32) e4b arm, each with TC1_STEP_MEM=1, in venv-unsloth (E4B_VENV=t212) as HO1's rows ran, at TC1's
+# defaults otherwise. qwen3ho1f is HO1's field rows (seq 2048 x micro-batch 2); qwen3ho1p is its packed rows (TC1_PACK=1, TC1_SEQ=4096).
+tc1_ho1x_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 S=$6
+  local ALL="e4b:fused_attn4_shipped_$S:fused e4b:fused_attn4_m_$S:fused"
+  say "===== HO1 EXPLORE family $FAM ($MID @ $REV; the shipped and matched fused arms with TC1_STEP_MEM=1; not a reading)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  can_run 600 $FAM/e4b/shipped_$S && TC1_ARM_EXTRA_ENV="TC1_STEP_MEM=1" E4B_VENV=t212 arm $FAM e4b fused_attn4_shipped_$S fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/m_$S       && TC1_ARM_EXTRA_ENV="TC1_STEP_MEM=1" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_$S fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 tc1_fieldbk_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   local ALL="e4b:fused_attn4_shipped_fb0:fused e4b:fused_attn4_shipped_fb1:fused e4b:fused_attn4_m_fb0:fused e4b:fused_attn4_m_fb1:fused e4b:fused_attn4_m_fb1_d2:fused e4b:fused_attn4_m_fb0_d2:fused e4b:fused_attn4_shipped_fb1_d2:fused e4b:fused_attn4_shipped_fb0_d2:fused"
   say "===== FIELD PAD-BUCKETS A/B family $FAM ($MID @ $REV; grouped-nf4-gemm's LoRA delta one padded block vs buckets, field recipe, venv-unsloth, amendment 49)"
@@ -3270,7 +3284,9 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3padbk28) tc1_padbk28_family qwen3padbk28 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 52: amendment 48's bucketing A/B in venv-e4b (torch 2.8)
   qwen3prof28) tc1_prof28_family qwen3prof28 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 53: the matched arm profiled in torch 2.12 and 2.8 at e4b's defaults
   qwen3ladder28) tc1_ladder28_family qwen3ladder28 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 54: defaults vs the cuBLASLt cache vs the bucket ladder, torch 2.8
-  qwen3fieldbk) tc1_fieldbk_family qwen3fieldbk Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 49: the LoRA delta's bucketed padding at the field recipe
+  qwen3fieldbk) tc1_fieldbk_family qwen3fieldbk Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;
+  qwen3ho1f) tc1_ho1x_family qwen3ho1f Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 h1f;;   # EXPLORE: HO1's field rows
+  qwen3ho1p) tc1_ho1x_family qwen3ho1p Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 h1p;;   # EXPLORE: HO1's packed rows   # TC1 amendment 49: the LoRA delta's bucketed padding at the field recipe
   qwen3fieldauto) tc1_fieldauto_family qwen3fieldauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 50: the bucket gate at the field recipe
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)
   fusedsweep)  tc1_fusedsweep_family fusedsweep 2400;;   # TC1c amendment 5: a fused-kernel config replay (no model)
