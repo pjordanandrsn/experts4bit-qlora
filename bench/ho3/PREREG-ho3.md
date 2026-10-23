@@ -49,9 +49,21 @@ No package under test, row, rule, prediction, cap or id changes. A box refused h
 rc 41 box does, and the lane worst already prices that time for every id beyond the caps. The staged hashes move, so the
 launch commit for every box not yet started is this amendment's merge.
 
+## Amendment 3 (pre-data for every box not yet started, 2026-10-23)
+
+The driver's fetch no longer imports links. A rented box is a third-party host: a symbolic link it left in its work
+directory, fetched as a link, could make a later store commit read a file on the controller instead. The fetch gains
+`--no-links`. A fetched tree that still holds a link refuses with the fetch-failed exit (22) before anything reads it:
+each link's path and target are recorded in `refused_links.txt` (the link is never followed) and the link is removed,
+so the evidence and the run's receipt can both be committed without a link in the store. The file is always written
+fresh, after every link in the tree has been recorded and removed: a regular `refused_links.txt` the box shipped
+itself is kept as `refused_links.box-supplied.txt`, and if that name is taken too the refusal lists the links in the
+driver log and touches neither. Fetch-only: no package under test, row, rule, prediction, cap or id changes. The launch commit for every box not yet
+started is this amendment's merge.
+
 ## Stack and launch (bench/common rule 1)
 
-- **Launch commit:** every box's kit and driver launch from the latest amendment's merge commit (Amendment 2).
+- **Launch commit:** every box's kit and driver launch from the latest amendment's merge commit (Amendment 3).
 - **Stack under test:** HO2's, exactly, so a cohort's two boxes differ only in the machine. The runner pins these as
   literals, separate from the launch commit:
   - experts4bit-qlora `f6e66fd65b28fe493a89062b02aa91d3970ff995` (0.56.1, HO2's registration merge);
