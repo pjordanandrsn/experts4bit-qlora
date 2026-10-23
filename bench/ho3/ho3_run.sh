@@ -66,7 +66,11 @@ RAM_GB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 # it) on a process holding 256 MiB, and refuses a host that gives it no sample: a host refusal before the install.
 python $W/ho3_drvprobe.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "DRVPROBE SELF-TEST FAILED"; finish 21; }
 python $W/ho3_drvprobe.py | tee -a summary.txt; DRV_RC=${PIPESTATUS[0]}
-[ "$DRV_RC" = 0 ] || { say "REFUSED: the driver peak cannot be sampled on this host (rc $DRV_RC)"; echo "refused: driver peak not sampleable" > REFUSAL; finish 19; }
+case "$DRV_RC" in
+  0) ;;
+  19) say "REFUSED: the driver peak cannot be sampled on this host"; echo "refused: driver peak not sampleable" > REFUSAL; finish 19;;
+  *) say "DRVPROBE FAILED (rc $DRV_RC): a kit fault, not a host refusal"; finish 21;;
+esac
 FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
 FIT=$((INSTALL_TO_GATE_S + NEED_WORK + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((HO3_DEADLINE_EPOCH - $(date +%s)))
 # rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike

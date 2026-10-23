@@ -37,7 +37,13 @@ another pid, and memory reported as `[N/A]`.
   `ho3_reduce.py --classify` holds this runner's pre-install exits, and its self-test now holds 12 of HO3's cases.
 - After three consecutive rc 19 on one card, the driver refuses that card's next box: stop and report, so a run of hosts
   that hide per-process memory cannot become a rental loop.
-- The pin screen skips machines the host registry already marks as hiding per-process memory.
+- The pin screen, done by hand before each create (the registry's `hosts screen` covers only the power floor), skips
+  any machine with a registry curation line (`kind` `curation`, `action` `caution`) whose `scope` says nvidia-smi
+  lists no per-process GPU memory (today machines 151238 and 154480). No code implements this screen. A refused box's
+  `DRIVER_PEAK_PROBE` line is in its fetched `summary.txt`, which the receipt commit stores; the machine is then curated
+  as a caution (`hosts curate`) with that line as the evidence.
+- Only the probe's rc 19 is a host refusal. Any other nonzero exit from the probe is a kit fault: the runner halts
+  with rc 21, as for a failed self-test, and the $0 shakedown is what should catch it.
 
 No package under test, row, rule, prediction, cap or id changes. A box refused here costs its time to the refusal, as an
 rc 41 box does, and the lane worst already prices that time for every id beyond the caps. The staged hashes move, so the
@@ -45,7 +51,7 @@ launch commit for every box not yet started is this amendment's merge.
 
 ## Stack and launch (bench/common rule 1)
 
-- **Launch commit:** every box's kit and driver launch from the latest amendment's merge commit (Amendment 1).
+- **Launch commit:** every box's kit and driver launch from the latest amendment's merge commit (Amendment 2).
 - **Stack under test:** HO2's, exactly, so a cohort's two boxes differ only in the machine. The runner pins these as
   literals, separate from the launch commit:
   - experts4bit-qlora `f6e66fd65b28fe493a89062b02aa91d3970ff995` (0.56.1, HO2's registration merge);
