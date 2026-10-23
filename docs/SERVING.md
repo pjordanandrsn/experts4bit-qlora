@@ -395,6 +395,24 @@ MXFP4 expert store, on a placement that is not all-resident, and at any expert s
 engage on the device. Reported in `nf4_smallm_bw`; which token counts it routed is
 `prefill_routes.seen.moe_nf4_smallm_bw`.
 
+**Pinned dense GEMMs at 2 to 8 rows (`E4B_DENSE_LT_PIN=o_proj[,router]`; opt-in, not yet read).** At 2 to 8 rows,
+cuBLAS's own kernel choice for some dense projections is slower than at one row. This knob routes the named projections'
+2..8-row calls through one cuBLASLt algorithm pinned per (cuBLASLt version, compute capability, SM count, shape, rows),
+called on the library torch already loaded. The pin table is filled by a registered selection; until then the knob is
+refused for want of a pin. Calls without a pin for their row count pass to `F.linear` and are counted; one row and more
+than 8 rows are untouched.
+- **Refused by name, never degraded silently:**
+  - a captured decode bucket without a pin;
+  - another cuBLASLt version or device;
+  - a configuration cuBLASLt rejects;
+  - a non-bf16 operand at a routed call;
+  - a second stream;
+  - a router not on the router epilogue's forward.
+- **The output changes within tolerance** (split-K reorders the sum), so the tokens can differ at 2 to 8 requests and a
+  default would need a quality bar.
+- **Reported** in `dense_lt_pin`, with calls counted by site, row count and prefill or decode. Design:
+  [`bench/dense-small-m/DESIGN.md`](../bench/dense-small-m/DESIGN.md).
+
 **Qwen3 decode defaults by family (lanes P143, P153, P158).** Three settings resolve per family at startup, before any
 weight loads. Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
 old behaviour until a read of its own. Other `qwen3_moe` checkpoints, Qwen3-235B-A22B among them, take the split cap

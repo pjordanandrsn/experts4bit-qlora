@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import os
 
+from .dense_lt_pin import router_linear
+
 import torch
 
 __all__ = ["fuse_router_epilogue", "CAST_WEIGHTS"]
@@ -418,7 +420,7 @@ def fuse_router_epilogue(model, mode: str | None = None, report: dict | None = N
                 rows = hidden_states.reshape(-1, _h)
                 if rows.shape[0] > _MAX_DECODE_ROWS:
                     return _orig(hidden_states)
-                logits = torch.nn.functional.linear(rows, _m.weight)
+                logits = router_linear(_m, rows)          # F.linear, or E4B_DENSE_LT_PIN's pinned GEMM at 2..8 rows
                 if not (_casts and _cast_for("softmax_topk")):
                     first, w, idx = router_epilogue(logits, _k, _norm)            # the kernel widens on load
                 elif _wdt and logits.dtype in _KERNEL_WEIGHT_DTYPES:
@@ -445,6 +447,7 @@ def fuse_router_epilogue(model, mode: str | None = None, report: dict | None = N
                     w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
         mod.forward = _fwd
+        mod._e4b_router_epi_kind = kind               # read by E4B_DENSE_LT_PIN (engines/dense_lt_pin.py)
         n += 1
         # The kernel loads the logits with ``.to(tl.float32)`` (every grouped-nf4-gemm since e4b's floor, 0.30.0), so
         # the forwards above hand it the projection's own dtype: a host ``logits.float()`` was one launch a layer for

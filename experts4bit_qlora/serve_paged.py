@@ -175,7 +175,7 @@ LEVER_ENV = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_I
              "E4B_INT4_ARTIFACT_DIR", "E4B_INT4_EXPECTED_FINGERPRINT", "E4B_INT4_DUMP_ARTIFACT_DIR",
              "E4B_INT4_ASSIGNMENT", "E4B_CALIB_LAYERS_PER_PASS", "E4B_INT4_KEEP_NF4",
              "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI", "E4B_FUSED_KV_APPEND",
-             "E4B_SERVE_ATTN_INT8", "E4B_INT8_HEAD_ROWS")
+             "E4B_SERVE_ATTN_INT8", "E4B_INT8_HEAD_ROWS", "E4B_DENSE_LT_PIN")
 FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
 # Under an adapter, a lever is classified by what it DEPENDS ON (docs/ADAPTER_PORTABILITY.md F4). REFUSED (refusal 5)
 # until a registered read gates it: (i) it re-quantizes an ADAPTED module (attention after the merge; experts once
@@ -223,6 +223,9 @@ ADAPTER_NEUTRAL_KNOBS = {
     "E4B_FUSE_ROUTER_EPI": ("the router's epilogue: reads the router weight, which no adapter trains; its store "
                             "rounds as torch's cast does"),
     "E4B_FUSED_KV_APPEND": "the paged KV cache's append kernel: no weights at all",
+    "E4B_DENSE_LT_PIN": ("a pinned cuBLASLt algorithm for named bf16 projections at 2..8 rows (K1): it reads the merged "
+                         "weight as stored, re-quantizes nothing and reads no calibration; its outputs move within the "
+                         "served tolerance exactly as on the base server"),
     "E4B_INT8_HEAD_ROWS": ("routes the int8 head's 2..8 rows to K37 over the head's own codes and scales (K2b): it "
                            "quantizes nothing and reads no calibration, and the head it widens is the allowed "
                            "base-serving lever E4B_INT8_HEAD_BW"),
@@ -1955,8 +1958,17 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     moe_resid: dict = {}
     license_moe_residual(model, sorted({1, *cfg.buckets, *runner._verify_buckets}),
                          mode=(fusion_report.get("modes") or {}).get("E4B_FUSE_T1_GLUE_R2"), report=moe_resid)
+    # K1 (E4B_DENSE_LT_PIN, opt-in): the pinned cuBLASLt GEMM on the named dense projections at 2..8 rows -- after the
+    # fusions patched the routers and K35 swapped its one-row projections, before any graph is captured; every captured
+    # decode bucket in 2..8 (the verify buckets included) must carry a pin (bench/dense-small-m/DESIGN.md)
+    from .engines.dense_lt_pin import apply_dense_lt_pin, engagement as dense_lt_engagement
+    dense_lt = apply_dense_lt_pin(model, sorted({*cfg.buckets, *runner._verify_buckets}) if cfg.graphs else (),
+                                  device=cfg.device)
     graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None
     engage_prefill_graph(runner, cfg)
+    if dense_lt.get("on") and torch.cuda.current_stream(torch.device(cfg.device)) != dense_lt.pop("_stream"):
+        raise RuntimeError("E4B_DENSE_LT_PIN: the decode graphs were captured for a stream other than the pin's: its "
+                           "one workspace must serve one stream")
     # E4B_PAGED_KV_POOL=shared (bench/kv-pool-g/DESIGN.md): graphed slots claim blocks as they write (G1) and the
     # scheduler admits by reserved blocks (G2). The pool keeps its claim-all size here, so the reservation never binds;
     # sizing the pool from free memory (G3) is a separate, later change.
@@ -1988,6 +2000,9 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     info["dense_gemv_bw"] = {**dense_gemv, "engagement": dense_gemv_engagement(model)}
     # P153: the head's record and, per row count, whether it routed or passed during the build's captures and warm-ups
     info["int8_head_bw"] = {**int8_head, "rows": int8_head_rows, "engagement": int8_head_engagement(model)}
+    # K1: the resolved pins and, per (site, M, prefill|decode|eager), the calls routed through them or passed
+    info["dense_lt_pin"] = {**{k_: v_ for k_, v_ in dense_lt.items() if not k_.startswith("_")},
+                            "engagement": dense_lt_engagement()}
     # E4B_K25_LUT as resolved at startup; which decode each K25 call took is prefill_routes()["seen"]["moe_k25_lut"]
     info["k25_lut"] = k25_lut
     # E4B_K25_PLAN as resolved at startup; which plan each K25 call took is prefill_routes()["seen"]["moe_k25_plan"]
