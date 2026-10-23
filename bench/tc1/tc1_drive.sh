@@ -186,7 +186,7 @@ fi
 tc1_partial_fetch() {  # dest_dir -> rc of rsync; never exits the caller
   mkdir -p "$1" || return 1
   # /bin/bash 3.2 on the controller treats an empty array's [@] as unbound under set -u.
-  rsync -az --timeout=120 -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" ${TC1_PARTIAL_EXCLUDES[@]+"${TC1_PARTIAL_EXCLUDES[@]}"} "root@$HOST:$W/" "$1/" >/dev/null 2>&1
+  rsync -az --no-links --timeout=120 -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" ${TC1_PARTIAL_EXCLUDES[@]+"${TC1_PARTIAL_EXCLUDES[@]}"} "root@$HOST:$W/" "$1/" >/dev/null 2>&1
 }
 
 say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s of no change, idle GPU AND no disk movement; never acted on)"
@@ -246,7 +246,7 @@ if [ "${TC1_L_CENSUS:-}" = 1 ]; then
   }
 fi
 rm -rf "$RUN_DIR/tc1" && mkdir -p "$RUN_DIR/tc1" || { say "fetch failed: local dir"; exit 22; }
-if ! rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" "root@$HOST:$W/" "$RUN_DIR/tc1/"; then
+if ! rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" "root@$HOST:$W/" "$RUN_DIR/tc1/"; then
   if [ -n "$(ls -A "$RUN_DIR/tc1.partial" 2>/dev/null)" ]; then
     # keep whatever the final rsync did bring, and add the partial copy's files it did not (-n never overwrites). cp -n's
     # exit status on a skipped file differs between BSD and GNU cp, so the merge is checked file by file instead.
