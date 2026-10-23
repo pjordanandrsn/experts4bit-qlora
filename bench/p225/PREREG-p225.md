@@ -154,7 +154,8 @@ Every fixed phase alarm (fetch, bake, train, ref, each slot, collect) and the to
   the slowest fetch, 806 s, had no probe). A fetch timeout falls after strike-eligibility begins, so the screen must
   not be trusted to bound it.
 - **alarm(phase):** at least 1.25 x need(phase).
-- **The guard:** (the sum of the needs + install 450 + reserve 600) x 1.25 + 300 s of boot.
+- **The guard:** (the sum of the needs + install 450 + reserve 600) x 1.25 + 880 s of boot (Amendment 2; registered
+  as 300).
 
 **The invariant test** parses every alarm and NEED out of the runner's own text (never restated in the test), computes
 need() from the derivation table below, and asserts alarm >= need x 1.25 for every phase at the floors.
@@ -182,8 +183,8 @@ need() from the derivation table below, and asserts alarm >= need x 1.25 for eve
 The 1.75 margin applies to train, the reference process and the fetch only. Every measured first slot (the slowest:
 `p224-5090-2`'s 364 s at 688 rows) sits under need(slot) + need(score) at 688 rows, and `p225_derive.py`'s self-test
 checks it. The needs plus gate 60 and reduce 60 sum to 15,230 s. The guard is (15,230 + install 450 + reserve 600) x
-1.25 + 300 = 20,650 s, **5.74 h**: inside the launcher's 6 h teardown cap (the fill refuses above 5.9 h). The worst
-case is 5.74 x USD 1.05 + 66 x USD 0.011 = **USD 6.75**.
+1.25 + 880 = 21,230 s, **5.90 h** (Amendment 2; registered as + 300 = 20,650 s, 5.74 h): inside the launcher's 6 h
+teardown cap (the fill refuses above 5.9 h). The worst case is 5.897 x USD 1.05 + 66 x USD 0.011 = **USD 6.92**.
 
 **The 30-Mops pricing is CONSERVATIVE.** Every host the screen would admit, measured so far, reads 36.2 or more, so a
 need is a bound, not an expected runtime.
@@ -269,8 +270,9 @@ G3 (latency) and the cost are reported with every outcome that reaches the reduc
 
 ## Budget
 
-Worst per box = guard x USD 1.05/h + 66 GB x USD 0.011/GB = **about USD 6.75**, inside the USD 15 per-box rule. Lane
-worst: 3 boxes plus 8 host refusals, about 3 x 6.75 + 8 x 0.10 = **about USD 21.1**.
+Worst per box = guard x USD 1.05/h + 66 GB x USD 0.011/GB = **about USD 6.92** (Amendment 2; registered as 6.75),
+inside the USD 15 per-box rule. Lane worst: 3 boxes plus 8 host refusals, about 3 x 6.92 + 8 x 0.10 = **about USD
+21.6**.
 
 ## Sequencing
 
@@ -303,6 +305,22 @@ them; nothing else changes.
 - If NOT_RUN boxes ever use up `r8`, that is a launcher fault to fix, not a reason to add ids.
 - It is pre-data: no box has started. A box launched after it merges launches from its merge commit, since the
   runner's bytes (and their staged pin) change.
+
+## Amendment 2 (pre-data): the boot allowance
+
+The guard's boot term was 300 s: launch to the runner's pre-install fit check could take at most about 314 s (the
+wallclock, 5.74 h, less the fit's need). The launcher alone may wait 420 s for ssh on Vast (the manifest's
+`ssh_ready_s`) before it stages the kit. `p225-5090-r1` took 443 s from launch to the check and refused at the fit
+(rc 41, PRE_INSTALL_HALT, no strike; it is recorded under that row and halted the lane, as registered). Measured launch
+to check: 103 s (P226's reading), 184 s (`p225-5090-2`, which passed the fit), 443 s (`r1`).
+- **The change:** the boot term is **880 s**, so the guard is 20,350 + 880 = **21,230 s, 5.90 h** (inside the 5.9 h
+  fill limit), and the launch wallclock is 5.9 h. The worst case is **USD 6.92** a box (was 6.75); the lane worst is
+  about USD 21.6.
+- **What does not change:** every need, alarm and floor; the runner (its fit reads the deadline the launcher sets),
+  so no staged pin moves; rc 41 stays PRE_INSTALL_HALT, so it keeps catching real launch faults.
+- **The test:** the boot allowance (the guard less the fit's need) must be at least the launcher's ssh wait plus a
+  300 s staging margin, so an allowance below the launcher's own ssh wait cannot be registered again.
+- It is pre-data: no box has started. The lane resumes from its merge commit on `p225-5090-r2`.
 
 ## What this lane cannot say
 
