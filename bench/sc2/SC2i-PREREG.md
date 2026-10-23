@@ -92,12 +92,14 @@ bar on prompts chunked as the arm chunks them), and only that read can open a de
 
 **Predictions** (per draw; HOLDS / MISSED / UNREAD; no outcome reads them):
 - P1: `pe2`'s `ratio` in [0.75, 0.97].
-- P2: `lc128`'s serial TTFT p50 / `base`'s ≥ 1.00 (a shorter first chunk loses the prefill graph).
+- P2: `lc128`'s TTFT p50 at 12 req/s / `base`'s ≥ 1.00 (a shorter first chunk loses the prefill graph). It is read under load,
+  not serially: with no decode live the cap never applies.
 - P3: every knob arm's attainment at 4 req/s ≥ 0.95.
 - P4: `lc256`'s and `lc128`'s `short_chunk` > 0 and `base`'s = 0.
 
 **Reported, no bar:** TPOT p99 and TTFT p50 at 8 and 12 req/s for each arm against `ref`; `prefill_deferred` per server;
-per draw the drift `base_b − base_a`; the serial text agreement of each knob arm with `base_a`.
+per draw the drift `base_b − base_a`; the text agreement of each knob arm with `base_a` at 12 req/s (serially the knobs
+never act, so serial texts would agree by construction).
 
 ## Shakedown, proof and budget
 
@@ -110,14 +112,14 @@ P130 knob), warm, `h_early` and the burst, a 6-request serial smoke and a 16-req
 request VALID. Each server's end `/health` then goes through ENGAGED as the reducer reads it. `lc128`'s is the real
 record the adapted gate is checked on, before any reading box.
 
-**Reading** (`sc2i-5090-*`, guard 4.0 h): installs about 10 min, fetch and bake 25–40 min, twelve servers at about
-12–14 min each.
+**Reading** (`sc2i-5090-*`, guard 4.5 h): installs about 10 min, fetch and bake 25–40 min, twelve servers at about
+12–14 min each: about 179–218 min, so a 4.0 h guard would leave 11 % headroom.
 
 **Worst cases** at $1.05/h plus download at ≤ $0.011/GB:
 - a proof: 1.0 h ≤ $1.05 + about $0.10 = $1.15;
-- the reading: 4.0 h ≤ $4.20 + about $0.73 = $4.93;
-- the lane, as SC2f's and SC2h's (two proofs, one reading, one re-run counted as a reading): 2 × $1.15 + 2 × $4.93 =
-  **$12.16**.
+- the reading: 4.5 h ≤ $4.73 + about $0.73 = $5.46;
+- the lane, as SC2f's and SC2h's (two proofs, one reading, one re-run counted as a reading): 2 × $1.15 + 2 × $5.46 =
+  **$13.21**.
 
 Each run is under the standing single-run tier ($15), and every box sits inside the launcher's 6 h cap. Two
 consecutive HARNESS_ERROR, VOID or NOT_RUN runs stop the lane's rentals pending a root-cause note. A harness or

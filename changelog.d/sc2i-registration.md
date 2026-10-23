@@ -14,4 +14,4 @@
   beside boxes N and O, at grouped-nf4-gemm v0.50.0. SC2e's ENGAGED gate is adapted for the loaded-chunk arms only: a
   capped first chunk runs eagerly there by design.
 - `tests/test_sc2i_box.py` covers box P; the SC1/SC2 box tests and the staged pins read the new box letter.
-- The box runs after SC2f's and SC2h's, on its own rental, inside the launcher's 6 h cap; lane worst $12.16.
+- The box runs after SC2f's and SC2h's, on its own rental, inside the launcher's 6 h cap (reading guard 4.5 h); lane worst $13.21.

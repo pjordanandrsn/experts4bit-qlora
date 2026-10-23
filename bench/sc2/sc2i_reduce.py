@@ -27,12 +27,12 @@ on TPOT p50 at 12 req/s; ``bar`` = max(0.05, ``noise``); ``ratio`` = the arm's T
 - FLAT otherwise.
 The reducer licenses nothing: a FASTER arm is a candidate for a quality read, never a default.
 
-**Predictions** (per draw; no outcome reads them): P1 ``pe2``'s ratio in [0.75, 0.97]; P2 ``lc128``'s serial TTFT p50 /
-``base``'s >= 1.00; P3 every knob arm attains >= 0.95 at 4 req/s; P4 ``lc256`` and ``lc128`` count short chunks > 0 and
+**Predictions** (per draw; no outcome reads them): P1 ``pe2``'s ratio in [0.75, 0.97]; P2 ``lc128``'s TTFT p50 at 12 req/s
+/ ``base``'s >= 1.00 (serial has no live decode, so the cap never applies there); P3 every knob arm attains >= 0.95 at 4 req/s; P4 ``lc256`` and ``lc128`` count short chunks > 0 and
 ``base`` = 0.
 
 **Reported, no bar:** TPOT p99 and TTFT p50 at 8 and 12 req/s against ``ref``; ``prefill_deferred``; the drift
-``base_b - base_a``; serial text agreement with ``base_a``.
+``base_b - base_a``; text agreement with ``base_a`` at 12 req/s (where the knobs act).
 
   sc2i_reduce.py --dir DIR [--out verdict.json]
   sc2i_reduce.py --knobs HEALTH.json ARM [--proof]     (box P's start check; exit 1 on a departure)
@@ -241,11 +241,11 @@ def reduce(d: str) -> dict:
                "ratio": [per[("pe2", k)].get("ratio") for k in DRAWS]}
     p2 = []
     for k in DRAWS:
-        a = _get(d, tag("lc128", k), "serial", "ttft_p50_s")
-        b = [_get(d, tag("base", k, s), "serial", "ttft_p50_s") for s in ("base_a", "base_b")]
+        a = _get(d, tag("lc128", k), "r12", "ttft_p50_s")
+        b = [_get(d, tag("base", k, s), "r12", "ttft_p50_s") for s in ("base_a", "base_b")]
         p2.append(None if a is None or None in b else round(a / statistics.fmean(b), 4))
     v["P2"] = {"verdict": "UNREAD" if None in p2 else ("HOLDS" if all(x >= 1.0 for x in p2) else "MISSED"),
-               "lc128_over_base_serial_ttft": p2}
+               "lc128_over_base_ttft_p50_r12": p2}
     p3 = [_get(d, tag(a, k), "r4", "attainment") for a in KNOB_ARMS for k in DRAWS]
     v["P3"] = {"verdict": "UNREAD" if None in p3 else ("HOLDS" if all(x >= 0.95 for x in p3) else "MISSED")}
     sc = {t: _short_chunks(d, t) for t, *_ in srv}
@@ -262,8 +262,8 @@ def reduce(d: str) -> dict:
         for arm in KNOB_ARMS:
             t = tag(arm, k)
             rep["vs_ref"][t] = {f"{m}_r{r}": _get(d, t, f"r{r}", m) for m in ("tpot_p99_s", "ttft_p50_s") for r in (8, 12)}
-            rep["vs_ref"][t]["serial_text_agreement_vs_base_a"] = _agreement(
-                _load(d, f"{tag('base', k, 'base_a')}_serial.json"), _load(d, f"{t}_serial.json"))
+            rep["vs_ref"][t]["text_agreement_vs_base_a_r12"] = _agreement(
+                _load(d, f"{tag('base', k, 'base_a')}_r12.json"), _load(d, f"{t}_r12.json"))
     out["outcome"] = {"void": void, "verdicts": {a: out["arms"][a]["verdict"] for a in KNOB_ARMS}}
     return out
 
@@ -308,7 +308,8 @@ def _fixture(d, *, tpot=None, att=None, ttft99=None, knob_edit=None, missing=(),
         for r in LADDER:
             a = (att or {}).get((t, r), 1.0)
             t99 = (ttft99 or {}).get(t, 0.4) if r == 12 else None
-            dump(f"{t}_r{r}.json", {"requests": reqs(N_RATE), "summary": summ(0.05, tpot[key], a, r, t99)})
+            ttft50 = 0.06 if (arm == "lc128" and r == 12) else 0.05
+            dump(f"{t}_r{r}.json", {"requests": reqs(N_RATE), "summary": summ(ttft50, tpot[key], a, r, t99)})
         n = 4 + 64 + N_SERIAL + N_RATE * len(LADDER)
         w = f_red.WANT_FLIPS["on"]
         seen = {"moe": {"int4_k19|gt256": 384, "int4_k19|le256": 720}, "prefill_attn": {"flash": 240},
@@ -353,7 +354,7 @@ def self_test() -> int:
         ("the bar is the 0.05 floor when noise is smaller", r["draws"]["d1"]["bar"] == 0.05),
         ("the noise is |base_a - base_b| / ref", abs(r["draws"]["d1"]["noise"] - round(0.0006 / 0.0303, 4)) < 1e-9),
         ("P1 holds at 26 / 30.3", r["predictions"]["P1"]["verdict"] == "HOLDS"),
-        ("P2 holds when lc128's serial TTFT is higher", r["predictions"]["P2"]["verdict"] == "HOLDS"),
+        ("P2 holds when lc128's TTFT p50 at 12 req/s is higher", r["predictions"]["P2"]["verdict"] == "HOLDS"),
         ("P4 holds: short chunks on lc arms only", r["predictions"]["P4"]["verdict"] == "HOLDS"),
     ]
     r = run(knob_edit={"e4b_pe4_d2": {"prefill_every": 1}})
