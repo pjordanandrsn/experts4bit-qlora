@@ -1,0 +1,57 @@
+KNOBS e4b=b1ba94083064be0e214626d6ff92ad9f675594ed gnf4=41ef086e6a3e2be5b158ff1bb38e0de67862a949 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 short=32 long=160 reps=3
+CUDA_PROBE ok
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-dddf1fae-6a40-020c-d6f2-fa01f3f8a183, 12.0
+power.limit,clocks.max.sm 500.00 W, 3105 MHz
+CPU(s):                                  48
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 7402P 24-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             125           4          51           0          70         120
+overlay         180G   42M  180G   1% /
+GUARD_FIT fit=5210s need=6512s left=7481s
+STARTED 2026-10-23T13:14:35Z
+[2026-10-23T13:14:37Z] p230: install e4b @b1ba94083064be0e214626d6ff92ad9f675594ed + gnf4 @41ef086e6a3e2be5b158ff1bb38e0de67862a949 (image python; transformers 5.17.0; torch held at 2.8.0)
+tripwire OK: 0.57.0 gnf4 0.50.0 torch 2.8.0+cu128
+e4b 0.57.0 @b1ba94083064be0e214626d6ff92ad9f675594ed
+gnf4 0.50.0 @41ef086e6a3e2be5b158ff1bb38e0de67862a949
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p230_reduce self-test OK (38 cases)
+p109_box self-test OK (5/5 cases)
+p230_box self-test OK (10/10 cases)
+premise run rc=0: 7 passed in 11.81s
+premise GNF4_PDL contract rc=0: 26 passed in 12.89s
+premise K33 PDL rc=0: 2 passed in 4.67s
+premise ok
+[2026-10-23T13:16:41Z] p230: fetch Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+[2026-10-23T13:24:06Z] p230: bake the NF4 arena
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+[2026-10-23T13:25:22Z] p230: arm OFF1 (alarm=1800)
+arm OFF1 rc=0 P230_ARM {"arm": "OFF", "tag": "OFF1", "pdl_active": false, "pdl_cap": 8, "load_s": 58.17, "pdl_launches": 8759, "pdl_with": 0, "k33_launches": 480, "by_bucket": {"none": [3269, 0], "1": [1155, 0], "2": [867, 0], "4": [867, 0], "8": [867, 0], "16": [867, 0], "32": [867, 0]}, "config": {"max_seqs": 32, "buckets": [1, 2, 4, 8, 16, 32], "placement": "all-vram", "graphs": true}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph"}, "W16": 1449.75, "W1": 269.72}
+
+[2026-10-23T13:26:56Z] p230: arm DEF1 (alarm=1800)
+arm DEF1 rc=0 P230_ARM {"arm": "DEF", "tag": "DEF1", "pdl_active": true, "pdl_cap": 8, "load_s": 41.54, "pdl_launches": 8759, "pdl_with": 4513, "k33_launches": 480, "by_bucket": {"none": [3269, 1192], "1": [1155, 1152], "2": [867, 723], "4": [867, 723], "8": [867, 723], "16": [867, 0], "32": [867, 0]}, "config": {"max_seqs": 32, "buckets": [1, 2, 4, 8, 16, 32], "placement": "all-vram", "graphs": true}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph"}, "W16": 1445.86, "W1": 271.24}
+
+[2026-10-23T13:28:12Z] p230: arm DEF2 (alarm=1800)
+arm DEF2 rc=0 P230_ARM {"arm": "DEF", "tag": "DEF2", "pdl_active": true, "pdl_cap": 8, "load_s": 38.77, "pdl_launches": 8759, "pdl_with": 4513, "k33_launches": 480, "by_bucket": {"none": [3269, 1192], "1": [1155, 1152], "2": [867, 723], "4": [867, 723], "8": [867, 723], "16": [867, 0], "32": [867, 0]}, "config": {"max_seqs": 32, "buckets": [1, 2, 4, 8, 16, 32], "placement": "all-vram", "graphs": true}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph"}, "W16": 1445.44, "W1": 271.19}
+
+[2026-10-23T13:29:26Z] p230: arm OFF2 (alarm=1800)
+arm OFF2 rc=0 P230_ARM {"arm": "OFF", "tag": "OFF2", "pdl_active": false, "pdl_cap": 8, "load_s": 39.44, "pdl_launches": 8759, "pdl_with": 0, "k33_launches": 480, "by_bucket": {"none": [3269, 0], "1": [1155, 0], "2": [867, 0], "4": [867, 0], "8": [867, 0], "16": [867, 0], "32": [867, 0]}, "config": {"max_seqs": 32, "buckets": [1, 2, 4, 8, 16, 32], "placement": "all-vram", "graphs": true}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph", "32": "graph"}, "W16": 1446.04, "W1": 269.77}
+
+[2026-10-23T13:30:41Z] p230: reduce
+P230_VERDICT KEEP ["tokens identical on every row; W1 pairs [1.00564, 1.00526] (g1 1.00526, h1 1.00564); W16 control [0.99732, 0.99959]"]
+  g1: 1.00526
+  h1: 1.00564
+  pair_ratios: {"W16": [0.99732, 0.99959], "W1": [1.00564, 1.00526]}
+  self_pairs: {"OFF2/OFF1 W16": 0.99744, "OFF2/OFF1 W1": 1.00019, "DEF2/DEF1 W16": 0.99971, "DEF2/DEF1 W1": 0.99982}
+  decode_tok_s: {"OFF1": {"W16": 1449.75, "W1": 269.72}, "DEF1": {"W16": 1445.86, "W1": 271.24}, "DEF2": {"W16": 1445.44, "W1": 271.19}, "OFF2": {"W16": 1446.04, "W1": 269.77}}
+  ms_per_step: {"OFF1": {"W16": 11.0364, "W1": 3.7075}, "DEF1": {"W16": 11.0661, "W1": 3.6867}, "DEF2": {"W16": 11.0693, "W1": 3.6874}, "OFF2": {"W16": 11.0647, "W1": 3.7068}}
+  whole_pass_tok_s: {"OFF1": {"W16": 1449.68, "W1": 269.69}, "DEF1": {"W16": 1436.77, "W1": 271.24}, "DEF2": {"W16": 1435.39, "W1": 271.21}, "OFF2": {"W16": 1436.19, "W1": 269.8}}
+  switched_launches_build: {"OFF1": [8759, 0], "DEF1": [8759, 4513], "DEF2": [8759, 4513], "OFF2": [8759, 0]}
+[2026-10-23T13:30:41Z] p230: TP_DONE rc=0

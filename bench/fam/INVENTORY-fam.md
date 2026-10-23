@@ -47,7 +47,9 @@ read per family.
 - **BW GEMV / dot-pad.** Both engage only at Qwen3-30B-A3B's two expert shapes on ≥ 160-SM parts. ⚠ The two shape sets
   are identical, and the BW route is checked first. So the dot-pad default never runs unless `GNF4_GEMV_BW=0`.
 - **PDL** reaches the int4-b32 GEMV, the BW GEMV, the glue kernels and part of the MXFP4 decode, on sm_90+. With the
-  folds off, the default NF4 server has no PDL-carrying kernel on any family but Qwen3.
+  folds off, the default NF4 server has no PDL-carrying kernel on any family but Qwen3. On Qwen3-30B-A3B's default NF4
+  server it was read by P230 (`bench/p230/RESULTS-p230.md`): KEEP, 1.00526× at one request with identical tokens; the
+  build carries seven switched kernels, and buckets 1 to 8 carry PDL.
 - **K19** needs the opt-in int4-b32 store. **K21** needs gpt-oss's opt-in native MXFP4 store.
 - **K23** (lean glue) also applies to K25 rows, though its docstring says K19 only. On Granite and OLMoE it ran inside
   P96's K25 arms, not alone.

@@ -1,0 +1,8 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-dddf1fae-6a40-020c-d6f2-fa01f3f8a183, 12.0
+power.limit,clocks.max.sm 500.00 W, 3105 MHz
+CPU(s):                                  48
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 7402P 24-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             125           4          51           0          70         120
+overlay         180G   42M  180G   1% /
