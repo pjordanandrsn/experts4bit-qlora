@@ -298,7 +298,7 @@ def test_the_probe_runs_before_the_install_and_refuses_with_rc_19():
     probe = RUN.index("python $W/ho3_drvprobe.py | tee -a summary.txt")
     assert RUN.index("python $W/ho3_drvprobe.py --self-test") < probe
     assert RUN.index('-ge "$MIN_RAM_GB"') < probe < RUN.index("phase_start install") < RUN.index("pip install")
-    assert probe < RUN.index('finish 41; }')                                    # before the guard fit, like the other host refusals
+    assert RUN.index('finish 41; }') < probe       # after the guard fit: it runs another file (tests/test_lane_guard_fit.py)
     assert 'echo "refused: driver peak not sampleable" > REFUSAL; finish 19;;' in RUN
     # only the probe's rc 19 is a host refusal; any other nonzero is a kit halt (21), never a refusal
     case = RUN[RUN.index('case "$DRV_RC" in'):RUN.index("esac", RUN.index('case "$DRV_RC" in'))]
