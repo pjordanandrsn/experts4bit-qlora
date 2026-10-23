@@ -53,7 +53,8 @@ census since TC1's amendments 10-21. Map 1's **T-H census** answers it. It runs 
 note (about USD 0.5 a box): one profiled step at the matched set on a 5090.
 
 **What it records:**
-- launch count and host time per kernel family;
+- launch count and host time per kernel family, split by phase: the forward, the checkpoint recompute in the backward, and
+  the backward proper;
 - device time per family;
 - the host/device overlap fraction.
 
@@ -75,7 +76,9 @@ note (about USD 0.5 a box): one profiled step at the matched set on a 5090.
   amended, never read by eye.
 - **Each option's addressable share** is the host launch time it can remove:
   - A: every in-step launch;
-  - B: attention, dense GEMM, and norms and RoPE;
+  - B: attention, dense GEMM, and norms and RoPE, in the FORWARD phase only. These sit inside each checkpointed layer, and
+    per-module capture does not compose with the non-reentrant checkpoint's hooks (section 2), so their recompute and
+    backward launches stay eager. B's share counts them only if an amendment names how B captures those phases;
   - C: the glue.
 
 **The decision rule, fixed before data.** It applies on the slow-CPU host, where host time binds, at the field recipe.
