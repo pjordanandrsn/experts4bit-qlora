@@ -127,8 +127,9 @@ hit one of these gaps.
      is followed by a post-fetch link refusal before anything reads the tree: `find <dir> -type l` printing anything
      exits 22. Simpler still: drop a fallback path, so a failed fetch is a fetch failure.
 
-   The receipt commit removes and records links too, so this rule is the second layer, not the only one. It applies to a
-   driver at its next edit or launch. Closed drivers are not swept: `tests/test_fetch_no_links.py` freezes every script
+   The receipt commit guards against links too (it never follows one into the store), so this rule is the second
+   layer, not the only one. It applies to a driver at its next edit or launch. Closed drivers are not swept:
+   `tests/test_fetch_no_links.py` freezes every script
    that broke the rule on 2026-10-23 by its sha256, and a new script, or a frozen one whose bytes change, must pass. The
    test finds each pull in any command position (`if ! rsync ...`, `$(rsync ...)`, inside a function body), reads
    rsync's flags in order (`--no-links -a` still keeps links), and treats a quoted remote `tar -x` as a push, not a pull.
