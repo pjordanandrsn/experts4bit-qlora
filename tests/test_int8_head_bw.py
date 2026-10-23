@@ -382,14 +382,20 @@ def test_build_engine_widens_the_route_after_the_swap_and_before_any_capture():
 
 def test_the_rows_route_passes_interpreted_in_its_own_process():
     """The real kernels (K36 at one row, K37's linear_i8 at 2..8) under Triton's interpreter, in a fresh process
-    (tests/test_int8_head_rows_interp.py; CI's suite imports triton compiled first). Skips without K37."""
-    pytest.importorskip("triton")
+    (tests/test_int8_head_rows_interp.py; CI's suite imports triton compiled first). Skips without K37 or triton,
+    except under CI (``CI=true``): CI pins grouped-nf4-gemm 0.49.0, which carries K37, so there it must RUN, and a
+    skip fails. A green CI check is therefore the evidence that the real kernels ran."""
+    in_ci = os.environ.get("CI") == "true"
+    if not in_ci:
+        pytest.importorskip("triton")
     here = pathlib.Path(__file__).resolve().parent
     out = subprocess.run([sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider",
                           str(here / "test_int8_head_rows_interp.py")], capture_output=True, text=True,
                          cwd=here.parent, env={**os.environ, "TRITON_INTERPRET": "1"}, timeout=900)
     last = (out.stdout.strip().splitlines() or [""])[-1]
     if out.returncode in (0, 5) and re.match(r"1 skipped(, \d+ warnings?)? in ", last) and "without dense_i8" in out.stdout:
+        if in_ci:
+            pytest.fail("CI pins grouped-nf4-gemm 0.49.0, which carries K37: the interpreted route must run here")
         pytest.skip("grouped-nf4-gemm without dense_i8 (K37)")
     ok = out.returncode == 0 and re.match(r"7 passed, 4 skipped(, \d+ warnings?)? in ", last)   # CPU: no graphs
     assert ok, out.stdout[-3000:] + out.stderr[-2000:]

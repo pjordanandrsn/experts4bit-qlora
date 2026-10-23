@@ -857,6 +857,11 @@ class PagedServeConfig:
             if self.decode_lookahead:
                 raise ValueError("E4B_PAGED_SPEC and E4B_PAGED_DECODE_LOOKAHEAD do not combine: each speculative step "
                                  "reads its accepted tokens back before the next is planned")
+            if self.int8_head_rows > 1:
+                raise ValueError(f"E4B_PAGED_SPEC and {INT8_HEAD_ROWS_ENV}={self.int8_head_rows} do not combine until "
+                                 "a read covers them: SD2's gate and draft were read with the head on F.linear at 2..4 "
+                                 f"rows, and K2b's served read is plain decode ({INT8_HEAD_ROWS_ENV}=1 or "
+                                 "E4B_PAGED_SPEC=off)")
         if not self.adapter and (self.adapter_allow_unverified_arena or self.adapter_accept_unverified_base):
             raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} are set but E4B_PAGED_ADAPTER "
                              f"is not")
