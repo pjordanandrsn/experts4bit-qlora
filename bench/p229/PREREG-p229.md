@@ -125,9 +125,11 @@ head. K2b routes 2..N rows to K37's `linear_i8` over the same codes.
    e4b#2024 (its code) and the 0.57.0 tag.
 2. The shakedown may run first.
 3. The reading runs at the merge commit.
-4. On GO_ROWS_N, the served read is registered next: W2, W4 and W8 (up to N) ABBA on the default Qwen3 server, the
+4. On GO_ROWS_N with N below 8, a code PR first lowers the route's `MAX_ROWS` to N, refusing larger values by name.
+   The knob never routes more rows than were read, and the cap never moves by default.
+5. On GO_ROWS_N, the served read is registered next: W2, W4 and W8 (up to N) ABBA on the default Qwen3 server, the
    knob against unset, P153's quality bars per bucket. It comes before any default.
-5. On NO_GO, K2a is put to the maintainer as a decision of its own.
+6. On NO_GO, K2a is put to the maintainer as a decision of its own.
 
 ## What this lane cannot say
 

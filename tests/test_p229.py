@@ -75,7 +75,8 @@ def test_the_registered_constants_and_the_prereg_agree():
     for s in ("**0.70**", "**1.25x**", "**max |I - D| / max |D| <= 1.5e-2**", "seed 229", "seed 22900 + M",
               "`41ef086e6a3e2be5b158ff1bb38e0de67862a949`", "plan: (32, 256, 4) at EVERY M in 2..8", "under 575 W",
               "exactly **11 passed**", "exactly **45 passed**", "**$1.45**", "GO_ROWS_8 / GO_ROWS_4 / GO_ROWS_2",
-              "A miss at 4 caps it at 2 even if 8 passes"):
+              "A miss at 4 caps it at 2 even if 8 passes",
+              "a code PR first lowers the route's `MAX_ROWS` to N, refusing larger values by name"):
         assert s in PREREG, s
 
 
