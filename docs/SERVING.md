@@ -438,8 +438,11 @@ decode in 0.50.0. On an older package each resolves off, recorded.
     2 to 8 rows runs `F.linear` on the bf16 rounding of the grid, which reads twice the int8 bytes. With it, those
     calls run grouped-nf4-gemm's int8 multi-row kernel (`dense_i8.linear_i8`, K37, 0.49.0 or later) over the same
     codes and scales; one row keeps the int8 GEMV, and more rows keep `F.linear`. **Outputs change** at 2 to 8
-    requests, within bf16's output rounding of the same grid. No served read has run yet, so this is not a speed or
-    quality claim ([`bench/dense-small-m/DESIGN-K2.md`](../bench/dense-small-m/DESIGN-K2.md)). It is refused at startup
+    requests, within bf16's output rounding of the same grid. A captured microbench of the head call (lane P229) read
+    GO_ROWS_8: K37 runs the head in a median 0.51 of `F.linear`'s time at 2, 4 and 8 rows
+    (`e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23`, [`bench/p229/RESULTS-p229.md`](../bench/p229/RESULTS-p229.md)).
+    No served read has run yet, so this is not a served speed or quality claim
+    ([`bench/dense-small-m/DESIGN-K2.md`](../bench/dense-small-m/DESIGN-K2.md)). It is refused at startup
     when the head is not on its int8 grid or the kernel package lacks K37, and together with speculative decode
     (`E4B_PAGED_SPEC`), whose gate and draft were read with the head on `F.linear`, until a read covers the pair.
     Unset imports nothing. Reported in `levers.int8_head_bw.rows`; which kernel each row count took is
