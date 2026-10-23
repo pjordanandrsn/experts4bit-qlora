@@ -62,9 +62,10 @@ def phase_of(t_ns: int, ranges: list[tuple[str, int, int]]) -> str | None:
     return None
 
 
-def attribute(launches, kernels, syncs, ranges):
+def attribute(launches, kernels, syncs, ranges, names=None):
     """launches: [{corr, thread, start, end}] (runtime calls, ns); kernels: [{corr, name, dur}]; syncs: [{thread, start, end}];
-    ranges: [(phase, start, end)]. Returns the census table and the join ratio."""
+    ranges: [(phase, start, end)]. Returns the census table and the join ratio. `names`, when a dict, also collects
+    (family, kernel name, phase) -> launches / host / device, the table T-B's first fusion target is read from."""
     by_corr = {}
     for ln in launches:
         by_corr.setdefault(ln["corr"], ln)
@@ -95,7 +96,13 @@ def attribute(launches, kernels, syncs, ranges):
         cell = table[ph][classify(k["name"])]
         cell["launches"] += 1
         cell["device_ns"] += int(k["dur"])
-        cell["host_ns"] += host_of.pop(k["corr"], 0)          # a launch's host time counts once, with its first kernel
+        h = host_of.pop(k["corr"], 0)                          # a launch's host time counts once, with its first kernel
+        cell["host_ns"] += h
+        if names is not None:
+            nm = names.setdefault((classify(k["name"]), k["name"][:110], ph), {"launches": 0, "host_ns": 0, "device_ns": 0})
+            nm["launches"] += 1
+            nm["host_ns"] += h
+            nm["device_ns"] += int(k["dur"])
     return table, (joined / len(kernels) if kernels else 0.0)
 
 
@@ -160,8 +167,17 @@ def self_test() -> int:
                {"corr": 3, "name": "flash_fwd_kernel", "dur": 100}, {"corr": 4, "name": "vectorized_elementwise_kernel", "dur": 50},
                {"corr": 5, "name": "multi_tensor_apply_kernel", "dur": 80}]
     syncs = [{"thread": 1, "start": 2 * ms, "end": 3 * ms}]          # a 1 ms host sync between launches 1 and 2
-    table, jr = attribute(launches, kernels, syncs, ranges)
+    names = {}
+    table, jr = attribute(launches, kernels, syncs, ranges, names)
     assert jr == 1.0
+    assert names[("attention", "flash_fwd_kernel", "forward")]["launches"] == 1
+    assert sum(v["launches"] for v in names.values()) == 5
+    ev = [{"name": "phase:forward", "cuda": False, "start": 0, "end": 10, "corr": 0, "thread": 1},
+          {"name": "phase:forward", "cuda": True, "start": 0, "end": 10, "corr": 99, "thread": 0},
+          {"name": "cudaLaunchKernel", "cuda": False, "start": 1, "end": 2, "corr": 7, "thread": 1},
+          {"name": "flash_fwd_kernel", "cuda": True, "start": 3, "end": 5, "corr": 7, "thread": 0}]
+    t2, j2, c2 = census_from(ev)
+    assert j2 == 1.0 and c2["kernels"] == 1, (j2, c2)              # the GPU-side annotation is not a kernel
     assert table["forward"]["attention"]["launches"] == 1 and table["recompute"]["attention"]["launches"] == 1
     assert table["backward"]["glue"]["launches"] == 1 and table["optimizer"]["glue"]["launches"] == 1
     gap2 = table["forward"]["moe_expert"]["host_ns"]
@@ -221,9 +237,15 @@ def census_from(events):
                 if not e["cuda"] and e["name"] in LAUNCH_NAMES]
     syncs = [{"thread": e["thread"], "start": e["start"], "end": e["end"]} for e in events
              if not e["cuda"] and e["name"] in SYNC_NAMES]
-    kernels = [{"corr": e["corr"], "name": e["name"], "dur": e["end"] - e["start"]} for e in events if e["cuda"]]
-    table, jr = attribute(launches, kernels, syncs, ranges)
-    return table, jr, {"ranges": len(ranges), "launch_calls": len(launches), "syncs": len(syncs), "kernels": len(kernels)}
+    # the phase ranges also appear on the GPU timeline as annotations: they are not kernels, so they are not counted
+    kernels = [{"corr": e["corr"], "name": e["name"], "dur": e["end"] - e["start"]} for e in events
+               if e["cuda"] and not e["name"].startswith("phase:")]
+    names = {}
+    table, jr = attribute(launches, kernels, syncs, ranges, names)
+    top = sorted(({"family": f, "name": n, "phase": ph, **v} for (f, n, ph), v in names.items()),
+                 key=lambda r: -r["host_ns"])[:80]
+    return table, jr, {"ranges": len(ranges), "launch_calls": len(launches), "syncs": len(syncs), "kernels": len(kernels),
+                       "top_by_host": top}
 
 
 def main():
@@ -308,6 +330,7 @@ def main():
         wall = time.perf_counter() - t
     events = raw_events(prof)
     table, jr, counts = census_from(events)
+    top_by_host = counts.pop("top_by_host")
     verdict = decide(table, jr)
     import importlib.metadata as md
     out = {"tier": "EXPLORE (T-H census, Map 1): a design input, never a reading", "model": a.model, "seq": a.seq,
@@ -317,7 +340,7 @@ def main():
            "cpu": (open("/proc/cpuinfo").read().split("model name")[1].split("\n")[0].strip(": \t")
                    if os.path.exists("/proc/cpuinfo") else None),
            "single_thread_mops": mops, "profiled_wall_s": round(wall, 4), "join_ratio": round(jr, 4), "counts": counts,
-           "table": table, "decision": verdict, "rule": {"share_bar": SHARE_BAR, "unclassified_max": UNCLASSIFIED_MAX,
+           "table": table, "top_by_host": top_by_host, "decision": verdict, "rule": {"share_bar": SHARE_BAR, "unclassified_max": UNCLASSIFIED_MAX,
                                                         "match_min": MATCH_MIN, "b_families": B_FAMILIES}}
     Path(a.out).write_text(json.dumps(out, indent=1))
     unc = sorted({e["name"][:120] for e in events if e["cuda"] and classify(e["name"]) == "unclassified"})[:40]
