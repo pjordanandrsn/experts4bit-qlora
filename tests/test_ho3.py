@@ -373,7 +373,7 @@ def test_a_box_supplied_refused_links_file_is_replaced_never_followed(tmp_path):
     start = DRIVE.index('if [ -n "$(find "$RUN_DIR/ho3" -type l -print -quit)" ]; then')
     block = DRIVE[start:DRIVE.index("\nfi\n", start) + 4]
     script = 'say(){ echo "$*"; }\nRUN_DIR="$1"\n' + block
-    for kind in ("file", "link"):
+    for kind in ("file", "link", "scratch"):
         run = tmp_path / kind / "run"
         (run / "ho3").mkdir(parents=True)
         target = tmp_path / kind / "controller.txt"
@@ -382,8 +382,12 @@ def test_a_box_supplied_refused_links_file_is_replaced_never_followed(tmp_path):
         if kind == "file":
             rl.write_text("forged -> nothing\n")
             (run / "ho3" / "x").symlink_to(target)
-        else:
+        elif kind == "link":
             rl.symlink_to(target)
+        else:                                     # links at the names an in-tree scratch file would have used
+            rl.symlink_to(target)
+            for name in ("refused_links.txt.tmp", "refused_links.txt.links"):
+                (run / "ho3" / name).symlink_to(target)
         r = subprocess.run(["bash", "-c", script, "x", str(run)], capture_output=True, text=True, timeout=30)
         assert r.returncode == 22, r.stdout + r.stderr
         assert target.read_text() == "keep\n" and not rl.is_symlink() and not [p for p in run.rglob("*") if p.is_symlink()]
@@ -395,4 +399,6 @@ def test_a_box_supplied_refused_links_file_is_replaced_never_followed(tmp_path):
             assert kept.read_text() == "forged -> nothing\n" and not kept.is_symlink()   # kept, marked, not appended to
         else:
             assert not kept.exists()
+        if kind == "scratch":
+            assert rec.count(" -> ") == 3, rec                                       # all three links recorded
 

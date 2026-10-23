@@ -200,8 +200,10 @@ if [ -n "$(find "$RUN_DIR/ho3" -type l -print -quit)" ]; then
   if [ -L "$RL" ]; then NOTE="# the box shipped refused_links.txt as a link; it is recorded below and removed"
   elif [ -e "$RL" ]; then mv -f -- "$RL" "$RUN_DIR/ho3/refused_links.box-supplied.txt"
     NOTE="# the box shipped its own refused_links.txt: kept as refused_links.box-supplied.txt"; fi
-  [ -L "$RL" ] && { printf '%q -> %q\n' "refused_links.txt" "$(readlink "$RL")" > "$RL.tmp"; rm -f -- "$RL"; mv -f -- "$RL.tmp" "$RL.links"; }
-  { [ -z "$NOTE" ] || printf '%s\n' "$NOTE"; [ ! -e "$RL.links" ] || cat "$RL.links"; } > "$RL"; rm -f -- "$RL.links"
+  # scratch lives on the controller, never in the box's tree (a box-shipped link there would be followed by >)
+  SELF=$(mktemp) || { say "fetch failed: no temp file"; exit 22; }
+  [ -L "$RL" ] && { printf '%q -> %q\n' "refused_links.txt" "$(readlink "$RL")" > "$SELF"; rm -f -- "$RL"; }
+  { [ -z "$NOTE" ] || printf '%s\n' "$NOTE"; cat "$SELF"; } > "$RL"; rm -f -- "$SELF"
   find "$RUN_DIR/ho3" -type l -print0 | while IFS= read -r -d '' l; do
     printf '%q -> %q\n' "${l#"$RUN_DIR/ho3/"}" "$(readlink "$l")" >> "$RL"; rm -f -- "$l"
   done
