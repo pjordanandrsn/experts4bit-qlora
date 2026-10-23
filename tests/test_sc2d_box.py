@@ -90,18 +90,18 @@ def test_the_reducer_passes_its_self_test():
 
 
 def test_box_k_is_wired_like_box_h():
-    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O) ;;' in RUN
+    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P) ;;' in RUN
     assert 'case "$BOX" in K) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac' in RUN    # v0.41.0, as H
-    assert '[ "$BOX" = J ] || [ "$BOX" = K ] || [ "$BOX" = L ] || [ "$BOX" = M ] || [ "$BOX" = N ] || [ "$BOX" = O ]; then   # SC2g (box G), SC2c (box H), SC1g (boxes I, J), SC2d' in RUN
-    assert "C|D|E|F|G|H|I|J|K|L|M|N|O) BASEPY=python3;;" in RUN
+    assert '[ "$BOX" = J ] || [ "$BOX" = K ] || [ "$BOX" = L ] || [ "$BOX" = M ] || [ "$BOX" = N ] || [ "$BOX" = O ] || [ "$BOX" = P ]; then   # SC2g (box G), SC2c (box H), SC1g (boxes I, J), SC2d' in RUN
+    assert "C|D|E|F|G|H|I|J|K|L|M|N|O|P) BASEPY=python3;;" in RUN
     torch = next(x for x in RUN.splitlines() if '"torch==2.8.0"' in x and "pipx logs/pip_torch.log" in x)
     assert '[ "$BOX" = K ]' in torch                                     # A1's lesson: every python3 box pins torch
-    assert RUN.count('os.environ["TRIP_BOX"] in ("F", "G", "H", "I", "J", "K", "L", "N", "O")') == 2
+    assert RUN.count('os.environ["TRIP_BOX"] in ("F", "G", "H", "I", "J", "K", "L", "N", "O", "P")') == 2
     assert "  K) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc2d_box_k.sh; install_sc2_client ;;" in RUN
-    assert 'K) PROVE_NEEDS="sc2client";;' in RUN and '[ "$BOX" = K ] && prove_k' in RUN and "K) box_k;; L) box_l;; M) case \"${SC1_SC5_PHASE:-read}\" in ref) box_m_ref;; *) box_m;; esac;; N) box_n;; O) box_o;; esac" in RUN
-    assert 'case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O) ;;' in DRIVE
+    assert 'K) PROVE_NEEDS="sc2client";;' in RUN and '[ "$BOX" = K ] && prove_k' in RUN and "K) box_k;; L) box_l;; M) case \"${SC1_SC5_PHASE:-read}\" in ref) box_m_ref;; *) box_m;; esac;; N) box_n;; O) box_o;; P) box_p;; esac" in RUN
+    assert 'case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P) ;;' in DRIVE
     assert "sc2d_box_k.sh sc2d_reduce.py sc2e_box_l.sh" in DRIVE and "; do STAGE=" in DRIVE and 'STAGE="$STAGE $P98/p98_bake.py"' in DRIVE
-    assert 'sc2c_*|sc2d_*|sc2e_*|sc2f_*|sc2h_*) src="$SC2/$name";;' in DRIVE and 'p98_bake.py) src="$P98/$name";;' in DRIVE
+    assert 'sc2c_*|sc2d_*|sc2e_*|sc2f_*|sc2h_*|sc2i_*) src="$SC2/$name";;' in DRIVE and 'p98_bake.py) src="$P98/$name";;' in DRIVE
     pin = (REPO / "bench" / "sc1" / "staged.sha256").read_text()
     for name in ("sc2d_box_k.sh", "sc2d_reduce.py", "p98_bake.py"):
         assert re.search(rf"^[0-9a-f]{{64}}  {re.escape(name)}$", pin, re.M), name

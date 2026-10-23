@@ -55,7 +55,7 @@ That is everything needed to rebuild `Q_train(W)` bit for bit, and §4 F1-F2 tur
 
 | fact | where |
 |---|---|
-| **No adapter support today.** The module docstring says "Not in v1: … adapters", and the config and requests have no adapter field. | `serve_paged.py:120`, `:605-650`, `:1846-1869` |
+| **No adapter support at this doc's pin** (from 0.57.0 the paged server serves ONE adapter, `E4B_PAGED_ADAPTER`, attention LoRA merged at load: see `SERVING.md` and the 0.57.0 changelog; section 3's merged-at-load row describes it). At the pin, the module docstring said "Not in v1: … adapters", and the config and requests had no adapter field. | `serve_paged.py:120`, `:605-650`, `:1846-1869` |
 | **Attention is bf16** unless a lever is set. `E4B_SERVE_ATTN_INT4` (int4-b32, packed from the bf16 weight), `E4B_SERVE_ATTN_INT8` (per-row int8, no bf16 copy kept) and the `*_CALIB` levers (GPTQ-style, calibration-dependent) swap plain `nn.Linear` children of `*Attention` modules. | `serve_paged.py:1290-1357`, `engines/int4_attn.py:391-400`, `engines/int8_attn.py:5-7` |
 | **Fusions read `.weight`:** `fuse_qkv` (Qwen3MoeAttention only) copies q/k/v into one `qkv_proj`; the dense GEMV route shares `.weight`. | `engines/qkv_fuse.py:105`, `:140-158`, `engines/dense_gemv_bw.py:46` |
 | **The NF4 expert arena** is baked with `F.quantize_4bit(w, blocksize=64, quant_type="nf4")` over `cat[gate; up]`, with any nested absmax **dequantized to fp32** (or stored bf16 where that is lossless). Its index records `snapshot` (a path) and `quantizer` (kind, quant_type, blocksize, bnb and torch versions, absmax dtype). It records **no model revision**, and e4b never compares it with the served revision. | grouped-nf4-gemm `kernel/nvme_bake_nf4.py:128-146`, `:606-628`; `loader.py:1344-1346` |
@@ -204,10 +204,14 @@ tensors up, in one of three sources:
 - **`offload_homes`, training with expert offload:** each stack is read where its bytes live: resident when staged, and
   its host home when evicted (the same substitution `state_dict` makes). So offload and resident training fingerprint
   alike. A stack with no readable host copy is refused by name, never hashed as empty.
-- **`arena`, serving:** the paged server's expert stacks are meta-backed, and the bytes live in the arena. So the reader's
-  expert fingerprint is computed from the arena's packed bytes and fp32 absmax, through the same function. The source
-  is defined here and raises `NotImplementedError` naming PA-1. PA-1 implements it, and its test compares the
-  arena-side fingerprint with the training-side one on one adapter.
+- **`arena`, serving (PA-1):** the paged server's expert stacks are meta-backed, and the bytes live in the arena. So
+  the reader's expert fingerprint is computed from the arena's packed bytes and absmax, through the same function:
+  `quant_fingerprint(model, "experts", source="arena", arena=<path>)` reads each layer's rows at the offsets the arena
+  index records (`rows`, and each segment's `seg_off` / `length`), the k-th expert stack being arena layer k. Its tests
+  (`tests/test_adapter_fingerprint_serve.py`) bake a tiny MoE with grouped-nf4-gemm's own `bake_nf4` and require the
+  arena-side fingerprint to EQUAL the resident one, and, where `nvme_residency`'s reader runs (Linux), require the
+  hashed bytes to equal the bytes that reader hands the server. Training and the bake quantize the same way
+  (`quantize_4bit(w, blocksize=64, nf4)` per expert on `cat([gate, up])`), so an fp32-absmax-trained adapter verifies.
 
 **What the reader does with it today.** e4b's paged server verifies a `/2` directory:
 - the v1 checks;
@@ -216,7 +220,24 @@ tensors up, in one of three sources:
 - a known scheme, a sha256, a positive module count and a measured duration per fingerprint;
 - the applied attention scale equal to alpha/r.
 
-It does not yet compare the fingerprints against the served base. That is PA-1 (attention, merging into a verified
-`Q_train(W)`) and the expert path. Until then:
-- the expert base of a `/2` adapter stays unverified, refusal 9, with the same named opt-in as v1;
-- an `attn_4bit` adapter stays refused, refusal 8.
+After the load, and BEFORE the attention LoRA is merged (the merge rewrites those weights) or any lever touches a
+module, it compares each fingerprint the manifest records with the served base's (`adapter_dir.fingerprint_check`):
+- **attention:** `quant_fingerprint(model, "attention")` on the served model. A mismatch is **refusal 11**, with no
+  override: the LoRA would be merged into weights it was not trained on.
+- **experts:** the arena source above. A match reads `base_match.experts = verified (qfp-v1 ...)`. A mismatch is
+  **refusal 12**. `E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts` serves it anyway, reported in `/health` as
+  `mismatch (served under ...)`; `E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE` never covers a MEASURED mismatch.
+- **the double-quantized training form, and where it is reachable:** training double-quantizes the expert absmax
+  only under `expert_kernel=grouped_nf4`, which requires `train_experts=true` (the recipe refuses it otherwise). So a
+  dq-trained adapter always carries expert LoRA, and the paged server refuses it with **refusal 1** before this check
+  runs. An attention-only adapter, the kind this server serves, keeps the fp32 absmax by construction and verifies by
+  its plain fingerprint. The dq branch below (refusal 12 as the dq-vs-fp32 case, F1, with the override) is reachable
+  for a `/2` manifest whose expert LoRA is all zero, and serves the expert-serving path to come. Its tests guard that
+  path. A follow-up records the base's fp32 source fingerprint at training (the fp32 absmax hashed before
+  compression), which proves BASE identity against the fp32 arena, never that the served absmax equals the trained
+  one.
+- `/health` carries `adapter.fingerprints`: per scope, the trained and served sha256, the module counts, the seconds and
+  the status.
+
+A v1 manifest records no fingerprint: its expert base stays unverified, refusal 9, with the same named opt-in as before.
+An `attn_4bit` adapter stays refused, refusal 8.

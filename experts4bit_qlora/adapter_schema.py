@@ -221,24 +221,87 @@ def _expert_stacks(model) -> list:
     return out
 
 
-def quant_fingerprint(model, scope: str, *, source: str = "resident") -> dict:
+_ARENA_DTYPES = {"U8": "uint8", "F32": "float32", "BF16": "bfloat16", "F16": "float16"}
+
+
+def _arena_segment(fh, index: dict, offsets: dict, layer: int, num_experts: int, suffix: str):
+    """One segment of every expert of ``layer``, ``[E, *shape_per_expert]``, read from the arena file at the offsets
+    its index records (``rows``: ``[layer, expert, offset]``; ``segments``: ``seg_off`` / ``length`` inside a row). A plain
+    seek and read, the same bytes grouped-nf4-gemm's ``nvme_residency.segment_tensor`` hands the server (a test checks
+    it where that reader runs)."""
+    import torch
+
+    geo = next((g for g in index["segments"] if g["suffix"] == suffix), None)
+    if geo is None or geo.get("dtype") not in _ARENA_DTYPES:
+        raise ValueError(f"PA-1: the arena has no readable segment {suffix!r} "
+                         f"(have {[g.get('suffix') for g in index.get('segments', ())]})")
+    dt = getattr(torch, _ARENA_DTYPES[geo["dtype"]])
+    out = []
+    for e in range(num_experts):
+        if (layer, e) not in offsets:
+            raise ValueError(f"PA-1: the arena index has no row for layer {layer} expert {e}")
+        fh.seek(offsets[(layer, e)] + int(geo["seg_off"]))
+        raw = bytearray(fh.read(int(geo["length"])))
+        if len(raw) != int(geo["length"]):
+            raise ValueError(f"PA-1: a short read of layer {layer} expert {e} segment {suffix!r}")
+        out.append(torch.frombuffer(raw, dtype=dt).reshape(tuple(geo["shape_per_expert"])))
+    return torch.stack(out)
+
+
+def _arena_expert_records(model, arena: str) -> list:
+    """``[(line, bytes_hashed)]`` for every expert stack of a SERVED model, from the arena it serves (PA-1). The served
+    stacks are meta: their names, shapes and recipe come from the modules, their bytes from the arena's rows, the k-th
+    stack being arena layer k (the loader's order). Each line goes through :func:`expert_line`, the function every other
+    source uses, and the code table through the stack class's own ``_build_code``."""
+    import json
+
+    from ._vendor.experts import _build_code
+    from .engines.nvme_train import arena_offload_view
+
+    with open(arena + ".index.json", encoding="utf-8") as f:
+        index = json.load(f)
+    view, segs = arena_offload_view(index)
+    stacks = _expert_stacks(model)
+    if len(stacks) != int(index["n_layers"]):
+        raise ValueError(f"PA-1: the model has {len(stacks)} expert stacks, the arena {index['n_layers']} layers")
+    offsets = {(int(r[0]), int(r[1])): int(r[2]) for r in view["rows"]}
+    out = []
+    with open(arena, "rb") as fh:
+        for layer, (name, mod, _handle) in enumerate(stacks):
+            if int(mod.num_experts) != int(index["n_experts_per_layer"]):
+                raise ValueError(f"PA-1: {name} has {mod.num_experts} experts, the arena {index['n_experts_per_layer']}")
+            code = _build_code(mod.quant_type, "cpu")
+            for which in ("gate_up", "down"):
+                shape = getattr(mod, f"_{which}_shape")
+                packed = _arena_segment(fh, view, offsets, layer, mod.num_experts, segs[f"{which}_proj"])
+                absmax = _arena_segment(fh, view, offsets, layer, mod.num_experts, segs[f"{which}_absmax"]).float()
+                absmax = absmax.reshape(mod.num_experts, shape[0], shape[1] // int(mod.blocksize))
+                out.append(expert_line(name, which, bits=int(mod.bits), quant_type=mod.quant_type,
+                                       num_experts=mod.num_experts, shape=shape, blocksize=int(mod.blocksize),
+                                       packed=packed, absmax=absmax, code=code))
+    return out
+
+
+def quant_fingerprint(model, scope: str, *, source: str = "resident", arena: str | None = None) -> dict:
     """``{"scheme_id", "scope", "source", "modules", "sha256", "bytes_hashed", "seconds"}`` for ``scope``
     (``"attention"`` or ``"experts"``), by qfp-v1 (module docstring), looking the tensors up in ``source`` (``SOURCES``).
-    A training run with expert offload fingerprints with ``source="offload_homes"``. An empty scope is refused:
-    nothing to fingerprint is not a match."""
+    A training run with expert offload fingerprints with ``source="offload_homes"``; a served model's experts with
+    ``source="arena"`` and ``arena=`` the arena it serves (PA-1). An empty scope is refused: nothing to fingerprint is
+    not a match."""
     if scope not in SCOPES:
         raise ValueError(f"quant_fingerprint scope must be one of {SCOPES}, got {scope!r}")
     if source not in SOURCES:
         raise ValueError(f"quant_fingerprint source must be one of {SOURCES}, got {source!r}")
-    if source == "arena":
-        raise NotImplementedError("quant_fingerprint source='arena' is PA-1's: a served model's expert stacks are meta "
-                                  "and their bytes live in the arena, so PA-1 reads the arena's rows and builds each line "
-                                  "with expert_line, the same function as the other sources")
+    if source == "arena" and (scope != "experts" or not arena):
+        raise ValueError("quant_fingerprint source='arena' fingerprints the experts scope of a served model and needs "
+                         "arena=<path>; a served model's attention is resident (source='resident')")
     t0 = time.perf_counter()
     records = []
     if scope == "attention":
         for name, lin in _attention_projections(model):
             records.append(_linear_record(name, lin))
+    elif source == "arena":
+        records.extend(_arena_expert_records(model, arena))
     else:
         for name, mod, handle in _expert_stacks(model):
             records.extend(_expert_records(name, mod, handle, source))
