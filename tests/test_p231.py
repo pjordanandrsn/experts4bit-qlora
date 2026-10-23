@@ -220,6 +220,60 @@ def test_every_exit_before_the_start_is_classified():
     assert R.classify(27, True)["event"] == "NO_ANSWER"
 
 
+#: P227's reading (bench/p227/receipts/p227-5090-1): e4b's ROUTE_SEEN and grouped-nf4-gemm v0.50.0's dispatch tally as
+#: the engine wrote them, for the two routes P231 grades, at Mixtral's shapes on an RTX 5090 -- K (the tile route, B0's)
+#: and B (E4B_NF4_SMALLM_BW=1, B1's). Pinned by the receipt's own SHA256SUMS line.
+P227_RECEIPT = REPO / "bench" / "p227" / "receipts" / "p227-5090-1" / "bench_p227.json"
+P227_SHA256 = "76750467dfdf552609cfd821ab3bd04ddeeb111d365d5a43689e639963a8d3dd"
+
+
+def _p227_engaged():
+    raw = P227_RECEIPT.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == P227_SHA256, "P227's receipt changed"
+    import json
+    d = json.loads(raw)
+    assert d["gnf4"] == "0.50.0" and d["sm_count"] >= 160
+    return {t: d["families"]["mixtral"]["cells"][t]["engaged"] for t in ("2", "4", "8")}
+
+
+def _as_bucket(rec, R):
+    """One real P227 record as a P231 bucket entry: its route tally verbatim, and its dispatch counters picked by name
+    (P227 stored them beside the route; P231's box stores them under "dispatch"). No value is typed."""
+    return {"route": rec["route"], "dispatch": {k: rec[k] for k in R.GNF4_DISPATCH_KEYS}}
+
+
+def test_the_reducer_reads_real_engine_records():
+    """The maintainer's check after (F): the gates run on ROUTE_SEEN and dispatch records real code produced, not on
+    fixtures typed to match a belief about their format."""
+    R = _load("p231_reduce")
+    eng = _p227_engaged()
+    assert all("|" in k for t in eng for arm in ("K", "B") for k in eng[t][arm]["route"]), "real keys carry the row class"
+    for t in eng:                                    # each real record, read the way P231 reads it
+        k, b = _as_bucket(eng[t]["K"], R), _as_bucket(eng[t]["B"], R)
+        assert R._routes(k["route"]) == {"nf4_k25": 8} and R._bw_counted(k["dispatch"]) == 0
+        assert R._routes(b["route"]) == {"nf4_singleton": 8} and R._bw_counted(b["dispatch"]) == 24
+    # whole per-bucket records assembled ONLY from real entries: B (singleton + K33) where the rule registers the
+    # per-row route, K (K25, K33 counted at 0) where it registers the tile route
+    single, tile = _as_bucket(eng["2"]["B"], R), _as_bucket(eng["2"]["K"], R)
+    by_t = {t: (_as_bucket(eng[t]["B"], R), _as_bucket(eng[t]["K"], R)) for t in eng}
+    b1 = {"1": single, **{t: by_t[t][0] for t in eng}, "16": tile}
+    b0 = {"1": single, **{t: by_t[t][1] for t in eng}, "16": tile}
+    assert R.bucket_faults("B1a", {"by_bucket": b1}) == [] and R.bucket_faults("B0a", {"by_bucket": b0}) == []
+    assert R.bucket_faults("B0a", {"by_bucket": b1}) and R.bucket_faults("B1a", {"by_bucket": b0})   # swapped: VOID
+    # and through the whole reducer: the LICENSED fixture with its per-bucket records replaced by the real ones
+    base = [[r * 100 + i for i in range(8)] for r in range(16)]
+    rates = {"B0": {"W1": 50.0, "W2": 60.0, "W4": 80.0, "W8": 100.0, "W16": 140.0},
+             "B1": {"W1": 50.0, "W2": 70.0, "W4": 90.0, "W8": 98.0, "W16": 140.0}}
+    arms = {t: R._fake_arm(t, rates[t[:2]], base, byb=b1 if t.startswith("B1") else b0) for t in R.TAGS}
+    on, off = R._fake_quality("on"), R._fake_quality("off")
+    on["route_measure"], on["dispatch_measure"] = eng["4"]["B"]["route"], _as_bucket(eng["4"]["B"], R)["dispatch"]
+    off["route_measure"], off["dispatch_measure"] = eng["4"]["K"]["route"], _as_bucket(eng["4"]["K"], R)["dispatch"]
+    assert R.reduce(arms, off, on, R.E, fit={"status": "ok"})["verdict"] == "LICENSED"
+    # a real record with one counter removed is refused: absence never reads as the negative
+    partial = dict(tile, dispatch={k: v for k, v in tile["dispatch"].items() if k != "bw_splitk"})
+    assert R.bucket_faults("B0a", {"by_bucket": {**b0, "16": partial}})
+
+
 def test_the_runner_finishes_on_the_verdict():
     assert ('case "$V" in LICENSED|SLOWER|QUALITY_FAIL|FUNCTION_FAIL) finish 0;; *) say "P231 $V -- no reading"; '
             'finish 27;; esac') in RUN
