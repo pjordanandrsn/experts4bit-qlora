@@ -297,8 +297,8 @@ case "$BOX" in
   L) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; install_sc2_client ;;
   N) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; . $W/sc2f_box_n.sh; install_sc2_client ;;   # SC2f: 64 slots, P130's two prefill defaults on against off, e4b only (bench/sc2)
   O) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; . $W/sc2f_box_n.sh; . $W/sc2h_box_o.sh; install_sc2_client ;;   # SC2h: 64 slots on the release's defaults, P118's decode lookahead on against off, e4b only (bench/sc2)
-  P) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; . $W/sc2f_box_n.sh; . $W/sc2i_box_p.sh; install_sc2_client ;;
-  Q) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; . $W/sc2f_box_n.sh; . $W/sc2j_box_q.sh; install_sc2_client ;;   # SC2j: the shared KV pool against claim-all at auto width and 4,096 tokens a slot, e4b only (bench/sc2)   # SC2i: 64 slots on the release's defaults, e4b#2017's prefill interleave knobs against off, e4b only (bench/sc2)
+  P) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; . $W/sc2f_box_n.sh; . $W/sc2i_box_p.sh; install_sc2_client ;;   # SC2i: 64 slots on the release's defaults, e4b#2017's prefill interleave knobs against off, e4b only (bench/sc2)
+  Q) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; . $W/sc2e_box_l.sh; . $W/sc2f_box_n.sh; . $W/sc2j_box_q.sh; install_sc2_client ;;   # SC2j: the shared KV pool against claim-all at auto width and 4,096 tokens a slot, e4b only (bench/sc2)
   M) [ "${SC1_SC5_PHASE:-read}" = ref ] || m_install_competitors ;;   # SC5: vLLM 0.31.0 and SGLang 0.5.21 from their locks, the SC2 client (box M sourced above; the ref phase needs neither; bench/sc5)   # SC2e: 16 / 32 / 64 slots, buckets auto against the default list, e4b only (bench/sc2)
 esac
 # ---- environments (P88, byte for byte) + SC1's explicit route knobs (v3 "Fixture": never inherited)
