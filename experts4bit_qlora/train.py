@@ -256,6 +256,7 @@ def _print_env_help(which: str) -> None:
         ("OFFLOAD_PIN", "1", "pin the offloaded expert memory"),
         ("FAST_TRAIN", "0", "the fused expert path: enable_fast_train(dgrad=True) (1 under LAYER_MAJOR=1 unless set to 0)"),
         ("LAYER_MAJOR", "0", "layer-major accumulation: stage each offloaded layer once per step (needs OFFLOAD_EXPERTS=1; implies FAST_TRAIN=1)"),
+        ("E4B_TRAIN_DETERMINISTIC", "0", "the deterministic mode: det gather + strict mode around each backward + no fill; needs CUBLAS_WORKSPACE_CONFIG=:4096:8 (refused otherwise)"),
         ("E4B_ABSMAX_DQ", "auto", "double-quantize the frozen expert absmax: on for resident training (0 off, 1 required)"),
         ("E4B_CHUNKED_LM_LOSS", "auto", "auto: the loss over token chunks only where a forward's fp32 logits would reach 1 GiB; 1 or a chunk size: every training forward; 0: the stock loss"),
         ("DO_GEN", "1", "sample generations during training"),
@@ -361,6 +362,16 @@ def main():
     if any(a in ("-h", "--help") for a in sys.argv[1:]):
         _print_env_help("train")
         return 0
+    # E4B_TRAIN_DETERMINISTIC=1 (engines/train_determinism.py): refused here, before any CUDA work, when
+    # CUBLAS_WORKSPACE_CONFIG is not set, because cuBLAS reads it when it creates its handle.
+    from .engines.train_determinism import deterministic_backward, deterministic_requested, enable_training_determinism
+    if deterministic_requested():
+        try:
+            enable_training_determinism()
+        except RuntimeError as e:
+            raise SystemExit(str(e))
+        print("[determinism] E4B_TRAIN_DETERMINISTIC=1: det gather, strict mode around each backward, "
+              f"CUBLAS_WORKSPACE_CONFIG={os.environ['CUBLAS_WORKSPACE_CONFIG']}, no fill of uninitialised memory", flush=True)
     torch.manual_seed(int(os.environ.get("SEED", "0")))  # default unchanged; the mode-matrix scripts set it
     if ABSMAX_DQ_REQUIRED and (OFFLOAD_EXPERTS or os.environ.get("TRAIN_ARENA")):
         # Refused before the load: expert offload stages the absmax by name from a host home, and
@@ -676,7 +687,8 @@ def main():
                 if _clock:
                     _clock.stop()
                     _clock.start("backward")
-                (out.loss / GRAD_ACCUM).backward()
+                with deterministic_backward():
+                    (out.loss / GRAD_ACCUM).backward()
                 if _clock:
                     _clock.stop()
                     _clock.start("loss_sync")
