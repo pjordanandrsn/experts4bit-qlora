@@ -24,7 +24,7 @@ MIN_POWER_W=575   # P149's power floor (P222's, kept): a capped board refuses be
 GPU_CLASS=5090; MIN_RAM_GB=32; MIN_DISK_GB=20
 SHAKE=0   # p227-shake-N: the shakedown on a cheaper card; never a reading
 case "$P227_RUN_ID" in
-  p227-5090-1|p227-5090-2|p227-5090-3) :;;
+  p227-5090-1|p227-5090-2|p227-5090-3|p227-5090-r1|p227-5090-r2|p227-5090-r3|p227-5090-r4|p227-5090-r5|p227-5090-r6|p227-5090-r7|p227-5090-r8) :;;   # r1..r8: Amendment 4's retry ids (labels, not budget)
   p227-shake-1|p227-shake-2|p227-shake-3) SHAKE=1;;
   *) say "unregistered run ID: $P227_RUN_ID"; finish 78;;
 esac

@@ -7,6 +7,7 @@ import importlib.util
 import json
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 
@@ -94,7 +95,7 @@ def test_the_runner_installs_the_release_then_e4b_checks_the_route_and_runs_the_
     at = [RUN.index(x) for x in order]
     assert at == sorted(at), dict(zip(order, at))
     assert "MIN_POWER_W=575 " in RUN and "finish 17; }" in RUN
-    assert "p229-5090-1|p229-5090-2|p229-5090-3)" in RUN and "p229-shake-1|p229-shake-2|p229-shake-3) SHAKE=1;;" in RUN
+    assert "p229-5090-1|p229-5090-2|p229-5090-3|" in RUN and "p229-shake-1|p229-shake-2|p229-shake-3) SHAKE=1;;" in RUN
     assert "--shakedown --reps 4)" in RUN
     for knob in ("E4B_INT8_HEAD_ROWS", "E4B_INT8_HEAD_BW", "E4B_PAGED_SPEC", "TRITON_INTERPRET"):
         assert re.search(rf"^unset .*|^\s+.*\b{knob}\b", RUN, re.M) and f" {knob}" in RUN.split("unset ", 1)[1].split(
@@ -122,7 +123,7 @@ def test_the_guard_fit():
 
 
 def test_the_drive_never_creates_compute_and_stages_the_premise_in_the_repos_layout():
-    assert "p229-5090-[1-3]|p229-shake-[1-3]) :;;" in DRIVE and "the checkout is dirty" in DRIVE
+    assert "p229-5090-[1-3]|p229-5090-r[1-8]|p229-shake-[1-3]) :;;" in DRIVE and "the checkout is dirty" in DRIVE
     assert 'mkdir -p "$STAGE/t/$(dirname "$f")" && cp "$REPO/$f" "$STAGE/t/$f"' in DRIVE
     for f in ("tests/test_int8_head_bw.py", "tests/test_int8_head_rows_interp.py", "tests/conftest.py",
               "bench/i8dense/i8_fakequant.py", "bench/p148/p148_kernels.py"):
@@ -130,6 +131,27 @@ def test_the_drive_never_creates_compute_and_stages_the_premise_in_the_repos_lay
     assert "scp -q -r" in DRIVE
     for word in ("vast.py", "destroy", "/api/", "rent-watch"):
         assert word not in DRIVE.split("set -uo pipefail", 1)[1], word
+
+
+def _accepted(src, pattern_re, ids):
+    """The ids a script's own reading case accepts, run through bash with the pattern as written."""
+    pat = re.search(pattern_re, src, re.M).group(1)
+    script = f'case "$1" in {pat}) exit 0;; *) exit 9;; esac'
+    return {rid for rid in ids if subprocess.run(["bash", "-c", script, "_", rid]).returncode == 0}
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+def test_amendment_4_adds_exactly_the_retry_ids_r1_to_r8():
+    """Amendment 4: the runner and the drive accept exactly -1..-3 and r1..r8 (labels, not budget); -4 and r9 refuse."""
+    probe = [f"p229-5090-{x}" for x in ("0", "1", "2", "3", "4", "10", "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
+                                       "r8", "r9", "r10", "r01", "R1", "r", "r1x")]
+    want = {f"p229-5090-{x}" for x in ("1", "2", "3")} | {f"p229-5090-r{i}" for i in range(1, 9)}
+    assert _accepted(RUN, r"^  (p229-5090-1\|[^)]*)\) :;;", probe) == want
+    assert _accepted(DRIVE, r'^case "\$E4B_RENT_RUN_ID" in ([^)]*)\) :;;', probe) == want
+    assert "**`p229-5090-r1` to `p229-5090-r8`**, for ANY box" in PREREG
+    assert "**The ids are labels, not budget.**" in PREREG and "no code parses an id's number" in PREREG
+    assert ("| **refused at create** (Amendment 4) | the provider refused the create, so nothing was created ($0) | no |"
+            " no; counts toward no cap, uses one id |") in PREREG
 
 
 def test_the_drive_follows_pod_launchs_contract():
