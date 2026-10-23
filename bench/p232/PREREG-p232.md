@@ -188,6 +188,8 @@ count, arm or threshold moves; each item says what the registration left open or
 - **Argmax agreement is compared as exact pooled counts.** Each window's agreement is matched positions over 128, so the
   reducer recovers the integer counts and compares count x 100 >= bar x 100 x positions. A mean of fractions could land
   a hair under 0.95 at exactly 0.95.
+  A window whose agreement is not k/128 for an integer k was not scored on the registered 128 positions: the record
+  is a VOID with the reason named, never rounded.
 - **A missing per-window KL or argmax on the scored arm is a VOID,** never read as 0 (bench/common rule 7).
 - **The shakedown runs 3 reps** (registered as "a reduced rep count") and keeps the card floor of 30,000 MiB: the default
   server at 16 sequences x 4,096 tokens does not fit a 24 GB card.

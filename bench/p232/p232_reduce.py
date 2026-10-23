@@ -289,6 +289,11 @@ def quality_faults(name, rec, arm, e4b_sha, shake=False) -> list:
                 out.append(f"{name} T={T}: a {key} window carries no KL (a missing KL is unread, never 0)")
             if key == "ON" and any(not isinstance(x.get("argmax_agree"), (int, float)) for x in per.get(key) or []):
                 out.append(f"{name} T={T}: a {key} window carries no argmax agreement")
+            elif key == "ON":
+                off = [x.get("window") for x in per.get(key) or [] if not integral_agree(x["argmax_agree"])]
+                if off:
+                    out.append(f"{name} T={T}: argmax agreement in window(s) {off[:4]} is not k/{Q_CONT} for an integer k: "
+                               f"the window was not scored on the registered {Q_CONT} positions, so its counts are unread")
         out += cap_faults(f"{name} T={T}", p.get("attn_split_cap"), (T,), shake)
         qk = p.get("quality_kv") or {}
         served = (qk.get("max_tokens_per_seq"), qk.get("blocks_per_seq")) == ([SERVED_TOKENS], [SERVED_BLOCKS])
@@ -303,6 +308,12 @@ def quality_faults(name, rec, arm, e4b_sha, shake=False) -> list:
 
 def _mean(xs):
     return sum(xs) / len(xs)
+
+
+def integral_agree(frac: float) -> bool:
+    """measure_phase's agreement is matched/positions; on the registered Q_CONT positions it is k/Q_CONT exactly."""
+    k = frac * Q_CONT
+    return abs(k - round(k)) < 1e-6
 
 
 def agree_counts(windows: list) -> tuple:
@@ -672,6 +683,9 @@ def _cases() -> list:
          (lambda x: x["verdict"] == "FLIP_ROWS_8" and x["tripwire"])(r(q=kq({8: {"bias": 0.0199999}})))),
         ("argmax 121/128 (0.9453) at T = 8 caps at 4", v(q=kq({8: {"agree": 121 / 128}})) == "FLIP_ROWS_4"),
         ("argmax 122/128 (0.9531) passes", v(q=kq({8: {"agree": 122 / 128}})) == "FLIP_ROWS_8"),
+        ("a window scored on 127 positions (121/127) is a VOID, never rounded", v(q=kq({4: {"agree": 121 / 127}})) == "VOID"),
+        ("the integrality check: 121/128 is integral, 121/127 is not",
+         integral_agree(121 / 128) and not integral_agree(121 / 127)),
         ("pooled counts at the 0.95 edge: 2919/3072 passes, 2918 misses",
          agree_at_least((2919, 3072), Q_ARGMAX) and not agree_at_least((2918, 3072), Q_ARGMAX)),
         ("pooled counts at the 0.98 edge: 3011/3072 holds, 3010 fires",
@@ -718,11 +732,11 @@ def _cases() -> list:
         ("the floor is read per T: T = 4's floor does not lift T = 8's bound",
          r(q=qual(R={"per_t": {4: {"floor": 0.01}}}, K={"per_t": {8: {"kl": 0.0021}}}))["tripwire"] != []),
         ("every fired condition is listed, at every T",
-         len(r(q=kq({2: {"bias": 0.006, "agree": 0.97, "kl": 0.01}, 8: {"bias": -0.006}}))["tripwire"]) == 4),
+         len(r(q=kq({2: {"bias": 0.006, "agree": 124 / 128, "kl": 0.01}, 8: {"bias": -0.006}}))["tripwire"]) == 4),
         ("the tripwire is reported on NO_FLIP too",
          (lambda x: x["verdict"] == "NO_FLIP" and x["tripwire"])(r(arms(**scale("W2", 1.0)), kq({2: {"bias": 0.006}})))),
         ("the tripwire never changes the verdict (FLIP_ROWS_8 with all three conditions fired)",
-         v(q=kq({T: {"bias": 0.01, "agree": 0.96, "kl": 0.05} for T in GROUPS})) == "FLIP_ROWS_8"),
+         v(q=kq({T: {"bias": 0.01, "agree": 123 / 128, "kl": 0.05} for T in GROUPS})) == "FLIP_ROWS_8"),
         ("TRIPWIRE prints each condition", tripwire_line(r(q=kq({2: {"bias": 0.006}}))).startswith("TRIPWIRE T=2: |NLL gap|")),
         ("a VOID's tripwire is unread, never none", tripwire_line(r(arms(Ka={"reps": 3}))) == "TRIPWIRE unread (VOID: nothing was read)"),
         # ---- VOID

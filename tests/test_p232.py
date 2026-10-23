@@ -332,6 +332,7 @@ def test_the_new_files_are_lf_only_and_the_shell_scripts_parse():
 
 
 REDUCER_MUTANTS = [
+    ("    return abs(k - round(k)) < 1e-6", "    return True"),
     # g_T from the best pair, not the worst of four
     ("    g = {T: min(pairs[w].values()) for w, T in WORKLOADS.items()}",
      "    g = {T: max(pairs[w].values()) for w, T in WORKLOADS.items()}"),
