@@ -424,6 +424,50 @@ def test_amendment_2_the_block_fails_where_k33_does_not_engage(hr_clean):
     assert hr._NF4_SMALLM_BW_RESOLVED[0] is False, "a refused resolution routes nothing"
 
 
+def test_amendment_2_the_block_fails_when_the_switch_routes_wrong(hr_clean, monkeypatch):
+    """The lane's own switch: resolved and set, a 4-token call that does NOT take singleton groups fails the block."""
+    hr, _ = hr_clean
+    real = hr._collapsed_grouping
+
+    def wrong_at_4(T, int4_stores):
+        if T == 4 and os.environ.get("E4B_NF4_SMALLM_BW") == "1" and hr._NF4_SMALLM_BW_RESOLVED[0]:
+            return False, True
+        return real(T, int4_stores)
+
+    monkeypatch.setattr(hr, "_collapsed_grouping", wrong_at_4)
+    with pytest.raises(AssertionError, match="B1: 2..8 tokens take singleton groups"):
+        _run_block(_routing_block(), hr)
+
+
+def test_amendment_2_the_block_fails_on_a_refusal_with_other_text(hr_clean, monkeypatch):
+    """The refusal must be the guard's own: another RuntimeError while unresolved fails the block."""
+    hr, _ = hr_clean
+    real = hr._nf4_smallm_bw_takes
+
+    def other_refusal(T, int4_stores):
+        if 1 < T <= hr.NF4_SMALLM_BW_MAX_T and hr._nf4_smallm_bw_env() and not hr._NF4_SMALLM_BW_RESOLVED[0]:
+            raise RuntimeError("E4B_NF4_SMALLM_BW=1 refused for a reason that is not the resolve guard")
+        return real(T, int4_stores)
+
+    monkeypatch.setattr(hr, "_nf4_smallm_bw_takes", other_refusal)
+    with pytest.raises(AssertionError, match="refused for another reason"):
+        _run_block(_routing_block(), hr)
+
+
+def test_amendment_2_the_block_fails_when_resolve_reads_other_shapes(hr_clean, monkeypatch):
+    """The resolution must have read Mixtral's two expert shapes, not merely come back on."""
+    hr, _ = hr_clean
+
+    def other_shapes(modules, device):
+        hr._NF4_SMALLM_BW_RESOLVED[0] = True
+        return {"env": "1", "on": True, "max_tokens": hr.NF4_SMALLM_BW_MAX_T, "why": None, "shapes": [[2048, 7168]]}
+
+    monkeypatch.setattr(hr, "resolve_nf4_smallm_bw", other_shapes)
+    with pytest.raises(AssertionError, match="resolve:"):
+        _run_block(_routing_block(), hr)
+    assert hr._NF4_SMALLM_BW_RESOLVED[0] is False, "the finally undoes even a resolution the asserts rejected"
+
+
 def test_amendment_2_shakedowns_stop_before_the_premise_and_never_count():
     assert "p231-shake-1|p231-shake-2|p231-shake-3) SHAKE=1;;" in RUN and "p231-shake-1|p231-shake-2|p231-shake-3) :;;" in DRIVE
     stop = RUN.index('[ "$SHAKE" = 1 ] && { echo "SHAKE OK')
