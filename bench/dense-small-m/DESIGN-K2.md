@@ -39,6 +39,7 @@ it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
 
 - **The knob:** `E4B_INT8_HEAD_ROWS`, an opt-in upper bound on the rows the head routes to an int8 kernel.
   - Unset or `1` is today's behaviour, and the default. Values 2 to 8 widen the route. Anything else is refused.
+  - 8 is the largest row count section 5 reads (bar and served read). The bound never exceeds the reads.
   - It is refused unless `E4B_INT8_HEAD_BW` has put the head on its int8 grid. It widens that route and switches
     nothing on by itself.
 - **The kernels:**
@@ -85,17 +86,22 @@ it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
 1. **The EXPLORE microbench, before any registration** (a cheap box, explore tier, never quoted). It informs the bar;
    it is not a reading.
    - At the head's shape, 151936 x 2048, M = 1..8, CUDA-graph timed.
-   - The arms: the bf16 head (`F.linear`); `linear_i8` at `PLAN_SMALL_DEFAULT` and at every plan K37's table offers;
-     K36 at M = 1; and the int8 byte floor.
+   - The arms: the bf16 head (`F.linear`); `linear_i8` at `PLAN_SMALL_DEFAULT` and at every plan K37's table offers
+     (plus a small sweep, for information); K36 at M = 1; and the int8 byte floor.
 2. **The registered microbench** (one RTX 5090, 575 W): `linear_i8` against `F.linear` on the grid (the served path
    at those rows) and against K36 at one row, at M = 2, 4 and 8, with the byte floor reported.
-   - **The proposed bar:** `linear_i8` at M = 2 and 4 within 1.25x of K36's one-row time (the bytes are the same),
-     and at most 0.70x of `F.linear`'s.
-   - **The fallback rule, fixed before data:** if `linear_i8` misses the bar at the head's shape at every plan K37
-     offers, K2b is NO_GO, and K2a (section 8) becomes the candidate. That is a decision of its own, never a silent
-     switch.
-3. **The served read**, on its own registration: W2 and W4 ABBA on the default Qwen3 server, the knob against unset,
-   and P153's quality bars per bucket.
+   - **The plan the bar reads is the plan the route runs** (re-check). On released packages that is
+     `PLAN_SMALL_DEFAULT`, `(32, 256, 4)`, named in the registration.
+   - **The proposed bar, at EVERY M the knob can route (2, 4 and 8):** `linear_i8` at the shipped plan within 1.25x
+     of K36's one-row time (the bytes are the same), and at most 0.70x of `F.linear`'s.
+   - **Another plan passing is a finding, not a GO.** It opens a grouped-nf4-gemm PR adding `(151936, 2048)` to
+     `PLANS_SMALL`. The route then needs that release (section 3) and the bar is read again on that plan.
+   - **The fallback rule, fixed before data:** if `linear_i8` misses the bar at the head's shape at every plan K37's
+     table offers, K2b is NO_GO, and K2a (section 8) becomes the explicit next decision. Never a silent switch.
+3. **The served read**, on its own registration: W2, W4 and W8 ABBA on the default Qwen3 server, the knob against
+   unset, and P153's quality bars per bucket.
+- **The knob never routes more rows than were read** (re-check). If a reading covers fewer row counts than 2..8, the
+  knob's upper bound is capped at the largest row count read and refuses above it by name.
 
 ## 6. Tests (with the code PR)
 
