@@ -306,7 +306,8 @@ def fingerprint_check(ad: AdapterDir, model, arena: str, *, accept_base_mismatch
         else:
             why = (" The manifest records a double-quantized expert absmax (training's default) and the arena stores "
                    "fp32: this is the dq-vs-fp32 absmax case (docs/ADAPTER_PORTABILITY.md F1), not a different model. "
-                   "Retraining at E4B_ABSMAX_DQ=0, or the coming serve-side reconstruction, resolves it."
+                   "Retraining at E4B_ABSMAX_DQ=0 resolves it; a follow-up records the base's fp32 source "
+                   "fingerprint at training, which verifies the base (not the served absmax form)."
                    if _dq_trained(ad) else
                    " The arena was not baked from the base this adapter was trained on (or with another recipe).")
             refusals.append((12, f"the served expert base is not the adapter's: qfp-v1 {got['sha256'][:16]} served "

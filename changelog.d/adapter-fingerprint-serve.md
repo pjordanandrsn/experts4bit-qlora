@@ -9,5 +9,6 @@
   expert absmax was served with `E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts` as "unverified". The server now
   MEASURES the mismatch with the arena's fp32 absmax and refuses it as **refusal 12**, which that opt-in does not cover.
   Set `E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts` to serve it anyway (reported in `/health`), or retrain at
-  `E4B_ABSMAX_DQ=0`; a serve-side reconstruction that makes the default verify follows separately. An attention
+  `E4B_ABSMAX_DQ=0`; a follow-up records the fp32 source fingerprint at training, which verifies the base (base
+  identity only, not the served absmax form). An attention
   fingerprint mismatch is **refusal 11**, with no override. v1 adapters are unchanged (refusal 9).

@@ -229,8 +229,9 @@ module, it compares each fingerprint the manifest records with the served base's
   `mismatch (served under ...)`; `E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE` never covers a MEASURED mismatch.
 - **the default training form:** training double-quantizes the expert absmax by default and the arena stores fp32, so a
   default-trained `/2` adapter is refusal 12 (F1). Its message says so: that is the dq-vs-fp32 case, not a different
-  model; retraining at `E4B_ABSMAX_DQ=0`, or the coming serve-side reconstruction (the server re-applying training's
-  compression to the arena's fp32 absmax), resolves it.
+  model; retraining at `E4B_ABSMAX_DQ=0` resolves it. A follow-up records the base's fp32 source fingerprint at
+  training (the fp32 absmax hashed before compression), which proves BASE identity against the fp32 arena, never that
+  the served absmax equals the trained one.
 - `/health` carries `adapter.fingerprints`: per scope, the trained and served sha256, the module counts, the seconds and
   the status.
 
