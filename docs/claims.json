@@ -12823,6 +12823,56 @@
         "the private receipt store, run p149-5090-2 (receipt.json, teardown-proof.json)"
       ],
       "notes": "Pre-registered in #1806 with Amendments 1-5 (one non-consumer review and the maintainer's final pass before any data); the premise was box K's K_GO (p149k-5090-8, a microbench). Predictions: Q GO hit; FLIP hit; g1 1.04-1.08 missed toward faster; g16 0.99-1.03 hit; ROUTING_CLEAR and the pre-read g16_routing band [0.9979, 1.0019] not read (VOID). The verdict re-derives byte-identical from the receipt subset with p149_reduce.py at 835874d1. The lever stays opt-in: E4B_SERVE_ATTN_INT8 is in e4b v0.56.0, off by default."
+    },
+    {
+      "id": "e4b.kernel.p227.per-row-gemv.mixtral.5090.2026-10-23",
+      "package": "experts4bit-qlora",
+      "area": "kernel",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1 (expert shapes only; random NF4 bytes, no checkpoint loaded)",
+      "claim": "Lane P227 (one RTX 5090): on Mixtral-8x7B's experts at two and four decode tokens, the per-row GEMV route (E4B_NF4_SMALLM_BW=1, K33 one row per program) runs the captured expert call in 0.36 and 0.47 of K25's time (upper bounds 0.3601 and 0.4655 against P227's 0.70 bar: PASS); at eight tokens it reads 0.73 and runs at 2.00x the byte floor, which fires B2's multi-row trigger (threshold 1.25).",
+      "value": 0.4655,
+      "unit": "ratio, B / K expert-call time at T = 4, the upper bound (median + 2 SE over 60 reps; T = 2 reads 0.3601; clock-adjusted bounds equal)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 580.126.18, a 575 W power limit read on the box before any install), one rented Vast.ai host (verified-secure, AMD EPYC 9334, 128 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @b7146363 (P227's registration with Amendments 1-4, #2036's merge) + grouped-nf4-gemm v0.50.0 @41ef086e; torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; premise 25 tests passed on the card (e4b#2009's GPU contract, 20; the served T == 1 GEMV route's tests, 5); arms K (device grouping, then K25 at the family's served decode plan), K2 (K captured again, the self-pair) and B (E4B_NF4_SMALLM_BW=1: singleton groups, K33, one row per program) in captured graphs of the family's layers (Qwen3 48, Mixtral 8) on random NF4 bytes, 60 reps of Williams-ordered arms with spacer replays, P155's larger-of SE, clock-adjusted bounds from a sampled SM clock; verdict by bench/p227/p227_reduce.py",
+      "measured_on": "2026-10-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p227/RESULTS-p227.md",
+        "bench/p227/PREREG-p227.md",
+        "bench/p227/p227_reduce.py",
+        "bench/p227/receipts/p227-5090-1/verdict_p227.json",
+        "bench/p227/receipts/p227-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p227-5090-1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2013 (Amendments 1-4: the shakedowns and real fixture, the runner's strike-note comment, pod-launch's drive contract, the retry ids and the started-box cap), before any data. A microbench of the expert call, not a served read: B3, a served read of E4B_NF4_SMALLM_BW=1, needs its own registration with a quality bar. E4B_NF4_SMALLM_BW stays opt-in."
+    },
+    {
+      "id": "e4b.kernel.p227.per-row-gemv.qwen3.5090.2026-10-23",
+      "package": "experts4bit-qlora",
+      "area": "kernel",
+      "model": "Qwen/Qwen3-30B-A3B (expert shapes only; random NF4 bytes, no checkpoint loaded)",
+      "claim": "Lane P227 (one RTX 5090): on Qwen3-30B-A3B's experts at two and four decode tokens, the per-row GEMV route (E4B_NF4_SMALLM_BW=1) runs the captured expert call in 0.75 and 0.90 of K25's time at its served plan (upper bounds 0.7478 and 0.9047 against P227's 0.70 bar: MISS), and at eight tokens it is slower than K25 (1.21); lever B is small on Qwen3 at these token counts.",
+      "value": 0.9047,
+      "unit": "ratio, B / K expert-call time at T = 4, the upper bound (median + 2 SE over 60 reps; T = 2 reads 0.7478; clock-adjusted bounds equal)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 580.126.18, a 575 W power limit read on the box before any install), one rented Vast.ai host (verified-secure, AMD EPYC 9334, 128 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @b7146363 (P227's registration with Amendments 1-4, #2036's merge) + grouped-nf4-gemm v0.50.0 @41ef086e; torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; premise 25 tests passed on the card (e4b#2009's GPU contract, 20; the served T == 1 GEMV route's tests, 5); arms K (device grouping, then K25 at the family's served decode plan), K2 (K captured again, the self-pair) and B (E4B_NF4_SMALLM_BW=1: singleton groups, K33, one row per program) in captured graphs of the family's layers (Qwen3 48, Mixtral 8) on random NF4 bytes, 60 reps of Williams-ordered arms with spacer replays, P155's larger-of SE, clock-adjusted bounds from a sampled SM clock; verdict by bench/p227/p227_reduce.py",
+      "measured_on": "2026-10-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p227/RESULTS-p227.md",
+        "bench/p227/PREREG-p227.md",
+        "bench/p227/p227_reduce.py",
+        "bench/p227/receipts/p227-5090-1/verdict_p227.json",
+        "bench/p227/receipts/p227-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p227-5090-1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2013 (Amendments 1-4: the shakedowns and real fixture, the runner's strike-note comment, pod-launch's drive contract, the retry ids and the started-box cap), before any data. A microbench of the expert call, not a served read: B3, a served read of E4B_NF4_SMALLM_BW=1, needs its own registration with a quality bar. E4B_NF4_SMALLM_BW stays opt-in."
     }
   ]
 }
