@@ -2819,7 +2819,7 @@ hp3_seed_plan(){ local SW=$1 NF=$2 L k n=0 need=""
     need="$need \"$k\": $nk,"; [ $n = 0 ] && [ $nk -le $(( L - 900 )) ] && n=$k; done
   $PY_E4B -c "import json,sys,time; n,W,L,nf=map(int,sys.argv[2:6]); seeds=[3410,3411,3412,3413,3414][:n]
 json.dump({'n': n, 'seeds': seeds, 'basis': 'timing', 'seed1_wall_s': W, 'left_s': L, 'frameworks': nf, 'need_s': json.loads(sys.argv[6]),
-           'eval_s_per_run': 360, 'reserve_s': 900, 'written_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+           'eval_s_per_run': 360, 'reserve_s': 900, 'written_at_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
            'reason': ('fit: %d seeds at seed 3410\\'s wall time %d s' % (n, W)) if n else 'host-limited: fewer than 3 seeds fit at seed 3410\\'s wall time %d s' % W},
           open(sys.argv[1], 'w'), indent=1)" $W/hp3/seed_plan.json $n $SW $L $NF "{${need%,} }" || { echo 0; return 1; }
   echo $n; }
@@ -2912,7 +2912,7 @@ tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=$
     done
   fi
   env $E HF_HUB_OFFLINE=1 $PY_H3E $W/hp1_eval.py --receipts "${PR[@]}" --bases $W/hp1/base_*_$AF --tokens $TLS --eval-n $HP1_EVAL_N --model "$TM" --revision $TR \
-    --zero-report-only 1 --roundtrip-zero-centred $RT --out $W/hp3/eval_P.json > logs/hp3_eval_P.log 2>&1; tail -1 logs/hp3_eval_P.log
+    --zero-report-only 1 --roundtrip-zero-centred $RT ${PLAN[@]+"${PLAN[@]}"} --out $W/hp3/eval_P.json > logs/hp3_eval_P.log 2>&1; tail -1 logs/hp3_eval_P.log
   rm -rf $SC
   hp1_bulk_manifest "$W"
   $PY_H3E $W/hp3_reduce.py verdict $W/hp3/eval_P.json --g1 $W/hp3/g1.json --manifest $W/hp1/bulk_manifest.json "${RCP[@]}" ${PLAN[@]+"${PLAN[@]}"} \

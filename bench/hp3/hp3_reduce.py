@@ -17,9 +17,9 @@ engagement check). Per pair: the seed-paired Delta, its 90 % t-interval and G2' 
 deltaN is reported with the in-loop term named. Then the three-way read. Exit 0 when every pair is read, 3 otherwise.
 """
 import argparse
+import hashlib
 import json
 import math
-import os
 import statistics
 import sys
 from pathlib import Path
@@ -307,7 +307,7 @@ def main(argv=None):
     a2.add_argument("--g1", required=True)
     a2.add_argument("--arm-receipt", action="append", default=[], help="an axolotl confirmation arm's receipt (its tag inside)")
     a2.add_argument("--manifest", action="append", default=[])
-    a2.add_argument("--seed-plan", help="the runner's hp3/seed_plan.json (Amendment 1 part 7); it must predate every evaluator output")
+    a2.add_argument("--seed-plan", help="the runner's hp3/seed_plan.json (Amendment 1 part 7); every evaluator output must carry its sha256")
     a2.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     try:
@@ -326,13 +326,21 @@ def main(argv=None):
         for p in a.arm_receipt:
             q = json.load(open(p))
             receipts[q.get("tag")] = q
+        evs = [json.load(open(p)) for p in a.evals]
         plan = None
-        if a.seed_plan:
-            late = [p for p in a.evals if os.path.getmtime(a.seed_plan) > os.path.getmtime(p)]
-            if late:
-                raise ValueError(f"the seed plan is newer than the evaluator output {late}: a plan written after the evaluator's pass")
-            plan = json.load(open(a.seed_plan))
-        rec, code = verdict([json.load(open(p)) for p in a.evals], json.load(open(a.g1)), receipts, plan)
+        if a.seed_plan:                       # Amendment 1 part 7: the content binding (no mtime is trusted)
+            raw = open(a.seed_plan, "rb").read()
+            want = hashlib.sha256(raw).hexdigest()
+            bad = [p for p, ev in zip(a.evals, evs) if ev.get("plan_sha256") != want]
+            if bad:
+                raise ValueError(f"the evaluator output(s) {bad} do not carry this seed plan's sha256 {want[:12]} (plan_sha256 missing, null or "
+                                 "different): the plan was not fixed before the evaluator's pass, or another plan was")
+            plan = json.loads(raw)
+        else:
+            bound = [p for p, ev in zip(a.evals, evs) if ev.get("plan_sha256") is not None]
+            if bound:
+                raise ValueError(f"the evaluator output(s) {bound} carry a plan_sha256 but no --seed-plan was given: the runner's plan is missing")
+        rec, code = verdict(evs, json.load(open(a.g1)), receipts, plan)
         json.dump(rec, open(a.out, "w"), indent=1)
         print(f"HP3_VERDICT three_way={rec['three_way']['verdict']} "
               + " ".join(f"{k}={p['verdict']}" for k, p in rec["pairs"].items()) + f" ({SCOPE})")

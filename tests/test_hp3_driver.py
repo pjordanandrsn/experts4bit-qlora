@@ -207,6 +207,9 @@ def test_the_read_writes_its_seed_plan_before_seed_3411_and_hands_it_to_the_redu
     assert (tmp_path / "hp3" / "seed_plan.json").stat().st_mtime_ns <= first_3411.stat().st_mtime_ns
     ver = next(ln for ln in (tmp_path / "py.log").read_text().splitlines() if "hp3_reduce.py verdict" in ln)
     assert f"--seed-plan {tmp_path}/hp3/seed_plan.json" in ver
+    ev = next(ln for ln in (tmp_path / "py.log").read_text().splitlines() if "hp1_eval.py" in ln and "eval_P" in ln)
+    assert f"--seed-plan {tmp_path}/hp3/seed_plan.json" in ev                     # the evaluator hashes the plan it is handed
+    assert "written_at_utc" in plan and "written_at" not in {k for k in plan if k != "written_at_utc"}
 
 
 def test_a_short_deadline_reads_four_seeds_and_a_shorter_one_stops_after_seed_3410(tmp_path):
@@ -224,3 +227,4 @@ def test_a_short_deadline_reads_four_seeds_and_a_shorter_one_stops_after_seed_34
 def test_the_shakedown_writes_no_seed_plan(tmp_path):
     _, summary = drive(tmp_path, FAMILY_FAM="qwen3hp3shake", HP3_SHAKE="1")
     assert not (tmp_path / "hp3" / "seed_plan.json").exists() and "SEED_PLAN" not in summary
+    assert "--seed-plan" not in (tmp_path / "py.log").read_text()                  # the shakedown never hands a plan to the evaluator

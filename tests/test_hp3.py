@@ -240,15 +240,50 @@ def test_a_seed_plan_outside_the_registered_counts_or_not_by_timing_is_refused()
         raise AssertionError(f"accepted {bad}")
 
 
-def test_the_reducer_refuses_a_seed_plan_written_after_the_evaluators_pass(tmp_path):
+def _bound(tmp_path, plan_obj, bind=True, mtimes=None):
+    """eval_P.json carrying (or not) plan_sha256 of the plan file, as hp1_eval --seed-plan writes it; optional mtimes per file."""
+    import hashlib
     import os
     ev, g1, plan = tmp_path / "eval_P.json", tmp_path / "g1.json", tmp_path / "seed_plan.json"
     g1.write_text(json.dumps(R.g1(_cal())))
-    plan.write_text(json.dumps({"n": 4, "seeds": [3410, 3411, 3412, 3413], "basis": "timing", "reason": "fit"}))
-    ev.write_text(json.dumps(_conf()))
-    os.utime(plan, (1000, 1000))
-    os.utime(ev, (2000, 2000))
+    plan.write_text(json.dumps(plan_obj))
+    conf = _conf()
+    if bind:
+        conf["plan_sha256"] = hashlib.sha256(plan.read_bytes()).hexdigest()
+    ev.write_text(json.dumps(conf))
+    for f, t in (mtimes or {}).items():
+        os.utime(tmp_path / f, (t, t))
+    return ev, g1, plan
+
+
+PLAN4 = {"n": 4, "seeds": [3410, 3411, 3412, 3413], "basis": "timing", "reason": "fit: 4 seeds at seed 3410's wall time 2400 s"}
+
+
+def test_the_seed_plan_is_bound_by_content_so_a_rederivation_with_any_mtimes_still_verdicts(tmp_path):
+    """Amendment 1 part 7 (the maintainer's content binding): the store keeps content, not mtimes, so a re-derivation whose
+    checkout wrote the plan AFTER the evaluator output still reads; only the hash decides."""
+    ev, g1, plan = _bound(tmp_path, PLAN4, mtimes={"seed_plan.json": 3000, "eval_P.json": 1000})
+    out = tmp_path / "v.json"
+    rc = R.main(["verdict", str(ev), "--g1", str(g1), "--seed-plan", str(plan), "--out", str(out)])
+    assert rc in (R.EXIT_OK, R.EXIT_INCOMPLETE) and json.loads(out.read_text())["seed_count"] == 4   # no axolotl receipts: its pairs NOT_READ
+
+
+def test_a_plan_edited_after_the_evaluators_pass_or_an_unbound_output_refuses(tmp_path):
+    (tmp_path / "edit").mkdir()
+    ev, g1, plan = _bound(tmp_path / "edit", PLAN4)
+    plan.write_text(json.dumps(dict(PLAN4, n=5, seeds=[3410, 3411, 3412, 3413, 3414])))     # edited after the evaluator hashed it
     args = ["verdict", str(ev), "--g1", str(g1), "--seed-plan", str(plan), "--out", str(tmp_path / "v.json")]
-    assert R.main(args) in (R.EXIT_OK, R.EXIT_INCOMPLETE) and json.loads((tmp_path / "v.json").read_text())["seed_count"] == 4
-    os.utime(plan, (3000, 3000))                                      # the plan now postdates the evaluator output
     assert R.main(args) == R.EXIT_UNUSABLE
+    (tmp_path / "unbound").mkdir()
+    ev, g1, plan = _bound(tmp_path / "unbound", PLAN4, bind=False)                         # the evaluator never saw the plan
+    assert R.main(["verdict", str(ev), "--g1", str(g1), "--seed-plan", str(plan), "--out", str(tmp_path / "v2.json")]) == R.EXIT_UNUSABLE
+    d = json.loads(ev.read_text())
+    d["plan_sha256"] = None                                                                 # null is a refusal too (rule 7)
+    ev.write_text(json.dumps(d))
+    assert R.main(["verdict", str(ev), "--g1", str(g1), "--seed-plan", str(plan), "--out", str(tmp_path / "v3.json")]) == R.EXIT_UNUSABLE
+
+
+def test_a_bound_output_without_the_plan_refuses(tmp_path):
+    """The inverted gap: the runner made a plan (the evaluator hashed it) but the reducer was not given it."""
+    ev, g1, _ = _bound(tmp_path, PLAN4)
+    assert R.main(["verdict", str(ev), "--g1", str(g1), "--out", str(tmp_path / "v.json")]) == R.EXIT_UNUSABLE

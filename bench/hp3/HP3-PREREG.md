@@ -338,15 +338,26 @@ at plausible noise. Every number in this section is an ESTIMATE.
      eager path is the slowest, so one arm would underestimate a seed).
      - It sets n to the largest k in {5, 4, 3} with (k − 1) × W + 360 s × (frameworks) × k + 900 s ≤ the time left − 900 s. The
        evaluator's pass is estimated at ~6 min a run.
-     - It writes `hp3/seed_plan.json` (n, the seeds, W, the time left, each k's need, `basis: timing`, the reason) BEFORE any
-       later seed or the evaluator's pass.
+     - It writes `hp3/seed_plan.json` (n, the seeds, W, the time left, each k's need, `basis: timing`, the reason,
+       `written_at_utc`) BEFORE any later seed or the evaluator's pass.
    - **The read.** The box runs exactly n seeds, and `hp3_reduce.py verdict --seed-plan` reads the first n (df = n − 1).
      - The verdict records `seed_count`, `seeds_read` and `seed_plan_reason` (e.g. "fit: 4 seeds at seed 3410's wall time 2400 s").
      - A read on 3 or 4 seeds is a **reduced-power read**, stated as such in the record and every RESULTS line. It is never
        upgraded later.
      - A VOID run among the planned seeds still makes its pairs NOT_READ.
-   - **The refusals.** The reducer refuses a plan whose n is not 0, 3, 4 or 5, whose seeds are not that prefix, whose basis is
-     not timing, or whose file is newer than any evaluator output it reads.
+   - **The refusals.** The reducer refuses a plan whose n is not 0, 3, 4 or 5, whose seeds are not that prefix, or whose basis is
+     not timing.
+   - **The content binding (the maintainer, 20:54Z, replacing an mtime check that a re-derivation cannot confirm).**
+     - The runner hands the plan to the evaluator explicitly (`hp1_eval.py --seed-plan`). At its start, before any model or base
+       is touched, the evaluator records `plan_sha256`, the sha256 of the plan's raw bytes, in `hp3/eval_P.json`.
+     - The reducer, given `--seed-plan`, refuses unless every evaluator output's `plan_sha256` equals that file's hash. A missing
+       or null field also refuses.
+     - Given no plan, it refuses any evaluator output that carries one: the runner made a plan the reducer was not handed.
+     - What this binds: the plan was fixed before the evaluator's pass. That is the pre-data property, and it survives the
+       store, which keeps content and not mtimes. The runner writes the plan before seed 3411 by its code order. That is
+       recorded (`summary.txt`'s `HP3 SEED_PLAN` line, the plan's `written_at_utc`, a clock read kept for the record only), but
+       the binding does not claim it.
+     - HP1, HP2, HPN and the shakedown never pass `--seed-plan`, so their evaluator output is unchanged.
    - **Fewer than 3 seeds fit:** n = 0. The box stops after seed 3410, with no evaluator pass. Every pair reads NOT_READ,
      host-limited, with a host refusal note. It is no strike, and the spend is minimal.
    - **The power each count can read.** ESTIMATE, P(PARITY | true Δ = 0) under the registered verdict order, from
