@@ -18,8 +18,16 @@ trap 'finish 130' INT TERM
 for v in G1S_RUN_ID G1S_DEADLINE_EPOCH G1S_INSTANCE_ID E4B_SHA GNF4_SHA GR_REV; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 for v in E4B_SHA GNF4_SHA GR_REV; do val=${!v}; case "$val" in *[!0-9a-f]*|"") say "refusing: $v is not hex"; finish 78;; esac
   [ ${#val} -eq 40 ] || { say "refusing: $v is not a 40-char sha"; finish 78; }; done
-command -v rsync > /dev/null || perl -e 'alarm 300; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq rsync git' > logs/apt.log 2>&1
-command -v git > /dev/null || perl -e 'alarm 300; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq git' >> logs/apt.log 2>&1
+# the CUDA devel image ships python3 without venv / ensurepip, git, cmake or rsync (g1-smoke-2: VENV FAIL); bench/sc1/sc1_run.sh's
+# ensure_tools list, plus rsync for the receipt fetch
+need=0; for t in git cmake curl rsync; do command -v $t > /dev/null 2>&1 || need=1; done
+python3 -c "import venv, ensurepip" 2> /dev/null || need=1
+if [ "$need" = 1 ]; then
+  say "apt: python3-venv / git / cmake / curl / rsync / build-essential (missing on this image)"
+  perl -e 'alarm 900; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends python3 python3-dev python3-venv python3-pip git cmake ninja-build curl rsync ca-certificates build-essential' > logs/apt.log 2>&1 \
+    || { tail -3 logs/apt.log; say "APT FAIL"; finish 9; }
+fi
+python3 -c "import venv, ensurepip" || { say "python3 still lacks venv / ensurepip after apt"; finish 9; }
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 : > summary.txt; echo "$G1S_INSTANCE_ID" > INSTANCE_ID
 line(){ echo "$*" | tee -a summary.txt; }
