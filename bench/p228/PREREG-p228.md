@@ -296,3 +296,24 @@ P227's and P229's Amendment 4, in its final form, for this lane.
   staged kit files. Their admission change gets its own review (the diff posted on the bus) and is installed only
   after this amendment merges. No staged pin moves and no runner byte changes. Until then, both run as they are.
 - Decided pre-data: no P228 box has run.
+
+## Amendment 7 (2026-10-23, before any reading): the fetch never imports a link
+
+- **Why:** a security rule for the whole bench (bench/common rule 8). The receipt store's writer hashes a linked file's
+  TARGET, and the drive fetched the box tree with `rsync -az`, which keeps symbolic links. A rented box is a
+  third-party host, so a relative link left in its work directory could have brought a controller-side file into the
+  store. No P228 box has created, so nothing was fetched.
+- **The change:** the drive's one fetch is now `rsync -az --no-links`. A link in the box tree is skipped and never
+  reaches the controller. Every regular file is fetched as before, and the runner writes no link into `$W`.
+- **Unchanged:** every command on the box, every staged file (no pin moves), the measurement, every threshold, every
+  cap and every output. Only the drive's fetch line moved.
+- **The launch commit is this amendment's merge.** Between the previous launch commit (`8d58cdc4`, Amendment 6) and
+  this amendment's base, main merged three changes. None is on this lane's default path:
+  - a training-only gather in `engines/fast.py` that is off unless `E4B_TRAIN_DET_GATHER=1`, which no P228 box sets.
+    The runner's engine (`engines/dense_lt_pin.py`) does not import it;
+  - HO3's Amendment 2 (`bench/ho3/` and its test);
+  - P225's results (receipts and docs).
+- **Checked:** the lane's test asserts that every rsync in the drive carries `--no-links`, and that a drive with no
+  rsync fails. Where rsync is installed, the test also runs the drive's own flags on a tree holding a file link and a
+  directory link, and asserts that neither arrives.
+- Decided pre-data: no P228 box has read.
