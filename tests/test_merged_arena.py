@@ -475,7 +475,7 @@ def _arena_openers():
                     calls.setdefault(name, []).append(node.lineno)
             if "load_index" in calls or "ColdTier" in calls:
                 refusal = calls.get("refuse_merged", []) + calls.get("refuse_merged_path", [])
-                out[f"{path.relative_to(root)}:{fn.name}"] = (min(calls.get("ColdTier", [0])) or None,
+                out[f"{path.relative_to(root).as_posix()}:{fn.name}"] = (min(calls.get("ColdTier", [0])) or None,
                                                               min(refusal) if refusal else None)
     return out
 
@@ -536,6 +536,29 @@ def _bake_patched(monkeypatch, how):
 def test_a_checkpoint_bake_that_is_not_the_base_geometry_is_refused(base, tmp_path, monkeypatch, how, needle):
     _bake_patched(monkeypatch, how)
     _refused(base, tmp_path, needle, source="checkpoint", checkpoint=str(base[1]))
+
+
+def test_the_checkpoint_bake_takes_the_base_arenas_own_recorded_inputs(base, tmp_path):
+    """A base baked at a non-default input (here a layers subset) re-bakes from the checkpoint with that same input, so
+    its geometry matches and the merge goes through: the re-bake reads the base index's layers, projections, source and
+    MoE attribute, never the bake's defaults (which would bake both layers here and be refused)."""
+    from experts4bit_qlora import adapter_schema as S
+    W, snap, _arena = base
+    nb = _need("nvme_bake_nf4")
+    sub = str(tmp_path / "layer0.arena")
+    nb.bake_nf4(str(snap), sub, layers=[0], quantize_fn=nb.default_quantize_expert(dev="cpu"), log=lambda *a, **k: None)
+    idx = json.load(open(sub + ".index.json"))
+    assert idx["n_layers"] == 1 and {r[0] for r in idx["rows"]} == {0}
+    model = _trained(W, lora_scale=0.05)
+    fp = dict(S.arena_expert_fingerprint(sub, MA._stand_ins({0: STACK.format(0)}, idx)), seconds=0.0)
+    tensors = {f"{STACK.format(0)}.{w}_lora_{ab}": getattr(model.model.layers[0].mlp.experts, f"{w}_lora_{ab}")
+               .detach().clone().contiguous() for w in MA.WHICH for ab in "AB"}
+    ad = _adapter(tmp_path, model, tensors=tensors, fingerprint=fp)
+    a, c = str(tmp_path / "a.arena"), str(tmp_path / "c.arena")
+    MA.write(sub, ad, a, log=lambda *x: None)
+    block = MA.write(sub, ad, c, source="checkpoint", checkpoint=str(snap), log=lambda *x: None)
+    assert block["source"] == "checkpoint" and json.load(open(c + ".index.json"))["rows"] == idx["rows"]
+    assert _sha(c) != _sha(sub) != _sha(a)
 
 
 def test_a_partial_bake_is_never_a_base(base, tmp_path):
