@@ -54,7 +54,7 @@ FIT=$((INSTALL_TO_GATE_S + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PC
 ## Registration rules (new lanes)
 
 Each rule below was added to a lane by a pre-data amendment on 2026-10-23, after a box hit the gap it closes. Every
-lane registered after this section merges states all six in its PREREG. Existing lanes keep their registered text,
+lane registered after this section merges states all seven in its PREREG. Existing lanes keep their registered text,
 including their own classification rules (P225's hand reading of a refused classify, for one), and amend it only if they
 hit one of these gaps.
 
@@ -68,8 +68,9 @@ hit one of these gaps.
    it measures since the old one, with why the reading still stands.
 2. **Run ids.**
    - Every box has its own id and receipt, and an id is never reused, because the ledger holds one row per run.
-   - Register the reading ids (`<lane>-<card>-1` to `-N`) AND retry ids (`-r1` to `-r8`) for any box that follows one
-     that did not start.
+   - Register a reading id for EVERY box the cap allows to start (`<lane>-<card>-1` to `-N`, with N at least the cap),
+     so a re-run after a started box that was not read has its own id. Also register retry ids (`-r1` to `-r8`) for any
+     box that follows one that did not start.
    - Ids are labels, not budget. No code may parse an id's number; the caps below govern alone.
    - If boxes that did not start ever use up `r8`, that is a launcher or market fault to fix, not a reason to add ids.
 3. **Outcome classes, and what each counts toward.** Each class is decided from the launcher's receipt and the
@@ -107,6 +108,11 @@ hit one of these gaps.
 
    A later move of a shared pin (CI's kernel pin, a shared staged file) then neither re-pins nor fails a closed lane.
    A lane still OPEN that a shared move would break needs an amendment, not a frozen read.
+7. **Every reducer gate fails closed.** A missing, `None` or empty input reads VOID or UNREAD, never a pass. Each gate
+   has a self-test with its evidence removed. Where the registered text separates the two, say which input reads which.
+   For example, SC2j reads a server with no end `/health` as UNREAD only when the runner recorded a deadline skip for it,
+   and as VOID otherwise (a crash or a lost server). Added 2026-10-23, from P230's bucket-16 control and SC2j's plans and
+   `kv_blocks_waits`.
 
 ## Host facts
 
