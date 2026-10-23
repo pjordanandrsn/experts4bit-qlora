@@ -22,7 +22,7 @@ say "install: gnf4 @$GNF4_SHA + e4b @$E4B_SHA, transformers 5.18.0"
 perl -e 'alarm 2400; exec @ARGV' python -m pip install -q --no-input --prefer-binary \
   "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" \
   "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
-  "transformers==5.18.0" accelerate safetensors "huggingface_hub>=0.23" datasets sentencepiece > logs/pip.log 2>&1 \
+  "transformers==5.18.0" accelerate safetensors "huggingface_hub>=0.23" datasets sentencepiece "brotli>=1.2.0" > logs/pip.log 2>&1 \
   || { tail -5 logs/pip.log; echo "PIP FAIL" | tee -a summary.txt; finish 9; }
 python - <<'PYT' > logs/tripwire.log 2>&1 || { cat logs/tripwire.log; echo "TRIPWIRE FAIL" | tee -a summary.txt; finish 9; }
 import importlib.metadata as md, json, os, torch
@@ -41,10 +41,13 @@ lscpu | grep -E "Model name|^CPU\(s\)" | tee -a forensics.txt
 python ls1/ls1_oracle.py --self-test 2>&1 | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { echo "SELF-TEST FAIL" | tee -a summary.txt; finish 21; }
 
 say "fetch Qwen/Qwen3-30B-A3B@ad44e777 (TC1's pin)"
-snap=$(perl -e 'alarm 3600; exec @ARGV' python -c "
+# th-x-1 (2026-10-23): httpx2's Brotli decoder passes output_buffer_limit, which brotli < 1.2 rejects, so a host whose
+# CDN edge serves a file br-encoded failed the fetch. brotli>=1.2.0 is installed above, and the fetch retries once.
+fetch(){ perl -e 'alarm 3600; exec @ARGV' python -c "
 from huggingface_hub import snapshot_download
 print(snapshot_download('Qwen/Qwen3-30B-A3B', revision='ad44e777bcd18fa416d9da3bd8f70d33ebb85d39',
-                        allow_patterns=['*.json','*.safetensors','tokenizer*','*.txt','*.jinja']))" 2> logs/fetch.log | tail -1)
+                        allow_patterns=['*.json','*.safetensors','tokenizer*','*.txt','*.jinja']))" 2>> logs/fetch.log | tail -1; }
+snap=$(fetch); [ -d "$snap" ] || { echo "fetch retry" | tee -a summary.txt; snap=$(fetch); }
 [ -d "$snap" ] || { tail -3 logs/fetch.log; echo "FETCH FAILED" | tee -a summary.txt; finish 22; }
 echo "fetched $(du -shL "$snap" | cut -f1)" | tee -a summary.txt
 
