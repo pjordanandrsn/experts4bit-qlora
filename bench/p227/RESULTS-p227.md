@@ -16,14 +16,15 @@ plan)? Each family is ruled on its own.
 |---|---|---|---|---|---|
 | **Mixtral-8x7B** | 2 | 0.3565 | **0.3601** | 0.3601 | <= 0.70 |
 | | 4 | 0.4608 | **0.4655** | 0.4655 | <= 0.70: **PASS** |
-| | 8 (never rules) | 0.7277 | 0.7346 | 0.7346 | |
+| | 8 (never rules) | 0.7275 | 0.7351 | 0.7351 | |
 | **Qwen3-30B-A3B** | 2 | 0.7440 | **0.7478** | 0.7478 | > 0.70 |
 | | 4 | 0.9002 | **0.9047** | 0.9047 | > 0.70: **MISS** |
-| | 8 (never rules) | 1.1994 | 1.2121 | 1.2121 | |
+| | 8 (never rules) | 1.1989 | 1.2122 | 1.2122 | |
 
-- **Mixtral PASSES:** the per-row route runs the expert call in 0.36 of K25's time at two tokens and 0.47 at four.
-- **Qwen3 MISSES:** 0.75 and 0.90. Lever B is small on Qwen3 at these token counts, and from eight tokens it is slower
-  than K25.
+- **Mixtral PASSES:** the per-row route runs the expert call in a median 0.36 of K25's time at two tokens and 0.46 at
+  four (upper bounds 0.3601 and 0.4655, which the verdict reads).
+- **Qwen3 MISSES:** a median 0.74 and 0.90 (upper bounds 0.7478 and 0.9047). Lever B is small on Qwen3 at these token
+  counts, and at eight tokens it is slower than K25 (a median 1.20).
 - **B2's trigger fires on both families.** The per-row route over the byte floor at T = 8 is 2.00 on Mixtral (lower bound
   1.97) and 1.59 on Qwen3 (lower bound 1.57), against the 1.25 threshold.
 - **All three predictions HELD** (Mixtral PASS, Qwen3 MISS, B2 fires on Mixtral).
