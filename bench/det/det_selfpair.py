@@ -53,9 +53,11 @@ def decide(r: dict) -> dict:
     """Fails closed: every count must equal its expected value exactly (absence or a shortfall is VOID, never a pass)."""
     void = []
     for k in ("det_gather_calls", "compared_steps", "expected_compared", "backends", "recompute_checked",
-              "expected_recompute", "step_wall_ms", "recompute_split_bad"):
+              "expected_recompute", "step_wall_ms", "recompute_split_bad", "recompute_equal", "mismatches"):
         if r.get(k) is None or (k in ("backends", "step_wall_ms") and not r.get(k)):
             void.append(f"{k} missing")
+    if not isinstance(r.get("mismatches"), list) or not isinstance(r.get("recompute_split_bad"), list):
+        void.append("mismatches / recompute_split_bad are not lists")
     if r.get("raised"):
         void.append(f"strict mode raised: {r['raised']}")
     if not void:
@@ -87,11 +89,14 @@ def self_test() -> int:
     assert decide({**ok, "mismatches": ["x: 1e-5"]})["verdict"] == "NOT_SELF_IDENTICAL"
     n = 0
     for k in ("det_gather_calls", "compared_steps", "expected_compared", "backends", "recompute_checked",
-              "expected_recompute", "step_wall_ms", "recompute_split_bad"):
+              "expected_recompute", "step_wall_ms", "recompute_split_bad", "recompute_equal", "mismatches"):
         bad = dict(ok)
         bad[k] = None
-        assert decide(bad)["verdict"] == "VOID", k                       # each input removed
-        n += 1
+        assert decide(bad)["verdict"] == "VOID", k                       # each input set to None
+        gone = dict(ok)
+        del gone[k]
+        assert decide(gone)["verdict"] == "VOID", k                      # each input deleted (never a KeyError)
+        n += 2
     cases = [{"det_gather_calls": 0}, {"raised": "aten::nll_loss"}, {"recompute_equal": False}, {"backends": {}},
              {"step_wall_ms": []},
              {"compared_steps": 0},                                        # nothing compared (review-desk, fail-open 1)
@@ -100,7 +105,8 @@ def self_test() -> int:
              {"recompute_checked": 0, "recompute_equal": False},
              {"recompute_checked": 20},                                    # a shortfall
              {"recompute_split_bad": [(8, 0)]},                            # every output landed in fwd
-             {"expected_compared": 0, "compared_steps": 0}, {"expected_recompute": 0, "recompute_checked": 0}]
+             {"expected_compared": 0, "compared_steps": 0}, {"expected_recompute": 0, "recompute_checked": 0},
+             {"mismatches": 0}, {"mismatches": ""}, {"recompute_split_bad": 0}]
     for c in cases:
         assert decide({**ok, **c})["verdict"] == "VOID", c
         n += 1
