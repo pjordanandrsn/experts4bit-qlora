@@ -32,7 +32,17 @@ it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
   same axis, the same scale multiply and the same bf16 store.
 - **The contract:** each row of an M-row call is **bitwise** that row's own call through the one-row kernel (K36 at
   M = 1), at the same plan. This is the per-row identity lever B uses (B0's rows at T = 2..8 against T == 1, and B2's
-  multi-row GEMV against M = 1). The M = 1
+  multi-row GEMV against M = 1).
+- **The contract is REQUIRED AND TESTED, never assumed** (review 1).
+  - In the source it holds: K36 never splits K, uses no atomics, runs a 1-D grid over N with a sequential K-loop, and
+    each row has its own accumulator.
+  - But the bits of `tl.sum` are a compiler property (the layout-driven reduction tree, FMA contraction), and the
+    `M_ROWS = 8` instance is a different compiled kernel from `M_ROWS = 1`.
+  - So the bitwise test is a GPU test at every M in 1..8, on sm_86 and on sm_120. The interpreter proves the indexing,
+    not the bits.
+  - At engine build, e4b also runs a bitwise probe on the device at the head's own shape, for every M up to the knob's
+    value (an M-row call against M one-row calls on random rows). A failing (M, arch) is refused by name, never
+    served. The M = 1
   launch is the `M_ROWS = 1` instance of the same kernel, so today's one-row results do not move by a bit (a test holds
   the old kernel's output against it).
 - **The plan:** the one-row plan (`PLANS_I8`, P148's) at every M. A plan per M could read faster at M = 8, but it would
@@ -51,6 +61,12 @@ it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
   today's behaviour, the default. Values 2 to 8 widen the route. Anything else is refused.
   - It needs a grouped-nf4-gemm that exports `GEMV_I8_MAX_ROWS >= value`. Otherwise it is refused at build by name,
     never dropped.
+  - **Unset (or `1`) never probes:** it reads no constant and runs no probe, so an older package is untouched.
+  - **The route gates on BOTH the knob and the probed constant.** Today's `gemv_i8_bw` raises on M > 1, so a
+    multi-row call must never reach a package that lacks the constant.
+  - **Safe to merge before the grouped-nf4-gemm release:** CI pins an older grouped-nf4-gemm, so stub-old-package CPU
+    tests are what CI runs. One stub without the constant must refuse the knob and leave unset untouched; one stub with
+    it must route.
 - **The forward:** `Int8HeadLinear.forward` routes `1 <= rows <= value` bf16 CUDA rows (copied contiguous if they are
   not) to `gemv_i8_bw`. More rows keep `F.linear` on the grid.
 - **The engagement record:** gains the routed row counts. Under CUDA graphs, buckets up to the value capture the
@@ -72,8 +88,15 @@ it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
   the kernel contract.
   - Today the head is batch-variant: one row runs K36, two rows run cuBLAS on the bf16 rounding.
   - So K2 removes the head as a source of bucket-dependent tokens below 9 rows (P149's finding, for this layer).
-  - The served read reports that identity directly: a request's head logits at bucket 1 against bucket 2..8 on the same
-    hidden state.
+  - **The served read REGISTERS that identity, not just reports it** (review 1). Hidden states are saved at the head's
+    input, and each is fed to the head once in a bucket of T rows (T = 2, 4, 8) and once alone (bucket 1). Every row's
+    logits must be bitwise equal; a failure is a contract finding.
+  - The hidden states are saved, not regenerated per bucket, because the attention's split plan already varies with the
+    bucket (P149). That makes the hidden state itself bucket-dependent, and the identity is the head's to keep, not the
+    whole step's.
+- **P153's quality bars transfer unchanged, but do not discriminate here** (review 1). The knob against unset is a far
+  smaller change than int8 against bf16: both are on the same grid. They stay registered as a floor. The head-logit
+  identity above is the test that can fail.
 
 ## 5. Readings (registrations, later)
 
@@ -100,13 +123,16 @@ installed package lacks `GEMV_I8_MAX_ROWS`.
 
 ## 7. Tests (with the code PRs)
 
-- **grouped-nf4-gemm (CPU interpreter and GPU):**
+- **grouped-nf4-gemm (GPU, on sm_86 AND sm_120, which the bits require; the interpreter checks the indexing only):**
   - each row of an M-row call is bitwise its one-row call, at every M in 1..8 and on ragged N and K;
   - the M = 1 output equals the pre-change kernel's (a frozen copy in the test);
   - M = 9 is refused;
   - registers and spills are read on sm_86 and sm_120.
 - **e4b (CPU, with a stub kernel; GPU on a box):**
   - the knob's parsing and refusals: the value, a kernel package without `GEMV_I8_MAX_ROWS`, the head not on its grid;
+  - a stub OLD package (no constant): unset untouched and never probed, the knob refused;
+  - a stub NEW package: routed;
+  - a failing build probe (a stub whose M-row call differs) refused by name for that M;
   - rows 1..value routed and more passed;
   - the engagement counts;
   - under CUDA graphs, bucket-by-bucket capture equals eager.
