@@ -908,8 +908,9 @@ class PagedServeConfig:
         if self.graphs and self.placement == "solver":
             raise ValueError("E4B_PAGED_GRAPHS=1 at E4B_PAGED_PLACEMENT=solver would capture nothing: a tiered MoE layer "
                              "syncs on the host every step (hot_row.nonzero before any branch on the routing), so every "
-                             "bucket's capture raises and runs eagerly. Use E4B_PAGED_GRAPHS=auto or 0 (eager at solver), "
-                             "or the all-vram placement")
+                             "bucket's capture raises and runs eagerly. Use E4B_PAGED_GRAPHS=auto or 0 (eager at solver); "
+                             "if every expert fits in VRAM, no layer is tiered, so use E4B_PAGED_PLACEMENT=all-vram for "
+                             "graphs")
         if self.kv_groups != "auto":
             int(self.kv_groups)
         if self.max_queue < 0:
