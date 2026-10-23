@@ -279,21 +279,25 @@ worst: 3 boxes plus 8 host refusals, about 3 x 6.75 + 8 x 0.10 = **about USD 21.
 4. The readings, `p225-5090-1` to `-3`, through pod-launch from the merge commit, or by direct API rental under the
    project's standing rental rules (host pinned, USD 15 per box, verified teardown).
 
-## Amendment 1 (pre-data): refusal-retry run ids
+## Amendment 1 (pre-data): retry run ids for boxes that did not start
 
-The registration names three run ids, `p225-5090-1` to `-3`, while a HOST_REFUSED box is not box-started and is
-capped separately (4 refusals a trip, 8 in all). Every box needs its own id and receipt: the ledger holds one row per
-run, so an id is never reused. This amendment adds the refusal-retry ids **`p225-5090-r1` to `p225-5090-r8`**, one for
-each refusal the registration allows in all, at the same tier and terms. With `-1` to `-3` they cover the lane's
-maximum of 11 boxes. The ids are labels, not budget: the registered caps (3 box-started, 4 refusals a trip, 8 in all)
-and the strike rules alone govern. The runner's and the driver's id cases accept them; nothing else changes.
-- A box that HOST_REFUSES keeps its own id and receipt, with no strike, and counts toward the refusal cap as
-  registered.
+The registration names three run ids, `p225-5090-1` to `-3`. Every box needs its own id and receipt (the ledger holds
+one row per run, so an id is never reused), but a box that does not start uses an id while counting toward no
+started slot: a HOST_REFUSED box (capped separately, 4 refusals a trip, 8 in all), or a NOT_RUN box (the launcher's
+pre-flight tore the instance down before the runner ran: no `RUN_ID`, no exit file, no marker; no strike, and it
+counts toward neither cap, like a pre-create refusal). `p225-5090-1` was such a NOT_RUN box. So `-1` to `-3` can run
+out before three boxes have started. This amendment adds the retry ids **`p225-5090-r1` to `p225-5090-r8`**, for ANY
+box that follows one that did not start, at the same tier and terms. The runner's and the driver's id cases accept
+them; nothing else changes.
+- **The ids are labels, not budget.** The registered caps (3 box-started, 4 refusals a trip, 8 in all) and the strike
+  rules alone govern. Started-box accounting is by outcome, never by id: no code parses the id's number.
+- A box that HOST_REFUSES or is NOT_RUN keeps its own id and receipt, with no strike. A HOST_REFUSED box counts toward
+  the refusal cap as registered; a NOT_RUN box counts toward no cap.
 - A retry box that passes the screen and starts takes the next unused box-started slot. The 3-box-started cap, the
   strike rules, the stop and the HOST_REFUSED cap are unchanged; nothing is widened.
-- It merges only if a box refuses on the screen before any reading has started. A refusal is not measurement data,
-  so the amendment is still pre-data. A box launched after it merges launches from its merge commit, since the runner's
-  bytes (and their staged pin) change.
+- If NOT_RUN boxes ever use up `r8`, that is a launcher fault to fix, not a reason to add ids.
+- It is pre-data: no box has started. A box launched after it merges launches from its merge commit, since the
+  runner's bytes (and their staged pin) change.
 
 ## What this lane cannot say
 

@@ -319,7 +319,8 @@ def test_amendment_1_adds_exactly_the_eight_refusal_retry_ids():
         assert f"{rid}|" in DRIVE or f"{rid})" in DRIVE
     assert "p225-5090-r9" not in RUN and "p225-5090-r9" not in DRIVE        # one per refusal allowed in all (8)
     assert "p225-5090-4" not in RUN and "p225-5090-4" not in DRIVE          # the 3-box-started cap is not widened
-    assert "**`p225-5090-r1` to `p225-5090-r8`**, one for" in PREREG
+    assert "**`p225-5090-r1` to `p225-5090-r8`**, for ANY" in PREREG
+    assert "**The ids are labels, not budget.**" in PREREG
 
 
 def test_no_shakedown_and_no_fixture_generation():
