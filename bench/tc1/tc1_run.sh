@@ -221,7 +221,7 @@ case " $FAMILIES " in *" qwen3ompab "*)
 esac
 # TC1 amendment 76's CPU-allotment floor (42) is SUPERSEDED by amendment 77: the quota is recorded (arm_facts.threads), never screened.
 # TC1 amendment 77: a SINGLE-THREAD floor in the pre-flight, before any venv or fetch. The probe is the launcher's own cpu_loop_mops loop
-# (adertha host_probe; the same body as bench/p225/p225_probe.py), the median of 5 runs of at least 2 s each. Box tc1-5090-155 read 25.91
+# (its host probe; the same body as bench/p225/p225_probe.py), the median of 5 runs of at least 2 s each. Box tc1-5090-155 read 25.91
 # Mops (its launcher host facts); scaling its CPU-bound phases as 25.91/M, every arm run three times, with 25 % headroom, a 3 h guard
 # covers 15 Mops or more (TC1-PREREG amendment 77). Below the floor the box refuses here (rc 18, a host floor).
 POS77_MIN_MOPS=15
@@ -245,7 +245,7 @@ PYM
 }
 case " $FAMILIES " in *" qwen3pos76co "*)
   MOPS=$(single_thread_mops)
-  echo "SINGLE_THREAD ${MOPS:-unreadable} Mops (median of 5; floor $POS77_MIN_MOPS; amendment 77)" | tee -a summary.txt
+  echo "SINGLE_THREAD ${MOPS:-unreadable} Mops (median of 5; floor $POS77_MIN_MOPS; python $(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null); amendment 77)" | tee -a summary.txt
   python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "${MOPS:-0}" "$POS77_MIN_MOPS" 2>/dev/null \
     || { say "BOX REFUSED: single-thread speed ${MOPS:-unreadable} Mops is under amendment 77's floor ($POS77_MIN_MOPS): the 3 h guard would not cover the four arms with the load gate's re-runs (host floor)"; echo "BOX_REFUSED single_thread_mops=${MOPS:-unreadable} floor=$POS77_MIN_MOPS (amendment 77)" >> summary.txt; finish 18; };;
 esac

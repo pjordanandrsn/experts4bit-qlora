@@ -161,7 +161,8 @@ def test_the_single_thread_floor_refuses_a_slow_box_before_any_venv(tmp_path: Pa
         d.mkdir()
         out = _floor(d, mops, fam)
         assert "PASSED" in out and "FINISH" not in out, (mops, fam, out)
-    assert "SINGLE_THREAD 25.91 Mops (median of 5; floor 15; amendment 77)" in _floor(tmp_path / "25.91-qwen3pos76co", "25.91", "qwen3pos76co")
+    line = _floor(tmp_path / "25.91-qwen3pos76co", "25.91", "qwen3pos76co")
+    assert re.search(r"SINGLE_THREAD 25\.91 Mops \(median of 5; floor 15; python 3\.\d+\.\d+; amendment 77\)", line), line   # the loop is interpreter-sensitive
 
 
 def test_the_single_thread_probe_is_the_launchers_loop_and_reads_a_speed(tmp_path: Path):
