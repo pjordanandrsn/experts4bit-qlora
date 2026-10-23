@@ -11,16 +11,26 @@ RTX 5090 and an RTX 4090), but each cohort's rows came from ONE box. A band that
 planner's error from that machine's. HO3 gives each of those cohorts its second box (Part A). Every held-out row so far
 ran with the experts on the device, so HO3 also measures the first rows with the experts on the host (Part B).
 
+## Amendment 1 (pre-data, 2026-10-23)
+
+Registered at `9c186f01` (#2044); no box has run. This amendment changes the fetch only, after a cross-lane hazard: an
+unpinned `huggingface_hub` decodes a br-encoded download with an API that needs `brotli>=1.2.0`, the image ships an older
+one, and a model fetch then raises `TypeError` on some hosts. The install gains `brotli>=1.2.0`, and a failed checkpoint
+fetch is retried once before the box refuses. No package under test, row, rule, prediction or cap changes. The staged
+`ho3_run.sh` hash moves with it, so the launch commit is this amendment's merge.
+
 ## Stack and launch (bench/common rule 1)
 
-- **Launch commit:** every box's kit and driver launch from this registration's merge commit.
+- **Launch commit:** every box's kit and driver launch from the latest amendment's merge commit (Amendment 1).
 - **Stack under test:** HO2's, exactly, so a cohort's two boxes differ only in the machine. The runner pins these as
   literals, separate from the launch commit:
   - experts4bit-qlora `f6e66fd65b28fe493a89062b02aa91d3970ff995` (0.56.1, HO2's registration merge);
   - grouped-nf4-gemm `a83f6bb3` (0.49.0), Loggetta `9348f8b8` (0.6.2);
   - transformers 5.17.0, bitsandbytes 0.50.2, the image's torch 2.8.0+cu128.
 - The install, the tripwire and the four `loggetta train` rows are HO2's, unchanged (`tests/test_ho3.py` checks them
-  against `bench/ho2/ho2_run.sh`).
+  against `bench/ho2/ho2_run.sh`), with two fetch-only additions that touch no measured code: `brotli>=1.2.0` in the
+  install (an unpinned `huggingface_hub` needs it to decode a br-encoded download, and the image's is older) and one
+  retry of a failed checkpoint fetch.
 
 ## Rows
 
