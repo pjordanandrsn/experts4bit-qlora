@@ -272,6 +272,9 @@ DENSE_GEMV_BW_ENV = "E4B_DENSE_GEMV_BW"
 #: changes multi-row outputs too) and route its single-row decode GEMV through dense_gemv's gemv_i8_bw
 #: (engines/int8_head_bw.py). 0 or 1; unset resolves per family and head shape (INT8_HEAD_BW_DEFAULT_FAMILIES).
 INT8_HEAD_BW_ENV = "E4B_INT8_HEAD_BW"
+#: K2b (bench/dense-small-m/DESIGN-K2.md; engines/int8_head_bw.py): the int8 head's 2..value rows on grouped-nf4-gemm
+#: K37's linear_i8. 1 to 8; unset is 1, today's route (opt-in: no read has licensed a default)
+INT8_HEAD_ROWS_ENV = "E4B_INT8_HEAD_ROWS"
 # Lane P153's default for ``E4B_INT8_HEAD_BW`` (bench/p153/RESULTS-p153.md): an UNSET knob resolves to ``1`` on a
 # model_type here whose output head has a listed [N, K] shape, the shapes grouped-nf4-gemm K36 has a tuned plan for
 # (dense_gemv.PLANS_I8), and to ``0`` everywhere else, with the reason recorded. qwen3_moe at 151936 x 2048 takes it on
@@ -571,6 +574,12 @@ def _int8_head_bw_env(value: str) -> str:
     raise ValueError(f"{INT8_HEAD_BW_ENV}={value!r}: expected '0' or '1' (unset: per family and head shape, lane P153)")
 
 
+def _int8_head_rows_env(value: str) -> int:
+    """``E4B_INT8_HEAD_ROWS`` as the server reads it (:func:`~.engines.int8_head_bw.rows_value`): 1 to 8, unset 1."""
+    from .engines.int8_head_bw import rows_value
+    return rows_value(value)
+
+
 def resolve_int8_head_bw(value: str, model_type, head_shape, *, refusal=None, kernel_error=None) -> tuple:
     """``(mode, source)``: an explicit ``0`` / ``1`` passes through (``explicit``; the swap still refuses an ineligible
     head under ``1``). ``default`` resolves to ``1`` (``default-allowlisted``) only on a ``model_type`` in
@@ -711,6 +720,7 @@ class PagedServeConfig:
     attn_split_cap: str = FUSION_UNSET   # E4B_ATTN_SPLIT_CAP: 0 | 1..32, or "default" when unset (per family, P143)
     dense_gemv_bw: str = "0"             # E4B_DENSE_GEMV_BW: 0 | 1 (P151; grouped-nf4-gemm K35's gemv_bf16_bw)
     int8_head_bw: str = FUSION_UNSET     # E4B_INT8_HEAD_BW: 0 | 1, or "default" when unset (per family and head shape, P153)
+    int8_head_rows: int = 1              # E4B_INT8_HEAD_ROWS: 1 (today) | 2..8, the int8 head's rows on K37 (K2b)
     fusion_modes: dict = field(default_factory=dict)   # FUSION_KNOBS -> auto | 0 | 1 (_fusion_env), or "default" when
                                                        # unset (resolved per family at the build); a knob not named keeps
                                                        # its old reading: fuse_qkv, or the fold's own env var
@@ -770,6 +780,7 @@ class PagedServeConfig:
             attn_split_cap=_attn_split_cap_env(env(ATTN_SPLIT_CAP_ENV, "")),
             dense_gemv_bw=env(DENSE_GEMV_BW_ENV, "0").strip() or "0",
             int8_head_bw=_int8_head_bw_env(env(INT8_HEAD_BW_ENV, "")),
+            int8_head_rows=_int8_head_rows_env(env(INT8_HEAD_ROWS_ENV, "")),
             torch_threads=int(env("E4B_PAGED_TORCH_THREADS", "8")),
             max_tokens_cap=int(env("E4B_PAGED_MAX_TOKENS", "0")),
             max_queue=int(env("E4B_PAGED_MAX_QUEUE", "0")),
@@ -1830,6 +1841,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # (unset: on for qwen3_moe at the head shape P153 read, else off with the reason recorded in info["int8_head_bw"])
     from .engines.int8_head_bw import engagement as int8_head_engagement
     int8_head = apply_int8_head_bw_resolved(model, cfg)
+    # K2b: the int8 head's 2..value rows on K37's linear_i8, before any capture (unset: 1, nothing imported); refused by
+    # name when the head did not resolve to int8 or the package lacks K37
+    from .engines.int8_head_bw import apply_int8_head_rows
+    int8_head_rows = apply_int8_head_rows(model, getattr(cfg, "int8_head_rows", 1))
 
     # proof of execution, the lanes' census (serve_stack.build_served_model) + their refusal rule
     try:
@@ -1892,7 +1907,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # during the build's captures and warm-ups: the engagement record a served read checks
     info["dense_gemv_bw"] = {**dense_gemv, "engagement": dense_gemv_engagement(model)}
     # P153: the head's record and, per row count, whether it routed or passed during the build's captures and warm-ups
-    info["int8_head_bw"] = {**int8_head, "engagement": int8_head_engagement(model)}
+    info["int8_head_bw"] = {**int8_head, "rows": int8_head_rows, "engagement": int8_head_engagement(model)}
     # E4B_K25_LUT as resolved at startup; which decode each K25 call took is prefill_routes()["seen"]["moe_k25_lut"]
     info["k25_lut"] = k25_lut
     # E4B_K25_PLAN as resolved at startup; which plan each K25 call took is prefill_routes()["seen"]["moe_k25_plan"]
