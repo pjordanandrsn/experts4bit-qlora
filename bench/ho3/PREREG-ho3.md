@@ -44,8 +44,8 @@ its pinned revision, the planner's own plan (no `--fix`, no `--observations`). B
   declared at $0.25/h, a 3 h 10 min guard (11,400 s). On a 16 GB card the planner keeps ERNIE's experts on the host.
   Each box is pinned at create to a machine no earlier A4000 box used. The driver also refuses an A4000 box on the
   machine of any earlier A4000 box that ran the runner, and refuses when such a box's machine is unreadable. That check
-  sees only run directories under the same runs root, so every HO3 box launches through the lane's launcher with its
-  default runs root, never another launcher.
+  sees only run directories under the same runs root, so every HO3 box launches through pod-launch with the lane's
+  default runs root, never a direct launcher, and the guard sees every earlier box.
 - **Cohorts:** ERNIE × A4000 (host offload) and LFM2 × A4000 (device), each two rows per box and two boxes. Each family's
   result is reported on its own, so a fault in one never reads as the other, and Part B never touches Part A's verdict.
 - **Prediction (before any measurement):** Loggetta 0.6.2's plan on a 16 GB RTX A4000 profile (16,376 MiB):
