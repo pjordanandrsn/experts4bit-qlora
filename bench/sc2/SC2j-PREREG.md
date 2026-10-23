@@ -186,7 +186,7 @@ the reserved blocks and the waits per ladder. The pool's derivation as G3 record
 ## Shakedown, proof and budget (bench/common rules 2-5)
 
 **$0 shakedown.**
-- The self-tests of the reducer (`sc2j_reduce.py`, 31 cases), the contract arm (`sc2j_contract.py`, 10) and the long
+- The self-tests of the reducer (`sc2j_reduce.py`, 33 cases), the contract arm (`sc2j_contract.py`, 10) and the long
   prompt pool (`sc2j_prompts.py`).
 - The box's checks on fixtures (`tests/test_sc2j_box.py`): the POOL check executed on every departure, the tripwire,
   the lane's constants held equal across files, Guard Fit's static form, the cap and ids, and the wiring.

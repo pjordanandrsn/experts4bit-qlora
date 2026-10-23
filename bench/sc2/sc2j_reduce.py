@@ -149,8 +149,8 @@ def engagement_bad(t, end, prompts, q3_prompts=None) -> list:
         if g.get("status") != "on" or g.get("T") != T or prompts is None or g.get("replays") != prompts:
             why.append(f"{t}: prefill_graph status {g.get('status')!r}, T {g.get('T')!r}, replays {g.get('replays')!r} "
                        f"(want on, {T}, {prompts})")
-        if not isinstance(er, dict) or "later_chunk" not in er:
-            why.append(f"{t}: prefill_graph eager_reasons {er!r} (want a record with later_chunk)")
+        if not isinstance(er, dict) or "later_chunk" not in er or "short_chunk" not in er:
+            why.append(f"{t}: prefill_graph eager_reasons {er!r} (want a record with later_chunk and short_chunk)")
         else:
             other = {k: v for k, v in er.items() if k != "later_chunk" and v != 0}
             if other:
@@ -161,8 +161,8 @@ def engagement_bad(t, end, prompts, q3_prompts=None) -> list:
                 why.append(f"{t}: later_chunk {er.get('later_chunk')!r} != {LATER_PER_Q3} x {q3_prompts} Q3 prompts")
     k = end.get("kv_bookkeeping")
     n = prompts
-    want = {"requested": True, "bulk": True, "flush_layers": 0, "flush_bulk": n, "ready_layers": 0, "ready_bulk": 0,
-            "ready_at_flush": n}
+    want = {"requested": True, "bulk": True, "flush_layers": 0, "flush_bulk": n, "flush_bulk_fallback": 0,
+            "ready_layers": 0, "ready_bulk": 0, "ready_at_flush": n}
     if not isinstance(k, dict):
         why.append(f"{t}: no kv_bookkeeping block ({k!r})")
     else:
@@ -549,6 +549,8 @@ def self_test() -> int:
     case("eager_reasons removed", "VOID", end_mut=lambda h: h["prefill_graph"].pop("eager_reasons"))
     case("eager_reasons emptied", "VOID", end_mut=lambda h: h["prefill_graph"].update(eager_reasons={}))
     case("eager_chunks removed", "VOID", end_mut=lambda h: h["prefill_graph"].pop("eager_chunks"))
+    case("short_chunk removed", "VOID", end_mut=lambda h: h["prefill_graph"]["eager_reasons"].pop("short_chunk"))
+    case("flush_bulk_fallback removed", "VOID", end_mut=lambda h: h["kv_bookkeeping"].pop("flush_bulk_fallback"))
     case("a short_chunk eager prefill", "VOID",
          end_mut=lambda h: h["prefill_graph"].update(eager_chunks=13, eager_reasons={"later_chunk": 12, "short_chunk": 1}))
     case("later_chunk not 3 x the Q3 prompts", "VOID",
