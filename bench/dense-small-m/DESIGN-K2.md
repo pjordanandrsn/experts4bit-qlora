@@ -124,6 +124,9 @@ identity is measured, not assumed.
    - The proposed bar: the multi-row call at M = 2 and 4 within 1.25x of K36's one-row time (the bytes are the same)
      and at most 0.70x of cuBLAS's.
    - The contract tests (bitwise per row, the old M = 1 unchanged, registers) are its premise.
+   - **The fallback rule, fixed before data:** if K2's multi-row call is slower than `linear_i8` by more than the
+     registered bar, K2 is NO_GO. Moving the head onto `linear_i8` is then a separate decision with its own plan check
+     at the head's shape, never a silent switch.
 2. **The served read**, on its own registration: W2 and W4 ABBA on the default Qwen3 server, the knob against unset,
    the quality bar per bucket as a floor, and the head-logit identity across buckets registered (section 4).
 
