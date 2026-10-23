@@ -14,7 +14,7 @@ for v in P228_RUN_ID P228_DEADLINE_EPOCH E4B_SHA; do [ -n "${!v:-}" ] || { say "
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
 INSTALL_TO_GATE_S=600   # the install, the self-tests and the premise: P222's, kept
-NEED_BENCH=900          # the selection and the reading: about 330 s by the PREREG arithmetic, x2, rounded up
+NEED_BENCH=1200         # the selection (up to 64 candidates a cell) and the reading: about 480 s (PREREG), x2, rounded up
 RESERVE=600             # can_run's margin after the bench: the reduce, the fetch-back and the teardown
 MIN_POWER_W=575   # P149's power floor (P222's, kept): a capped board refuses before the install, rc 17
 GPU_CLASS=5090; MIN_RAM_GB=16; MIN_DISK_GB=20

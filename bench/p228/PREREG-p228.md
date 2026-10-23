@@ -120,14 +120,14 @@ called through `router_linear`. The bench therefore times e4b's real pinned path
   - rent-watch is armed at the create (`--until`), and teardown is verified.
 - **Worst case:** at most $1.05/h, **guard 1.0 h**, at most 10 GB at <= $0.04/GB: 1.0 x $1.05 + 10 x $0.04 = **$1.45**.
 - **The fit, with at least 25 % headroom.** Arithmetic, every term conservative:
-  - **The selection:** 6 cells x up to 8 candidates, each three graph calls of up to 384 ctypes launches (about 0.3 s),
-    plus 40 replays of up to 4 ms (0.16 s). About 25 s.
+  - **The selection:** 6 cells x up to 64 candidates (the heuristic request's bound; review, Amendment 1), each three
+    graph calls of up to 384 ctypes launches (about 0.3 s), plus 40 replays of up to 4 ms (0.16 s). About 177 s.
   - **The reading:** 6 cells x 60 reps x 80 replays of up to 4 ms = 115 s, plus the captures.
   - **Everything else:** the copy rate, the stores, the engagement.
-  - **Total:** about 330 s; x2 rounded up: `NEED_BENCH` = **900 s**. `INSTALL_TO_GATE_S` = 600 s, `RESERVE` = 600 s.
-  - **The runner's check:** `FIT` = 600 + 900 + 600 = 2100 s, and `FIT_NEED` = 2100 x 1.25 = 2625 s. Short of that is
+  - **Total:** about 480 s; x2 rounded up: `NEED_BENCH` = **1200 s**. `INSTALL_TO_GATE_S` = 600 s, `RESERVE` = 600 s.
+  - **The runner's check:** `FIT` = 600 + 1200 + 600 = 2400 s, and `FIT_NEED` = 2400 x 1.25 = 3000 s. Short of that is
     rc 41.
-  - **The static fit:** (boot 300 s + 2100 s) x 1.25 = 3000 s <= 3600 s (1.0 h).
+  - **The static fit:** (boot 300 s + 2400 s) x 1.25 = 3375 s <= 3600 s (1.0 h).
 - **The premise, on the 5090 itself:** exactly **37 passed**, else rc 25. That is K1's GPU suite against the loaded
   cuBLASLt (`tests/test_dense_lt_pin_gpu.py`, 10) and its CPU suite (`tests/test_dense_lt_pin.py`, 27), staged copies.
   An RTX A4000 run of the same suite (sm_86) was a kit check, not the premise.
@@ -150,3 +150,20 @@ called through `router_linear`. The bench therefore times e4b's real pinned path
 - **No step time:** two dense projections alone.
 - **Scope:** one RTX 5090 at 575 W, one cuBLASLt version (the key), random bf16 weights and inputs.
 - **No quality:** P differs from D within the tolerance, and the tokens are a served read's to judge.
+
+## Amendment 1 (2026-10-23, before any reading): the shakedown and the real fixture
+
+- **`p228-shake-1`:** an RTX A4000 (sm_86), explore tier, about $0.01, teardown verified. It ran this kit at the
+  registration's head end to end:
+  - the tripwire, including `LT_PINS == {}` in the commit and `router_linear` as the epilogue's call;
+  - the premise: **37 passed** on the card;
+  - both blocks, with every candidate on the card's own list checked, timed and selected by the rule;
+  - the reducer: `o_proj=SHAKEDOWN router=SHAKEDOWN`.
+  - No times are quoted, and the sm_86 selections seed nothing for the 5090.
+- **The fit (review 1):** the selection's bound is the heuristic request's 64 candidates per cell, not 8. `NEED_BENCH`
+  moves 900 -> 1200 s (above). The guard stays 1.0 h and the worst case $1.45.
+- **The real fixture:** its bench record is pinned at `bench/p228/fixtures/p228-shake-1/bench_p228.json` (sha256
+  `06adab43...`; no host identifiers).
+  - `tests/test_p228.py` reduces it to SHAKEDOWN with every structural check passed.
+  - Five departures from it each VOID `o_proj` alone.
+  - A mutant without the "block B timed the pin block A's rule names" check accepts one of them.

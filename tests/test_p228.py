@@ -76,11 +76,11 @@ def test_the_runner_installs_e4b_alone_checks_k1_and_runs_the_premise_on_the_car
 def test_the_guard_fit():
     get = lambda v: int(re.search(rf"^{v}=(\d+)", RUN, re.M).group(1))  # noqa: E731
     install, need, reserve = get("INSTALL_TO_GATE_S"), get("NEED_BENCH"), get("RESERVE")
-    assert (install, need, reserve) == (600, 900, 600)
+    assert (install, need, reserve) == (600, 1200, 600)
     fit = install + need + reserve
-    assert fit == 2100 and int(fit * 1.25) == 2625 and (300 + fit) * 1.25 == 3000 <= 3600
-    for s in ("`NEED_BENCH` = **900 s**", "`FIT` = 600 + 900 + 600 = 2100 s", "2100 x 1.25 = 2625 s",
-              "(boot 300 s + 2100 s) x 1.25 = 3000 s <= 3600 s (1.0 h)"):
+    assert fit == 2400 and int(fit * 1.25) == 3000 and (300 + fit) * 1.25 == 3375 <= 3600
+    for s in ("`NEED_BENCH` = **1200 s**", "`FIT` = 600 + 1200 + 600 = 2400 s", "2400 x 1.25 = 3000 s",
+              "(boot 300 s + 2400 s) x 1.25 = 3375 s <= 3600 s (1.0 h)", "up to 64 candidates"):
         assert s in PREREG, s
     assert abs(1.0 * 1.05 + 10 * 0.04 - 1.45) < 1e-9
 
@@ -134,3 +134,58 @@ def test_the_self_test_kills_each_reducer_mutant(tmp_path, old, new):
     (tmp_path / "p228_reduce.py").write_bytes(src.replace(old, new).encode("utf-8"))
     r = subprocess.run([sys.executable, str(tmp_path / "p228_reduce.py"), "--self-test"], capture_output=True, text=True)
     assert r.returncode != 0 and "FAILED" in r.stdout, (old, r.stdout)
+
+
+# ---- the real record first: p228-shake-1's bench record (an RTX A4000, explore tier), sha256-pinned
+FIXTURE = LANE / "fixtures" / "p228-shake-1" / "bench_p228.json"
+FIXTURE_SHA256 = "06adab439ed025df7edbe06b3bba85cd135409ece94874076cc7981b621d25dc"
+
+
+def _real():
+    raw = FIXTURE.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == FIXTURE_SHA256, "the pinned shakedown record changed"
+    return json.loads(raw)
+
+
+def test_the_real_shakedown_record_reduces_to_shakedown_with_every_check_passed():
+    rec = _real()
+    assert rec["shakedown"] is True and isinstance(rec["key"]["cublaslt"], int)
+    v = R.verdict(rec)
+    assert v["verdict"] == "o_proj=SHAKEDOWN router=SHAKEDOWN", v
+    for site in R.SITE_ORDER:
+        L = rec["sites"][site]["copies"]
+        for M in R.MS:
+            sel = rec["sites"][site]["select"][str(M)]
+            assert sel["chosen"] == R.select(sel["candidates"])[0] is not None
+            assert rec["sites"][site]["cells"][str(M)]["engaged"]["P"] == {f"{site}|M{M}|eager|pinned": L}
+
+
+DEPARTURES = [
+    (lambda r: r["sites"]["o_proj"]["select"]["2"].update(chosen=dict(r["sites"]["o_proj"]["select"]["2"]["chosen"],
+                                                                      split_k=99)), "a pin the rule did not name"),
+    (lambda r: r["sites"]["o_proj"]["cells"]["4"]["engaged"].update(D={"o_proj|M4|eager|pinned": 1}), "D pinned"),
+    (lambda r: r["sites"]["o_proj"]["cells"]["8"]["engaged"].update(P={}), "P never pinned"),
+    (lambda r: r["sites"]["o_proj"]["cells"]["2"]["reps"][1].update(d2_identical=False), "D2 moved a bit"),
+    (lambda r: r["sites"]["o_proj"]["cells"]["4"]["reps"][2].update(order=["T1", "P", "D2", "D"]), "the order"),
+]
+
+
+@pytest.mark.parametrize("depart, what", DEPARTURES, ids=[d[1] for d in DEPARTURES])
+def test_each_departure_from_the_real_record_voids_that_site_only(depart, what):
+    rec = _real()
+    depart(rec)
+    sv = R.verdict(rec)["sites"]
+    assert sv["o_proj"]["verdict"] == "VOID" and sv["router"]["verdict"] == "SHAKEDOWN", (what, sv["o_proj"]["why"])
+
+
+def test_a_mutant_without_the_chosen_pin_check_accepts_the_real_records_departure(tmp_path):
+    """The rule that block B timed the pin block A's rule names: without it, a hand-edited pin passes."""
+    src = (LANE / "p228_reduce.py").read_text(encoding="utf-8")
+    old = 'if sel.get("chosen") != cfg:'
+    assert src.count(old) == 1
+    (tmp_path / "p228_reduce.py").write_bytes(src.replace(old, "if False:").encode("utf-8"))
+    mut = _load("p228_reduce_no_chosen_check", tmp_path / "p228_reduce.py")
+    rec = _real()
+    DEPARTURES[0][0](rec)
+    assert mut.verdict(rec)["sites"]["o_proj"]["verdict"] == "SHAKEDOWN"
+    assert R.verdict(rec)["sites"]["o_proj"]["verdict"] == "VOID"
