@@ -38,7 +38,9 @@ def test_a_dump_of_this_tree_resolves_every_lever_on_cpu(tmp_path):
     assert not [k for k, v in lev.items() if isinstance(v, str) and v.startswith(("RAISES", "ABSENT"))]
     # the caller's variables are cleared before anything resolves: the two set above leave no trace
     assert lev["config.max_seqs_requested"] == "auto"
-    assert "today" not in json.dumps(lev["route.resolve_k25_plan"])
+    # the plan itself may be "today" by default (an older grouped-nf4-gemm without K39's decode); what must hold is that
+    # the caller's E4B_K25_PLAN never reached the resolver: its raw value is recorded as absent
+    assert lev["route.resolve_k25_plan"]["env"] is None, lev["route.resolve_k25_plan"]
 
 
 def test_a_moved_default_refuses_by_name_and_allow_passes_it(monkeypatch):
