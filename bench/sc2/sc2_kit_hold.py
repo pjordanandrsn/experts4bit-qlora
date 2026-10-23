@@ -30,6 +30,12 @@ abbreviated or disagreeing is VOID. The record (``verdict_stack.json``) is a req
 
   check --hold <rev> [--base <rev>] [--at <rev>] [--e4b-sha SHA] [--out FILE]     exit 0 OK, 1 REFUSE
   verdict-stack --run <fetched sc1 dir> [--out FILE]                                exit 0 OK, 1 VOID
+  package-hold --base <rev> [--at <rev>] [--out FILE]                               exit 0 OK, 1 REFUSE
+
+PACKAGE-HOLD (SC2j Amendment 2): a launch checkout later than a lane's registered launch commit, taken only for rule 8's
+fetch fix. It refuses unless the package under test is unchanged: the ``experts4bit_qlora/`` tree and the install
+metadata (``pyproject.toml``, ``MANIFEST.in``) are identical, the staged kit (``staged.sha256``) and ``make_pin.sh`` are byte-identical,
+and ``sc1_drive.sh`` differs at most by rule 8's one declared token.
   --self-test
 """
 import argparse
@@ -66,6 +72,27 @@ Q_STRIP = (('|Q)', ')'), (' || [ "$BOX" = Q ]', ''), (', "Q")', ')'), (' Q) PROV
            (' Q) box_q;;', ''), ('# P, Q: v0.50.0', '# P: v0.50.0'), ('O, P or Q (', 'O or P ('), (', SC2i, SC2j)', ', SC2i)'))
 Q_REPLACED = 9                     # the box lists e4b#2041 extends with Q (sc1_run.sh at its head, c6e72f10)
 STAGING = re.compile(r"STAGE=|\bsrc=|sha_of")
+NO_LINKS = " --no-links"                     # bench/common rule 8: the one declared sc1_drive.sh delta
+PULL_BOX_RSYNC = '  rsync -az --timeout=120 -e "ssh -o BatchMode=yes -o ConnectTimeout=20 $E4B_RENT_SSH_OPTS -p $PORT"'
+
+
+def driver_delta_ok(at_text: str, hold_text: str) -> bool:
+    """The launch's sc1_drive.sh against the hold's: identical, or identical but for exactly one ' --no-links' on
+    pull_box's rsync line (matched by that line's own prefix, inside `pull_box()`: the nearest function above it), nowhere else."""
+    if at_text == hold_text:
+        return True
+    if at_text.count(NO_LINKS) != 1 or NO_LINKS in hold_text:
+        return False
+    a, h = at_text.split("\n"), hold_text.split("\n")
+    if len(a) != len(h):
+        return False
+    diff = [i for i, (x, y) in enumerate(zip(a, h)) if x != y]
+    if len(diff) != 1 or diff[0] == 0:
+        return False
+    i = diff[0]
+    fn = next((x for x in reversed(h[:i]) if re.match(r"[A-Za-z_][A-Za-z0-9_]*\(\) *\{", x)), "")
+    return (NO_LINKS in a[i] and a[i].replace(NO_LINKS, "", 1) == h[i] and h[i].startswith(PULL_BOX_RSYNC)
+            and fn.startswith("pull_box() {"))
 RUNS = re.compile(r"\bbash\b|\bsource\b|python|\$PY\b|\bexec\b")
 
 
@@ -115,6 +142,11 @@ class Git:
 
     def sha(self, rev):
         r = subprocess.run(["git", "-C", self.repo, "rev-parse", "--verify", f"{rev}^{{commit}}"], capture_output=True,
+                           text=True)
+        return r.stdout.strip() if r.returncode == 0 else None
+
+    def tree(self, rev, path):
+        r = subprocess.run(["git", "-C", self.repo, "rev-parse", "--verify", f"{rev}:{path}"], capture_output=True,
                            text=True)
         return r.stdout.strip() if r.returncode == 0 else None
 
@@ -287,6 +319,69 @@ def verdict_stack(run) -> dict:
             "installed": [{"version": v, "commit": c} for v, c in installed], "knobs_e4b": sorted(set(knobs))}
 
 
+PACKAGE_TREES = ("experts4bit_qlora",)
+PACKAGE_FILES = ("pyproject.toml", "MANIFEST.in", PIN, "bench/sc1/make_pin.sh")
+
+
+def package_hold(git, base, at) -> dict:
+    """The launch checkout ``at`` against a lane's registered launch commit ``base``: the package, its install metadata
+    and the staged kit identical; the driver differing at most by rule 8's token."""
+    rec, why = {"base": base, "at": at}, []
+    for k in ("base", "at"):
+        full = git.sha(rec[k]) if rec[k] else None
+        if not full:
+            return {**rec, "verdict": "REFUSE", "why": [f"{k} {rec[k]!r} is not a readable commit"]}
+        rec[k] = full
+    for t in PACKAGE_TREES:
+        a, b = git.tree(rec["at"], t), git.tree(rec["base"], t)
+        if a is None or a != b:
+            why.append(f"{t}/ differs from the registered launch commit (or is unreadable)")
+    for f in PACKAGE_FILES:
+        a, b = git.show(rec["at"], f), git.show(rec["base"], f)
+        if a is None or a != b:
+            why.append(f"{f} differs from the registered launch commit (or is unreadable)")
+    a, b = git.show(rec["at"], "bench/sc1/sc1_drive.sh"), git.show(rec["base"], "bench/sc1/sc1_drive.sh")
+    if a is None or b is None or not driver_delta_ok(a.decode(), b.decode()):
+        why.append("bench/sc1/sc1_drive.sh differs beyond rule 8's one declared delta (or is unreadable)")
+    rec["verdict"], rec["why"] = ("OK" if not why else "REFUSE"), why
+    return rec
+
+
+def _package_self_test() -> list:
+    import hashlib as _h
+    drv = 'pull_box() { local -a low=()\n' + PULL_BOX_RSYNC + ' x:/w/ ./\n}\n'
+    base = {"experts4bit_qlora/a.py": "x = 1\n", "pyproject.toml": "[project]\n", "MANIFEST.in": "i\n", PIN: "p\n",
+            "bench/sc1/make_pin.sh": "m\n", "bench/sc1/sc1_drive.sh": drv, "bench/other.md": "o\n"}
+
+    class FT(Fake):
+        def tree(self, rev, path):
+            t = self.trees.get(rev)
+            if t is None:
+                return None
+            items = sorted((k, v) for k, v in t.items() if k.startswith(path + "/"))
+            return _h.sha1(repr(items).encode()).hexdigest() if items else None
+
+    def run(**edits):
+        at = dict(base)
+        for k, v in edits.items():
+            k = {"pkg": "experts4bit_qlora/a.py", "pyproject": "pyproject.toml", "pin": PIN,
+                 "make_pin": "bench/sc1/make_pin.sh", "drive": "bench/sc1/sc1_drive.sh", "doc": "bench/other.md"}[k]
+            at[k] = v(at[k]) if callable(v) else v
+        return package_hold(FT({"B": base, "L": at}), "B", "L")["verdict"]
+    nl = drv.replace("rsync -az --timeout", "rsync -az --no-links --timeout")
+    return [
+        ("package: identical", run(), "OK"),
+        ("package: only rule 8's driver token", run(drive=nl), "OK"),
+        ("package: a doc elsewhere changed", run(doc="o2\n"), "OK"),
+        ("package: the package source changed", run(pkg="x = 2\n"), "REFUSE"),
+        ("package: pyproject changed", run(pyproject="[project]\nv=1\n"), "REFUSE"),
+        ("package: the staged pin changed", run(pin="q\n"), "REFUSE"),
+        ("package: make_pin changed", run(make_pin="n\n"), "REFUSE"),
+        ("package: the driver changed beyond rule 8", run(drive=nl.replace("x:/w/", "y:/w/")), "REFUSE"),
+        ("package: base unreadable", package_hold(FT({"L": base}), "B", "L")["verdict"], "REFUSE"),
+    ]
+
+
 def _stack_self_test() -> list:
     import tempfile
     from pathlib import Path
@@ -356,7 +451,9 @@ def _fixtures():
             lines[4], FETCH[2], FETCH[3], lines[5], lines[6], Q_LINES[0], lines[7], Q_LINES[1],
             lines[8].replace("P) box_p;;", "P) box_p;; Q) box_q;;"), ""]
     common = {"bench/sc2/sc2f_box_n.sh": "prove_n(){ :; }\n", "bench/sc2/sc2i_box_p.sh": "prove_p(){ :; }\n",
-              "bench/sc1/sc1_drive.sh": 'STAGE="$STAGE $REPO/bench/sc2/sc2f_box_n.sh"\n',
+              "bench/sc1/sc1_drive.sh": ('STAGE="$STAGE $REPO/bench/sc2/sc2f_box_n.sh"\n'
+                                         'pull_box() { local -a low=()\n  # a comment between\n' + PULL_BOX_RSYNC
+                                         + ' x:/w/ ./\n}\nother() {\n  :\n}\n'),
               "bench/sc1/make_pin.sh": 'echo "$(sha_of x)  sc2f_box_n.sh"\n'}
     b = _pin({**common, "bench/sc1/sc1_run.sh": base_run})
     newf = {"bench/sc2/" + n: f"# {n}\n" for n in NEW if n.startswith("sc2j")}
@@ -422,7 +519,7 @@ def self_test() -> int:
             ("E4B_SHA is the kit's commit", run(stack=HOLD), "REFUSE"),
             ("E4B_SHA abbreviated", run(stack=STACK[:8]), "REFUSE"),
         ]
-        cases += _stack_self_test()
+        cases += _stack_self_test() + _package_self_test()
     finally:
         Q_REPLACED = saved
     fails = 0
@@ -435,7 +532,7 @@ def self_test() -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("cmd", nargs="?", choices=("check", "verdict-stack"))
+    ap.add_argument("cmd", nargs="?", choices=("check", "verdict-stack", "package-hold"))
     ap.add_argument("--run")
     ap.add_argument("--hold", default=HOLD)
     ap.add_argument("--base", default=BASE)
@@ -447,6 +544,15 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.cmd == "package-hold":
+        if not a.base or a.base == BASE:
+            ap.error("package-hold needs --base <the lane's registered launch commit>")
+        v = package_hold(Git(a.repo), a.base, a.at or "HEAD")
+        if a.out:
+            with open(a.out, "w") as f:
+                json.dump(v, f, indent=1)
+        print("SC2_PACKAGE_HOLD " + json.dumps(v), flush=True)
+        return 0 if v["verdict"] == "OK" else 1
     if a.cmd == "verdict-stack":
         if not a.run:
             ap.error("verdict-stack needs --run")

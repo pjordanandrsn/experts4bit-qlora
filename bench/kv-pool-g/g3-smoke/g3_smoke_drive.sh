@@ -38,7 +38,7 @@ while :; do
   sleep "$POLL"
 done
 rm -rf "$RUN_DIR/g3s" && mkdir -p "$RUN_DIR/g3s" || { say "fetch failed: local dir"; exit 22; }
-rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude venv --exclude work_granite --exclude .cache --exclude __pycache__ "root@$HOST:$W/" "$RUN_DIR/g3s/" || {
+rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude venv --exclude work_granite --exclude .cache --exclude __pycache__ "root@$HOST:$W/" "$RUN_DIR/g3s/" || {
   say "rsync fetch failed -- falling back to tar over the same ssh options"
   $SSH "tar -C $W --exclude=./venv --exclude=./work_granite --exclude=./.cache -cf - ." | tar -C "$RUN_DIR/g3s" -xf - || { say "fetch failed: rsync and tar"; exit 22; }; }
 say "fetched $(ls "$RUN_DIR/g3s" | wc -l | tr -d ' ') entries"

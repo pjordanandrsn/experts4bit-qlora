@@ -61,3 +61,33 @@ def test_verdict_stack_on_a_real_run(tmp_path):
         (tmp_path / "versions.txt").write_text(vv)
         (tmp_path / "summary.txt").write_text(ss)
         assert kh.verdict_stack(tmp_path)["verdict"] == want
+
+
+def test_rule_8_driver_delta_on_the_held_driver():
+    """bench/common rule 8 on 7b8f1f69's own sc1_drive.sh: exactly one ' --no-links' on pull_box's rsync line passes;
+    anything more, or elsewhere, refuses."""
+    held = subprocess.run(["git", "-C", str(REPO), "show", f"{kh.HOLD}:bench/sc1/sc1_drive.sh"], capture_output=True,
+                          text=True, check=True).stdout
+    assert held.count(kh.PULL_BOX_RSYNC) == 1 and kh.NO_LINKS not in held
+    declared = held.replace("  rsync -az --timeout", "  rsync -az --no-links --timeout", 1)
+    assert kh.driver_delta_ok(held, held) and kh.driver_delta_ok(declared, held)
+    assert not kh.driver_delta_ok(declared.replace("ConnectTimeout=20", "ConnectTimeout=21", 1), held)
+    assert not kh.driver_delta_ok(declared.replace(kh.NO_LINKS, kh.NO_LINKS * 2, 1), held)
+    elsewhere = held.replace('SC2="$REPO/bench/sc2";', 'SC2="$REPO/bench/sc2"; # --no-links', 1)
+    assert elsewhere != held and not kh.driver_delta_ok(elsewhere, held)
+
+
+def test_the_live_driver_fetches_without_links():
+    """bench/common rule 8: pull_box's fetch never imports links."""
+    drive = (REPO / "bench" / "sc1" / "sc1_drive.sh").read_text()
+    line = next(x for x in drive.splitlines() if x.startswith("  rsync -az"))
+    assert " --no-links " in line
+
+
+def test_package_hold_on_registered_commits():
+    """SC2j Amendment 2's package hold reads OK on a commit against itself, and refuses across a staged-kit change
+    (1a25b209 -> 7b8f1f69 changed sc1_run.sh, and staged.sha256 with it)."""
+    g = kh.Git(str(REPO))
+    assert kh.package_hold(g, kh.HOLD, kh.HOLD)["verdict"] == "OK"
+    r = kh.package_hold(g, kh.BASE, kh.HOLD)
+    assert r["verdict"] == "REFUSE" and any("staged.sha256" in w for w in r["why"])

@@ -157,7 +157,7 @@ lane_dead() { lane_two_missing "$@"; }   # live_now live_prev: two DEFINITE zero
 # during a timed arm does not perturb it.
 pull_box() { local -a low=(); [ "${2:-}" = low ] && low=(--rsync-path="nice -n 19 ionice -c3 rsync" --exclude 'census/')   # mid-run pulls only; SC1b's traces come in the final fetch
   # ${low[@]+...}: the controller runs /bin/bash 3.2 under set -u (the mini), where "${low[@]}" of an empty array is unbound
-  rsync -az --timeout=120 -e "ssh -o BatchMode=yes -o ConnectTimeout=20 $E4B_RENT_SSH_OPTS -p $PORT" ${low[@]+"${low[@]}"} \
+  rsync -az --no-links --timeout=120 -e "ssh -o BatchMode=yes -o ConnectTimeout=20 $E4B_RENT_SSH_OPTS -p $PORT" ${low[@]+"${low[@]}"} \
     --exclude 'artifact*/payloads/' --include 'work_*/' --include 'work_*/bake.json' --exclude 'work_*/*' \
     --exclude 'venv*' --exclude '.cache' --exclude 'llama.cpp/' --exclude 'gguf/' --exclude 'sglang-cache/' \
     --exclude 'sc1g_ref_full/' --exclude 'sc1g/ref_full_*.f16' \
