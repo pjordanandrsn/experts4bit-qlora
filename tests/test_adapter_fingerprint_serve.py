@@ -118,23 +118,100 @@ def test_a_matching_manifest_verifies_both_scopes(served):
     assert bm["experts"].startswith("verified (qfp-v1 ") and "base verified" in bm["attention"]
 
 
-def test_a_double_quantized_adapter_is_refusal_12_naming_the_override_and_the_dq_case(served):
-    from experts4bit_qlora import adapter_dir as AD
+def _dq(W):
+    """A dq-trained base as training builds it: the stacks in ExpertsLoRA, the absmax compressed (training's default)."""
     from experts4bit_qlora.absmax_dq import compress_expert_absmax_
-    W, arena, model = served
     dq_model = _model(W, wrap=True)
     assert compress_expert_absmax_(dq_model) == L                 # training's default absmax form (F1)
-    trained = _fps(dq_model)                                       # what a dq-trained /2 manifest records
+    return dq_model
+
+
+def _without_source(fps):
+    """A manifest written before the fp32 source record (#2014's form)."""
+    return dict(fps, experts={k: v for k, v in fps["experts"].items() if k != "fp32_source"})
+
+
+def test_a_dq_trained_adapter_verifies_by_its_fp32_source_without_an_override(served):
+    from experts4bit_qlora import adapter_dir as AD
+    W, arena, model = served
+    trained = _fps(_dq(W))                                         # what a dq-trained /2 manifest records
+    src = trained["experts"]["fp32_source"]
+    assert trained["experts"]["sha256"] != src["sha256"]           # the trained form is the compressed one
+    refusals, report = AD.fingerprint_check(_ad(trained, form="double-quantized"), model, arena)
+    assert refusals == [] and report["experts"]["status"] == "verified (source)"
+    assert report["experts"]["fp32_source"] == src["sha256"] == report["experts"]["served"]
+    assert report["experts"]["trained"] == trained["experts"]["sha256"] and report["attention"]["status"] == "verified"
+    bm = AD.base_match(_ad(trained, form="double-quantized"), fingerprints=report)["experts"]
+    # the BASE is proven, never "served == trained"
+    assert bm.startswith("verified (source, qfp-v1 ") and bm.endswith(
+        "trained on double-quantized absmax, served on fp32 absmax")
+
+
+def test_the_fp32_source_is_the_full_fp32_absmax_hashed_before_compression(served):
+    """Condition (c): the recorded hash covers each stack's FULL fp32 absmax, taken before compression, keyed per
+    stack: it equals the same base's fingerprint while fp32, stack by stack, and the arena's (condition (b) on CPU:
+    training's quantize and the bake's reach the same fp32 absmax)."""
+    from experts4bit_qlora import adapter_schema as S
+    W, arena, model = served
+    src = S.quant_fingerprint(_dq(W), "experts")["fp32_source"]
+    fp32 = S.quant_fingerprint(model, "experts")
+    served_fp = S.quant_fingerprint(model, "experts", source="arena", arena=arena)
+    assert src["sha256"] == fp32["sha256"] == served_fp["sha256"]
+    assert src["absmax_by_stack"] == fp32["absmax_by_stack"] == served_fp["absmax_by_stack"]
+    assert sorted(src["absmax_by_stack"]) == sorted(f"model.layers.{li}.mlp.experts.{w}" for li in range(L)
+                                                    for w in ("gate_up", "down"))
+    stack = model.model.layers[0].mlp.experts
+    full = S.absmax_sha256(stack.gate_up_absmax)                    # the whole buffer's bytes
+    assert src["absmax_by_stack"]["model.layers.0.mlp.experts.gate_up"] == full
+    assert "fp32_source" not in fp32                               # an fp32 base records no second fingerprint
+
+
+def test_a_dq_adapter_without_the_source_record_is_refusal_12_naming_the_override_and_the_dq_case(served):
+    from experts4bit_qlora import adapter_dir as AD
+    W, arena, model = served
+    trained = _without_source(_fps(_dq(W)))                        # a dq-trained /2 manifest from before the record
     refusals, report = AD.fingerprint_check(_ad(trained, form="double-quantized"), model, arena)
     assert [c for c, _ in refusals] == [12] and report["experts"]["status"] == "mismatch"
     msg = refusals[0][1]
     assert "E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts" in msg            # the exact override, named
-    assert "dq-vs-fp32 absmax case" in msg and "not a different model" in msg  # the upgrade case, explained
+    assert "dq-vs-fp32 absmax case" in msg and "records the fp32 source fingerprint" in msg
     assert report["attention"]["status"] == "verified"
     ok, rep = AD.fingerprint_check(_ad(trained, form="double-quantized"), model, arena,
                                    accept_base_mismatch=frozenset({"experts"}))
     assert ok == [] and rep["experts"]["status"] == "mismatch (served under E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts)"
     assert AD.base_match(_ad(trained), fingerprints=rep)["experts"].startswith("mismatch (served under")
+
+
+def test_a_source_fingerprint_the_arena_does_not_match_is_refusal_12_naming_the_stack(served):
+    from experts4bit_qlora import adapter_dir as AD
+    W, arena, model = served
+    trained = _fps(_dq(W))
+    src = trained["experts"]["fp32_source"]
+    key = "model.layers.1.mlp.experts.down"
+    trained["experts"]["fp32_source"] = {"sha256": "2" * 64,
+                                         "absmax_by_stack": dict(src["absmax_by_stack"], **{key: "3" * 64})}
+    refusals, report = AD.fingerprint_check(_ad(trained, form="double-quantized"), model, arena)
+    assert [c for c, _ in refusals] == [12] and report["experts"]["status"] == "mismatch"
+    msg = refusals[0][1]
+    assert "matches neither" in msg and f"the first stack whose absmax differs: {key}" in msg
+    assert "dq-vs-fp32" not in msg                                 # a recorded source rules the dq case out
+    ok, rep = AD.fingerprint_check(_ad(trained, form="double-quantized"), model, arena,
+                                   accept_base_mismatch=frozenset({"experts"}))
+    assert ok == [] and rep["experts"]["status"].startswith("mismatch (served under")
+
+
+def test_a_malformed_fp32_source_is_refused_by_the_verifier(served):
+    from experts4bit_qlora import adapter_dir as AD
+    W, _arena, _model_ = served
+    fp = _fps(_dq(W))["experts"]
+    AD._verify_fp32_source(fp, "experts", ValueError)              # well formed
+    src = fp["fp32_source"]
+    for bad, scope in ((dict(src, sha256="x"), "experts"),
+                       (dict(src, absmax_by_stack=dict(list(src["absmax_by_stack"].items())[1:])), "experts"),
+                       (dict(src, absmax_by_stack={k: "nope" for k in src["absmax_by_stack"]}), "experts"),
+                       ("ab" * 32, "experts"), (src, "attention")):
+        with pytest.raises(ValueError, match="fp32_source"):
+            AD._verify_fp32_source(dict(fp, fp32_source=bad), scope, ValueError)
 
 
 def test_an_fp32_manifest_mismatch_does_not_claim_the_dq_case(served):
@@ -213,9 +290,11 @@ def test_the_hashed_bytes_are_the_bytes_the_server_reads(served):
 MUTANTS = [
     ('        if scope == "attention":\n            refusals.append((11,',
      '        if False:\n            refusals.append((11,'),                                            # refusal 11
-    ('        elif "experts" in accept_base_mismatch:\n', '        elif True:\n'),                    # 12 always waived
+    ('        if "experts" in accept_base_mismatch:\n', '        if True:\n'),                        # 12 always waived
     ('        match = got["sha256"] == want.get("sha256")', '        match = True or got["sha256"] == want.get("sha256")'),
-    ('                   if _dq_trained(ad) else', '                   if False else'),            # the dq explanation
+    ('            elif _dq_trained(ad):\n', '            elif False:\n'),                         # the dq explanation
+    ('        if src is not None and src.get("sha256") == got["sha256"] and', '        if src is not None and'),
+    ('        if src is not None and src.get("sha256") == got["sha256"] and', '        if False and'),
 ]
 
 
@@ -233,7 +312,9 @@ def test_each_mutant_is_caught(served, tmp_path, monkeypatch, old, new):
     monkeypatch.setattr(pkg, "adapter_dir", mod, raising=False)
     monkeypatch.setitem(sys.modules, "experts4bit_qlora.adapter_dir", mod)
     caught = 0
-    for test in (test_a_double_quantized_adapter_is_refusal_12_naming_the_override_and_the_dq_case,
+    for test in (test_a_dq_adapter_without_the_source_record_is_refusal_12_naming_the_override_and_the_dq_case,
+                 test_a_dq_trained_adapter_verifies_by_its_fp32_source_without_an_override,
+                 test_a_source_fingerprint_the_arena_does_not_match_is_refusal_12_naming_the_stack,
                  test_an_attention_mismatch_is_refusal_11_with_no_override,
                  test_an_fp32_manifest_mismatch_does_not_claim_the_dq_case):
         try:
@@ -241,3 +322,27 @@ def test_each_mutant_is_caught(served, tmp_path, monkeypatch, old, new):
         except AssertionError:
             caught += 1
     assert caught >= 1, f"mutant survived: {new!r}"
+
+
+SOURCE_MUTANTS = [
+    ("        source[which] = absmax_sha256(absmax)\n",
+     "        source[which] = absmax_sha256(absmax.reshape(-1)[:64])\n"),                 # a subset, not the full absmax
+    ("        source[which] = absmax_sha256(absmax)\n", ""),                              # never recorded
+]
+
+
+@pytest.mark.parametrize("old,new", SOURCE_MUTANTS)
+def test_each_training_side_mutant_is_caught(served, tmp_path, monkeypatch, old, new):
+    """Condition (c) on the writer: the hash must be the FULL fp32 absmax, recorded before compression."""
+    src = (ROOT / "experts4bit_qlora" / "absmax_dq.py").read_text(encoding="utf-8")
+    assert src.count(old) == 1, old
+    path = tmp_path / "absmax_dq_mutant.py"
+    path.write_bytes(src.replace(old, new).encode("utf-8"))
+    spec = importlib.util.spec_from_file_location("experts4bit_qlora.absmax_dq", path,
+                                                  submodule_search_locations=None)
+    mod = importlib.util.module_from_spec(spec)
+    mod.__package__ = "experts4bit_qlora"
+    monkeypatch.setitem(sys.modules, "experts4bit_qlora.absmax_dq", mod)
+    spec.loader.exec_module(mod)
+    with pytest.raises((AssertionError, KeyError, NameError)):
+        test_the_fp32_source_is_the_full_fp32_absmax_hashed_before_compression(served)
