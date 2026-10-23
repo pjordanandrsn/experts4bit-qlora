@@ -177,13 +177,34 @@ def _var(text, name):
     return m.group(1)
 
 
+#: P224 is CLOSED (e4b#1998): its kit is frozen at the merge of Amendment 6, the last change to its staged pins. A closed
+#: lane asserts its own literal pins against that commit, never the live tree, so a later change to a shared file it
+#: staged (tests/test_adapter_schema.py, e4b#2014) does not re-pin or fail it.
+P224_FROZEN = "8140f8b004943f6f00dac7795b01deded666a6e6"
+
+
 def test_staged_pins_match_their_sources():
     import hashlib
-    lines = [ln.split() for ln in (LANE / "staged-p224.sha256").read_text(encoding="ascii").splitlines() if ln.strip()]
+    import os
+    import subprocess
+
+    def at_frozen(rel):
+        r = subprocess.run(["git", "-C", str(REPO), "show", f"{P224_FROZEN}:{rel}"], capture_output=True)
+        if r.returncode != 0:
+            # CI checks out full history (fetch-depth: 0), so a miss there is a failure, never a skip
+            if os.environ.get("CI") == "true":
+                pytest.fail(f"P224's frozen commit {P224_FROZEN[:12]} is not readable: {r.stderr.decode()[:200]}")
+            pytest.skip("P224's frozen commit is not in this checkout's history (a shallow clone)")
+        return r.stdout
+
+    staged = (LANE / "staged-p224.sha256").read_text(encoding="ascii")
+    assert staged.encode("ascii") == at_frozen("bench/p224/staged-p224.sha256"), "P224's pins changed after it closed"
+    lines = [ln.split() for ln in staged.splitlines() if ln.strip()]
     assert sorted(n for _, n in lines) == sorted(SOURCES)
     for want, name in lines:
-        got = hashlib.sha256((SOURCES[name] / name).read_bytes()).hexdigest()
-        assert got == want, f"{name}: staged {want}, source {got}"
+        rel = (SOURCES[name] / name).relative_to(REPO).as_posix()
+        got = hashlib.sha256(at_frozen(rel)).hexdigest()
+        assert got == want, f"{name}: staged {want}, frozen source {got}"
 
 
 def test_runner_pins_are_the_registered_ones():

@@ -1,0 +1,10 @@
+# p226-5090-1: files kept only in the private receipt store, byte-exact. The launcher's teardown proof and instance
+# record name the provider's instance; capture.pt is the routing picks the bench timed (capture.json records its sha256
+# as picks.file_sha256); three box logs carry download progress bars' carriage returns. Receipts are never rewritten,
+# so they are not committed here. sha256, then the file's path within this run's receipt.
+f30ab72c911b48679d01b071ed6f3ef8c610375d45349ce81e44951db812fc4f  teardown-proof.json
+8697a0754a417d16ff52a3da1f85b1f020e9f612372585fd43392958a8407476  instance.json
+452e9115edcb8625a82fec813535968de1c2dd42275a937553c96ee6922fe72c  p226/run/capture.pt
+4eaf8d389da65044a838181f028fd6793e7ba25a15db8c8456402d4c4cd34cef  p226/logs/capture.log
+3d246504fd7e7b374055fe7df3d5183341d5550d1c694ecea02f093d7df40e6a  p226/logs/fetch.log
+8a6cb61bd6949cf033bd89e797b29b13d79cb207b5f5092c55c9edf3dac025d7  p226/logs/prompts.log

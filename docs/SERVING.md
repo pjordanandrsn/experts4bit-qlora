@@ -275,7 +275,7 @@ Its cost is a few `perf_counter` calls and up to six CUDA events a step.
 
 Engine knobs: `E4B_PAGED_MAX_SEQS` (`auto`, below; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
 prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`
-(512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_GRAPHS` (`auto`, the default:
+(512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_PREFILL_EVERY` (1; while a decode row is live, prefill on at most one step in N) + `E4B_PAGED_LOADED_CHUNK_TOKENS` (0 = off; while a decode row is live, caps the chunk and the step's budget), `E4B_PAGED_GRAPHS` (`auto`, the default:
 bucketed CUDA-graph decode on scratch slots on a CUDA device of sm_89 or newer at `all-vram`; `0` eager, `1` forced) +
 `E4B_PAGED_BUCKETS` (`1,2,4,8,16`, trimmed to `max_seqs`; `auto` follows `max_seqs`, below), `E4B_PAGED_TRACE=<path>`
 (one JSON line per finished request: arrival, admitted_at, first_token_at, finished_at, prompt_len,
@@ -385,6 +385,34 @@ RTX 5090 at a 400 W limit, each the smaller of two ABBA pairs, `e4b.serve.p134.g
 the smaller of two ABBA pairs, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`). The shapes are licensed, not the
 families. Every other shape, and every other GPU below 160 SMs, keeps the previous route.
 
+**The same GEMV at 2 to 8 requests (`E4B_NF4_SMALLM_BW=1`; opt-in, not yet read).** Steps of 2 to 8 tokens normally
+leave the GEMV for K25, the grouped small-M GEMM. With this knob, on the NF4 store with every expert resident, those
+steps take one group per (token, slot) row, so each row runs through the bandwidth GEMV exactly as it would at one
+request, bitwise. Rows that share an expert each read its weights. No speed is claimed: a registered read decides
+whether it is faster than K25, and the tokens differ from K25's (within the kernels' tolerance contract), so a default
+would need a quality bar. Startup refuses it, naming the reason, beside `E4B_NF4_GROUPED_SMALLM=1`, with an int4 or
+MXFP4 expert store, on a placement that is not all-resident, and at any expert shape where the bandwidth GEMV does not
+engage on the device. Reported in `nf4_smallm_bw`; which token counts it routed is
+`prefill_routes.seen.moe_nf4_smallm_bw`.
+
+**Pinned dense GEMMs at 2 to 8 rows (`E4B_DENSE_LT_PIN=o_proj[,router]`; opt-in, not yet read).** At 2 to 8 rows,
+cuBLAS's own kernel choice for some dense projections is slower than at one row. This knob routes the named projections'
+2..8-row calls through one cuBLASLt algorithm pinned per (cuBLASLt version, compute capability, SM count, shape, rows),
+called on the library torch already loaded. The pin table is filled by a registered selection; until then the knob is
+refused for want of a pin. Calls without a pin for their row count pass to `F.linear` and are counted; one row and more
+than 8 rows are untouched.
+- **Refused by name, never degraded silently:**
+  - a captured decode bucket without a pin;
+  - another cuBLASLt version or device;
+  - a configuration cuBLASLt rejects;
+  - a non-bf16 operand at a routed call;
+  - a second stream;
+  - a router not on the router epilogue's forward.
+- **The output changes within tolerance** (split-K reorders the sum), so the tokens can differ at 2 to 8 requests and a
+  default would need a quality bar.
+- **Reported** in `dense_lt_pin`, with calls counted by site, row count and prefill or decode. Design:
+  [`bench/dense-small-m/DESIGN.md`](../bench/dense-small-m/DESIGN.md).
+
 **Qwen3 decode defaults by family (lanes P143, P153, P158).** Three settings resolve per family at startup, before any
 weight loads. Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
 old behaviour until a read of its own. Other `qwen3_moe` checkpoints, Qwen3-235B-A22B among them, take the split cap
@@ -406,6 +434,16 @@ decode in 0.50.0. On an older package each resolves off, recorded.
   off. Unset, a head the swap refuses (tied, biased, int4, not bf16) or a kernel package without the int8 GEMV resolves
   it off, recorded, never a crash; an explicit `1` refuses them at startup. `0` restores the bf16 head. Reported in
   `levers.int8_head_bw`.
+  - **Opt-in: the int8 head at 2 to 8 rows (`E4B_INT8_HEAD_ROWS`, `1` to `8`; unset is `1`).** Without it, a call of
+    2 to 8 rows runs `F.linear` on the bf16 rounding of the grid, which reads twice the int8 bytes. With it, those
+    calls run grouped-nf4-gemm's int8 multi-row kernel (`dense_i8.linear_i8`, K37, 0.49.0 or later) over the same
+    codes and scales; one row keeps the int8 GEMV, and more rows keep `F.linear`. **Outputs change** at 2 to 8
+    requests, within bf16's output rounding of the same grid. No served read has run yet, so this is not a speed or
+    quality claim ([`bench/dense-small-m/DESIGN-K2.md`](../bench/dense-small-m/DESIGN-K2.md)). It is refused at startup
+    when the head is not on its int8 grid or the kernel package lacks K37, and together with speculative decode
+    (`E4B_PAGED_SPEC`), whose gate and draft were read with the head on `F.linear`, until a read covers the pair.
+    Unset imports nothing. Reported in `levers.int8_head_bw.rows`; which kernel each row count took is
+    `levers.int8_head_bw.engagement`.
 - **K25's codebook decode (`E4B_K25_LUT`, `prmt` on `qwen3_moe`).** The batched-decode expert GEMM (K25) decodes NF4
   codes through byte-permute table lookups (grouped-nf4-gemm K39, from 0.50.0) instead of the select tree. It is
   bit-identical to the tree. Sixteen requests decode 1.0925× as fast (the smallest of four ABBA pairs), and one is
@@ -420,7 +458,11 @@ decode in 0.50.0. On an older package each resolves off, recorded.
   (`e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20`, [`bench/p161/RESULTS-p161.md`](../bench/p161/RESULTS-p161.md):
   one RTX 5090, Qwen3-30B-A3B). Unset, it resolves to `c1` only where K25's decode resolved to `prmt`, and to `today`
   otherwise (an older kernel package, ROCm, `E4B_K25_LUT=tree`), recorded, never a crash. `today` opts out; an explicit
-  `c1` under any other decode is refused. Reported in `levers.k25_plan`; which plan each K25 call took is
+  `c1` under any other decode is refused. `m1` is opt-in on every family (no default takes it): lane P222's selected
+  pair ([`bench/p222/RESULTS-p222.md`](../bench/p222/RESULTS-p222.md)), gate_up as `c1`'s and down at
+  `{block_n 32, kc 256, warps 4, stages 2}`, with `c1`'s refusals (only under `prmt`; refused with K25 off or absent).
+  It has a microbench read only (at Mixtral-8x7B's W16 shapes, one RTX 5090); no served speed is claimed for it.
+  Reported in `levers.k25_plan`; which plan each K25 call took (`today`, `c1` or `m1`) is
   `prefill_routes.seen.moe_k25_plan`.
 
 **Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves

@@ -1,0 +1,173 @@
+{
+ "arm": "s64a",
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16,
+  32,
+  64
+ ],
+ "busy_gap_share": 0.0042,
+ "dec_pieces": {
+  "1": 2474
+ },
+ "decode_steps": {
+  "1": {
+   "device_ms_p50": 1.8095,
+   "host_seg_ms_p50": {
+    "dec_emit": 0.0024,
+    "dec_issue": 0.0155,
+    "dec_mirror": 0.0023,
+    "dec_prep": 0.0357,
+    "dec_ready": 0.0041,
+    "dec_sync": 1.8094,
+    "dispatch": 0.0043,
+    "ops": 0.0063,
+    "plan": 0.0021,
+    "retire": 0.0005
+   },
+   "n": 1885,
+   "rows_p50": 1,
+   "step_ms_p50": 1.8841
+  },
+  "16": {
+   "device_ms_p50": 8.2448,
+   "host_seg_ms_p50": {
+    "dec_emit": 0.0055,
+    "dec_issue": 0.0186,
+    "dec_mirror": 0.0114,
+    "dec_prep": 0.042,
+    "dec_ready": 0.0055,
+    "dec_sync": 8.2255,
+    "dispatch": 0.0151,
+    "ops": 0.0072,
+    "plan": 0.0031,
+    "retire": 0.0009
+   },
+   "n": 204,
+   "rows_p50": 13.0,
+   "step_ms_p50": 8.4001
+  },
+  "2": {
+   "device_ms_p50": 7.6639,
+   "host_seg_ms_p50": {
+    "dec_emit": 0.0027,
+    "dec_issue": 0.0159,
+    "dec_mirror": 0.0031,
+    "dec_prep": 0.0364,
+    "dec_ready": 0.0043,
+    "dec_sync": 7.6602,
+    "dispatch": 0.0053,
+    "ops": 0.0067,
+    "plan": 0.0024,
+    "retire": 0.0006
+   },
+   "n": 36,
+   "rows_p50": 2.0,
+   "step_ms_p50": 7.7401
+  },
+  "32": {
+   "device_ms_p50": 9.4116,
+   "host_seg_ms_p50": {
+    "dec_emit": 0.009,
+    "dec_issue": 0.0691,
+    "dec_mirror": 0.0223,
+    "dec_prep": 0.1671,
+    "dec_ready": 0.0077,
+    "dec_sync": 9.34,
+    "dispatch": 0.0303,
+    "ops": 0.0087,
+    "plan": 0.0048,
+    "retire": 0.0016
+   },
+   "n": 38,
+   "rows_p50": 27.0,
+   "step_ms_p50": 9.7068
+  },
+  "4": {
+   "device_ms_p50": 7.1154,
+   "host_seg_ms_p50": {
+    "dec_emit": 0.0037,
+    "dec_issue": 0.0181,
+    "dec_mirror": 0.005,
+    "dec_prep": 0.0397,
+    "dec_ready": 0.0051,
+    "dec_sync": 7.1079,
+    "dispatch": 0.0076,
+    "ops": 0.0074,
+    "plan": 0.0026,
+    "retire": 0.0007
+   },
+   "n": 17,
+   "rows_p50": 4,
+   "step_ms_p50": 7.2152
+  },
+  "64": {
+   "device_ms_p50": 11.1454,
+   "host_seg_ms_p50": {
+    "dec_emit": 0.0131,
+    "dec_issue": 0.0658,
+    "dec_mirror": 0.0408,
+    "dec_prep": 0.2296,
+    "dec_ready": 0.0087,
+    "dec_sync": 11.0921,
+    "dispatch": 0.0527,
+    "ops": 0.0085,
+    "plan": 0.0058,
+    "retire": 0.002
+   },
+   "n": 132,
+   "rows_p50": 50.0,
+   "step_ms_p50": 11.6556
+  },
+  "8": {
+   "device_ms_p50": 7.5046,
+   "host_seg_ms_p50": {
+    "dec_emit": 0.0042,
+    "dec_issue": 0.0173,
+    "dec_mirror": 0.0073,
+    "dec_prep": 0.0387,
+    "dec_ready": 0.0049,
+    "dec_sync": 7.4874,
+    "dispatch": 0.0103,
+    "ops": 0.0071,
+    "plan": 0.0027,
+    "retire": 0.0008
+   },
+   "n": 84,
+   "rows_p50": 7.0,
+   "step_ms_p50": 7.6222
+  }
+ },
+ "ok": true,
+ "prefill_steps": {
+  "direct_stall_ms_p50": 41.7088,
+  "flush_done_ms_p50": 41.8254,
+  "forward_device_ms_p50": 41.5327,
+  "n": 90,
+  "riding_decode_rows_p50": 18.5,
+  "seg_ms_p50": {
+   "dec_emit": 0.0084,
+   "dec_issue": 0.0272,
+   "dec_mirror": 0.0215,
+   "dec_prep": 0.0622,
+   "dec_ready": 0.008,
+   "dec_sync": 9.0999,
+   "dispatch": 0.0278,
+   "ops": 0.0092,
+   "pf_emit": 0.0109,
+   "pf_flush": 0.9784,
+   "pf_forward": 0.0973,
+   "pf_prep": 0.0076,
+   "pf_sync": 40.7707,
+   "plan": 0.0071,
+   "retire": 0.0022
+  },
+  "step_ms_p50": 51.0059
+ },
+ "prompts": 90,
+ "steps": 2486,
+ "why": []
+}

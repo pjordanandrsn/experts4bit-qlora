@@ -204,10 +204,14 @@ tensors up, in one of three sources:
 - **`offload_homes`, training with expert offload:** each stack is read where its bytes live: resident when staged, and
   its host home when evicted (the same substitution `state_dict` makes). So offload and resident training fingerprint
   alike. A stack with no readable host copy is refused by name, never hashed as empty.
-- **`arena`, serving:** the paged server's expert stacks are meta-backed, and the bytes live in the arena. So the reader's
-  expert fingerprint is computed from the arena's packed bytes and fp32 absmax, through the same function. The source
-  is defined here and raises `NotImplementedError` naming PA-1. PA-1 implements it, and its test compares the
-  arena-side fingerprint with the training-side one on one adapter.
+- **`arena`, serving (PA-1):** the paged server's expert stacks are meta-backed, and the bytes live in the arena. So
+  the reader's expert fingerprint is computed from the arena's packed bytes and absmax, through the same function:
+  `quant_fingerprint(model, "experts", source="arena", arena=<path>)` reads each layer's rows at the offsets the arena
+  index records (`rows`, and each segment's `seg_off` / `length`), the k-th expert stack being arena layer k. Its tests
+  (`tests/test_adapter_fingerprint_serve.py`) bake a tiny MoE with grouped-nf4-gemm's own `bake_nf4` and require the
+  arena-side fingerprint to EQUAL the resident one, and, where `nvme_residency`'s reader runs (Linux), require the
+  hashed bytes to equal the bytes that reader hands the server. Training and the bake quantize the same way
+  (`quantize_4bit(w, blocksize=64, nf4)` per expert on `cat([gate, up])`), so an fp32-absmax-trained adapter verifies.
 
 **What the reader does with it today.** e4b's paged server verifies a `/2` directory:
 - the v1 checks;
@@ -216,7 +220,43 @@ tensors up, in one of three sources:
 - a known scheme, a sha256, a positive module count and a measured duration per fingerprint;
 - the applied attention scale equal to alpha/r.
 
-It does not yet compare the fingerprints against the served base. That is PA-1 (attention, merging into a verified
-`Q_train(W)`) and the expert path. Until then:
-- the expert base of a `/2` adapter stays unverified, refusal 9, with the same named opt-in as v1;
-- an `attn_4bit` adapter stays refused, refusal 8.
+After the load, and BEFORE the attention LoRA is merged (the merge rewrites those weights) or any lever touches a
+module, it compares each fingerprint the manifest records with the served base's (`adapter_dir.fingerprint_check`):
+- **attention:** `quant_fingerprint(model, "attention")` on the served model. A mismatch is **refusal 11**, with no
+  override: the LoRA would be merged into weights it was not trained on.
+- **experts:** the arena source above. A match reads `base_match.experts = verified (qfp-v1 ...)`. A mismatch is
+  **refusal 12**. `E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts` serves it anyway, reported in `/health` as
+  `mismatch (served under ...)`; `E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE` never covers a MEASURED mismatch.
+- **the double-quantized training form, and where it is reachable:** training double-quantizes the expert absmax
+  only under `expert_kernel=grouped_nf4`, which requires `train_experts=true` (the recipe refuses it otherwise). So a
+  dq-trained adapter always carries expert LoRA, and the paged server refuses it with **refusal 1** before this check
+  runs. An attention-only adapter, the kind this server serves, keeps the fp32 absmax by construction and verifies by
+  its plain fingerprint. The dq branch below (refusal 12 as the dq-vs-fp32 case, F1, with the override) is reachable
+  for a `/2` manifest whose expert LoRA is all zero, and serves the expert-serving path to come. Its tests guard that
+  path.
+- **the fp32 source fingerprint:** a dq-trained adapter's expert fingerprint never equals the fp32 arena's (F1).
+  So `compress_expert_absmax_` hashes each stack's FULL fp32 absmax BEFORE compressing it, and the experts fingerprint
+  carries `fp32_source`: `{"sha256", "absmax_by_stack"}`, the same qfp-v1 digest with each compressed stack's fp32
+  absmax (every other line unchanged), and that absmax's hash per `<stack>.<which>`. It is the fingerprint the base
+  had in fp32, so the server compares it with the arena's `sha256` exactly:
+  - **equal:** `base_match.experts = verified (source, qfp-v1 ...); trained on double-quantized absmax, served on fp32
+    absmax`, served WITHOUT an override. It proves the served BASE is the trained one. It does NOT prove served ==
+    trained: the served absmax is fp32 and the trained one was double-quantized, a declared recipe difference whose
+    quality effect is UNREAD (D0's cells repack a merged expert delta; they do not read an adapter served on the other
+    absmax form, so they do not bound it). That read is a lane of its own.
+  - **different:** refusal 12, naming the first stack whose absmax differs; the arena was not baked from this base.
+  - **absent** (a `/2` manifest written before the record): refusal 12 as the dq-vs-fp32 case; retraining with a
+    release that records it, or at `E4B_ABSMAX_DQ=0`, verifies.
+
+  Why a recorded hash and not a re-compression on the server: the compression's offset is `flat.mean()` on the
+  training device, and torch's CUDA reduction splits by the device's SM count, so its fp32 rounding can differ between
+  GPU models; the offset is added to every dequantized value. An absmax is a max over 64 weights: exact and
+  order-free, so the fp32 absmax's hash should not depend on the device that computes it. What is TESTED is the CPU:
+  training's quantizer and the bake reach the same bytes on a real `bake_nf4` arena (CI). A CUDA-trained adapter
+  against a CPU-baked arena is read by the GPU smoke before this ships; until that record exists, the cross-device
+  claim is the argument above, not a reading.
+- `/health` carries `adapter.fingerprints`: per scope, the trained and served sha256, the module counts, the seconds and
+  the status.
+
+A v1 manifest records no fingerprint: its expert base stays unverified, refusal 9, with the same named opt-in as before.
+An `attn_4bit` adapter stays refused, refusal 8.

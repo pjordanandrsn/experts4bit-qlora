@@ -40,6 +40,9 @@ dense section is added.
 - ``experts``: the full absmax of every stack and a fixed byte sample. That is a RECIPE check: it catches a
   quant_type, blocksize or absmax-form mismatch anywhere (an fp32 and a double-quantized absmax differ in every
   block). It is NOT a content proof of the packed bytes outside the sample.
+- ``experts.fp32_source`` (present when ``compress_expert_absmax_`` compressed a stack): the same digest with each
+  compressed stack's fp32 absmax, hashed in full before compression. It proves the BASE matches an fp32 arena; it never
+  proves the served absmax equals the trained (double-quantized) one.
 """
 from __future__ import annotations
 
@@ -103,22 +106,31 @@ def linear_line(name: str, *, kind: str, shape, blocksize: int, data, absmax=Non
     return "\t".join((name, kind, _shape(shape), str(int(blocksize)), _sha(d), _sha(a), _sha(c))), len(d) + len(a) + len(c)
 
 
+def absmax_sha256(absmax) -> str:
+    """The qfp-v1 hash of an fp32 absmax's bytes: the absmax field of :func:`expert_line`. ``compress_expert_absmax_``
+    records it for the fp32 absmax it compresses, before compressing (the fp32 source fingerprint)."""
+    return _sha(_bytes(absmax.float()))
+
+
 def expert_line(name: str, which: str, *, bits: int, quant_type: str, num_experts: int, shape, blocksize: int,
-                packed, absmax, code=None) -> tuple:
+                packed, absmax=None, code=None, absmax_sha=None) -> tuple:
     """THE canonical qfp-v1 line for one projection of an expert stack: every writer and every reader (PA-1's arena
     reader included) MUST compute its lines through this function, from tensors found anywhere (a resident stack, an
     offload host home, an arena's rows), never re-derive the format. ``packed`` is the stack's packed storage (its
     BYTES are sampled, whatever the dtype), ``absmax`` the fp32 absmax ``[E, N, K/blocksize]`` as dequantize computes
-    it. Returns ``(line, bytes_hashed)``."""
+    it, or, instead, ``absmax_sha`` its :func:`absmax_sha256` (already taken, or recorded before compression). Returns
+    ``(line, bytes_hashed)``."""
     import torch
 
+    if (absmax is None) == (absmax_sha is None):
+        raise ValueError("expert_line takes the absmax or its absmax_sha256, exactly one")
     flat = packed.detach().contiguous().reshape(-1).view(torch.uint8)       # bytes, whatever the storage dtype
     n = EXPERT_SUBSET_BYTES
     sample = _bytes(flat) if flat.numel() <= 2 * n else _bytes(flat[:n]) + _bytes(flat[-n:])
-    a = _bytes(absmax.float())
+    a = _bytes(absmax.float()) if absmax is not None else b""
     c = _bytes(code.float()) if code is not None else b""
     line = "\t".join((f"{name}.{which}", f"experts{int(bits)}:{quant_type}:{which}", _shape((num_experts, *shape)),
-                      str(int(blocksize)), _sha(sample), _sha(a), _sha(c)))
+                      str(int(blocksize)), _sha(sample), _sha(a) if absmax is not None else absmax_sha, _sha(c)))
     return line, len(sample) + len(a) + len(c)
 
 
@@ -149,10 +161,29 @@ def _resolved(name, mod, handle, attr):
     return h
 
 
+def _expert_record(name, which, mod, *, shape, packed, absmax, code, source_sha=None) -> dict:
+    """One projection's record: ``line`` (through :func:`expert_line`), ``bytes``, ``key`` (``<stack>.<which>``),
+    ``absmax`` (the line's absmax hash) and, for a stack ``compress_expert_absmax_`` compressed, ``source`` (the
+    hash of the fp32 absmax it recorded before compressing; None if it recorded none) and ``source_line`` (the line
+    with that absmax). A stack whose absmax is fp32 has no ``source``: its own line already reads the fp32 absmax."""
+    from .absmax_dq import is_absmax_compressed
+
+    common = dict(bits=int(mod.bits), quant_type=mod.quant_type, num_experts=mod.num_experts, shape=shape,
+                  blocksize=int(mod.blocksize), packed=packed, code=code)
+    a_sha = absmax_sha256(absmax)
+    line, n = expert_line(name, which, absmax_sha=a_sha, **common)
+    rec = {"line": line, "bytes": n + absmax.numel() * 4, "key": f"{name}.{which}", "absmax": a_sha}
+    if is_absmax_compressed(mod):
+        rec["source"] = source_sha
+        rec["source_line"] = expert_line(name, which, absmax_sha=source_sha, **common)[0] if source_sha else None
+    return rec
+
+
 def _expert_records(name, mod, handle=None, source="offload_homes") -> list:
-    """``[(line, bytes_hashed)]`` for one expert stack's gate_up and down (qfp-v1's fixed subset of the packed bytes).
-    ``handle`` is the stack's expert-offload handle, when one is installed (its homes hold the evicted tensors)."""
-    from .absmax_dq import expert_absmax_fp32
+    """One :func:`_expert_record` for each of one expert stack's gate_up and down (qfp-v1's fixed subset of the packed
+    bytes). ``handle`` is the stack's expert-offload handle, when one is installed (its homes hold the evicted
+    tensors)."""
+    from .absmax_dq import absmax_source_sha256, expert_absmax_fp32
 
     out = []
     for which in ("gate_up", "down"):
@@ -169,9 +200,8 @@ def _expert_records(name, mod, handle=None, source="offload_homes") -> list:
             absmax = home.view(mod.num_experts, shape[0], shape[1] // int(mod.blocksize))
         else:
             absmax = expert_absmax_fp32(mod, which)
-        out.append(expert_line(name, which, bits=int(mod.bits), quant_type=mod.quant_type,
-                               num_experts=mod.num_experts, shape=shape, blocksize=int(mod.blocksize), packed=packed,
-                               absmax=absmax, code=getattr(mod, "code", None)))
+        out.append(_expert_record(name, which, mod, shape=shape, packed=packed, absmax=absmax,
+                                  code=getattr(mod, "code", None), source_sha=absmax_source_sha256(mod, which)))
     return out
 
 
@@ -221,33 +251,113 @@ def _expert_stacks(model) -> list:
     return out
 
 
-def quant_fingerprint(model, scope: str, *, source: str = "resident") -> dict:
+_ARENA_DTYPES = {"U8": "uint8", "F32": "float32", "BF16": "bfloat16", "F16": "float16"}
+
+
+def _arena_segment(fh, index: dict, offsets: dict, layer: int, num_experts: int, suffix: str):
+    """One segment of every expert of ``layer``, ``[E, *shape_per_expert]``, read from the arena file at the offsets
+    its index records (``rows``: ``[layer, expert, offset]``; ``segments``: ``seg_off`` / ``length`` inside a row). A plain
+    seek and read, the same bytes grouped-nf4-gemm's ``nvme_residency.segment_tensor`` hands the server (a test checks
+    it where that reader runs)."""
+    import torch
+
+    geo = next((g for g in index["segments"] if g["suffix"] == suffix), None)
+    if geo is None or geo.get("dtype") not in _ARENA_DTYPES:
+        raise ValueError(f"PA-1: the arena has no readable segment {suffix!r} "
+                         f"(have {[g.get('suffix') for g in index.get('segments', ())]})")
+    dt = getattr(torch, _ARENA_DTYPES[geo["dtype"]])
+    out = []
+    for e in range(num_experts):
+        if (layer, e) not in offsets:
+            raise ValueError(f"PA-1: the arena index has no row for layer {layer} expert {e}")
+        fh.seek(offsets[(layer, e)] + int(geo["seg_off"]))
+        raw = bytearray(fh.read(int(geo["length"])))
+        if len(raw) != int(geo["length"]):
+            raise ValueError(f"PA-1: a short read of layer {layer} expert {e} segment {suffix!r}")
+        out.append(torch.frombuffer(raw, dtype=dt).reshape(tuple(geo["shape_per_expert"])))
+    return torch.stack(out)
+
+
+def _arena_expert_records(model, arena: str) -> list:
+    """``[(line, bytes_hashed)]`` for every expert stack of a SERVED model, from the arena it serves (PA-1). The served
+    stacks are meta: their names, shapes and recipe come from the modules, their bytes from the arena's rows, the k-th
+    stack being arena layer k (the loader's order). Each line goes through :func:`expert_line`, the function every other
+    source uses, and the code table through the stack class's own ``_build_code``."""
+    import json
+
+    from ._vendor.experts import _build_code
+    from .engines.nvme_train import arena_offload_view
+
+    with open(arena + ".index.json", encoding="utf-8") as f:
+        index = json.load(f)
+    view, segs = arena_offload_view(index)
+    stacks = _expert_stacks(model)
+    if len(stacks) != int(index["n_layers"]):
+        raise ValueError(f"PA-1: the model has {len(stacks)} expert stacks, the arena {index['n_layers']} layers")
+    offsets = {(int(r[0]), int(r[1])): int(r[2]) for r in view["rows"]}
+    out = []
+    with open(arena, "rb") as fh:
+        for layer, (name, mod, _handle) in enumerate(stacks):
+            if int(mod.num_experts) != int(index["n_experts_per_layer"]):
+                raise ValueError(f"PA-1: {name} has {mod.num_experts} experts, the arena {index['n_experts_per_layer']}")
+            code = _build_code(mod.quant_type, "cpu")
+            for which in ("gate_up", "down"):
+                shape = getattr(mod, f"_{which}_shape")
+                packed = _arena_segment(fh, view, offsets, layer, mod.num_experts, segs[f"{which}_proj"])
+                absmax = _arena_segment(fh, view, offsets, layer, mod.num_experts, segs[f"{which}_absmax"]).float()
+                absmax = absmax.reshape(mod.num_experts, shape[0], shape[1] // int(mod.blocksize))
+                out.append(_expert_record(name, which, mod, shape=shape, packed=packed, absmax=absmax, code=code))
+    return out
+
+
+def quant_fingerprint(model, scope: str, *, source: str = "resident", arena: str | None = None) -> dict:
     """``{"scheme_id", "scope", "source", "modules", "sha256", "bytes_hashed", "seconds"}`` for ``scope``
     (``"attention"`` or ``"experts"``), by qfp-v1 (module docstring), looking the tensors up in ``source`` (``SOURCES``).
-    A training run with expert offload fingerprints with ``source="offload_homes"``. An empty scope is refused:
-    nothing to fingerprint is not a match."""
+    A training run with expert offload fingerprints with ``source="offload_homes"``; a served model's experts with
+    ``source="arena"`` and ``arena=`` the arena it serves (PA-1). An empty scope is refused: nothing to fingerprint is
+    not a match.
+
+    The experts scope adds ``absmax_by_stack`` (``{"<stack>.<which>": absmax hash}``) and, when
+    ``compress_expert_absmax_`` compressed any stack, ``fp32_source``: ``{"sha256", "absmax_by_stack"}``, the same
+    qfp-v1 digest taken with each compressed stack's fp32 absmax as recorded BEFORE compression (every other line
+    unchanged). It is the fingerprint the base had in fp32, so a server compares it with its fp32 arena's ``sha256``
+    exactly: it proves the BASE is the trained one, never that the served absmax equals the trained (double-quantized)
+    one. It is absent when a compressed stack recorded no fp32 hash."""
     if scope not in SCOPES:
         raise ValueError(f"quant_fingerprint scope must be one of {SCOPES}, got {scope!r}")
     if source not in SOURCES:
         raise ValueError(f"quant_fingerprint source must be one of {SOURCES}, got {source!r}")
-    if source == "arena":
-        raise NotImplementedError("quant_fingerprint source='arena' is PA-1's: a served model's expert stacks are meta "
-                                  "and their bytes live in the arena, so PA-1 reads the arena's rows and builds each line "
-                                  "with expert_line, the same function as the other sources")
+    if source == "arena" and (scope != "experts" or not arena):
+        raise ValueError("quant_fingerprint source='arena' fingerprints the experts scope of a served model and needs "
+                         "arena=<path>; a served model's attention is resident (source='resident')")
     t0 = time.perf_counter()
     records = []
     if scope == "attention":
         for name, lin in _attention_projections(model):
-            records.append(_linear_record(name, lin))
+            line, n = _linear_record(name, lin)
+            records.append({"line": line, "bytes": n})
+    elif source == "arena":
+        records.extend(_arena_expert_records(model, arena))
     else:
         for name, mod, handle in _expert_stacks(model):
             records.extend(_expert_records(name, mod, handle, source))
     if not records:
         raise ValueError(f"quant_fingerprint: no {scope} module in this model")
-    lines = sorted(line for line, _ in records)
-    digest = _sha(("\n".join(lines) + "\n").encode("utf-8"))
-    return {"scheme_id": SCHEME_ID, "scope": scope, "source": source, "modules": len(lines), "sha256": digest,
-            "bytes_hashed": sum(n for _, n in records), "seconds": round(time.perf_counter() - t0, 3)}
+    out = {"scheme_id": SCHEME_ID, "scope": scope, "source": source, "modules": len(records),
+           "sha256": _digest(r["line"] for r in records), "bytes_hashed": sum(r["bytes"] for r in records)}
+    if scope == "experts":
+        out["absmax_by_stack"] = {r["key"]: r["absmax"] for r in records}
+        compressed = [r for r in records if "source" in r]
+        if compressed and all(r["source"] for r in compressed):
+            out["fp32_source"] = {"sha256": _digest(r.get("source_line") or r["line"] for r in records),
+                                  "absmax_by_stack": {r["key"]: r.get("source") or r["absmax"] for r in records}}
+    out["seconds"] = round(time.perf_counter() - t0, 3)
+    return out
+
+
+def _digest(lines) -> str:
+    """qfp-v1's digest of a scope's lines: sorted, newline-joined, newline-terminated."""
+    return _sha(("\n".join(sorted(lines)) + "\n").encode("utf-8"))
 
 
 def lora_scale_applied(model) -> dict:
