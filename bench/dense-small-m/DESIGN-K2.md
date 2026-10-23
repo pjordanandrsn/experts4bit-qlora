@@ -106,7 +106,7 @@ it, and no K1 pin applies. The fix is to keep the int8 bytes at 2 to 8 rows.
      and at most 0.70x of cuBLAS's.
    - The contract tests (bitwise per row, the old M = 1 unchanged, registers) are its premise.
 2. **The served read**, on its own registration: W2 and W4 ABBA on the default Qwen3 server, the knob against unset,
-   the quality bar per bucket, and the head-logit identity across buckets reported.
+   the quality bar per bucket as a floor, and the head-logit identity across buckets registered (section 4).
 
 ## 6. The release dependency
 
