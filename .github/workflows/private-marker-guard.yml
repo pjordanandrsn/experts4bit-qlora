@@ -90,6 +90,7 @@ jobs:
           moved to pjordanandrsn/adertha-agents
           the launcher refuses unknown keys (adertha-agents#243)
           a stuck load is not machine evidence (adertha#164)
+          the failed adertha reconciler
           the receipt sits in adertha-receipts on cdo/state-2026-01-01
           reduced from /Users/someone/runs/x and /home/someone/runs/y
           a venv under /home/n/.venvs/z
