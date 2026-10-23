@@ -4,6 +4,7 @@ registered constants as the PREREG states them; the runner's order, installs, tr
 drive's refusals; the runner's verdict cases; the self-tests and the reducer mutants they must kill."""
 import hashlib
 import importlib.util
+import json
 import pathlib
 import re
 import subprocess
@@ -153,3 +154,54 @@ def test_the_self_test_kills_each_reducer_mutant(tmp_path, old, new):
     (tmp_path / "p229_reduce.py").write_bytes(src.replace(old, new).encode("utf-8"))
     r = subprocess.run([sys.executable, str(tmp_path / "p229_reduce.py"), "--self-test"], capture_output=True, text=True)
     assert r.returncode != 0 and "FAILED" in r.stdout, (old, r.stdout)
+
+
+# ---- the real record first: p229-shake-1's bench record (an RTX A4000, explore tier), sha256-pinned
+FIXTURE = LANE / "fixtures" / "p229-shake-1" / "bench_p229.json"
+FIXTURE_SHA256 = "584b1b61146f5864efc8c5d7dfa1ea72dd11e84c120e0b30e2ec84c297b2659b"
+
+
+def _real():
+    raw = FIXTURE.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == FIXTURE_SHA256, "the pinned shakedown record changed"
+    return json.loads(raw)
+
+
+def test_the_real_shakedown_record_reduces_to_shakedown_with_every_check_passed():
+    rec = _real()
+    assert rec["shakedown"] is True and rec["gnf4_commit"] == R.GNF4_COMMIT and rec["rows_record"] == R.ROWS_RECORD
+    v = R.verdict(rec)
+    assert v["verdict"] == "SHAKEDOWN" and v["read"] is False, v
+    for M in R.MS:
+        assert rec["cells"][str(M)]["engaged"] == R.engaged_want(M)
+        assert all(rep["d2_identical"] for rep in rec["cells"][str(M)]["reps"])
+
+
+DEPARTURES = [
+    (lambda r: r["rows_record"]["plan"].update({"8": [128, 128, 4]}), "a plan other than the shipped one at M = 8"),
+    (lambda r: r.update(gnf4_commit="a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7"), "another package commit"),
+    (lambda r: r["cells"]["4"]["engaged"].update(I={}), "I never routed"),
+    (lambda r: r["cells"]["2"]["reps"][1].update(d2_identical=False), "D2 moved a bit"),
+    (lambda r: r["cells"]["8"]["reps"][2].update(order=["K", "I", "D2", "D"]), "the order"),
+]
+
+
+@pytest.mark.parametrize("depart, what", DEPARTURES, ids=[d[1] for d in DEPARTURES])
+def test_each_departure_from_the_real_record_voids_it(depart, what):
+    rec = _real()
+    depart(rec)
+    v = R.verdict(rec)
+    assert v["verdict"] == "VOID", (what, v.get("why"))
+
+
+def test_a_mutant_without_the_route_record_check_accepts_the_real_records_departure(tmp_path):
+    """The rule that the bar reads the plan the shipped route runs: without it, a record off that plan passes."""
+    src = (LANE / "p229_reduce.py").read_text(encoding="utf-8")
+    old = 'if rec.get("rows_record") != ROWS_RECORD:'
+    assert src.count(old) == 1
+    (tmp_path / "p229_reduce.py").write_bytes(src.replace(old, "if False:").encode("utf-8"))
+    mut = _load("p229_reduce_no_route_check", tmp_path / "p229_reduce.py")
+    rec = _real()
+    DEPARTURES[0][0](rec)
+    assert mut.verdict(rec)["verdict"] == "SHAKEDOWN"
+    assert R.verdict(rec)["verdict"] == "VOID"

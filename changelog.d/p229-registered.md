@@ -11,4 +11,5 @@ e4b's own resolvers), the lane reads the route `E4B_INT8_HEAD_ROWS` (e4b#2024) i
 - **The premise:** the route's real kernels compiled on the 5090 (11 passed) and its CPU suite (45 passed).
 - **What follows:** the served read with P153's quality bars per bucket, before any default.
 - **Files:** `bench/p229/` (PREREG, bench, reducer with its self-test, runner, drive, staged pins) and
-  `tests/test_p229.py` (18 tests, 10 reducer mutants).
+  `tests/test_p229.py` (25 tests: 10 reducer mutants, and p229-shake-1's record as the real fixture with five
+  departures and a mutant).

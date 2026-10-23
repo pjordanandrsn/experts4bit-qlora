@@ -139,3 +139,20 @@ head. K2b routes 2..N rows to K37's `linear_i8` over the same codes.
 - **Scope:** one RTX 5090 at 575 W, one release of grouped-nf4-gemm, a random bf16 head and random inputs.
 - **No quality:** I differs from D within the tolerance, and the tokens are a served read's to judge.
 - **No speculative decode:** the route is refused with `E4B_PAGED_SPEC` until a read covers the pair.
+
+## Amendment 1 (2026-10-23, before any reading): the shakedown and the real fixture
+
+- **`p229-shake-1`:** an RTX A4000 (sm_86), explore tier, about $0.01, teardown verified. It ran this kit at the
+  registration's head (a5525a83; every staged file is unchanged since) end to end:
+  - the installs and the tripwire: grouped-nf4-gemm 0.50.0 at the release commit, and `dense_i8.plan` at (32, 256, 4)
+    for every M in 2..8;
+  - the premise on the card: **11 passed** (the real kernels compiled, the graph replays included) and **45 passed**;
+  - the bench: the route record `{rows_max: 8, K37, (32, 256, 4) at every M}`, the engagement exactly as registered,
+    D2 bitwise D in every rep;
+  - the reducer: `SHAKEDOWN`.
+  - No times are quoted.
+- **The real fixture:** its bench record is pinned at `bench/p229/fixtures/p229-shake-1/bench_p229.json` (sha256
+  `584b1b61...`; no host identifiers).
+  - `tests/test_p229.py` reduces it to SHAKEDOWN with every structural check passed.
+  - Five departures from it each VOID the record.
+  - A mutant without the "the route reports the shipped plan" check accepts one of them.
