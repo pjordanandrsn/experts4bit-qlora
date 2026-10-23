@@ -136,6 +136,17 @@ def test_the_guard_fits_under_the_launchers_wallclock_cap():
     assert set(D.FLOOR_MOPS) == {"a"} and set(_load("p225_probe").FLOORS) == {"a"}     # no fallback tier at this N
 
 
+def test_amendment_2_the_boot_allowance_covers_the_launchers_ssh_wait():
+    D, C = _load("p225_derive"), _load("p225_canary")
+    plan = D.plan("a", C.N_HELDOUT)
+    fit_need = plan["fit"] * D.GUARD_X                       # the runner's FIT_NEED (fit x FIT_HEADROOM_PCT / 100)
+    assert plan["guard_s"] - fit_need >= D.SSH_READY_S + D.STAGING_MARGIN_S, (plan["guard_s"], fit_need)
+    assert D.SSH_READY_S >= 420 and D.STAGING_MARGIN_S >= 300       # never registered below the launcher's own wait
+    assert "FIT_HEADROOM_PCT=125" in RUN and D.GUARD_X == 1.25       # the runner's headroom is the derivation's
+    assert plan["guard_s"] == 21230 and round(plan["worst_usd"], 2) == 6.92
+    assert "**21,230 s, 5.90 h**" in PREREG and "**USD 6.92**" in PREREG
+
+
 def test_the_held_out_size_is_the_ruled_rule_on_the_five_sd_receipts():
     S, C = _load("p225_size"), _load("p225_canary")
     r = S.size(SD_INPUTS, KURTOSIS_MAX)
