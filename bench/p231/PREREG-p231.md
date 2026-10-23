@@ -274,6 +274,45 @@ cross-lane rule of 2026-10-23, bench/common rule 8). Nothing else changes: the a
 runner and every staged file are as registered (`staged-p231.sha256` does not pin the driver). The launch commit becomes
 this amendment's merge.
 
+## Amendment 2 (after `p231-5090-1`, before any reading): the tripwire proves the switch's guard; shakedowns
+
+**What happened.** `p231-5090-1` started (`STARTED` written) and exited 9 at the install tripwire, before anything was
+fetched: no answer, so by the table above it is **a strike**, and it used one of the lane's two box-started runs.
+- **The cause** is in the kit, not the host or the package. The tripwire asserted the switch's routing (2..8 tokens take
+  singleton groups under `E4B_NF4_SMALLM_BW=1`) by calling `hot_residency._collapsed_grouping` directly.
+- At the launch commit the switch routes only after `resolve_nf4_smallm_bw(modules, device)` has checked that K33
+  engages at the model's expert shapes on the device. The engine build makes that call on every measured path; the
+  tripwire never did, so the guard refused it, as designed.
+- The block is pure Python and needs no GPU, so running it against the launch commit would have shown the failure at no
+  cost; the dry run had stubbed it.
+
+**The change.**
+1. **The routing block** (between the `>>> the routing block` markers in `p231_run.sh`):
+   - It first asserts that the switch, set but unresolved, refuses with the guard's own message.
+   - It then makes the REAL `resolve_nf4_smallm_bw` call on stand-in MoE modules at Mixtral's expert shapes (28672 x 4096
+     and 4096 x 14336) on the box's device, so K33's engagement there is checked by the same code the engine build runs.
+   - It reads the routing at 2, 4, 8 and 16 tokens, and undoes the resolution, the switch and the grouping in a
+     `finally`.
+2. **A CI test** (`tests/test_p231.py`) extracts that block from `p231_run.sh` itself and runs it on CPU against the
+   repository's `hot_residency`, with K33's engagement stubbed. It also requires that:
+   - the pre-amendment lines fail with the guard's refusal;
+   - a copy of the switch with the guard deleted fails the block;
+   - a device where K33 does not engage fails the block.
+
+   A future move of the launch commit that breaks the block now fails in CI, not on a paid box.
+3. **Shakedowns.**
+   - The ids `p231-shake-1` to `p231-shake-3` run this runner through the refusals, the download probe, the installs,
+     the tripwire and the self-tests, then stop with rc 0 (`SHAKE OK`) before the premise, with nothing fetched.
+   - Their fit is the installs only, and their disk floor is 40 GB.
+   - The classifier reads them as `SHAKE_OK` or `SHAKE_FAIL`: never a box-started run, never a strike, never a host
+     refusal. A `SHAKE_FAIL` halts the lane until the kit is fixed.
+   - Before `p231-5090-2`, one shakedown at this amendment's merge runs on a 5090 as an exploration, outside the lane's
+     counts and budget, at a worst case under USD 1.
+
+**What does not change.** The arms, the rule, the bars, the reading's floors and budget, the premise and the box's code.
+The tripwire's other assertions are unchanged. The next reading id is `p231-5090-2`: it is the lane's last box-started
+run, and a second strike ends the lane with no reading. The launch commit becomes this amendment's merge.
+
 ## What was seen before this page (stated, not hidden)
 
 - **P227's reading** on `p227-5090-1`: its Mixtral cells (B over K25 0.356 at T = 2, 0.461 at T = 4; B over the floor

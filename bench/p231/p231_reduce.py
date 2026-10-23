@@ -356,8 +356,14 @@ def reduce(arms: dict, off, on, e4b_sha: str, fit=None) -> dict:
 
 # ---------------------------------------------------------------- classification --
 
-def classify(rc: int, started: bool) -> dict:
-    """The registered class of one fetched box: ``{"event", "started", "host_refused_cap", "halt", "why"}``."""
+def classify(rc: int, started: bool, run_id: str = "") -> dict:
+    """The registered class of one fetched box: ``{"event", "started", "host_refused_cap", "halt", "why"}``. Amendment 2:
+    a ``p231-shake-N`` box is an explore shakedown, SHAKE_OK at rc 0 and SHAKE_FAIL otherwise; it never counts as a
+    started box, a strike or a host refusal, and a failure halts the lane until the kit is fixed."""
+    if run_id.startswith("p231-shake-"):
+        return {"event": "SHAKE_OK" if rc == 0 else "SHAKE_FAIL", "started": False, "host_refused_cap": False,
+                "halt": rc != 0, "why": "an explore shakedown: never a reading, never counted"
+                + ("" if rc == 0 else f"; exit {rc}: the lane halts until the kit is fixed")}
     if not started:
         if rc in HOST_CODES:
             return {"event": "HOST_REFUSED", "started": False, "host_refused_cap": True, "halt": False,
@@ -484,6 +490,10 @@ def _classify_cases() -> list:
         b = read_box(box(0, True))
         out.append(("0 after the start is an ANSWER", classify(b["rc"], b["started"])["event"] == "ANSWER"))
         out.append(("27 after the start is NO_ANSWER", classify(27, True)["event"] == "NO_ANSWER"))
+        out.append(("9 after the start is NO_ANSWER (p231-5090-1's class)", classify(9, True, "p231-5090-1")["event"] == "NO_ANSWER"))
+        sh0, sh9 = classify(0, True, "p231-shake-1"), classify(9, True, "p231-shake-2")
+        out.append(("a shakedown is never counted (Amendment 2)", sh0["event"] == "SHAKE_OK" and not sh0["started"]
+                    and not sh0["halt"] and sh9["event"] == "SHAKE_FAIL" and not sh9["started"] and sh9["halt"]))
         for name, w in (("two exit files", box(0, True, codes=2)), ("no exit file", box(0, True, codes=0))):
             try:
                 read_box(w)
@@ -632,7 +642,8 @@ def main(argv=None) -> int:
         except ValueError as e:
             print(f"P231_CLASSIFY_REFUSED {e}")
             return 2
-        print("P231_CLASS " + json.dumps(dict(classify(box["rc"], box["started"]), run_id=box["run_id"], rc=box["rc"])))
+        print("P231_CLASS " + json.dumps(dict(classify(box["rc"], box["started"], box["run_id"]), run_id=box["run_id"],
+                                             rc=box["rc"])))
         return 0
 
     def load(name):

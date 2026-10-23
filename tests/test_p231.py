@@ -349,3 +349,88 @@ def test_the_runner_finishes_on_the_verdict():
             'finish 27;; esac') in RUN
     R = _load("p231_reduce")
     assert R.ANSWERS == ("LICENSED", "SLOWER", "QUALITY_FAIL", "FUNCTION_FAIL")
+
+
+# ---- Amendment 2: the tripwire's routing block, run from p231_run.sh itself against the repo (CPU)
+
+#: p231-5090-1's tripwire lines, verbatim from the launch commit before Amendment 2: they routed the knob unresolved
+PRE_AMENDMENT_2_BLOCK = '''hr.DEVICE_GROUPING[0] = True
+os.environ.pop("E4B_NF4_SMALLM_BW", None)
+assert hr._collapsed_grouping(1, None) == (True, False) and hr._collapsed_grouping(4, None) == (False, True)
+os.environ["E4B_NF4_SMALLM_BW"] = "1"
+assert all(hr._collapsed_grouping(t, None) == (True, False) for t in (2, 4, 8)), "B1: 2..8 tokens take singleton groups"
+assert hr._collapsed_grouping(16, None) == (False, True), "B1 is inert above 8 tokens"
+del os.environ["E4B_NF4_SMALLM_BW"]
+hr.DEVICE_GROUPING[0] = False
+'''
+
+
+def _routing_block() -> str:
+    m = re.search(r"^# >>> the routing block[^\n]*\n(.*?)^# <<< the routing block <<<", RUN, re.S | re.M)
+    assert m, "the routing block's markers are missing from p231_run.sh"
+    return m.group(1)
+
+
+@pytest.fixture
+def hr_clean(monkeypatch):
+    """The repo's hot_residency with a stand-in nf4_grouped (K33's engagement is a CUDA question; the box asks the real
+    one), the knobs unset, and every switch the block touches restored afterwards, whatever the block did."""
+    import types
+    from experts4bit_qlora.engines import hot_residency as hr
+    fake = types.ModuleType("nf4_grouped")
+    fake.engages = True
+    fake._bw_engages = lambda n, k, dev: fake.engages
+    monkeypatch.setitem(sys.modules, "nf4_grouped", fake)
+    for k in ("E4B_NF4_SMALLM_BW", "E4B_NF4_GROUPED_SMALLM"):
+        monkeypatch.delenv(k, raising=False)
+    yield hr, fake
+    hr.DEVICE_GROUPING[0] = False
+    hr._NF4_SMALLM_BW_RESOLVED[0] = False
+    os.environ.pop("E4B_NF4_SMALLM_BW", None)
+
+
+def _run_block(block, hr):
+    import types
+    exec(compile(block, "p231_run.sh:routing-block", "exec"),
+         {"os": os, "hr": hr, "types": types, "TRIPWIRE_DEVICE": "cpu"})
+
+
+def test_amendment_2_the_tripwire_routing_block_passes_on_the_repo(hr_clean):
+    hr, _ = hr_clean
+    _run_block(_routing_block(), hr)
+    assert hr._NF4_SMALLM_BW_RESOLVED[0] is False and hr.DEVICE_GROUPING[0] is False
+    assert "E4B_NF4_SMALLM_BW" not in os.environ, "the block leaves the knob as it found it"
+
+
+def test_amendment_2_the_pre_amendment_tripwire_fails_on_the_repo(hr_clean):
+    hr, _ = hr_clean
+    with pytest.raises(RuntimeError, match=r"resolve_nf4_smallm_bw\(modules, device\)"):
+        _run_block(PRE_AMENDMENT_2_BLOCK, hr)
+
+
+def test_amendment_2_the_block_fails_when_the_resolve_guard_is_deleted(hr_clean, monkeypatch):
+    hr, _ = hr_clean
+    monkeypatch.setattr(hr, "_nf4_smallm_bw_takes",
+                        lambda T, int4_stores: 1 < T <= hr.NF4_SMALLM_BW_MAX_T and hr._nf4_smallm_bw_env())
+    with pytest.raises(AssertionError, match="the resolve guard is gone"):
+        _run_block(_routing_block(), hr)
+
+
+def test_amendment_2_the_block_fails_where_k33_does_not_engage(hr_clean):
+    hr, fake = hr_clean
+    fake.engages = False
+    with pytest.raises(RuntimeError, match="does not engage"):
+        _run_block(_routing_block(), hr)
+    assert hr._NF4_SMALLM_BW_RESOLVED[0] is False, "a refused resolution routes nothing"
+
+
+def test_amendment_2_shakedowns_stop_before_the_premise_and_never_count():
+    assert "p231-shake-1|p231-shake-2|p231-shake-3) SHAKE=1;;" in RUN and "p231-shake-1|p231-shake-2|p231-shake-3) :;;" in DRIVE
+    stop = RUN.index('[ "$SHAKE" = 1 ] && { echo "SHAKE OK')
+    assert RUN.index("p115_quality.py --self-test") < stop < RUN.index("# ---- the premise")
+    assert RUN.index("<<< the routing block <<<") < stop
+    R = _load("p231_reduce")
+    assert R.classify(0, True, "p231-shake-1")["event"] == "SHAKE_OK" and not R.classify(0, True, "p231-shake-1")["started"]
+    assert R.classify(9, True, "p231-shake-2")["event"] == "SHAKE_FAIL" and R.classify(9, True, "p231-shake-2")["halt"]
+    assert R.classify(9, True, "p231-5090-2")["event"] == "NO_ANSWER", "a reading id's class is unchanged"
+    assert "## Amendment 2" in PREREG and "p231-shake-1" in PREREG
