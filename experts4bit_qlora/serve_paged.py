@@ -1304,7 +1304,9 @@ def prefill_routes() -> dict:
     ``moe_k19_dispatch`` is :data:`~.engines.hot_residency.K19_DISPATCH_SEEN` (K19's tile table and dispatch,
     ``E4B_PREFILL_LEAN_DISPATCH``'s evidence), ``moe_k25_lut`` is :data:`~.engines.hot_residency.K25_LUT_SEEN` (K25's
     codebook decode per call, ``E4B_K25_LUT``'s), ``moe_k25_plan`` is :data:`~.engines.hot_residency.K25_PLAN_SEEN`
-    (K25's plan per call, ``E4B_K25_PLAN``'s) and ``prefill_folds`` is
+    (K25's plan per call, ``E4B_K25_PLAN``'s), ``moe_nf4_smallm_bw`` is
+    :data:`~.engines.hot_residency.NF4_SMALLM_BW_SEEN` (the collapse's calls ``E4B_NF4_SMALLM_BW`` routed, by token
+    count) and ``prefill_folds`` is
     :data:`~.engines.glue_fuse.PREFILL_FOLD_SEEN` (fused fold calls above 64 rows, ``E4B_FUSE_PREFILL_GLUE``'s)."""
     from .engines import glue_fuse, hot_residency, paged_attention
 
@@ -1332,6 +1334,7 @@ def prefill_routes() -> dict:
                    "moe_k19_dispatch": dict(sorted(hot_residency.K19_DISPATCH_SEEN.items())),
                    "moe_k25_lut": dict(sorted(hot_residency.K25_LUT_SEEN.items())),
                    "moe_k25_plan": dict(sorted(hot_residency.K25_PLAN_SEEN.items())),
+                   "moe_nf4_smallm_bw": dict(sorted(hot_residency.NF4_SMALLM_BW_SEEN.items())),
                    "prefill_folds": dict(sorted(glue_fuse.PREFILL_FOLD_SEEN.items()))}
     return out
 
@@ -1847,6 +1850,11 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         raise RuntimeError("int4 attention requested but no projection is Int4Linear")
     if 0 < int4_layers < L:
         log(f"WARNING int4 expert stores on {int4_layers}/{L} MoE layers -- a partial stack; see /health")
+    # E4B_NF4_SMALLM_BW (opt-in; serving roadmap lever B): 2..8-token calls on the NF4 collapse take K33 per row.
+    # Resolved after the levers built any int4 store and before any graph is captured; refused here where it cannot
+    # engage, never left to route silently
+    from .engines.hot_residency import resolve_nf4_smallm_bw
+    nf4_smallm_bw = resolve_nf4_smallm_bw(mods, cfg.device)
 
     hkv, hd = _kv_geometry(model.config)
     spec_k = cfg.spec_k if cfg.spec != "off" else 0
@@ -1897,6 +1905,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     info["k25_lut"] = k25_lut
     # E4B_K25_PLAN as resolved at startup; which plan each K25 call took is prefill_routes()["seen"]["moe_k25_plan"]
     info["k25_plan"] = k25_plan
+    # E4B_NF4_SMALLM_BW as resolved at startup; which token counts it routed is prefill_routes()["seen"]["moe_nf4_smallm_bw"]
+    info["nf4_smallm_bw"] = nf4_smallm_bw
     # P149: the int8 attention census and, per row count, which projections routed through K37's kernels or
     # dequantized during the build's captures and warm-ups (Python counts calls, never a replay): what Q reads
     from .engines.int8_attn import engagement as int8_attn_engagement

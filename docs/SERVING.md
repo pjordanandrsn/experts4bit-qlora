@@ -385,6 +385,16 @@ RTX 5090 at a 400 W limit, each the smaller of two ABBA pairs, `e4b.serve.p134.g
 the smaller of two ABBA pairs, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`). The shapes are licensed, not the
 families. Every other shape, and every other GPU below 160 SMs, keeps the previous route.
 
+**The same GEMV at 2 to 8 requests (`E4B_NF4_SMALLM_BW=1`; opt-in, not yet read).** Steps of 2 to 8 tokens normally
+leave the GEMV for K25, the grouped small-M GEMM. With this knob, on the NF4 store with every expert resident, those
+steps take one group per (token, slot) row, so each row runs through the bandwidth GEMV exactly as it would at one
+request, bitwise. Rows that share an expert each read its weights. No speed is claimed: a registered read decides
+whether it is faster than K25, and the tokens differ from K25's (within the kernels' tolerance contract), so a default
+would need a quality bar. Startup refuses it, naming the reason, beside `E4B_NF4_GROUPED_SMALLM=1`, with an int4 or
+MXFP4 expert store, on a placement that is not all-resident, and at any expert shape where the bandwidth GEMV does not
+engage on the device. Reported in `nf4_smallm_bw`; which token counts it routed is
+`prefill_routes.seen.moe_nf4_smallm_bw`.
+
 **Qwen3 decode defaults by family (lanes P143, P153, P158).** Three settings resolve per family at startup, before any
 weight loads. Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
 old behaviour until a read of its own. Other `qwen3_moe` checkpoints, Qwen3-235B-A22B among them, take the split cap

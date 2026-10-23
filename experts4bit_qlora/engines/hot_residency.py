@@ -681,6 +681,9 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     the GEMV instead of the kernel it gates (lane P87). K21's opt-in does the same on the MXFP4 store, and K25's
     (``E4B_NF4_GROUPED_SMALLM=1``) on the NF4 store.
 
+    ``E4B_NF4_SMALLM_BW=1`` (opt-in) goes the other way on the NF4 store: a call of 2..8 tokens takes singleton groups
+    like T == 1, with or without :data:`DEVICE_GROUPING`, so it reaches K33's bandwidth GEMV (:func:`_nf4_smallm_bw_env`).
+
     A T > 1 call that would take HOST grouping on a uniform-int4 store -- every prefill chunk with
     :data:`DEVICE_GROUPING` off -- takes device grouping instead under ``E4B_INT4_PREFILL=k19`` or ``mtile`` (e4b#916;
     see :func:`_int4_prefill_mode_env`). Singleton groups, when chosen, are left alone."""
@@ -692,6 +695,8 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     nf4_t1 = T == 1 and int4_stores is None and _nf4_t1_device_grouping_env()
     if k19_t1 or k21_t1 or k25_t1 or nf4_t1:
         return False, True
+    if _nf4_smallm_bw_takes(T, int4_stores):
+        return True, False                # E4B_NF4_SMALLM_BW: 2..8 tokens take singleton groups, every row its own
     singleton = T == 1 or (FORCE_SINGLETON_GROUPS[0] and not DEVICE_GROUPING[0])
     device = DEVICE_GROUPING[0] and T > 1
     if (not singleton and not device and int4_stores is not None and int4_stores.get("kind") != "mxfp4"
@@ -712,6 +717,105 @@ def _nf4_t1_device_grouping_env() -> bool:
     if v not in ("0", "1"):
         raise ValueError(f"E4B_NF4_T1_DEVICE_GROUPING={v!r}: expected '0' or '1'")
     return v == "1"
+
+
+#: The widest step ``E4B_NF4_SMALLM_BW`` routes, in tokens: the serving roadmap's small-M regime (lever B, 2 <= T <= 8).
+NF4_SMALLM_BW_MAX_T = 8
+
+
+def _nf4_smallm_bw_env() -> bool:
+    """``E4B_NF4_SMALLM_BW=1`` (opt-in; off by default, also when unset): on the NF4 store's all-resident collapse, a
+    call of 2 to :data:`NF4_SMALLM_BW_MAX_T` tokens takes singleton groups (every (token, slot) row its own group), as
+    T == 1 does, instead of the device tile table and K25. grouped-nf4-gemm's ``gemm_4bit_grouped`` serves every
+    singleton call through K33's bandwidth GEMV where :func:`resolve_nf4_smallm_bw` found it engages, so each row is
+    computed as it is at T == 1: K33 reads one row per program, and its result never depends on the row count. Rows that
+    share an expert each read its weights (no reuse across rows); what that costs against K25 is a registered read's
+    to say, and none is claimed here. The tokens differ from K25's (a different function within the tolerance
+    contract), so a default needs a quality bar. Anything other than ``0``/``1`` is refused."""
+    v = os.environ.get("E4B_NF4_SMALLM_BW", "0").strip() or "0"
+    if v not in ("0", "1"):
+        raise ValueError(f"E4B_NF4_SMALLM_BW={v!r}: expected '0' or '1'")
+    return v == "1"
+
+
+def _nf4_smallm_bw_takes(T: int, int4_stores) -> bool:
+    """Whether ``E4B_NF4_SMALLM_BW`` routes a call of ``T`` tokens. It names the NF4 store's rows only: on a layer with an
+    int4 or MXFP4 store, and beside ``E4B_NF4_GROUPED_SMALLM=1`` (which names the same rows for K25), it is refused,
+    never dropped."""
+    if not 1 < T <= NF4_SMALLM_BW_MAX_T or not _nf4_smallm_bw_env():
+        return False
+    if int4_stores is not None:
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 routes the NF4 store's rows to K33's bandwidth GEMV, but this layer "
+                           f"serves a {int4_stores.get('kind', 'int4_b32')} expert store: unset one of them")
+    if _k25_mode_env() == "1":
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 and E4B_NF4_GROUPED_SMALLM=1 both name the rows of "
+                           f"2..{NF4_SMALLM_BW_MAX_T} tokens (K33 and K25): unset one of them")
+    if not _NF4_SMALLM_BW_RESOLVED[0]:
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 routes 2..8-token calls only after "
+                           "hot_residency.resolve_nf4_smallm_bw(modules, device) checked that K33 engages at this "
+                           "model's expert shapes on this device; nothing in this process has: call it after the "
+                           "levers and before any capture, or unset E4B_NF4_SMALLM_BW")
+    return True
+
+
+#: Whether :func:`resolve_nf4_smallm_bw` found ``E4B_NF4_SMALLM_BW=1`` servable in this process (one list cell, as
+#: :data:`_K25_LUT_DEFAULT`). The routing refuses the knob without it: an unresolved process (a harness enabling the
+#: collapse itself) could otherwise send the rows to dot-pad or the scalar GEMV where K33 does not engage.
+_NF4_SMALLM_BW_RESOLVED = [False]
+
+
+#: The all-resident collapse's calls ``E4B_NF4_SMALLM_BW`` routed, by token count, as ``{"T<n>": calls}``; counted in
+#: the Python forward (eager calls and captures count, replays do not), beside :data:`ROUTE_SEEN`'s ``nf4_singleton``.
+NF4_SMALLM_BW_SEEN: dict = {}
+
+
+def resolve_nf4_smallm_bw(modules, device) -> dict:
+    """``E4B_NF4_SMALLM_BW`` resolved once at engine build, after the levers and before any graph is captured, so a knob
+    that cannot engage fails at startup, never as a silent route. ``modules`` are the MoE modules carrying
+    ``_hot_residency``. Returns ``{"env": the raw value or None, "on": bool, "max_tokens":`` :data:`NF4_SMALLM_BW_MAX_T`
+    ``, "why": the reason when off, "shapes": every expert projection's (N, K) when on}``.
+
+    An explicit ``1`` is refused beside ``E4B_NF4_GROUPED_SMALLM=1``, on any layer with an int4 or MXFP4 store, on any
+    layer that is not on the all-resident collapse (the only forward that reads the knob), on a kernel package without
+    K33, and at any expert shape where K33 does not engage on this device (``GNF4_GEMV_BW``'s rule: there the singleton
+    route would run dot-pad or the scalar GEMV). Only a resolution that passes lets the forward route the knob
+    (:data:`_NF4_SMALLM_BW_RESOLVED`); an unresolved process refuses it at the first 2..8-token call."""
+    raw = os.environ.get("E4B_NF4_SMALLM_BW", "").strip() or None
+    base = {"env": raw, "on": False, "max_tokens": NF4_SMALLM_BW_MAX_T}
+    _NF4_SMALLM_BW_RESOLVED[0] = False    # a refusal below leaves the knob unservable in this process
+    if not _nf4_smallm_bw_env():
+        return {**base, "why": "opt-in: E4B_NF4_SMALLM_BW is not 1"}
+    if _k25_mode_env() == "1":
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 and E4B_NF4_GROUPED_SMALLM=1 both name the rows of "
+                           f"2..{NF4_SMALLM_BW_MAX_T} tokens (K33 and K25): unset one of them")
+    states = [getattr(m, "_hot_residency", None) for m in modules]
+    if not states or any(s is None for s in states):
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 needs the hot-residency engine on every MoE layer; "
+                           f"{sum(s is None for s in states)}/{len(states)} have none")
+    stores = [s for s in states if getattr(s, "_int4_stores", None)]
+    if stores:
+        raise RuntimeError(f"E4B_NF4_SMALLM_BW=1 routes the NF4 store's rows, but {len(stores)}/{len(states)} MoE "
+                           "layers serve an int4 or MXFP4 expert store: unset one of them")
+    off_collapse = sum(1 for s in states if not (getattr(s, "collapse_resident", False) and s._all_hot()))
+    if off_collapse:
+        raise RuntimeError(f"E4B_NF4_SMALLM_BW=1 runs on the all-resident collapse only, and {off_collapse}/"
+                           f"{len(states)} MoE layers are not on it (not every expert resident)")
+    try:
+        import nf4_grouped
+        engages = nf4_grouped._bw_engages
+    except (ImportError, AttributeError) as e:
+        raise RuntimeError("E4B_NF4_SMALLM_BW=1 needs grouped-nf4-gemm with K33's bandwidth GEMV "
+                           "(nf4_grouped._bw_engages, grouped-nf4-gemm#500)") from e
+    dev = torch.device(device)
+    shapes = sorted({(int(s.shapes[0]), int(s.shapes[1])) for s in states}
+                    | {(int(s.shapes[2]), int(s.shapes[3])) for s in states})
+    off = [nk for nk in shapes if not engages(nk[0], nk[1], dev)]
+    if off:
+        raise RuntimeError(f"E4B_NF4_SMALLM_BW=1: K33's bandwidth GEMV does not engage at (N, K) {off} on this device "
+                           f"(GNF4_GEMV_BW={os.environ.get('GNF4_GEMV_BW') or 'auto'}), so the singleton route would "
+                           "run dot-pad or the scalar GEMV there: unset E4B_NF4_SMALLM_BW, or set GNF4_GEMV_BW=1")
+    _NF4_SMALLM_BW_RESOLVED[0] = True
+    return {**base, "on": True, "why": None, "shapes": [list(nk) for nk in shapes]}
 
 
 def _decode_a16_default() -> bool:
@@ -1032,13 +1136,15 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         x_t, row_token, top_k = x_tokens
         if (_lean or _pf_lean) and _CALIB_SINK is None:
             _tok = (x_t, top_k)           # K23: K19's (or K25's) gate_up reads the token rows itself (gather_div)
-        elif (x_t.shape[0] == 1 and singleton_groups and not device_grouping and int4_stores is None
+        elif ((x_t.shape[0] == 1 or _nf4_smallm_bw_takes(x_t.shape[0], int4_stores))
+              and singleton_groups and not device_grouping and int4_stores is None
               and not _mxfp4_store and _CALIB_SINK is None and _nf4_takes_gather_div(gemm_4bit_grouped)):
             # ONE token, on the NF4 singleton route (the last branch below): gemm_4bit_grouped's gate_up reads row
             # r's token r // top_k -- token 0 for every row -- itself (gather_div, grouped-nf4-gemm#530), so the
             # (token, slot) copy is not made: bitwise the copied rows' result, one launch a layer fewer at T == 1
-            # (e4b#1313, lane P127's Phase 2, item b2). One token only: gather_div assumes token-major rows, which
-            # _row_index builds, but with one token the row order cannot matter at all.
+            # (e4b#1313, lane P127's Phase 2, item b2). gather_div assumes token-major rows: with one token the row
+            # order cannot matter, and E4B_NF4_SMALLM_BW's 2..8 tokens reach here only from the all-resident collapse,
+            # whose rows _row_index builds token-major (row r is token r // top_k).
             _gd = (x_t, top_k)
         else:
             x_rows = x_t.index_select(0, row_token)
@@ -1868,6 +1974,8 @@ class _HotResidency:
         else:
             xr, xtok = x.index_select(0, rt), None
         singleton, grouped = _collapsed_grouping(T, getattr(self, "_int4_stores", None))
+        if singleton and T > 1 and _nf4_smallm_bw_takes(T, getattr(self, "_int4_stores", None)):
+            NF4_SMALLM_BW_SEEN[f"T{T}"] = NF4_SMALLM_BW_SEEN.get(f"T{T}", 0) + 1
         dn = _fused_over_stack(xr, flat, self.h_gu_p, self.h_gu_a,
                                self.h_dn_p, self.h_dn_a, self.shapes,
                                self.has_gate, self.act_fn, gptoss=gptoss,
