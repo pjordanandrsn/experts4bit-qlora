@@ -1345,7 +1345,10 @@ def load_moe_4bit_streaming(
     arena_index = None
     if arena is not None:
         from nvme_arena import load_index
+
+        from .merged_arena import refuse_merged
         arena_index = load_index(arena)
+        refuse_merged(arena_index, arena)     # a merged arena is never read as a base (bench/d0/ARENA-DESIGN.md)
     if prefetch and not offload:
         raise ValueError(
             "prefetch=True requires offload=True: prefetch overlaps the H2D copy of offloaded "

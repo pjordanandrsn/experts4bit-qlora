@@ -278,11 +278,12 @@ def _arena_segment(fh, index: dict, offsets: dict, layer: int, num_experts: int,
     return torch.stack(out)
 
 
-def _arena_expert_records(model, arena: str) -> list:
+def _arena_expert_records(model, arena: str, stacks=None) -> list:
     """``[(line, bytes_hashed)]`` for every expert stack of a SERVED model, from the arena it serves (PA-1). The served
     stacks are meta: their names, shapes and recipe come from the modules, their bytes from the arena's rows, the k-th
     stack being arena layer k (the loader's order). Each line goes through :func:`expert_line`, the function every other
-    source uses, and the code table through the stack class's own ``_build_code``."""
+    source uses, and the code table through the stack class's own ``_build_code``. ``stacks`` (``[(name, module,
+    handle)]`` as :func:`_expert_stacks` returns them) stands in for the model's, for a reader that has none."""
     import json
 
     from ._vendor.experts import _build_code
@@ -291,7 +292,7 @@ def _arena_expert_records(model, arena: str) -> list:
     with open(arena + ".index.json", encoding="utf-8") as f:
         index = json.load(f)
     view, segs = arena_offload_view(index)
-    stacks = _expert_stacks(model)
+    stacks = _expert_stacks(model) if stacks is None else stacks
     if len(stacks) != int(index["n_layers"]):
         raise ValueError(f"PA-1: the model has {len(stacks)} expert stacks, the arena {index['n_layers']} layers")
     offsets = {(int(r[0]), int(r[1])): int(r[2]) for r in view["rows"]}
@@ -308,6 +309,16 @@ def _arena_expert_records(model, arena: str) -> list:
                 absmax = absmax.reshape(mod.num_experts, shape[0], shape[1] // int(mod.blocksize))
                 out.append(_expert_record(name, which, mod, shape=shape, packed=packed, absmax=absmax, code=code))
     return out
+
+
+def arena_expert_fingerprint(arena: str, stacks) -> dict:
+    """qfp-v1 of an arena's experts scope with no model loaded: ``{"scheme_id", "sha256", "modules",
+    "absmax_by_stack"}``, over the same lines, read the same way, as ``quant_fingerprint(model, "experts",
+    source="arena", arena=arena)`` takes from a served model whose stacks ``stacks`` describes (names, expert count,
+    recipe, shapes). The merged-arena writer fingerprints the arenas it reads and writes with it."""
+    records = _arena_expert_records(None, arena, stacks)
+    return {"scheme_id": SCHEME_ID, "sha256": _digest(r["line"] for r in records), "modules": len(records),
+            "absmax_by_stack": {r["key"]: r["absmax"] for r in records}}
 
 
 def quant_fingerprint(model, scope: str, *, source: str = "resident", arena: str | None = None) -> dict:
