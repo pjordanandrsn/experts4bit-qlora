@@ -1,0 +1,19 @@
+{
+ "measured": {
+  "timed_steps": "3..80"
+ },
+ "projection_of": {
+  "fields": [
+   "status",
+   "workload.steps",
+   "measured.timed_steps"
+  ],
+  "path": "run/receipts_REF/Qwen3-30B-A3B-device-reference-t512-20261023T154048Z-8dde0c2b.json",
+  "sha256": "a45ac35b0f957a570dc1dcbc41bdbf9ba30ab767f2075a10f3a7ba4d424b7502",
+  "why": "the trainer's receipt carries the card's GPU UUID; the original is store-only, and these are the only fields p225_gate.py reads from it"
+ },
+ "status": "OK",
+ "workload": {
+  "steps": 80
+ }
+}

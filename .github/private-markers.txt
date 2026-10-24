@@ -110,6 +110,12 @@ adertha://
 # word character, so one would let identifiers (a module file, an UPPER_CASE environment variable) through.
 #added-only: \badertha
 
+# A rented card's GPU UUID (nvidia-smi's uuid; 2026-10-24): it identifies one physical device, and a public receipt
+# never needs it. Receipt files that carry one (forensics.txt, outer.log, a trainer's device record) are store-only
+# (STORE-ONLY.sha256), or a public projection of only the fields a reducer reads. Files merged before the rule keep
+# theirs; new lines may not add one.
+#added-only: GPU-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+
 # --- RECEIPT STORE: the private receipt store's ledger and receipt records ----
 # The store's records are private, and none of the patterns above can see them.
 # They are matched by SHAPE, never by name: this file is public, so naming the

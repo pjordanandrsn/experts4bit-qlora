@@ -21,3 +21,7 @@ a1b92c0429809a1cb468f938a55cd8fb70d18535cf258a62bf3dce6fdfc01312  p223/logs/arm_
 478952bad7fe2780a120b0aeca0a3904eaa8c4ed96fd4876c465e8999bc2e00b  p223/logs/arm_D0b.log
 d8d53a6120dd54ac31226a26ebf6c7a2e533c4c107e817eb08e2f546d5288a90  p223/logs/fetch.log
 7e00ad183d54bae17d74af0633bccecde6fcb1562e53a439921197e81b82bd3f  p223/logs/prompts.log
+# Added 2026-10-24: files that carry the rented card's GPU UUID (nvidia-smi's uuid), kept only in the private
+# receipt store, byte-exact. The public tree carries no GPU UUID (the receipts rule since 2026-10-20).
+562710308dc33c3bc2f29600d7c1151f5632916f91625b86ce1856bc23293c21  forensics.txt
+ed08708022c77814a0a928735a88073603b0beecfd2ab39fed14c1fe261e1237  outer.log
