@@ -154,6 +154,24 @@ Two limits of the instrument:
   fault) is followed by the next id. A release-proof refusal is not: another box would install the same published
   bytes, so its cause is read and posted first, and the next id waits for that. A completed run is never re-run, whatever it reads (P58 STOP-4).
 
+**The guard fit.** Before its first install the runner checks that the box's time left covers the fit with 25 % headroom
+(`bench/common/README.md`, "Guard fit"), and refuses otherwise. Every term is conservative against P58's record. P58's
+whole run, boot and all 18 arms included, took 42 min (2,520 s) from the rental. It kept no per-phase times, so each
+term is P58's PREREG estimate with margin, or stated arithmetic:
+- the e4b and grouped-nf4-gemm installs, provenance, the fast-check proof and the tripwire: **600 s** (P58 estimated
+  about 10 min for its install);
+- the two vLLM venvs and their fast-checks: **1,500 s** (P58 estimated about 12 min for its two venvs; each
+  fast-check downloads the vLLM wheel again);
+- the two checkpoints, 78.03 GB, at 40 MB/s: **1,960 s** (no download floor is registered, so the rate is stated);
+- the bake and the prompt dump: **500 s** (P58 estimated about 1 min for the bake);
+- the largest gate, `can_run 900` before every arm: **900 s**, and the reserve `can_run` keeps: **600 s**.
+
+**FIT = 6,060 s, x 1.25 = 7,575 s.** The setup terms alone (4,560 s) are 1.8 x P58's whole measured run. With the
+300 s boot: (300 + 6,060) x 1.25 = 7,950 s <= the 3.0 h guard (10,800 s). The guard keeps 10,800 - 7,575 = 3,225 s over
+the check's need, more than the 540 s boot slack (Vast's 420 s ssh wait plus 120 s of staging). A fit refusal (rc 41)
+comes before the install and costs cents. It is not a strike, and the box did not start, so the next id follows; two
+consecutive fit refusals count as one strike.
+
 **No shakedown is registered.** P58's runner ran all 18 arms on a 5090 in this exact shape. The changes here are
 version pins, PyPI installs with a provenance check, and names, each checked at $0 (the API binding above, the
 tripwire asserts, the provenance checker's tests, vLLM's torch pin). A failure at install, provenance or the tripwire

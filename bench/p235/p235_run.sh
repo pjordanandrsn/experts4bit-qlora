@@ -33,6 +33,20 @@ for f in step_decomp.py k8_bake.py calib.json hook/usercustomize.py p37_vllm.py 
 # ---- deadline guard + per-arm alarm (P54's): never start an arm that cannot finish 10 min before teardown
 can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$P235_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((P235_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
 arm_alarm(){ local cap=$1 left=$(( P235_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }
+# ---- the pre-install fit check (bench/common/README.md, "Guard fit"): before any install and any staged script. Every
+# term is conservative against P58's record: its whole run, boot and 18 arms included, took 42 min from the rental, and it
+# kept no per-phase times, so each term is P58's PREREG estimate with margin, or stated arithmetic (PREREG "The guard fit")
+INSTALL_TO_GATE_S=600   # the e4b and gnf4 wheels with the toolchain pins, provenance, the fast-check proof, the tripwire (P58: ~10 min)
+NEED_VLLM_VENVS=1500    # two vLLM venvs (~3 GB each) and their fast-checks (the ~0.33 GB wheel again each) (P58: ~12 min for two)
+NEED_FETCH=1960         # the two checkpoints, 78.03 GB (61.08 + 16.95), at 40 MB/s (no download floor is registered: a stated rate)
+NEED_BAKE=500           # k8_bake (P58: ~1 min) and the prompt dump, with margin
+NEED_X=900              # the largest single gate: can_run 900 before every arm
+RESERVE=600             # can_run's margin after a step: the reduce, the fetch-back and the teardown
+FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
+FIT=$((INSTALL_TO_GATE_S + NEED_VLLM_VENVS + NEED_FETCH + NEED_BAKE + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P235_DEADLINE_EPOCH - $(date +%s)))
+# rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
+[ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
+echo "GUARD_FIT fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s" | tee -a summary.txt
 # ---- install (image python): experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0 as PyPI wheels + P235's toolchain
 # pins, --no-compile (install-time .pyc would land under the prefix, outside the wheel's RECORD); then provenance.py,
 # unconditionally, before anything is timed (a version string is not a release)

@@ -22,6 +22,7 @@ import types
 
 import pytest
 from guard_outcomes import expect_outcome
+from test_lane_guard_fit import fit_problems
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 B = REPO / "bench"
@@ -528,6 +529,20 @@ RUN_EDITS = [
     VLLM_PROOF.strip(),
     '|| { cat logs/release_proof_vllm_$VT.log; say "RELEASE PROOF FAIL (vllm $VT)',
     "done",
+    '# ---- the pre-install fit check (bench/common/README.md, "Guard fit"): before any install and any staged script.',
+    "# term is conservative against P58's record: its whole run, boot and 18 arms included, took 42 min from the rental, and it",
+    "# kept no per-phase times, so each term is P58's PREREG estimate with margin, or stated arithmetic",
+    'INSTALL_TO_GATE_S=600 ',
+    'NEED_VLLM_VENVS=1500 ',
+    'NEED_FETCH=1960 ',
+    'NEED_BAKE=500 ',
+    'NEED_X=900 ',
+    'RESERVE=600 ',
+    'FIT_HEADROOM_PCT=125 ',
+    'FIT=$((INSTALL_TO_GATE_S + NEED_VLLM_VENVS',
+    '# rc 41: a refusal before the install, not a strike',
+    '[ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s',
+    'echo "GUARD_FIT fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s"',
     "# file whose lines are not all pycache_fresh true (or not one per pin) refuses like the proof itself. These are the",
     "# BINDING proofs, the only ones ruled; the fast-checks above only stop a wrong wheel early.",
     "# ---- release-proof FAST-CHECK (not ruled: only the binding proof, the last step before the first e4b arm, is): the",
@@ -559,6 +574,52 @@ def test_the_runner_is_p58s_by_named_edits():
     for gone in ("driver_version,uuid", "transformers==5.16.1", "git+https://github.com/pjordanandrsn/experts4bit-qlora.git",
                  "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git", "pypi.org/pypi/vllm/json", ":-0.29.0}"):
         assert any(gone in ln for ln in removed), gone
+
+
+GUARD_S = 3 * 3600              # the registered guard, 3.0 h
+BOOT_S = 300                    # launch to the check (bench/common/README.md, "Guard fit"; tests/test_p155.py)
+SSH_READY_S, STAGING_MARGIN_S = 420, 120   # Vast's ssh wait and the staging margin (README rule 5)
+
+
+def _term(name):
+    m = re.search(rf"^{name}=(\d+) ", RUN, re.M)
+    assert m, name
+    return int(m.group(1))
+
+
+def test_the_runner_checks_its_guard_fit_before_the_first_install():
+    """The cross-lane rule's own check finds nothing wrong, and the refusal is rc 41 with a REFUSAL file and the
+    GUARD_FIT line, unused by any other refusal."""
+    assert fit_problems(RUN) == []
+    lines = RUN.splitlines()
+    k = lines.index('[ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), '
+                    '${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }')
+    assert lines[k + 1] == 'echo "GUARD_FIT fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s" | tee -a summary.txt'
+    assert RUN.count("finish 41") == 1
+    first_install = next(i for i, ln in enumerate(lines) if re.search(r"pip install|python -m venv", ln)
+                         and not ln.lstrip().startswith("#"))
+    assert k < first_install and k > lines.index(": > summary.txt; echo \"$P235_INSTANCE_ID\" > INSTANCE_ID")
+
+
+def test_the_registered_guard_holds_the_boot_and_the_fit_with_headroom():
+    """The static side (tests/test_p155.py's form): (boot 300 + FIT) x 1.25 <= the 3.0 h guard, and the guard keeps
+    the boot slack (ssh wait + staging) over the check's need. The terms are read from the runner."""
+    assert "FIT=$((INSTALL_TO_GATE_S + NEED_VLLM_VENVS + NEED_FETCH + NEED_BAKE + NEED_X + RESERVE))" in RUN
+    terms = {n: _term(n) for n in ("INSTALL_TO_GATE_S", "NEED_VLLM_VENVS", "NEED_FETCH", "NEED_BAKE", "NEED_X", "RESERVE")}
+    assert terms == {"INSTALL_TO_GATE_S": 600, "NEED_VLLM_VENVS": 1500, "NEED_FETCH": 1960, "NEED_BAKE": 500, "NEED_X": 900,
+                     "RESERVE": 600}
+    assert terms["NEED_X"] == max(int(x) for x in re.findall(r"^can_run (\d+) ", RUN, re.M))   # the largest gate
+    assert "$((now + need + 600))" in RUN and terms["RESERVE"] == 600               # can_run keeps 600 s after a step
+    fit = sum(terms.values())
+    pct = _term("FIT_HEADROOM_PCT")
+    assert pct >= 125 and fit == 6060 and fit * pct // 100 == 7575
+    assert (BOOT_S + fit) * 1.25 == 7950 <= GUARD_S
+    assert GUARD_S - fit * pct // 100 >= SSH_READY_S + STAGING_MARGIN_S, "a slow-ssh host clears the fit check"
+    assert 78.03e9 / 40e6 <= terms["NEED_FETCH"]                                 # 78.03 GB at the stated 40 MB/s
+    for s in ("**FIT = 6,060 s, x 1.25 = 7,575 s.**", "(300 + 6,060) x 1.25 = 7,950 s <= the 3.0 h guard (10,800 s)",
+              "the two checkpoints, 78.03 GB, at 40 MB/s: **1,960 s**", "A fit refusal (rc 41) comes before the install and costs cents",
+              "two consecutive fit refusals count as one strike", "took 42 min (2,520 s) from the rental", "guard 3.0 h"):
+        assert s in FLAT, s
 
 
 def test_the_pins_the_prereg_states_are_the_runners():

@@ -1,7 +1,7 @@
 # Names as the BOX sees them after staging (flat in $W, hook/ one level down); the box runs `sha256sum -c` on
 # this file and p235_drive.sh checks it in its stage directory. Every piece but this lane's three and loggetta's
 # release_proof.py is at P58's digest.
-a78d093ba3929c18eea5322071264154371f86e8ea1d9a6367f54e8c50ca01de  p235_run.sh
+a4ceb16d2da4603ca04491b1297a26c49f17697b56256fa0da4bb428454a5024  p235_run.sh
 028604b2936bb1f114d8b9b152e35dc0099dacdd52a03230d7f1dbdb2003dc16  p235_reduce.py
 843a8960c19fc51d811c73c8cb040b46eacaebf5742218f85811836539cae557  provenance.py
 aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0  release_proof.py

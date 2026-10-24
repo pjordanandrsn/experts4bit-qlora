@@ -21,6 +21,8 @@ release.
   versions. It runs the provenance check before the tripwire and every arm (rc 9) and in each vLLM venv (a failure
   refuses that build's rows), and it no longer collects the GPU's UUID. The 18 arms, the alarms, the STOP rules and
   the verdict code are P58's.
+- The runner checks the guard fit before its first install (`bench/common/README.md`, "Guard fit"): FIT = 6,060 s
+  from P58's record and stated arithmetic, x 1.25, refused with rc 41 (not a strike) when the box's time left is short.
 - `bench/p235/p235_drive.sh`: the pod-launch drive form (lane liveness by launch identity, the clean HEAD as the
   harness's launch commit, the `--no-links` fetch), staging P58's harness pieces at P58's digests.
 - `tests/test_p235.py`: the provenance rules on fake distributions, the constants against the PREREG and the runner,
