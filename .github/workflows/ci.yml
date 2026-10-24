@@ -135,6 +135,18 @@ jobs:
           python bench/smt-fuse/smt_fuse_box.py --self-test
       - name: Test
         run: pytest tests/ -q
+      - name: fixed attention split, the kernel itself (Triton's CPU interpreter; must RUN, never skip)
+        # tests/test_attn_split_fixed.py's interpreter row check is the only machine-checked evidence that a fixed
+        # split count (E4B_ATTN_SPLIT_FIXED) keeps one sequence's attention bitwise the same in a batch of 2 and of 16.
+        # It skips where Triton is absent, so it is re-run here alone and must report "1 passed": a skip or a
+        # deselection fails this step. No Triton is installed or pinned here: grouped-nf4-gemm declares it on Linux
+        # (triton>=3.4), and the version the install above resolved is printed.
+        run: |
+          set -euo pipefail
+          python -c "import triton, importlib.metadata as m; print('triton', triton.__version__, '| grouped-nf4-gemm', m.version('grouped-nf4-gemm'))"
+          out=$(python -m pytest tests/test_attn_split_fixed.py -k bitwise_the_same_in_a_batch_of_2_and_of_16 -rs -q -p no:cacheprovider 2>&1) || { echo "$out"; exit 1; }
+          echo "$out"
+          echo "$out" | grep -qE '(^|[^0-9])1 passed' || { echo "the interpreter row check did not run and pass (skipped or deselected)"; exit 1; }
       - name: census cross-check (grouped-nf4-gemm#353 -- every claimed family the kernel's shape census covered is still covered, against the census of the exact kernel commit installed above)
         # The census comes from the commit pip installed (direct_url.json), so it
         # is the kernel this suite ran against, never a second pin to keep in
