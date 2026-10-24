@@ -162,7 +162,10 @@ term is P58's PREREG estimate with margin, or stated arithmetic:
   about 10 min for its install);
 - the two vLLM venvs and their fast-checks: **1,500 s** (P58 estimated about 12 min for its two venvs; each
   fast-check downloads the vLLM wheel again);
-- the two checkpoints, 78.03 GB, at 40 MB/s: **1,960 s** (no download floor is registered, so the rate is stated);
+- the two checkpoints, 78.03 GB, at 40 MB/s: **1,960 s**. The launch kit's host screen admits only hosts advertising
+  `inet_down` >= 500 Mbps (62.5 MB/s), so 40 MB/s is 0.64 of the slowest admitted host's advertised rate. That rate
+  is advertised, not measured on the box (this runner has no download probe), so a host whose fetch overruns the
+  term is caught only by the later `can_run` gate, after the install;
 - the bake and the prompt dump: **500 s** (P58 estimated about 1 min for the bake);
 - the largest gate, `can_run 900` before every arm: **900 s**, and the reserve `can_run` keeps: **600 s**.
 

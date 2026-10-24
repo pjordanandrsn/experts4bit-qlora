@@ -38,7 +38,7 @@ arm_alarm(){ local cap=$1 left=$(( P235_DEADLINE_EPOCH - $(date +%s) - 600 )); [
 # kept no per-phase times, so each term is P58's PREREG estimate with margin, or stated arithmetic (PREREG "The guard fit")
 INSTALL_TO_GATE_S=600   # the e4b and gnf4 wheels with the toolchain pins, provenance, the fast-check proof, the tripwire (P58: ~10 min)
 NEED_VLLM_VENVS=1500    # two vLLM venvs (~3 GB each) and their fast-checks (the ~0.33 GB wheel again each) (P58: ~12 min for two)
-NEED_FETCH=1960         # the two checkpoints, 78.03 GB (61.08 + 16.95), at 40 MB/s (no download floor is registered: a stated rate)
+NEED_FETCH=1960         # the two checkpoints, 78.03 GB (61.08 + 16.95), at 40 MB/s, 0.64 of the kit screen's inet_down >= 500 Mbps floor
 NEED_BAKE=500           # k8_bake (P58: ~1 min) and the prompt dump, with margin
 NEED_X=900              # the largest single gate: can_run 900 before every arm
 RESERVE=600             # can_run's margin after a step: the reduce, the fetch-back and the teardown
