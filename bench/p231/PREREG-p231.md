@@ -315,6 +315,52 @@ fetched: no answer, so by the table above it is **a strike**, and it used one of
 The tripwire's other assertions are unchanged. The next reading id is `p231-5090-2`: it is the lane's last box-started
 run, and a second strike ends the lane with no reading. The launch commit becomes this amendment's merge.
 
+## Amendment 3 (after `p231-5090-2`, before any reading): the rows premise resolves the switch; every no-checkpoint phase runs in CI
+
+**What happened.** `p231-5090-2` started at Amendment 2's merge and passed the download probe (156.5 MB/s), the
+pre-install fit, the tripwire (now making the real resolve), every self-test and the served premise (7 passed). The ROWS
+premise then exited 25, `premise failed`: `p231_box.py --mode rows` raised the switch's guard, "routes 2..8-token calls
+only after `hot_residency.resolve_nf4_smallm_bw(modules, device)`".
+- **By the table above, rc 25 after the start is a HALT, not a strike.** The lane stops until it is amended. Strikes
+  stay at one (`p231-5090-1`), both box-started runs are used, and no reading has been taken.
+- **The cause is the same class as `p231-5090-1`'s, in a second place.** The rows premise calls
+  `hot_residency._fused_over_stack` itself, outside `build_engine`, with the switch set and nothing resolved. Amendment 2
+  fixed the tripwire's call and searched no further. Every other path the kit measures builds through `build_engine`,
+  which resolves the switch (the served arms and P115's quality phases).
+- **No shakedown or CI test could see it.** Amendment 2's shakedown stopped before the premise, and its CI test ran only
+  the tripwire's lines. Yet the premise needs no checkpoint: on the card it ran two minutes after the start.
+
+**The change.**
+1. **The rows premise resolves the switch itself** (`rows_resolve` in `p231_box.py`). It makes the REAL
+   `resolve_nf4_smallm_bw` call on stand-in MoE modules at the premise's expert shapes (Mixtral's 28672 x 4096 and 4096 x
+   14336) on the box's device, before its T loop. It requires the resolution to come back on at exactly those shapes,
+   records it in `rows.json`, and undoes the resolution and the switch in a `finally`.
+2. **Every box phase that needs no checkpoint runs end to end in CI, on CPU** (`tests/test_p231.py`). Only CUDA is
+   stubbed: the device line, `torch.cuda`'s two calls in the rows premise, and the kernel launch. The phases are:
+   - the tripwire's routing lines, read from `p231_run.sh`;
+   - all three self-tests the runner runs (`p231_reduce`, `p231_box`, `p115_quality`);
+   - the rows premise: the kit's own `rows_main` over the repository's `hot_residency`, at small stand-in shapes, through
+     the resolve, the guard, the routing and the per-row and engagement checks;
+   - the served premise's call path: the runner's own pytest line for `test_decode_graph_buckets.py`, which collects 7
+     tests with no failure or error on CPU, and the box's junit read.
+
+   The same test reads the REAL kits of the two lost boxes from git and requires each to fail on CPU, at the phase that
+   failed on the card: `5257ad42` at the tripwire and `5f7cec01` at the rows premise, both by the guard's own refusal.
+   A rows premise with its resolve deleted fails, and so does one on a device where K33 does not engage.
+3. **The shakedown runs through both premises.** It stops with `SHAKE OK` after the premise, before anything is
+   fetched, so a premise fault costs a shakedown, never a reading box. A shakedown's premise fault is `SHAKE_FAIL`,
+   which halts the lane. Before the next reading box, one shakedown at this amendment's merge runs on a 5090 as an
+   exploration, outside the lane's counts and budget, at a worst case under USD 1.
+4. **One more box-started run: `p231-5090-3`.** The runner and the driver accept it beside `-1`, `-2` and the retry ids
+   `r1` to `r8`. The two-strike stop is unchanged: one strike is spent, so a second ends the lane with no reading.
+
+**Budget.** The cap is the lane's actual spend plus the new box's worst case. The two started boxes cost USD 0.122 by
+the ledger (USD 0.069 and 0.053). With the third box's worst (USD 6.12) and the eight retry ids' non-starts
+(8 x USD 0.29), the lane's worst is 0.122 + 6.12 + 2.32 = **USD 8.56**, inside the USD 15 cap.
+
+**What does not change.** The arms, the rule, the bars, the reading's floors, guard and per-box worst, the premise's
+checks, and the served path. The launch commit becomes this amendment's merge.
+
 ## What was seen before this page (stated, not hidden)
 
 - **P227's reading** on `p227-5090-1`: its Mixtral cells (B over K25 0.356 at T = 2, 0.461 at T = 4; B over the floor

@@ -1,0 +1,5 @@
+### P231 Amendment 3 (after `p231-5090-2`, before any reading): the rows premise resolves the switch; every no-checkpoint phase runs in CI
+
+- `bench/p231/p231_box.py`: the rows premise (`--mode rows`) makes the real `resolve_nf4_smallm_bw` call on stand-in modules at its expert shapes on the box's device before its T loop (`rows_resolve`), records the resolution, and undoes it in a `finally`. Without it the switch's guard refused the premise's first 2-token call (`p231-5090-2`, rc 25).
+- `tests/test_p231.py`: every box phase that needs no checkpoint runs end to end on CPU with only CUDA stubbed (the tripwire's routing lines, the three self-tests, the rows premise's own `rows_main`, and the served premise's pytest line and junit read). The real kits of the two lost boxes, read from git, fail it at the phase that failed on the card.
+- `bench/p231/p231_run.sh`: shakedowns stop after both premises, before the fetch. The runner and `bench/p231/p231_drive.sh` accept the new reading id `p231-5090-3`.

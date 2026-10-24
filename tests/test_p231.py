@@ -29,7 +29,7 @@ PATHS = [str(LANE), str(BENCH / "p109"), str(BENCH / "p115"), str(BENCH / "p110"
          str(BENCH / "p97")]
 ENV = {**os.environ, "PYTHONPATH": os.pathsep.join(PATHS)}
 GNF4_V050 = "41ef086e6a3e2be5b158ff1bb38e0de67862a949"      # grouped-nf4-gemm v0.50.0
-RUN_IDS = ["p231-5090-1", "p231-5090-2"] + [f"p231-5090-r{i}" for i in range(1, 9)]
+RUN_IDS = ["p231-5090-1", "p231-5090-2", "p231-5090-3"] + [f"p231-5090-r{i}" for i in range(1, 9)]   # -3: Amendment 3
 SSH_READY_S, STAGING_MARGIN_S = 420, 300                     # the launch manifest's ssh_ready_s; staging and the checks
 GUARD_H = 4.8
 
@@ -46,9 +46,9 @@ def _load(name):
     return mod
 
 
-@pytest.mark.parametrize("name", ["p231_reduce", "p231_box"])
+@pytest.mark.parametrize("name", ["p231_reduce", "p231_box", "p115_quality"])   # every self-test the runner runs (Amendment 3)
 def test_self_tests_pass(name):
-    r = subprocess.run([sys.executable, str(LANE / f"{name}.py"), "--self-test"], capture_output=True, text=True,
+    r = subprocess.run([sys.executable, str(SOURCES[f"{name}.py"] / f"{name}.py"), "--self-test"], capture_output=True, text=True,
                        timeout=300, cwd=str(LANE), env=ENV)
     assert r.returncode == 0 and "self-test OK" in r.stdout, r.stdout + r.stderr
 
@@ -111,9 +111,9 @@ def test_staged_pins_match_their_sources_and_the_driver_stages_them():
 def test_run_ids_agree_across_runner_driver_and_prereg():
     case = "|".join(RUN_IDS) + ")"
     assert case in RUN and case in DRIVE
-    for bad in ("p231-5090-3", "p231-5090-r9"):
+    for bad in ("p231-5090-4", "p231-5090-r9"):
         assert bad not in RUN and bad not in DRIVE, bad
-    assert "`p231-5090-1`" in PREREG and "`p231-5090-r1` to `p231-5090-r8`" in PREREG
+    assert "`p231-5090-1`" in PREREG and "`p231-5090-r1` to `p231-5090-r8`" in PREREG and "`p231-5090-3`" in PREREG
 
 
 def test_the_runner_and_reducer_pin_gnf4_v050_mixtral_and_the_switch_boundary():
@@ -185,7 +185,11 @@ def test_the_pre_install_fit_meets_the_guard_with_boot_slack():
     assert GUARD_H <= 5.9 and abs(GUARD_H * 1.05 + (93 + 4.9) * 0.011 - 6.12) < 0.005   # the fetch + the probe's shard
     nonstart = (guard_s - fit_need) * 1.05 / 3600 + 4.9 * 0.011                # the boot term + the probe's shard
     assert nonstart <= 0.29
-    assert abs(2 * 6.12 + (len(RUN_IDS) - 2) * 0.29 - 14.56) < 0.005 and 14.56 <= 15.0   # the ids bound the boxes at 10
+    assert abs(2 * 6.12 + 8 * 0.29 - 14.56) < 0.005 and 14.56 <= 15.0   # the registration: 10 ids, 2 started
+    # Amendment 3: one more started box (p231-5090-3), bounded by the lane's ACTUAL spend: the two started boxes' ledger
+    # costs (USD 0.069 + 0.053), the third box's worst and the eight retry ids' non-starts
+    assert abs(0.122 + 6.12 + 8 * 0.29 - 8.56) < 0.005 and 8.56 <= 15.0 and len(RUN_IDS) == 11
+    assert "USD 8.56" in PREREG and "USD 0.122" in PREREG
     for s in ("13,200 s", "16,500 s", "Guard 4.8 h (17,280 s)", "780 s", "97.9 GB", "USD 6.12", "USD 0.29", "USD 14.56"):
         assert s in PREREG, s
     for need in ("NEED_FETCH=3000", "NEED_BAKE=1500", "NEED_FIT=600", "NEED_ARM=900", "NEED_QOFF=2400",
@@ -382,7 +386,8 @@ def hr_clean(monkeypatch):
     fake._bw_engages = lambda n, k, dev: fake.engages
     monkeypatch.setitem(sys.modules, "nf4_grouped", fake)
     for k in ("E4B_NF4_SMALLM_BW", "E4B_NF4_GROUPED_SMALLM"):
-        monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv(k, "")          # registered first, so teardown restores the prior state even when absent
+        monkeypatch.delenv(k)
     yield hr, fake
     hr.DEVICE_GROUPING[0] = False
     hr._NF4_SMALLM_BW_RESOLVED[0] = False
@@ -468,11 +473,15 @@ def test_amendment_2_the_block_fails_when_resolve_reads_other_shapes(hr_clean, m
     assert hr._NF4_SMALLM_BW_RESOLVED[0] is False, "the finally undoes even a resolution the asserts rejected"
 
 
-def test_amendment_2_shakedowns_stop_before_the_premise_and_never_count():
+def test_amendments_2_and_3_shakedowns_stop_after_the_premises_and_never_count():
     assert "p231-shake-1|p231-shake-2|p231-shake-3) SHAKE=1;;" in RUN and "p231-shake-1|p231-shake-2|p231-shake-3) :;;" in DRIVE
+    assert RUN.count('[ "$SHAKE" = 1 ] && { echo "SHAKE OK') == 1, "one shake stop"
     stop = RUN.index('[ "$SHAKE" = 1 ] && { echo "SHAKE OK')
-    assert RUN.index("p115_quality.py --self-test") < stop < RUN.index("# ---- the premise")
-    assert RUN.index("<<< the routing block <<<") < stop
+    # Amendment 3: AFTER both premises (the served suite and the rows premise, neither needs the checkpoint), before the
+    # fetch, so a premise fault costs a shake, never a reading box
+    assert RUN.index("<<< the routing block <<<") < RUN.index("p115_quality.py --self-test") < stop
+    assert RUN.index("python $W/p231_box.py --mode rows") < RUN.index('echo "premise ok"') < stop < RUN.index("snapshot_download")
+    assert 'finish 25' in RUN[RUN.index("python $W/p231_box.py --mode rows"):stop], "a shake's premise fault still halts"
     R = _load("p231_reduce")
     assert R.classify(0, True, "p231-shake-1")["event"] == "SHAKE_OK" and not R.classify(0, True, "p231-shake-1")["started"]
     assert R.classify(9, True, "p231-shake-2")["event"] == "SHAKE_FAIL" and R.classify(9, True, "p231-shake-2")["halt"]
@@ -484,3 +493,203 @@ def test_amendment_2_shakedowns_stop_before_the_premise_and_never_count():
         assert R.classify(rc, True, "p231-shake-3")["event"] == "SHAKE_FAIL" and R.classify(rc, True, "p231-shake-3")["halt"], rc
     assert R.classify(9, True, "p231-5090-2")["event"] == "NO_ANSWER", "a reading id's class is unchanged"
     assert "## Amendment 2" in PREREG and "p231-shake-1" in PREREG
+
+
+# ---- Amendment 3: every box phase that needs no checkpoint, run end to end on CPU (only CUDA stubbed)
+
+#: the kits that lost a box to a phase this file now runs on CPU: each must FAIL here, at the phase that failed on the card
+OLD_KITS = {"5257ad42d401cc8fc56385f6c6cfd3effa834e2e": "tripwire",     # p231-5090-1, rc 9
+            "5f7cec01278149e36466b05aa31934c54bb616cc": "rows"}         # p231-5090-2, rc 25
+#: small stand-ins for Mixtral's expert shapes (28672, 4096, 4096, 14336): the rows phase runs the premise's control flow
+#: (the resolve, the guard, the routing, the engagement and per-row checks), not its bits, which stay the card's
+ROWS_SHAPES = (128, 64, 64, 64)
+GUARD_TEXT = "resolve_nf4_smallm_bw(modules, device)"
+
+
+def _git_show(sha, rel):
+    r = subprocess.run(["git", "-C", str(REPO), "show", f"{sha}:{rel}"], capture_output=True, text=True,
+                       encoding="utf-8")
+    if r.returncode != 0:
+        pytest.fail(f"cannot read {rel} at {sha[:8]} (CI checks out the full history): {r.stderr.strip()}")
+    return r.stdout
+
+
+def _tripwire_lines(run_text):
+    """The runner's routing lines: the marked block (Amendment 2), else the span the same lines occupied before it."""
+    m = re.search(r"^# >>> the routing block[^\n]*\n(.*?)^# <<< the routing block <<<", run_text, re.S | re.M)
+    if m:
+        return m.group(1)
+    i = run_text.index("hr.DEVICE_GROUPING[0] = True")
+    j = run_text.index("hr.DEVICE_GROUPING[0] = False", i)
+    return run_text[i:j] + "hr.DEVICE_GROUPING[0] = False\n"
+
+
+def _tripwire_phase(run_text, hr):
+    try:
+        _run_block(_tripwire_lines(run_text), hr)
+    except Exception as e:  # noqa: BLE001 -- any failure of the phase is the finding
+        return f"tripwire: {type(e).__name__}: {str(e)[:200]}"
+    finally:
+        hr._NF4_SMALLM_BW_RESOLVED[0] = False
+        hr.DEVICE_GROUPING[0] = False
+        os.environ.pop("E4B_NF4_SMALLM_BW", None)
+    return None
+
+
+def _rows_phase(box_text, tmp_path, monkeypatch):
+    """The kit's own rows premise (``p231_box.py --mode rows``'s ``rows_main``) on CPU. The one CUDA device line becomes
+    CPU; ``torch.cuda``'s two calls and grouped-nf4-gemm's kernel launch are stubbed (each (token, slot) row computed on
+    its own from the packed weights, counted as a K33 launch); everything else is the kit's and the repo's own code."""
+    import argparse
+    import json
+    import torch
+    import nf4_grouped
+    assert box_text.count('torch.device("cuda")') == 1, "the rows premise has one CUDA device line"
+    path = tmp_path / "p231_box_cpu.py"
+    path.write_text(box_text.replace('torch.device("cuda")', 'torch.device("cpu")'), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("p231_box_cpu", path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.path[:0] = PATHS
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        del sys.path[:len(PATHS)]
+    monkeypatch.setitem(mod.MIXTRAL, "shapes", ROWS_SHAPES)
+    counts = {"bw_rows": 0}
+
+    def gemm_4bit_grouped(x, B, absmax, sizes, eids, gather_div=1):
+        counts["bw_rows"] += 1
+        xr = x.repeat_interleave(gather_div, 0)
+        e_l = [int(v) for v in (eids.tolist() if torch.is_tensor(eids) else eids)]
+        assert len(e_l) == xr.shape[0] and set(sizes) == {1}, "singleton groups: one row each"
+        return torch.stack([xr[r].float() @ nf4_grouped.dequant_ref(B[e], absmax[e], B.shape[1], B.shape[2] * 2).t()
+                            for r, e in enumerate(e_l)]).to(torch.bfloat16)
+    monkeypatch.setattr(nf4_grouped, "gemm_4bit_grouped", gemm_4bit_grouped)
+    monkeypatch.setattr(nf4_grouped, "dispatch_counts", lambda: dict(counts), raising=False)
+    monkeypatch.setattr(torch.cuda, "synchronize", lambda *a, **k: None)
+    monkeypatch.setattr(torch.cuda, "get_device_name", lambda *a, **k: "cpu (CUDA stubbed)")
+    out = tmp_path / "rows.json"
+    try:
+        rc = mod.rows_main(argparse.Namespace(out=str(out)))
+    except Exception as e:  # noqa: BLE001 -- any failure of the phase is the finding
+        return f"rows: {type(e).__name__}: {str(e)[:200]}"
+    finally:
+        os.environ.pop("E4B_NF4_SMALLM_BW", None)      # an old kit's rows_main sets it and raises with no finally
+    rec = json.loads(out.read_text(encoding="utf-8"))
+    if rc != 0 or not rec.get("ok"):
+        return f"rows: rc {rc}, status {rec.get('status')}, cases {json.dumps(rec.get('cases'))[:300]}"
+    n1, k1, n2, k2 = ROWS_SHAPES
+    res = rec.get("resolve") or {}
+    if res.get("on") is not True or res.get("shapes") != sorted([[n1, k1], [n2, k2]]):
+        return f"rows: the record's resolution is not on at the premise's shapes: {res}"
+    return None
+
+
+@pytest.fixture
+def cpu_phases(monkeypatch, tmp_path):
+    """The repo's hot_residency and the INSTALLED grouped-nf4-gemm (CI installs it), with K33's engagement answered by
+    ``engages["on"]`` (a CUDA question; the box asks the real one), the knobs unset and every switch restored after."""
+    nf4_grouped = pytest.importorskip("nf4_grouped")
+    from experts4bit_qlora.engines import hot_residency as hr
+    engages = {"on": True}
+    monkeypatch.setattr(nf4_grouped, "_bw_engages", lambda n, k, dev: engages["on"], raising=False)
+    for name, val in (("ROUTE_SEEN", {}), ("NF4_SMALLM_BW_SEEN", {}), ("_NF4_SMALLM_BW_RESOLVED", [False]),
+                      ("DEVICE_GROUPING", [False]), ("FORCE_SINGLETON_GROUPS", [False])):
+        monkeypatch.setattr(hr, name, val)
+    for k in ("E4B_NF4_SMALLM_BW", "E4B_NF4_GROUPED_SMALLM", "GNF4_GEMV_BW", "GNF4_GEMV_BW_PLAN", "GNF4_GEMV_BW_DECODE",
+              "GNF4_GEMV_DOTPAD"):
+        # registered first (setenv), then cleared: monkeypatch.delenv(k, raising=False) records nothing for an ABSENT
+        # knob, so a phase that sets one (an old kit's rows_main, which raises with no finally) would leak it into
+        # every later test of the session (e4b#2086's CI: two unrelated tests refused by E4B_NF4_SMALLM_BW=1)
+        monkeypatch.setenv(k, "")
+        monkeypatch.delenv(k)
+    return hr, engages, tmp_path, monkeypatch
+
+
+def test_amendment_3_every_no_checkpoint_phase_passes_on_cpu(cpu_phases):
+    """This commit's kit: the tripwire's routing lines and the rows premise, from the files the box runs. The other
+    no-checkpoint phases are the self-tests (test_self_tests_pass) and the served premise's call path (below)."""
+    hr, _, tmp_path, monkeypatch = cpu_phases
+    assert _tripwire_phase(RUN, hr) is None
+    assert _rows_phase((LANE / "p231_box.py").read_text(encoding="utf-8"), tmp_path, monkeypatch) is None
+    assert hr._NF4_SMALLM_BW_RESOLVED[0] is False and "E4B_NF4_SMALLM_BW" not in os.environ, "the rows phase undoes itself"
+
+
+@pytest.mark.parametrize("sha", sorted(OLD_KITS), ids=lambda s: s[:8])
+def test_amendment_3_the_kits_that_lost_boxes_fail_on_cpu(cpu_phases, sha):
+    """The REAL kits of p231-5090-1 (5257ad42) and p231-5090-2 (5f7cec01), read from git: each fails a no-checkpoint
+    phase on CPU, at the phase that failed on the card, by the guard's own refusal."""
+    hr, _, tmp_path, monkeypatch = cpu_phases
+    got = {"tripwire": _tripwire_phase(_git_show(sha, "bench/p231/p231_run.sh"), hr),
+           "rows": _rows_phase(_git_show(sha, "bench/p231/p231_box.py"), tmp_path, monkeypatch)}
+    assert got[OLD_KITS[sha]] and GUARD_TEXT in got[OLD_KITS[sha]], got
+    assert "E4B_NF4_SMALLM_BW" not in os.environ, "the old kit's phases leave no knob behind"
+    if OLD_KITS[sha] == "rows":
+        assert got["tripwire"] is None, "5f7cec01's tripwire was fixed (Amendment 2): its box was lost to the rows premise"
+
+
+def test_amendment_3_the_rows_phase_fails_without_the_resolve(cpu_phases):
+    """Mutant: this commit's rows premise with its resolve deleted fails the phase by the guard's own refusal."""
+    hr, _, tmp_path, monkeypatch = cpu_phases
+    box = (LANE / "p231_box.py").read_text(encoding="utf-8")
+    assert box.count("res = rows_resolve(hr, dev)") == 1
+    got = _rows_phase(box.replace("res = rows_resolve(hr, dev)", "res = {}"), tmp_path, monkeypatch)
+    assert got and GUARD_TEXT in got, got
+
+
+def test_amendment_3_the_rows_phase_fails_where_k33_does_not_engage(cpu_phases):
+    hr, engages, tmp_path, monkeypatch = cpu_phases
+    engages["on"] = False
+    got = _rows_phase((LANE / "p231_box.py").read_text(encoding="utf-8"), tmp_path, monkeypatch)
+    assert got and "does not engage" in got, got
+    assert hr._NF4_SMALLM_BW_RESOLVED[0] is False and "E4B_NF4_SMALLM_BW" not in os.environ, "a refused resolution routes nothing"
+
+
+@pytest.mark.parametrize("bad", ["other_shapes", "resolved_unset", "off"])
+def test_amendment_3_rows_resolve_refuses_a_resolution_that_does_not_hold(cpu_phases, bad):
+    """rows_resolve accepts only a resolution that is on, at exactly the premise's two expert shapes, AND left the
+    process resolved: another shape, a cleared flag or an off answer raises before any routed call."""
+    hr, _, _, monkeypatch = cpu_phases
+    B = _load("p231_box")
+    n1, k1, n2, k2 = B.MIXTRAL["shapes"]
+
+    def fake(modules, device):
+        hr._NF4_SMALLM_BW_RESOLVED[0] = bad != "resolved_unset"
+        shapes = [[2048, 7168]] if bad == "other_shapes" else sorted([[n1, k1], [n2, k2]])
+        return {"env": "1", "on": bad != "off", "max_tokens": hr.NF4_SMALLM_BW_MAX_T, "why": None, "shapes": shapes}
+    monkeypatch.setattr(hr, "resolve_nf4_smallm_bw", fake)
+    with pytest.raises(RuntimeError, match="did not come back on"):
+        B.rows_resolve(hr, "cpu")
+
+
+def test_amendment_3_the_rows_phase_reads_the_recorded_resolution(cpu_phases):
+    """Mutant: a rows premise that records no resolution (or an off one) fails the phase even when its rows match."""
+    hr, _, tmp_path, monkeypatch = cpu_phases
+    box = (LANE / "p231_box.py").read_text(encoding="utf-8")
+    assert box.count('"status": "ok", "resolve": res}') == 1
+    got = _rows_phase(box.replace('"status": "ok", "resolve": res}', '"status": "ok"}'), tmp_path, monkeypatch)
+    assert got and "the record's resolution is not on" in got, got
+
+
+def test_amendment_3_the_served_premise_call_path_runs_on_cpu(tmp_path):
+    """The runner's own pytest line for the served premise, then the box's junit read, on CPU: the suite collects its 7
+    tests with no failure or error (the fp8 ones skip off the card), and the read runs to its verdict line."""
+    line = next(ln for ln in RUN.splitlines() if "python -m pytest test_decode_graph_buckets.py" in ln)
+    argv = shlex.split(line[line.index("python -m pytest"):line.index(") > logs/premise.log")])
+    xml = tmp_path / "premise_served.xml"
+    argv = [sys.executable if a == "python" else a.replace("$W/logs/premise_served.xml", str(xml)) for a in argv]
+    (tmp_path / "test_decode_graph_buckets.py").write_bytes((REPO / "tests" / "test_decode_graph_buckets.py").read_bytes())
+    r = subprocess.run(argv, capture_output=True, text=True, timeout=600, cwd=str(tmp_path),
+                       env={**os.environ, "PYTHONPATH": str(REPO)})
+    assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+    import xml.etree.ElementTree as ET
+    cases = list(ET.parse(xml).getroot().iter("testcase"))
+    assert len(cases) == 7 and not any(c.find("failure") is not None or c.find("error") is not None for c in cases)
+    p = subprocess.run([sys.executable, str(LANE / "p231_box.py"), "--premise", str(xml), "--expect", "served"],
+                       capture_output=True, text=True, timeout=120, cwd=str(LANE), env=ENV)
+    assert p.stdout.startswith("P231_PREMISE served") and "Traceback" not in p.stderr, p.stdout + p.stderr
+
+
+def test_amendment_3_is_registered():
+    assert "## Amendment 3" in PREREG and "`p231-5090-3`" in PREREG
+    assert "def rows_resolve(hr, dev)" in (LANE / "p231_box.py").read_text(encoding="utf-8")

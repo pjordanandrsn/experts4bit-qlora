@@ -133,6 +133,22 @@ def rows_engagement_faults(e: dict) -> list:
     return out
 
 
+def rows_resolve(hr, dev) -> dict:
+    """Amendment 3: the rows premise calls ``hr._fused_over_stack`` itself, outside ``build_engine``, so it resolves
+    ``E4B_NF4_SMALLM_BW`` itself first, as the engine build does: the REAL ``resolve_nf4_smallm_bw`` on stand-in MoE
+    modules at :data:`MIXTRAL`'s expert shapes on this device (K33 must engage there). Without it the knob is refused
+    at the first 2..8-token call (p231-5090-2's rc 25). Returns the resolution; the caller undoes it in a finally."""
+    import types
+    n1, k1, n2, k2 = MIXTRAL["shapes"]
+    moe = types.SimpleNamespace(_hot_residency=types.SimpleNamespace(
+        _int4_stores=None, collapse_resident=True, _all_hot=lambda: True, shapes=MIXTRAL["shapes"]))
+    res = hr.resolve_nf4_smallm_bw([moe] * 32, dev)
+    want = sorted([[n1, k1], [n2, k2]])
+    if not (res.get("on") is True and res.get("shapes") == want and hr._NF4_SMALLM_BW_RESOLVED[0] is True):
+        raise RuntimeError(f"the rows premise's resolve did not come back on at {want}: {res}")
+    return res
+
+
 def rows_main(a) -> int:
     """The premise: B1's expert call returns each (token, slot) row bitwise identically at T = 1, 2 and 4."""
     import torch
@@ -143,6 +159,16 @@ def rows_main(a) -> int:
         os.environ.pop(k, None)
     os.environ[KNOB] = "1"
     dev = torch.device("cuda")
+    try:
+        res = rows_resolve(hr, dev)
+        return _rows_run(a, torch, F, hr, dev, res)
+    finally:
+        hr._NF4_SMALLM_BW_RESOLVED[0] = False
+        os.environ.pop(KNOB, None)
+
+
+def _rows_run(a, torch, F, hr, dev, res) -> int:
+    """The rows premise's body, after :func:`rows_resolve` (Amendment 3)."""
     E, k = MIXTRAL["E"], MIXTRAL["topk"]
     n1, k1, n2, k2 = MIXTRAL["shapes"]
     g = torch.Generator(device=dev).manual_seed(231)
@@ -157,7 +183,7 @@ def rows_main(a) -> int:
     X = (torch.randn(4, k1, generator=g, device=dev) * 0.3).to(torch.bfloat16)
     rec = {"mode": "rows", "shapes": list(MIXTRAL["shapes"]), "topk": k, "routings": routings, "cases": {},
            "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"),
-           "gpu": torch.cuda.get_device_name(0), "status": "ok"}
+           "gpu": torch.cuda.get_device_name(0), "status": "ok", "resolve": res}
 
     def call(tokens, pairs):
         T = len(tokens)
