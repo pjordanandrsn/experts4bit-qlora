@@ -48,7 +48,9 @@ DRIVE = (LANE / "p233_drive.sh").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p233.md").read_text(encoding="utf-8")
 FLAT = " ".join(PREREG.split())     # the PREREG's wrapped lines joined: a phrase reads across a line break
 NEW_FILES = [LANE / f for f in ("p233_run.sh", "p233_box.py", "p233_reduce.py", "p233_drive.sh", "staged-p233.sha256")] + [
-    REPO / "tests" / "test_p233.py", REPO / "changelog.d" / "p233-kit.md"]
+    REPO / "tests" / "test_p233.py"]
+# The kit's changelog fragment (changelog.d/p233-kit.md) was folded into CHANGELOG.md by the 0.58.0 release, so it is
+# no longer a file; its text is checked there with the rest of the release section.
 #: a committed P232 quality record: measure_phase's real output (with P232's box fields beside it)
 P232_FIXTURE = B / "p232" / "fixtures" / "p232-shake-1"
 

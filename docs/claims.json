@@ -13031,6 +13031,31 @@
       "notes": "Pre-registered in #2071 (Amendments 1-2: what the kit could implement exactly; the shakedown's record as the reducer's real fixture, the 575 W floor shown on its real bytes, and the guard read on a real host), before any reading. The premise: P229's GO_ROWS_8 microbench of the head call. Self-pairs 0.9925-1.0033 (band 0.985-1.015). T = 2 and T = 4 read identical quality numbers (observed, not explained by this record: the head-only bucket-stability record reads every row identical at T = 8 too, where the quality numbers differ). Greedy tokens (reported only): 76 of 112 rows identical to R's; a divergent row diverges at the same step in all four pairs. Predictions: quality, self-pairs and the verdict held; g_T in [1.02, 1.05] missed at T = 8 (1.0165, on the low side); most W2 rows identical at 32 tokens missed (half). The knob stays opt-in until the default PR merges; every other model family keeps its current default."
     },
     {
+      "id": "e4b.serve.p233.solver-placement-quality.qwen3.5090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P233 (one RTX 5090): on Qwen3-30B-A3B's serve_paged server, E4B_PAGED_PLACEMENT=solver at 8.0 GiB VRAM / 3.0 GiB DRAM (3236 / 1213 / 1695 experts on VRAM / DRAM / NVMe; 23 of 48 MoE layers on the tiered forward) keeps teacher-forced quality against the same server at all-vram inside P153's bars at group T = 1 and 8 (NLL gap +0.002077 and -0.000047 nats; argmax agreement 2993 of 3072 = 0.974284 at both T; KL 0.003925 and 0.003729). The verdict is SOLVER_SANE, and the TRIPWIRE fired at both T: the argmax agreement is below its 0.98 look-bar and the KL above its 0.002 bound. The written look in RESULTS-p233.md finds the disagreement smaller in every window than the reference server's own registered chunked-prefill floor arm ( KL 0.0100 and 0.0097, agreement 0.964 and 0.967), unbiased in NLL, and matched in size at T = 8 by a placement with no DRAM tier (C: KL 0.003676). A doc or lane may cite it for solver as an opt-in placement only, never a default; no speed is claimed.",
+      "value": 0.974284,
+      "unit": "argmax agreement, S (solver 8.0 / 3.0) against A (all-vram), teacher-forced, at T = 1 and at T = 8 (bar 0.95; the tripwire's look-bar 0.98)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 595.84, a 575 W power limit recorded and never ruled), one rented Vast.ai host (AMD EPYC 7532, 64 CPUs, AVX2 only, one NUMA node), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @2a0a9afc (0.57.0, P233's registration with Amendments 1-4, #2110's merge) + grouped-nf4-gemm v0.50.0 @41ef086e; torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; premise on the card exactly as registered (37 passed; CPU 6 passed); Qwen/Qwen3-30B-A3B @ad44e777, NF4 arena baked on the box; every arm E4B_PAGED_GRAPHS=0, E4B_INT8_HEAD_BW=1, E4B_INT8_HEAD_ROWS=8, E4B_PAGED_HOT_ROWS=128; arms A all-vram (the reference), S solver 8.0 / 3.0 GiB (ruling), C solver 8.0 / 0 (reported); quality = P153's instrument (P115 Phase B's measure_phase, unmodified) eager at group T = 1 and 8, 24 wikitext windows x 128 positions after a 512-token prompt per T, the pass KV at the server's 4096 tokens; the DRAM tier's experts on the host CPU kernels (64 threads); verdict by bench/p233/p233_reduce.py, re-derived byte-identical from the private receipt store",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p233/RESULTS-p233.md",
+        "bench/p233/PREREG-p233.md",
+        "bench/p233/p233_reduce.py",
+        "bench/p233/receipts/p233-5090-1/verdict_p233.json",
+        "bench/p233/receipts/p233-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p233-5090-1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2103 (Amendments 1-4: the head knobs named in every arm; what the kit implements exactly; E4B_PAGED_HOT_ROWS=128 after the shakedown found the cold tier's floor; the shakedown's records as the real fixture and phase A's term re-fit), before any reading. The TRIPWIRE fired (argmax 0.974284 < 0.98; KL above 0.002, A's repeat pass bit-identical so the floor fell to the absolute bound); the verdict stands, and a doc or lane may propose solver only as an opt-in placement citing this read and its written look, with the agreement below 0.98 stated. Predictions: the verdict held; S's |gap| <= 0.002 and argmax >= 0.98, S's KL <= 0.001, and C within 0.0005 / 0.995 all missed; T = 1 and T = 8 within 2x held for argmax and KL, missed for the NLL gap (sign change). One host CPU (EPYC 7532, AVX2) and one split read; the DRAM tier's reduction order on other instruction sets is not read. Phase A ran 1,217 s against its re-fit 1,026 s term (inside its 2,400 s alarm)."
+    },
+    {
       "id": "e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24",
       "package": "experts4bit-qlora",
       "area": "serve",
