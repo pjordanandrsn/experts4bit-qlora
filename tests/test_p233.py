@@ -29,6 +29,7 @@ import sys
 import types
 
 import pytest
+from guard_outcomes import expect_outcome
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 B = REPO / "bench"
@@ -344,18 +345,6 @@ def _clean_or_skip(dirty):
         pytest.skip(why)
 
 
-def _expect_outcome(call, outcome):
-    """``call()`` must end in exactly ``outcome`` (pytest.fail.Exception or pytest.skip.Exception). pytest.raises(outcome)
-    lets the other outcome escape, so a CI branch that regressed to a skip would be reported SKIPPED and pass CI."""
-    try:
-        call()
-    except (pytest.fail.Exception, pytest.skip.Exception) as e:
-        if not isinstance(e, outcome):
-            pytest.fail(f"expected {outcome.__name__}, got {type(e).__name__}: {e}")
-        return
-    pytest.fail(f"expected {outcome.__name__}, but the call returned")
-
-
 @pytest.mark.parametrize("ci,outcome", [("1", pytest.fail.Exception), ("", pytest.skip.Exception)],
                          ids=["ci-fails", "local-skips"])
 def test_a_dirty_checkout_fails_under_ci_and_skips_locally(monkeypatch, ci, outcome):
@@ -363,7 +352,8 @@ def test_a_dirty_checkout_fails_under_ci_and_skips_locally(monkeypatch, ci, outc
         monkeypatch.setenv("CI", ci)
     else:
         monkeypatch.delenv("CI", raising=False)
-    _expect_outcome(lambda: _clean_or_skip(" M tests/test_p233.py\n"), outcome)
+    with expect_outcome(outcome):
+        _clean_or_skip(" M tests/test_p233.py\n")
     _clean_or_skip("")                                                   # a clean tree neither fails nor skips
 
 
