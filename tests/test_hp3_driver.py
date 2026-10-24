@@ -34,10 +34,10 @@ def drive(tmp_path, **env):
     try:
         D.FAKEPY = fakepy.replace('  *"hp2_reduce.py verdict"*)', HP3_PY + '  *"hp2_reduce.py verdict"*)')
         D.HARNESS = (harness.replace("PY_E4B=$W/fakepy;", "PY_E4B=$W/fakepy; PY_H3E=$W/fakepy; PY_H3U=$W/fakepy; PY_H3A=$W/fakepy; H3_OK=${STUB_H3OK:-1}; "
-                                     "H3_REASON=${STUB_H3REASON:-}; DS_ALPACA_SHA=d;")
+                                     "H3_REASON=${STUB_H3REASON:-}; H3R_OK=${STUB_H3ROK:-1}; H3R_REASON=${STUB_H3RREASON:-}; DS_ALPACA_SHA=d;")
                      .replace('echo "$1 $2 $3 UNS_VENV=${UNS_VENV:-}" >> "$W/venv.log";',
                               'echo "$1 $2 $3 UNS_VENV=${UNS_VENV:-}" >> "$W/venv.log"; echo "$1 $2 $3 HP3_VENV=${HP3_VENV:-}" >> "$W/h3venv.log";')
-                     .replace("5400 2400 3600 3600", "5400 2400 3600 5400 ${HP3_SHAKE:-0}")
+                     .replace("5400 2400 3600 3600", "5400 2400 3600 5400 ${HP3_SHAKE:-0} ${HP3_MODE:-p}")
                      .replace("say(){", "left(){ echo ${STUB_LEFT:-100000}; }\nsay(){"))
         return D.drive(tmp_path, FAMILY_FN="tc1_hp3_family", **env)
     finally:
@@ -379,3 +379,46 @@ def test_the_shakedowns_evaluator_call_runs_on_a_cut_with_the_runners_real_argum
     ev = _run_hp1_eval(tmp_path / "r", _cal_argv(tmp_path / "r", "qwen3hp3", "0", "hp3-5090-1"), monkeypatch, trainable=26771456)
     assert ev["expect_trainable"] == 642514944
     assert all("trainable 26771456 != the registered 642514944" in str(x.get("reason")) for x in ev["arms"])
+
+
+def test_the_r_fallback_runs_e4b_and_unsloth_on_the_t28_build_with_the_r_reducer(tmp_path):
+    """HP3 Amendment 2 (R): e4b in venv-unsloth-t28 (t28u) and Unsloth 2026.9.14 (t28), no axolotl arm, the evaluator in that venv,
+    and the reducer in its --fallback-r mode, for calibration and five confirmation seeds."""
+    arms, summary = drive(tmp_path, FAMILY_FAM="qwen3hp3r", HP3_MODE="r", TC1_RUN_ID="hp3r-5090-1")
+    t = [a[2] for a in arms if a[0] == "qwen3hp3r"]
+    assert t[:2] == ["hp3cal_e4b_k00_s3407", "hp3cal_unsloth_s3407"] and not [x for x in t if "axolotl" in x]
+    assert t[2:] == [f"hp3_{r}_s{s}" for s in (3410, 3411, 3412, 3413, 3414) for r in ("k00", "unsloth")]
+    ev = (tmp_path / "e4bvenv.log").read_text().splitlines()
+    assert all(ln.endswith("E4B_VENV=t28u") for ln in ev if " e4b " in ln), ev
+    uv = (tmp_path / "venv.log").read_text().splitlines()
+    assert all(ln.endswith("UNS_VENV=t28") for ln in uv if " unsloth " in ln), uv
+    assert all(ln.endswith("HP3_VENV=") for ln in (tmp_path / "h3venv.log").read_text().splitlines())
+    py = (tmp_path / "py.log").read_text().splitlines()
+    assert [ln for ln in py if "hp1_eval.py" in ln] and all(ln.startswith("PY[fakepy-t28]") for ln in py if "hp1_eval.py" in ln)
+    red = [ln for ln in py if "hp3_reduce.py" in ln]
+    assert len(red) == 2 and all("--fallback-r" in ln for ln in red) and all(ln.startswith("PY[fakepy-t28]") for ln in red)
+
+
+def test_the_r_fallback_refuses_without_its_build_and_never_runs_a_shakedown(tmp_path):
+    (tmp_path / "b").mkdir()
+    arms, summary = drive(tmp_path / "b", FAMILY_FAM="qwen3hp3r", HP3_MODE="r", STUB_H3ROK="0", STUB_H3RREASON="venv-unsloth-t28 did not install/import")
+    assert arms == [] and "HP3 BUILD_FAILED: venv-unsloth-t28 did not install/import" in summary
+    (tmp_path / "s").mkdir()
+    arms, summary = drive(tmp_path / "s", FAMILY_FAM="qwen3hp3r", HP3_MODE="r", HP3_SHAKE="1", TC1_RUN_ID="hp3-shake-1")
+    assert arms == [] and "HP3 REFUSED: the (R) fallback has no shakedown token" in summary
+
+
+def test_the_r_build_record_compares_against_torch_280_cu128_with_bnb_unpinned():
+    sys.path.insert(0, str(D.REPO / "bench" / "hp3"))
+    import hp3_build as B
+    p = {"torch": "2.8.0+cu128", "cuda": "12.8", "bitsandbytes": "0.49.1", "bnb_lib_sha256": "b" * 64, "triton": "3.4.0"}
+    probes = [dict(p, framework=f) for f in ("e4b", "unsloth")]
+    assert B.compare(probes, "2.8.0", "any", "cu128")["verdict"] == "MATCHED"
+    rec = B.compare(probes, "2.8.0", "any", "cu130")
+    assert rec["verdict"] == "MISMATCH" and sum("is not a cu130 build" in x for x in rec["problems"]) == 2
+    assert B.compare([dict(p, framework="e4b"), dict(p, framework="unsloth", bnb_lib_sha256="c" * 64)], "2.8.0", "any", "cu128")["verdict"] == "MISMATCH"
+
+
+def test_the_part_8_memory_band_covers_the_r_token(tmp_path):
+    assert _membox(tmp_path, "5090", 32607, fams="qwen3hp3r")[0] == 0
+    assert _membox(tmp_path, "5090", 49140, fams="qwen3hp3r")[0] == 18

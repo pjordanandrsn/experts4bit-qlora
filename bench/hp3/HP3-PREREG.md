@@ -2,7 +2,8 @@
 
 **Status: registered 2026-10-21, before any data**, on #1932: one review outside the HP lane, then the maintainer's pass. Ruling
 5 was added on the harness PR, also before any data. Nothing launches without the maintainer's exec ACK with the kit hash, from
-main.
+main. **Amendment 2 (2026-10-24, before any reading box):** the spare shakedown triggered the registered (R) fallback,
+and HP3 reads e4b vs Unsloth 2026.9.14 on torch 2.8.0+cu128; axolotl waits for an amendment.
 
 **Scope label, in every verdict line:** *parity of the exported adapters under one evaluator on byte-identical bases*. HP3 says
 nothing about any framework's own in-loop loss.
@@ -394,6 +395,57 @@ two details (project from the first complete seed; record the count and its timi
 maintainer at 15:59Z on 2026-10-21, conditional on the evaluator's re-run of the simulation. The evaluator's checks:
 (a) the margin formula PASS, (b) the paired t quantile PASS, (c) a discrepancy (0.40, not 0.45) that came from the pre-read's
 PARITY-only test and strengthens the case. This amendment merges before the read box is created.
+
+## Amendment 2 (2026-10-24, before any reading box): the (R) fallback is triggered, and how it runs
+
+**Why.**
+- The spare shakedown `hp3-shake-2` (never data; receipt in the private store) read `HP3_BUILD=MATCHED`, and then G1' at L2 =
+  PARTIAL:
+  - e4b PASS as the reference;
+  - Unsloth PASS: the same dequantized digest, every zero-adapter row equal, equal row means;
+  - axolotl CLOSE: the digests differ, a zero-adapter row differs by 0.01238, the row means differ.
+- Under "The fallback" (decided before any data), a G1' other than PASS for every framework at L2 is the (R) trigger. The
+  maintainer re-derived the classes from the store (a g1.json identical to the box's) and ruled: follow the registration.
+- HP3 therefore runs **(R): e4b K00 vs Unsloth 2026.9.14 on HPN's build (torch 2.8.0+cu128)**, and axolotl waits for an
+  amendment.
+- *A hypothesis, never part of the classification:* axolotl's own 4-bit config records `bnb_4bit_use_double_quant: false`, and
+  e4b's and Unsloth's bases are byte-identical to each other. Bringing axolotl back is a separate amendment with its own
+  shakedown, and nothing about it changes (R).
+- The first shakedown, `hp3-shake-1`, was a harness fault (the evaluator's trainable count on the cut), fixed in e4b#2088. It
+  is the registration's spare after a harness fix, and it was never part of the trigger.
+
+**(R) as run.**
+1. **Token `qwen3hp3r`.** The family is `tc1_hp3_family` in its (R) mode, and two venvs are built:
+   - `venv-unsloth-t28`: Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 on the image's torch 2.8.0+cu128, as HP1/HP2/HPN installed it.
+   - e4b, installed into that same venv (`t28u`, HBD's E2 route).
+   - The evaluator also runs there, so the evaluator's process is on the build too.
+   - No cu130 Unsloth venv and no axolotl venv are built. The build record (`hp3/build.json`) probes both frameworks in that
+     venv and requires one build at torch 2.8.0+cu128. bitsandbytes is Unsloth's own resolve, recorded and never pinned by us
+     (HP1/HP2's rule for Unsloth).
+2. **Unchanged from the registration and Amendment 1:**
+   - the recipe, G1' (now over the two bases), 6(b), G2' and the bands and wording;
+   - five seeds with part 7's seed plan, the content binding, and part 8's memory band (RTX 5090: 31000–33000 MiB);
+   - the reported-only statistics and the scope label.
+3. **One pair, no three-way read.** The reading is the e4b–Unsloth pair's verdict. The record's three-way entry reads
+   NOT_APPLICABLE, with the reason.
+4. **Labels, in every verdict line (replacing (i)–(iii) for (R)):**
+   - (R) is the registered fallback: e4b K00 vs Unsloth 2026.9.14, HP1/HP2's version;
+   - axolotl waits for an amendment;
+   - the build is torch 2.8.0+cu128 with Unsloth's own bitsandbytes, so no HP3 (R) number is compared with an HP2 or HPN number.
+5. **The read box.** One RTX 5090 under the registered host rule (driver ≥580, RAM ≥98 GB, disk ≥220 GB), at all 48 layers.
+   - The phases are ~4.8 h: A ~0.6 (one venv + e4b + the fetch), B ~0.7, C ~2.6 for ≤10 runs, and D ~0.9.
+   - The guard is 6.5 h, and the worst case is 6.5 h × $0.85 + 100 GB × $0.011 = **$6.63**.
+   - Ids: `hp3r-5090-1`, with `hp3r-5090-2` as the one pre-create spare. A refusal at create uses no id.
+   - At most one reading box starts.
+6. **Lane worst case:** the shakedowns spent $0.373, so $0.373 + $6.63 = **$7.00**, under $15.
+7. **No (R) shakedown** (the maintainer's path for (R): independent review, the maintainer's pass, a $0 dry run and an Approved
+   on the merge).
+   - What this rests on:
+     - HPN ran e4b and Unsloth 2026.9.14 on torch 2.8.0+cu128, with e4b in venv-e4b.
+     - HBD's E2 cell ran e4b inside venv-unsloth-t28 on the 2-layer cut, on an RTX 5090.
+     - The read box's own G1' checks the bases.
+   - **What is new here:** e4b at 48 layers inside venv-unsloth-t28, with Unsloth's transformers. A box on which either framework
+     fails to install or run is a harness fault: NOT_READ, with no read and no strike, and the spare id follows a fix.
 
 ## Harness
 

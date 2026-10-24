@@ -287,3 +287,37 @@ def test_a_bound_output_without_the_plan_refuses(tmp_path):
     """The inverted gap: the runner made a plan (the evaluator hashed it) but the reducer was not given it."""
     ev, g1, _ = _bound(tmp_path, PLAN4)
     assert R.main(["verdict", str(ev), "--g1", str(g1), "--out", str(tmp_path / "v.json")]) == R.EXIT_UNUSABLE
+
+
+def test_the_r_fallback_reads_one_pair_with_its_own_labels_and_no_three_way_read():
+    """HP3 Amendment 2 (R): e4b vs Unsloth 2026.9.14 on torch 2.8.0+cu128. G1' over the two bases, one pair read, the three-way read
+    NOT_APPLICABLE, and the (R) labels on the record."""
+    try:
+        R.set_fallback_r()
+        cal = _cal()
+        cal["bases"] = cal["bases"][:2]                                         # no axolotl base under (R)
+        g = R.g1(cal)
+        assert g["verdict"] == "PASS" and g["readable_pairs"] == ["e4b-unsloth"] and set(g["frameworks"]) == {"e4b", "unsloth"}
+        assert g["labels"] == R.LABELS_R
+        conf = _conf()
+        conf["arms"] = [a for a in conf["arms"] if not a["tag"].startswith("hp3_axolotl")]
+        out, code = R.verdict([conf], g, {})
+        assert code == R.EXIT_OK and list(out["pairs"]) == ["e4b-unsloth"] and out["pairs"]["e4b-unsloth"]["verdict"] == "PARITY"
+        assert out["three_way"]["verdict"] == "NOT_APPLICABLE" and out["labels"] == R.LABELS_R
+    finally:
+        R.set_mode_p()
+    assert R.FRAMEWORKS == ("e4b", "unsloth", "axolotl") and R.MODE == "p"
+
+
+def test_the_r_flag_is_wired_through_main(tmp_path):
+    ev, out = tmp_path / "eval_cal.json", tmp_path / "g1.json"
+    cal = _cal()
+    cal["bases"] = cal["bases"][:2]
+    ev.write_text(json.dumps(cal))
+    try:
+        assert R.main(["g1", str(ev), "--fallback-r", "--out", str(out)]) == R.EXIT_OK
+        assert json.loads(out.read_text())["verdict"] == "PASS"
+    finally:
+        R.set_mode_p()
+    assert R.main(["g1", str(ev), "--out", str(tmp_path / "g1p.json")]) == R.EXIT_OK      # (P) over the same two bases: PARTIAL
+    assert json.loads((tmp_path / "g1p.json").read_text())["verdict"] == "PARTIAL"
