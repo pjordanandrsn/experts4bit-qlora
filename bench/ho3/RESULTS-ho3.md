@@ -83,21 +83,21 @@ The RTX 4090 cohort's second box is therefore not measured. HO2's RTX 4090 rows 
 
 ## Attempts and cost
 
-From the private receipt store: each attempt's launcher receipt (`receipt.json`, its `cost_usd.actual` and
+From the private receipt store (the receipts' runtime_seconds and cost lines; not in this tree): each attempt's launcher receipt (`receipt.json`, its `cost_usd.actual` and
 `runtime_seconds`). Those receipts are store-only, because they name the rented host, so a reader of this tree cannot
 re-derive this table; the four boxes that never started have no other record here. Each started box's README repeats
 its USD.
 
 | box | outcome | started | USD | launcher wall time |
 |---|---|---|---|---|
-| `ho3-5090-1` | refused at create: the pinned offer was gone | no | 0 | 35 s |
+| `ho3-5090-1` | refused at create: the pinned offer was gone (from the private receipt store: the receipt's runtime_seconds and cost lines; not in this tree) | no | 0 | 35 s |
 | `ho3-5090-r1` | read: COVERED | yes | 0.472 | 916 s |
-| `ho3-4090-1` | refused at create: the pinned offer was gone | no | 0 | 35 s |
+| `ho3-4090-1` | refused at create: the pinned offer was gone (from the private receipt store: the receipt's runtime_seconds and cost lines; not in this tree) | no | 0 | 35 s |
 | `ho3-4090-r1` | VOID (strike 1) | yes | 0.630 | 946 s |
 | `ho3-4090-2` | VOID (strike 2: the RTX 4090's stop) | yes | 0.282 | 851 s |
 | `ho3-a4000-1` | read: MISS | yes | 0.435 | 1,420 s |
-| `ho3-a4000-2` | host refusal before the install (rc 19: the driver-peak probe took no sample) | no | 0.008 | 378 s |
-| `ho3-a4000-r1` | refused at create (the offer billed above the declared rate), then NOT_RUN at the launcher's pre-flight (Hugging Face CDN 14.6 MB/s, under its 20 MB/s floor) | no | 0.014 | 305 s |
+| `ho3-a4000-2` | host refusal before the install (rc 19: the driver-peak probe took no sample) (from the private receipt store: the receipt's runtime_seconds and cost lines; not in this tree) | no | 0.008 | 378 s |
+| `ho3-a4000-r1` | refused at create (the offer billed above the declared rate), then NOT_RUN at the launcher's pre-flight (Hugging Face CDN 14.6 MB/s, under its 20 MB/s floor) (from the private receipt store: the receipt's runtime_seconds and cost lines; not in this tree) | no | 0.014 | 305 s |
 | `ho3-a4000-r2` | read: MISS | yes | 0.262 | 2,069 s |
 
 **Total:** USD 2.103 against the registered USD 27.23 worst. The A4000 retry id `r1` appears twice because a refusal at
