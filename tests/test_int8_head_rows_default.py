@@ -292,6 +292,37 @@ def test_spec_on_keeps_1_never_raises_and_never_imports_k37(monkeypatch, toy_fam
     assert m.lm_head.rows_max == 1
 
 
+def _probe_raises(monkeypatch):
+    """K37's probe replaced by one that fails the test if it is ever called."""
+    def probed():
+        raise AssertionError("rows_kernel_missing was called: the unset knob probed K37 where the default cannot apply")
+    monkeypatch.setattr(ih, "rows_kernel_missing", probed)
+
+
+@pytest.mark.parametrize("case", ["unlisted family", "qwen3 head off", "qwen3 spec on"])
+def test_an_unset_knob_never_probes_k37_where_the_default_cannot_apply(monkeypatch, toy_family, k37, case):
+    """The probe (and so ``import dense_i8``) runs only for a listed family with the head on and spec off: elsewhere an
+    unset knob resolves to 1 without the call (a mutant that probes every family fails here)."""
+    _probe_raises(monkeypatch)
+    if case == "unlisted family":
+        cfg, m = _cfg(monkeypatch, head_bw="1"), _Toy(model_type="olmoe")
+    elif case == "qwen3 head off":
+        cfg, m = _cfg(monkeypatch, head_bw="0"), _Toy()
+    else:
+        cfg, m = _cfg(monkeypatch), _Toy()
+        cfg.spec = "eagle3"
+    head, rows = _build(cfg, m)
+    assert rows["rows_max"] == 1 and rows["source"].startswith("default-off: "), (case, rows)
+
+
+def test_the_probe_runs_where_the_default_can_apply(monkeypatch, toy_family, k37):
+    """The positive control for the test above: on the listed family, head on, spec off, the unset knob does call the
+    probe, so the raising stub is the one the build reaches."""
+    _probe_raises(monkeypatch)
+    with pytest.raises(AssertionError, match="rows_kernel_missing was called"):
+        _build(_cfg(monkeypatch), _Toy())
+
+
 def test_an_explicit_1_opts_out_on_qwen3_moe(monkeypatch, toy_family, k37):
     m = _Toy()
     head, rows = _build(_cfg(monkeypatch, rows="1"), m)
