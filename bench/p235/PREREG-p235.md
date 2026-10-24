@@ -72,7 +72,8 @@ with `--no-compile`.
 - **e4b or grouped-nf4-gemm, provenance** (wrong version, editable, `file://`, another host, any git commit): the run
   ends with rc 9 before the tripwire and before any arm.
 - **e4b or grouped-nf4-gemm, release proof:** the run ends with rc 9 before the first arm. This comes after the
-  downloads and the bake, so a refusal here costs the setup time.
+  downloads, the bake and the vLLM installs, so a refusal here costs the setup: the download (at most $1.60 at the
+  80 GB cap) and the box time to that point, never more than the $4.75 worst case.
 - **A vLLM build** (checked in that build's venv, on `vllm` only): that build's rows are refused (they read `SKIPPED`,
   no comparator), as P58's `PIP FAIL` rule does. The e4b arms and the other build continue.
 
@@ -142,11 +143,15 @@ Two limits of the instrument:
 - **Worst case:** $3.15 + $1.60 = **$4.75**, inside a **$6** lane ceiling. P58 ran the same arms in 42 minutes.
 - **Run ids:** `p235-5090-1..-3` are the readings, and `p235-5090-r1..-r6` are for a box that did not start. The
   first run that completes is the reading. A run that ended before its arms (install, provenance, a dud box, a host
-  fault) is followed by the next id. A completed run is never re-run, whatever it reads (P58 STOP-4).
+  fault) is followed by the next id. A release-proof refusal is not: another box would install the same published
+  bytes, so its cause is read and posted first, and the next id waits for that. A completed run is never re-run, whatever it reads (P58 STOP-4).
 
 **No shakedown is registered.** P58's runner ran all 18 arms on a 5090 in this exact shape. The changes here are
 version pins, PyPI installs with a provenance check, and names, each checked at $0 (the API binding above, the
 tripwire asserts, the provenance checker's tests, vLLM's torch pin). A failure at install, provenance or the tripwire
-refuses (rc 9) before the first arm and costs a few minutes of one box, about what a shakedown would cost.
+refuses (rc 9) before the first arm and costs a few minutes of one box, about what a shakedown would cost. A
+release-proof refusal comes later, after the downloads and the bake, and costs the setup (above), bounded by the
+$4.75 worst case. grouped-nf4-gemm 0.51.0 and both vLLM builds read RECORD equal live at $0 before registration;
+experts4bit-qlora 0.58.0 was not yet published, so its wheel is first proven on the box.
 
 Amendments, dated, go below this line before any data is read.
