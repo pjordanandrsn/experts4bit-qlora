@@ -211,6 +211,10 @@ and the chunked LM loss both on, the reserved peak falls 0.482 GB and the alloca
 nvidia-smi peak, 25,727 MiB, is still 1,163 MiB over an RTX 4090's total. Even with no allocator gap the allocated peak plus the CUDA
 context is about 24,735 MiB, so no arm fits. The compact delta's backward then holds the peak: its rebuilt block and that block's grad,
 0.811 GB each, live together.
+**The 4090 fit** (`e4b.train.4090-fit.field.4090.2026-10-24`, TC1 amendment 78, the fit reading on real 24 GiB cards): every LoRA delta
+width-bucketed through the compact bucketed node plus 256-token LM-loss chunks (pb1cl256) trained the field recipe's 60 steps with no
+out-of-memory error on two RTX 4090s on two machines. The least headrooms over both draws: 1,258 MiB usable minus max allocated, 586 MiB
+usable minus max reserved, and 586 MiB of memory.total unused at the fullest step. FIT for this fixture only; the levers stay opt-in.
 **e4b's own host time at the field recipe.** grouped-nf4-gemm's opt-in single-block ladder (`NF4_QLORA_SINGLE_LADDER=1`,
 grouped-nf4-gemm#513) puts the padded LoRA block's batched products on repeating shapes
 (`e4b.train.single-ladder.field.5090.2026-10-08`, TC1 amendment 70). On a host-bound box it stepped e4b's matched arm, with fp32 adapters,
