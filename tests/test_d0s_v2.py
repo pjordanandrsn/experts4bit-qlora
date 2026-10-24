@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -62,6 +63,16 @@ def expert_digest(model, layers=(0, -1)):
             sha.update(tensors[n].detach().contiguous().view(torch.uint8).cpu().numpy().tobytes())
         out[f"stack[{li}]"] = sha.hexdigest()
     return out
+
+
+def _repo(path, lora_text, tag="v0.56.1"):
+    """A git repository holding experts4bit_qlora/lora.py at a release tag, the way the e4b repository holds it."""
+    (path / "experts4bit_qlora").mkdir(parents=True)
+    (path / "experts4bit_qlora" / "lora.py").write_text(lora_text)
+    env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+    for args in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "lora"], ["tag", tag]):
+        subprocess.run(["git", "-C", str(path), *args], check=True, env=env, capture_output=True)
+    return path
 
 
 def _weights(seed=0):
@@ -134,7 +145,8 @@ def world(tmp_path_factory):
         for w, (n, k) in (("gate_up", (2 * INTER, H)), ("down", (H, INTER))):
             lora[f"{STACK.format(li)}.{w}_lora_A"] = torch.randn(E, R, k, generator=g)
             lora[f"{STACK.format(li)}.{w}_lora_B"] = torch.randn(E, n, R, generator=g) * 0.05
-    out = {"snap": snap, "base": base, "record": base / "fixture_base.json", "lora_py": ROOT / "experts4bit_qlora" / "lora.py"}
+    out = {"snap": snap, "base": base, "record": base / "fixture_base.json",
+           "e4b_repo": _repo(tmp / "e4b-repo", (ROOT / "experts4bit_qlora" / "lora.py").read_text())}
     for fx in ("nodq", "dq"):
         out[f"receipt_{fx}"] = _receipt(tmp / f"receipt-{fx}.json", fx, digests[fx])
         out[f"v1_{fx}"] = _v1(tmp / f"fixture-{fx}", lora)
@@ -179,7 +191,7 @@ def _v1(d, tensors, setup=None):
 def _derive(world, fx, out, **kw):
     args = dict(fixture=fx, v1_dir=str(world[f"v1_{fx}"]), receipt_path=str(world[f"receipt_{fx}"]),
                 base_dir=str(world["base"]), base_record=str(world["record"]), checkpoint=str(world["snap"]),
-                lora_py=str(world["lora_py"]), lora_py_commit="test", created_at="2026-10-24T00:00:00Z", out=str(out),
+                e4b_repo=str(world["e4b_repo"]), created_at="2026-10-24T00:00:00Z", out=str(out),
                 expert_digest=expert_digest)
     args.update(kw)
     return V2.derive(**args)
@@ -327,10 +339,58 @@ def test_a_record_that_does_not_verify_the_base_is_refused(world, tmp_path):
      "    self.scaling = 1.0\n", "assigns self.scaling"),
 ])
 def test_a_training_lora_py_that_does_not_apply_alpha_over_r_is_refused(world, tmp_path, text, needle):
-    p = tmp_path / "lora.py"
-    p.write_text(text)
     with pytest.raises(V2.Refused, match=needle):
-        _derive(world, "nodq", tmp_path / "out", lora_py=str(p))
+        _derive(world, "nodq", tmp_path / "out", e4b_repo=str(_repo(tmp_path / "repo", text)))
+
+
+def test_the_lora_py_read_is_the_training_versions_tag_and_is_recorded(world, tmp_path):
+    man = _derive(world, "nodq", tmp_path / "out")
+    rec = man["derived_from"]["lora_py"]
+    repo = str(world["e4b_repo"])
+    commit = subprocess.run(["git", "-C", repo, "rev-parse", "v0.56.1^{commit}"], capture_output=True, text=True).stdout.strip()
+    blob = subprocess.run(["git", "-C", repo, "rev-parse", f"{commit}:experts4bit_qlora/lora.py"], capture_output=True,
+                          text=True).stdout.strip()
+    assert rec == {"version": "0.56.1", "tag": "v0.56.1", "commit": commit, "blob": blob,
+                   "sha256": hashlib.sha256((ROOT / "experts4bit_qlora" / "lora.py").read_bytes()).hexdigest()}
+
+
+def test_a_training_version_the_repository_has_no_tag_for_is_refused(world, tmp_path):
+    w = dict(world)
+    rec = json.loads(Path(world["receipt_nodq"]).read_text())
+    w["receipt_nodq"] = _receipt(tmp_path / "receipt.json", "nodq", rec["correctness"]["frozen_expert_digest"],
+                                 engaged__versions={"experts4bit-qlora": "9.9.9"})
+    with pytest.raises(V2.Refused, match="refs/tags/v9.9.9"):
+        _derive(w, "nodq", tmp_path / "out")
+
+
+def test_a_tag_whose_lora_py_is_not_the_one_read_fails_its_check(world, tmp_path):
+    """The bytes are the tag's, never a file passed beside it: a tag whose lora.py carries rslora is refused even though
+    main's lora.py would pass."""
+    bad = (ROOT / "experts4bit_qlora" / "lora.py").read_text() + "\nuse_rslora = False\n"
+    with pytest.raises(V2.Refused, match="rslora"):
+        _derive(world, "nodq", tmp_path / "out", e4b_repo=str(_repo(tmp_path / "repo", bad)))
+
+
+@pytest.mark.parametrize("which, field, bad, needle", [
+    ("gate_up", "_s", lambda t: t[:-1], "gate_up_absmax_s is torch.float32 x"),
+    ("down", "_s", lambda t: t[:-1], "down_absmax_s is torch.float32 x"),
+    ("gate_up", "_q", lambda t: t.to(torch.int16), "_absmax_q is torch.int16"),
+    ("gate_up", "_off", lambda t: t.repeat(2), "_absmax_off is torch.float32 x 2"),
+    ("gate_up", "_code", lambda t: t[:128], "_absmax_code is torch.float32 x 128"),
+])
+def test_installing_a_payload_of_the_wrong_shape_is_refused_before_anything_moves(which, field, bad, needle):
+    from experts4bit_qlora.absmax_dq import compress_expert_absmax_, install_compressed_absmax_
+    W, _A = _weights()
+    a, b = _trained(W), _trained(W)
+    compress_expert_absmax_(a)
+    sa = a.model.layers[0].mlp.experts.base
+    payloads = {w: {x: sa._buffers[f"{w}_absmax{x}"] for x in V2.SUFFIXES} for w in V2.WHICH}
+    payloads[which][field] = bad(payloads[which][field])
+    with pytest.raises(ValueError, match=needle):
+        install_compressed_absmax_(b.model.layers[0].mlp.experts.base, payloads)
+    sb = b.model.layers[0].mlp.experts.base
+    assert all(f"{w}_absmax" in sb._buffers for w in V2.WHICH)                   # a bad down payload moves no gate_up
+    assert not any(k.endswith("_absmax_q") for k in sb._buffers)
 
 
 def test_the_real_training_code_and_main_pass_the_scaling_check():

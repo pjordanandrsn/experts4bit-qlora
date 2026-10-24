@@ -290,6 +290,18 @@ def install_compressed_absmax_(mod, payloads: dict) -> None:
 
     if set(payloads) != set(_WHICH) or any(set(p) != set(_SUFFIXES) for p in payloads.values()):
         raise ValueError(f"a payload per projection {list(_WHICH)}, each with {list(_SUFFIXES)}")
+    # every projection's payload is checked before any buffer moves, so a refusal leaves the stack as it was
+    for which in _WHICH:
+        n = mod._buffers[f"{which}_absmax"].numel()
+        # the payload's own shape, as quantize_blockwise writes it: one uint8 code per absmax, one fp32 scale per
+        # nested block of 256 (the last one partial), one fp32 offset, and the 256-entry fp32 dynamic map
+        want = {"_q": (torch.uint8, n), "_s": (torch.float32, -(-n // NESTED_BLOCKSIZE)), "_off": (torch.float32, 1),
+                "_code": (torch.float32, 256)}
+        for x, (dtype, numel) in want.items():
+            t = payloads[which][x]
+            if not isinstance(t, torch.Tensor) or t.dtype != dtype or t.numel() != numel:
+                got = f"{t.dtype} x {t.numel()}" if isinstance(t, torch.Tensor) else type(t).__name__
+                raise ValueError(f"{which}_absmax{x} is {got}; a payload for {n} absmax holds {dtype} x {numel}")
     source = {}
     for which in _WHICH:
         absmax = mod._buffers[f"{which}_absmax"]
@@ -298,8 +310,6 @@ def install_compressed_absmax_(mod, payloads: dict) -> None:
         # The bytes are the buffer's in storage order, the same bytes expert_absmax_fp32's view of it hashes.
         source[which] = absmax_sha256(absmax)
         p = payloads[which]
-        if p["_q"].numel() != absmax.numel():
-            raise ValueError(f"{which}_absmax_q holds {p['_q'].numel()} values for {absmax.numel()} absmax")
         # Remove the fp32 buffer BEFORE registering the replacements, so the old name stops resolving to a
         # tensor; the guard takes the name as a plain attribute.
         delattr(mod, f"{which}_absmax")

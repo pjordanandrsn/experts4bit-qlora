@@ -8,8 +8,10 @@ paged server's refusal 13 read /2 only. This tool writes, into a NEW directory, 
 - ``expert_absmax``, ``train_fused_qkv``, ``attn_quant``, ``versions``, ``lora_scale_applied`` and ``run_id`` are read
   from the training receipt's ``engaged`` block, as the trainer recorded them. ``lora_scale_applied`` must equal the
   recorded alpha / r ("equal by the reader rule"), and the training code is read to show it applies alpha / r: the
-  ``lora.py`` of the training commit must set ``self.scaling = alpha / r`` in both LoRA classes and nowhere else
-  otherwise, with no rslora or DoRA path, and the recorded setup must carry no scaling option.
+  training commit is the receipt's recorded experts4bit-qlora version, resolved to its release tag in an e4b git
+  repository; ``lora.py`` is read from that commit (``git show``, its blob id recorded), and must set
+  ``self.scaling = alpha / r`` in both LoRA classes and nowhere else otherwise, with no rslora or DoRA path. The
+  recorded setup must carry no scaling option.
 - ``fingerprints.experts`` is e4b's own ``quant_fingerprint`` over the STORED trained base (fixture-base:
   ``stacks.safetensors``, plus ``absmax_dq.safetensors`` for a double-quantized one, installed as stored and never
   recomputed, since the compression's statistics depend on the device). Before that, the trainer's own record is
@@ -27,7 +29,7 @@ Every link that is missing or does not verify is a refusal (:class:`Refused`); n
 base. The fixture's own directory and receipts are only read.
 
     python bench/d0s/d0s_v2.py --fixture nodq --v1 DIR --receipt RECEIPT.json --base FIXTURE_BASE_DIR \\
-        --base-record fixture_base.json --checkpoint HF_SNAPSHOT --lora-py lora.py --lora-py-commit SHA \\
+        --base-record fixture_base.json --checkpoint HF_SNAPSHOT --e4b-repo E4B_GIT_CHECKOUT \\
         --created-at 2026-10-24T00:00:00Z --out NEW_DIR
 """
 from __future__ import annotations
@@ -38,6 +40,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 TOOL = "bench/d0s/d0s_v2.py"
@@ -82,6 +85,27 @@ def check_scaling_code(text: str) -> None:
         m = re.search(rf"^class {cls}\b.*?(?=^class |\Z)", text, re.S | re.M)
         if m is None or "self.scaling = alpha / r" not in m.group(0):
             raise Refused(f"the training lora.py's {cls} does not set self.scaling = alpha / r")
+
+
+def training_lora_py(e4b_repo: str, receipt: dict) -> dict:
+    """``{"version", "tag", "commit", "blob", "sha256", "text"}``: the training commit's ``experts4bit_qlora/lora.py``,
+    read with git from ``e4b_repo`` at the release tag of the experts4bit-qlora version the training receipt records."""
+    version = ((receipt.get("engaged") or {}).get("versions") or {}).get("experts4bit-qlora")
+    if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise Refused(f"the training receipt records no experts4bit-qlora release version ({version!r})")
+    tag = f"v{version}"
+
+    def git(*args):
+        r = subprocess.run(["git", "-C", e4b_repo, *args], capture_output=True, timeout=60)
+        if r.returncode:
+            raise Refused(f"git {' '.join(args)} in {e4b_repo}: {r.stderr.decode(errors='replace').strip()[:200]}")
+        return r.stdout
+
+    commit = git("rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}").decode().strip()
+    blob = git("rev-parse", "--verify", "--quiet", f"{commit}:experts4bit_qlora/lora.py").decode().strip()
+    body = git("cat-file", "blob", blob)
+    return {"version": version, "tag": tag, "commit": commit, "blob": blob,
+            "sha256": hashlib.sha256(body).hexdigest(), "text": body.decode("utf-8")}
 
 
 def check_receipt(v1, receipt: dict, fixture: str) -> dict:
@@ -201,7 +225,7 @@ def attach_attention(layers, checkpoint: str) -> dict:
 
 
 def derive(*, fixture: str, v1_dir: str, receipt_path: str, base_dir: str, base_record: str, checkpoint: str,
-           lora_py: str, lora_py_commit: str, created_at: str, out: str, expert_digest=None) -> dict:
+           e4b_repo: str, created_at: str, out: str, expert_digest=None) -> dict:
     """Write the derived /2 adapter directory ``out``; return its manifest. ``expert_digest`` is Loggetta's
     ``_expert_digest`` (the trainer's function; a test may pass the same computation)."""
     from torch import nn
@@ -222,8 +246,8 @@ def derive(*, fixture: str, v1_dir: str, receipt_path: str, base_dir: str, base_
         raise Refused(f"{v1_dir} is {v1.manifest.get('schema')}, not {SCHEMA_V1}")
     receipt = _json(receipt_path)
     engaged = check_receipt(v1, receipt, fixture)
-    with open(lora_py, encoding="utf-8") as f:
-        check_scaling_code(f.read())
+    lora = training_lora_py(e4b_repo, receipt)
+    check_scaling_code(lora["text"])
     record = _json(base_record)
     want = receipt["correctness"]["frozen_expert_digest"]
     if record.get(f"{fixture}_ok") is not True or record.get(f"got_{fixture}") != want \
@@ -264,7 +288,7 @@ def derive(*, fixture: str, v1_dir: str, receipt_path: str, base_dir: str, base_
             "v1_manifest_sha256": v1.manifest_sha256, "adapter_id": v1.adapter_id,
             "training_receipt_sha256": sha256_file(receipt_path), "fixture_base_record_sha256": sha256_file(base_record),
             "fixture_base_files": base_files, "checkpoint_files": checkpoint_files,
-            "lora_py_sha256": sha256_file(lora_py), "lora_py_commit": lora_py_commit,
+            "lora_py": {k: lora[k] for k in ("version", "tag", "commit", "blob", "sha256")},
             "digest_verified_stacks": list(DIGEST_STACKS), "fingerprint_seconds": "not measured (0)",
             "scale": "equal by the reader rule; the training code applies alpha/r",
             "limitation": LIMITATION},
@@ -299,13 +323,12 @@ def derive(*, fixture: str, v1_dir: str, receipt_path: str, base_dir: str, base_
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--fixture", required=True, choices=sorted(FIXTURES))
-    for name in ("v1", "receipt", "base", "base-record", "checkpoint", "lora-py", "lora-py-commit", "created-at", "out"):
+    for name in ("v1", "receipt", "base", "base-record", "checkpoint", "e4b-repo", "created-at", "out"):
         ap.add_argument(f"--{name}", required=True)
     a = ap.parse_args(argv)
     try:
         man = derive(fixture=a.fixture, v1_dir=a.v1, receipt_path=a.receipt, base_dir=a.base, base_record=a.base_record,
-                     checkpoint=a.checkpoint, lora_py=a.lora_py, lora_py_commit=a.lora_py_commit,
-                     created_at=a.created_at, out=a.out)
+                     checkpoint=a.checkpoint, e4b_repo=a.e4b_repo, created_at=a.created_at, out=a.out)
     except Refused as e:
         print(f"D0S_V2 REFUSED: {e}", file=sys.stderr)
         return 2
