@@ -85,11 +85,54 @@ def test_self_test_kills_the_mutants(i, tmp_path):
     assert _self_test(tmp_path / "ho3_reduce.py").returncode != 0, f"mutant survived: {old!r}"
 
 
+#: HO3 is CLOSED (bench/ho3/RESULTS-ho3.md): its kit is frozen at the merge of Amendment 3 (e4b#2064), the last change to its
+#: staged pins and the launch commit of every box not started before it. A closed lane asserts its own literal pins against
+#: that commit, never the live tree (bench/common rule 6), so a later change to a shared file it staged does not re-pin or fail it.
+HO3_FROZEN = "5790042a6adca0d2f1586f7cdbace3a19e04d941"
+
+
+def _at_frozen(rel):
+    r = subprocess.run(["git", "-C", str(REPO), "show", f"{HO3_FROZEN}:{rel}"], capture_output=True)
+    if r.returncode != 0:
+        # CI checks out full history (fetch-depth: 0), so a miss there is a failure, never a skip
+        if os.environ.get("CI") == "true":
+            pytest.fail(f"HO3's frozen commit {HO3_FROZEN[:12]} is not readable: {r.stderr.decode()[:200]}")
+        pytest.skip("HO3's frozen commit is not in this checkout's history (a shallow clone)")
+    return r.stdout
+
+
 def test_staged_pins_match_their_sources():
-    lines = [ln.split() for ln in (LANE / "staged-ho3.sha256").read_text(encoding="ascii").splitlines() if ln.strip()]
+    staged = (LANE / "staged-ho3.sha256").read_text(encoding="ascii")
+    assert staged.encode("ascii") == _at_frozen("bench/ho3/staged-ho3.sha256"), "HO3's pins changed after it closed"
+    lines = [ln.split() for ln in staged.splitlines() if ln.strip()]
     assert sorted(n for _, n in lines) == sorted(SOURCES)
     for want, name in lines:
-        assert hashlib.sha256((SOURCES[name] / name).read_bytes()).hexdigest() == want, name
+        rel = (SOURCES[name] / name).relative_to(REPO).as_posix()
+        got = hashlib.sha256(_at_frozen(rel)).hexdigest()
+        assert got == want, f"{name}: staged {want}, frozen source {got}"
+
+
+def _outcome(rel):
+    """What ``_at_frozen`` raises, caught whole: a skip must never escape as this test's own skip."""
+    try:
+        _at_frozen(rel)
+    except BaseException as e:  # noqa: BLE001 -- pytest's outcomes are BaseExceptions
+        return e
+    return None
+
+
+def test_an_unreadable_frozen_commit_fails_under_ci_and_skips_only_outside_it(monkeypatch):
+    monkeypatch.setattr(sys.modules[__name__], "HO3_FROZEN", "0" * 40)
+    monkeypatch.setenv("CI", "true")
+    got = _outcome("bench/ho3/staged-ho3.sha256")
+    assert type(got) is pytest.fail.Exception and "not readable" in str(got), repr(got)
+    monkeypatch.delenv("CI")
+    got = _outcome("bench/ho3/staged-ho3.sha256")
+    assert type(got) is pytest.skip.Exception and "shallow clone" in str(got), repr(got)
+
+
+def test_the_runner_at_the_frozen_commit_pins_ho2s_stack():
+    assert _var(_at_frozen("bench/ho3/ho3_run.sh").decode("utf-8"), "E4B_STACK_SHA") == HO2_STACK
 
 
 def test_the_stack_under_test_is_ho2s_exactly():

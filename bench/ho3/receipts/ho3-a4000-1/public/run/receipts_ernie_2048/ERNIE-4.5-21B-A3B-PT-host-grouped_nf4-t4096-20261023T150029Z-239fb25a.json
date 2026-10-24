@@ -1,0 +1,2463 @@
+{
+ "artifacts": {
+  "adapter": {
+   "format": "backend-adapter/1",
+   "manifest": "adapter_manifest.json",
+   "path": "/root/ho3/run/adapter_ernie_2048",
+   "sha256": "082e5491d0e9f72a4ee98812fbb2f6d01b63990a6d0156dc26ec794066a80701",
+   "tensor_count": 332,
+   "trainable_numel": 138149888,
+   "weights": "adapter.safetensors"
+  }
+ },
+ "backend": "experts4bit",
+ "comparison": {
+  "device_allocator": {
+   "derived_part": 4412113344,
+   "estimated": 6866829760,
+   "heuristic_part": 2454716416,
+   "measured": 6048546816,
+   "ratio": 0.8808,
+   "residual": -818282944,
+   "what": "PyTorch allocator peak during training vs the estimate without the context and reserve lines"
+  },
+  "device_driver": {
+   "estimated": 8777066624,
+   "measured": 6427770880,
+   "ratio": 0.7323,
+   "residual": -2349295744,
+   "what": "driver-reported process peak vs the full device estimate"
+  },
+  "host": {
+   "estimated": 15451815936,
+   "measured": 15387987968,
+   "ratio": 0.9959,
+   "residual": -63827968,
+   "what": "peak of anonymous + shared RSS (pinned memory included, mapped checkpoint pages excluded; load transients included) vs the host estimate"
+  }
+ },
+ "correctness": {
+  "adapter_B_norm_after": 54.70634723827243,
+  "adapter_B_norm_before": 0.0,
+  "adapters_moved": true,
+  "all_finite": true,
+  "frozen_expert_bytes_unchanged": true,
+  "frozen_expert_checked_stacks": [
+   "stack[0]",
+   "stack[-1]"
+  ],
+  "frozen_expert_digest": {
+   "stack[-1]": "1ea447951f30f3a4f6838ec85a380ee5e5c1366dc6c68366357950e172dcb7c9",
+   "stack[0]": "9bbd9e70e664ad21d11f8f768c41b11f1cb7e7ca26a87c181ee6c1a7824f9465"
+  },
+  "loss_decreased": true,
+  "loss_first_third_mean": 0.9718007147312164,
+  "loss_last_third_mean": 0.8993463615576426,
+  "losses": [
+   1.2959635257720947,
+   0.9988173842430115,
+   1.0328632593154907,
+   0.6950159072875977,
+   0.822870671749115,
+   0.985273540019989,
+   0.8915714025497437,
+   0.8446832895278931,
+   1.0513980388641357,
+   0.9017781615257263,
+   0.8382292985916138,
+   0.9161755442619324,
+   0.9224001169204712,
+   0.9154565334320068,
+   0.9668158292770386,
+   0.8741734027862549,
+   0.948235273361206,
+   0.96247798204422,
+   0.8050463795661926,
+   0.8393293023109436
+  ],
+  "steps_without_trained_tokens": 0
+ },
+ "data": {
+  "blocks": 40,
+  "dataset": "tatsu-lab/alpaca",
+  "discarded_tail_tokens": 74,
+  "encoded_sha256": "2566c061cce27559d8da5b0e7b1f5da42d7dcecc83596a3a194881018f9229c2",
+  "examples_used": 749,
+  "format": "text",
+  "loss": "full-sequence, including prompts",
+  "options": {
+   "config": null,
+   "format": "text",
+   "input_field": "input",
+   "instruction_field": "instruction",
+   "loss": "auto",
+   "messages_field": "messages",
+   "output_field": "output",
+   "packing": "auto",
+   "repeat": false,
+   "revision": "dce01c9b08f87459cf36a430d809084718273017",
+   "shuffle": false,
+   "skip_empty_output": false,
+   "source": "tatsu-lab/alpaca",
+   "split": "train",
+   "text_field": "text"
+  },
+  "packing": "concatenated examples separated by EOS; attention is not isolated between examples",
+  "passes": 1,
+  "repeated": false,
+  "seed": 0,
+  "seq_len": 2048,
+  "shuffled": false,
+  "source": {
+   "config": null,
+   "dataset_fingerprint": "a5048bbbf302198f",
+   "id": "tatsu-lab/alpaca",
+   "kind": "hub",
+   "requested_revision": "dce01c9b08f87459cf36a430d809084718273017",
+   "revision_note": null
+  },
+  "source_rows": 52002,
+  "split": "train",
+  "token_cache_bytes": 655360,
+  "token_encoding": "little-endian int64",
+  "token_stream_sha256": "4c7eb3f7eeb2a35aabe1a83da2132d4cea6913e6813ca0a189700e66abb14d74",
+  "tokenizer": {
+   "class": "TokenizersBackend",
+   "eos_token_id": 2,
+   "name": "baidu/ERNIE-4.5-21B-A3B-PT"
+  },
+  "tokens": 81920,
+  "verified_against_plan": true
+ },
+ "engaged": {
+  "attention_lora_projections": 112,
+  "attn_quant": {
+   "blocksize": null,
+   "form": "bf16",
+   "nested": null,
+   "quant_type": null
+  },
+  "commit": "87db95487941cb39592ee0abca3b9155a6d19c5c",
+  "dgrad": true,
+  "env_moe_keep_layers": null,
+  "expert_absmax": {
+   "form": "fp32",
+   "record": {
+    "compressed": 0,
+    "kept_fp32": "compress_expert_absmax_ refuses -- nothing was compressed: model.layers.1.mlp.experts.base: expert offload is enabled on this layer (its absmax lives in the offload handle's host home and is staged by name); expert offload cannot carry the compressed form; model.layers.2.mlp.experts.base: expert off",
+    "requested": true,
+    "required": false
+   },
+   "stacks": 0
+  },
+  "fused_expert_modules": 27,
+  "fused_rmsnorm": true,
+  "fused_rope": true,
+  "lora_scale_applied": {
+   "attention": 2.0,
+   "experts": 2.0
+  },
+  "setup": {
+   "adapter_dtype": "bf16",
+   "alpha": 16,
+   "attention_adapter_dtype": null,
+   "attn_4bit": false,
+   "blocksize": 64,
+   "dgrad": true,
+   "expert_kernel": "grouped_nf4",
+   "expert_residency": "host",
+   "keep_moe_layers": 0,
+   "pin": true,
+   "quant_type": "nf4",
+   "r": 8,
+   "train_attention": true,
+   "train_experts": true
+  },
+  "train_fused_qkv": 0,
+  "train_gemm_route": "fused",
+  "trainable_numel": 138149888,
+  "versions": {
+   "bitsandbytes": "0.50.2",
+   "experts4bit-qlora": "0.56.1",
+   "grouped-nf4-gemm": "0.49.0",
+   "torch": "2.8.0+cu128",
+   "transformers": "5.17.0"
+  }
+ },
+ "hardware": {
+  "cpu": "AMD Ryzen Threadripper 3970X 32-Core Processor",
+  "cpus": 30.71999,
+  "gpu": {
+   "compute_capability": [
+    8,
+    6
+   ],
+   "driver": "595.84",
+   "index": 0,
+   "memory_free": 16726884352,
+   "memory_free_source": "reported",
+   "memory_total": 17171480576,
+   "name": "NVIDIA RTX A4000",
+   "pcie": [
+    1,
+    16,
+    4,
+    16
+   ],
+   "uuid": null
+  },
+  "gpus": 1,
+  "platform": "Linux x86_64",
+  "ram_available": 182342144000,
+  "ram_available_source": "reported",
+  "ram_limit": 183355047936,
+  "torch": {
+   "available": true,
+   "cuda": "12.8",
+   "device_count": 1,
+   "note": "",
+   "version": "2.8.0+cu128",
+   "visible_devices": null
+  }
+ },
+ "measured": {
+  "adapter_save_seconds": 0.4218392129987478,
+  "cuda_context_bytes": 222298112,
+  "data_prepare_seconds": 14.908830401487648,
+  "data_token_cache_bytes": 655360,
+  "device_peak_bytes": 6048546816,
+  "device_reserved_peak_bytes": 6205472768,
+  "driver_peak_before_training_bytes": 3374317568,
+  "driver_process_peak_bytes": 6427770880,
+  "driver_samples": 772,
+  "host_anon_after_load_bytes": 2517651456,
+  "host_anon_peak_bytes": 3963953152,
+  "host_baseline_bytes": 1184960512,
+  "host_file_peak_bytes": 44126523392,
+  "host_peak_bytes": 59488415744,
+  "host_required_peak_bytes": 15387987968,
+  "host_shmem_peak_bytes": 12870492160,
+  "link_h2d_gbps": 22.914781907316357,
+  "link_h2d_probe": "256 MiB pinned x5, median",
+  "load_device_peak_bytes": 3167592448,
+  "load_seconds": 27.392306327819824,
+  "lr_first": 0.0002,
+  "lr_last": 2e-05,
+  "lr_peak": 0.0002,
+  "lr_schedule": "learning rate 0.0002: linear warmup over 1 step(s), then cosine decay to 2e-05",
+  "s_per_step_median": 9.454864621162415,
+  "step_seconds": [
+   9.363899946212769,
+   9.011866092681885,
+   9.10105848312378,
+   9.151253700256348,
+   9.217343807220459,
+   9.24569058418274,
+   9.292393445968628,
+   9.337892293930054,
+   9.38729190826416,
+   9.398895025253296,
+   9.458907842636108,
+   9.53368091583252,
+   9.662436485290527,
+   9.691821575164795,
+   9.659157752990723,
+   9.613130807876587,
+   9.596725463867188,
+   9.530497074127197,
+   9.474342107772827,
+   9.45082139968872
+  ],
+  "timed_steps": "3..20",
+  "tokens_per_s": 433.21614471687946
+ },
+ "model": {
+  "convention": "qwen2_moe",
+  "dense_params": 1441120448,
+  "expert_params": 20384317440,
+  "loader_refusal": null,
+  "model": "baidu/ERNIE-4.5-21B-A3B-PT",
+  "model_type": "ernie4_5_moe",
+  "moe_layers": 27,
+  "n_experts": 64,
+  "n_layers": 28,
+  "provenance": {
+   "config": "baidu/ERNIE-4.5-21B-A3B-PT",
+   "int4_attention_linears": "engines.int4_attn.attention_linears (the serving swap's rule) on the meta tree",
+   "kv": "serve_paged._kv_geometry + paged_runner.kv_layers over decoder_layers (the paged server's rules)",
+   "paged_state_refusal": "engines.paged_runner.paged_state_refusal (the runner's own rules) on the meta tree",
+   "structure": "module tree built on meta from the config (no weights read)",
+   "tied_embeddings": "config tie_word_embeddings (the loader's rule when no lm_head.weight ships)",
+   "top_k": "config: first of ROUTED_TOP_K_KEYS present",
+   "transformers": "5.17.0"
+  },
+  "revision": "87db95487941cb39592ee0abca3b9155a6d19c5c",
+  "summary": "baidu/ERNIE-4.5-21B-A3B-PT (ernie4_5_moe, qwen2_moe): 27/28 MoE layers, E=64 H=2560 I=1536, top-6; 20.38B expert + 1.44B dense params",
+  "top_k": 6
+ },
+ "plan": {
+  "alternatives": [
+   {
+    "backend": "experts4bit",
+    "bounds": {
+     "link_bytes_per_step": 22932360576,
+     "link_gbps": 31.504,
+     "link_gbps_basis": "inferred",
+     "link_gbps_source": "theoretical PCIe gen4 x16 ceiling",
+     "s_per_step_lower_bound": 0.7279190126968004
+    },
+    "device_bytes": 8777066624,
+    "feasible": true,
+    "host_bytes": 14687404032,
+    "label_text": "experts on host, grouped_nf4 kernel, pageable",
+    "lines": [
+     {
+      "basis": "derived",
+      "bytes": 424673344,
+      "detail": "offload streams one layer's stack to the GPU at a time",
+      "name": "frozen expert stacks, one layer staged",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 11466178560,
+      "detail": "11.47 GB of nf4, blocksize 64",
+      "name": "frozen expert stacks, host homes",
+      "where": "host"
+     },
+     {
+      "basis": "derived",
+      "bytes": 22932360576,
+      "detail": "each layer's stack is copied once for its forward and once for the checkpoint recompute (engines/offload.py)",
+      "name": "expert staging, host to device per micro-batch",
+      "where": "link"
+     },
+     {
+      "basis": "derived",
+      "bytes": 2882240896,
+      "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+      "name": "dense weights (bf16)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 268959744,
+      "detail": "ExpertsLoRA r=8, bf16",
+      "name": "expert LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 7340032,
+      "detail": "112 projections, r=8, bf16",
+      "name": "attention LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 276299776,
+      "detail": "one gradient per trainable parameter, in its dtype",
+      "name": "adapter gradients",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 552599552,
+      "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+      "name": "optimizer state (adamw)",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 4194304,
+      "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)",
+      "name": "small allocations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 2450522112,
+      "detail": "28 saved layer inputs (T x H bf16) + max(the chunked LM loss in 512-token chunks = 0.66 GB, 2 x one layer's recompute = 0.81 GB, the grouped_nf4 MoE backward = padded LoRA delta 0.70 GB (49152 rows x (H + first_out + I = 2560 + 3072 + 1536) x 2 B; bucketed (T x top_k = 24576 >= 16384): at most 2 x T x top_k) + fused workspaces 0.75 GB (5 x T x top_k x first_out bf16) + one layer's recompute 0.40 GB) at T=4096",
+      "name": "activations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 0,
+      "detail": "a no-grad forward of one 4096-token micro-batch with labels: 4.14 GB held (no gradients) + max(the chunked loss: bf16 logits + 512-token fp32 chunks = 1.38 GB, one layer's working set = 0.40 GB) = 5.52 GB against the training step's 6.87 GB",
+      "name": "held-out evaluation, above the training step",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 1373365952,
+      "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+      "name": "allocator reserve (cached, unallocated blocks)",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 536870912,
+      "detail": "default; no receipt on file measured this GPU + driver",
+      "name": "CUDA context + library workspaces",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3221225472,
+      "detail": "default; no receipt on file measured this host",
+      "name": "process baseline (torch, CUDA, libraries, model objects)",
+      "where": "host"
+     }
+    ],
+    "rank": [
+     1,
+     0,
+     0,
+     1,
+     0
+    ],
+    "rank_note": "objective speed: ordered by measured evidence (see Why)",
+    "rejected": [],
+    "setup": {
+     "adapter_dtype": "bf16",
+     "alpha": 16,
+     "attention_adapter_dtype": null,
+     "attn_4bit": false,
+     "blocksize": 64,
+     "dgrad": true,
+     "expert_kernel": "grouped_nf4",
+     "expert_residency": "host",
+     "keep_moe_layers": 0,
+     "pin": false,
+     "quant_type": "nf4",
+     "r": 8,
+     "train_attention": true,
+     "train_experts": true
+    },
+    "unmodelled": [
+     "offload staging transient on the fused kernel path (unmeasured)",
+     "load-time transients (the streaming loader's per-tensor quantize; host page cache)",
+     "grouped_nf4 LoRA-delta overrides read at run time and not by this estimate: NF4_QLORA_LORA_PATH, NF4_QLORA_PAD_BYTES_LIMIT, NF4_QLORA_PAD_WASTE_LIMIT, NF4_QLORA_PAD_BUCKETS(_MIN_ROWS), NF4_QLORA_PAD_BUCKETS_LADDER, NF4_QLORA_SINGLE_LADDER, NF4_QLORA_COMPACT_DELTA"
+    ]
+   },
+   {
+    "backend": "experts4bit",
+    "bounds": {
+     "link_bytes_per_step": 22932360576,
+     "link_gbps": 31.504,
+     "link_gbps_basis": "inferred",
+     "link_gbps_source": "theoretical PCIe gen4 x16 ceiling",
+     "s_per_step_lower_bound": 0.7279190126968004
+    },
+    "device_bytes": 7992729728,
+    "feasible": true,
+    "host_bytes": 15451815936,
+    "label_text": "experts on host, grouped_nf4 kernel, NF4 attention",
+    "lines": [
+     {
+      "basis": "derived",
+      "bytes": 424673344,
+      "detail": "offload streams one layer's stack to the GPU at a time",
+      "name": "frozen expert stacks, one layer staged",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 12230590464,
+      "detail": "11.47 GB of nf4, blocksize 64, each pinned tensor rounded up to a power of two",
+      "name": "frozen expert stacks, host homes (pinned)",
+      "where": "host"
+     },
+     {
+      "basis": "derived",
+      "bytes": 22932360576,
+      "detail": "each layer's stack is copied once for its forward and once for the checkpoint recompute (engines/offload.py)",
+      "name": "expert staging, host to device per micro-batch",
+      "where": "link"
+     },
+     {
+      "basis": "derived",
+      "bytes": 227189760,
+      "detail": "112 projections, bitsandbytes nested statistics",
+      "name": "attention projections (NF4)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 2001437056,
+      "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+      "name": "dense weights (bf16)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 268959744,
+      "detail": "ExpertsLoRA r=8, bf16",
+      "name": "expert LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 7340032,
+      "detail": "112 projections, r=8, bf16",
+      "name": "attention LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 276299776,
+      "detail": "one gradient per trainable parameter, in its dtype",
+      "name": "adapter gradients",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 552599552,
+      "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+      "name": "optimizer state (adamw)",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 4194304,
+      "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)",
+      "name": "small allocations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 2450522112,
+      "detail": "28 saved layer inputs (T x H bf16) + max(the chunked LM loss in 512-token chunks = 0.66 GB, 2 x one layer's recompute = 0.81 GB, the grouped_nf4 MoE backward = padded LoRA delta 0.70 GB (49152 rows x (H + first_out + I = 2560 + 3072 + 1536) x 2 B; bucketed (T x top_k = 24576 >= 16384): at most 2 x T x top_k) + fused workspaces 0.75 GB (5 x T x top_k x first_out bf16) + one layer's recompute 0.40 GB) at T=4096",
+      "name": "activations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 0,
+      "detail": "a no-grad forward of one 4096-token micro-batch with labels: 3.49 GB held (no gradients) + max(the chunked loss: bf16 logits + 512-token fp32 chunks = 1.38 GB, one layer's working set = 0.40 GB) = 4.86 GB against the training step's 6.21 GB",
+      "name": "held-out evaluation, above the training step",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 1242643136,
+      "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+      "name": "allocator reserve (cached, unallocated blocks)",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 536870912,
+      "detail": "default; no receipt on file measured this GPU + driver",
+      "name": "CUDA context + library workspaces",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3221225472,
+      "detail": "default; no receipt on file measured this host",
+      "name": "process baseline (torch, CUDA, libraries, model objects)",
+      "where": "host"
+     }
+    ],
+    "rank": [
+     1,
+     0,
+     1,
+     0,
+     0
+    ],
+    "rank_note": "objective speed: ordered by measured evidence (see Why)",
+    "rejected": [],
+    "setup": {
+     "adapter_dtype": "bf16",
+     "alpha": 16,
+     "attention_adapter_dtype": null,
+     "attn_4bit": true,
+     "blocksize": 64,
+     "dgrad": true,
+     "expert_kernel": "grouped_nf4",
+     "expert_residency": "host",
+     "keep_moe_layers": 0,
+     "pin": true,
+     "quant_type": "nf4",
+     "r": 8,
+     "train_attention": true,
+     "train_experts": true
+    },
+    "unmodelled": [
+     "offload staging transient on the fused kernel path (unmeasured)",
+     "load-time transients (the streaming loader's per-tensor quantize; host page cache)",
+     "grouped_nf4 LoRA-delta overrides read at run time and not by this estimate: NF4_QLORA_LORA_PATH, NF4_QLORA_PAD_BYTES_LIMIT, NF4_QLORA_PAD_WASTE_LIMIT, NF4_QLORA_PAD_BUCKETS(_MIN_ROWS), NF4_QLORA_PAD_BUCKETS_LADDER, NF4_QLORA_SINGLE_LADDER, NF4_QLORA_COMPACT_DELTA"
+    ]
+   },
+   {
+    "backend": "experts4bit",
+    "bounds": {
+     "link_bytes_per_step": 22932360576,
+     "link_gbps": 31.504,
+     "link_gbps_basis": "inferred",
+     "link_gbps_source": "theoretical PCIe gen4 x16 ceiling",
+     "s_per_step_lower_bound": 0.7279190126968004
+    },
+    "device_bytes": 7992729728,
+    "feasible": true,
+    "host_bytes": 14687404032,
+    "label_text": "experts on host, grouped_nf4 kernel, NF4 attention, pageable",
+    "lines": [
+     {
+      "basis": "derived",
+      "bytes": 424673344,
+      "detail": "offload streams one layer's stack to the GPU at a time",
+      "name": "frozen expert stacks, one layer staged",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 11466178560,
+      "detail": "11.47 GB of nf4, blocksize 64",
+      "name": "frozen expert stacks, host homes",
+      "where": "host"
+     },
+     {
+      "basis": "derived",
+      "bytes": 22932360576,
+      "detail": "each layer's stack is copied once for its forward and once for the checkpoint recompute (engines/offload.py)",
+      "name": "expert staging, host to device per micro-batch",
+      "where": "link"
+     },
+     {
+      "basis": "derived",
+      "bytes": 227189760,
+      "detail": "112 projections, bitsandbytes nested statistics",
+      "name": "attention projections (NF4)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 2001437056,
+      "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+      "name": "dense weights (bf16)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 268959744,
+      "detail": "ExpertsLoRA r=8, bf16",
+      "name": "expert LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 7340032,
+      "detail": "112 projections, r=8, bf16",
+      "name": "attention LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 276299776,
+      "detail": "one gradient per trainable parameter, in its dtype",
+      "name": "adapter gradients",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 552599552,
+      "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+      "name": "optimizer state (adamw)",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 4194304,
+      "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)",
+      "name": "small allocations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 2450522112,
+      "detail": "28 saved layer inputs (T x H bf16) + max(the chunked LM loss in 512-token chunks = 0.66 GB, 2 x one layer's recompute = 0.81 GB, the grouped_nf4 MoE backward = padded LoRA delta 0.70 GB (49152 rows x (H + first_out + I = 2560 + 3072 + 1536) x 2 B; bucketed (T x top_k = 24576 >= 16384): at most 2 x T x top_k) + fused workspaces 0.75 GB (5 x T x top_k x first_out bf16) + one layer's recompute 0.40 GB) at T=4096",
+      "name": "activations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 0,
+      "detail": "a no-grad forward of one 4096-token micro-batch with labels: 3.49 GB held (no gradients) + max(the chunked loss: bf16 logits + 512-token fp32 chunks = 1.38 GB, one layer's working set = 0.40 GB) = 4.86 GB against the training step's 6.21 GB",
+      "name": "held-out evaluation, above the training step",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 1242643136,
+      "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+      "name": "allocator reserve (cached, unallocated blocks)",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 536870912,
+      "detail": "default; no receipt on file measured this GPU + driver",
+      "name": "CUDA context + library workspaces",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3221225472,
+      "detail": "default; no receipt on file measured this host",
+      "name": "process baseline (torch, CUDA, libraries, model objects)",
+      "where": "host"
+     }
+    ],
+    "rank": [
+     1,
+     0,
+     1,
+     1,
+     0
+    ],
+    "rank_note": "objective speed: ordered by measured evidence (see Why)",
+    "rejected": [],
+    "setup": {
+     "adapter_dtype": "bf16",
+     "alpha": 16,
+     "attention_adapter_dtype": null,
+     "attn_4bit": true,
+     "blocksize": 64,
+     "dgrad": true,
+     "expert_kernel": "grouped_nf4",
+     "expert_residency": "host",
+     "keep_moe_layers": 0,
+     "pin": false,
+     "quant_type": "nf4",
+     "r": 8,
+     "train_attention": true,
+     "train_experts": true
+    },
+    "unmodelled": [
+     "offload staging transient on the fused kernel path (unmeasured)",
+     "load-time transients (the streaming loader's per-tensor quantize; host page cache)",
+     "grouped_nf4 LoRA-delta overrides read at run time and not by this estimate: NF4_QLORA_LORA_PATH, NF4_QLORA_PAD_BYTES_LIMIT, NF4_QLORA_PAD_WASTE_LIMIT, NF4_QLORA_PAD_BUCKETS(_MIN_ROWS), NF4_QLORA_PAD_BUCKETS_LADDER, NF4_QLORA_SINGLE_LADDER, NF4_QLORA_COMPACT_DELTA"
+    ]
+   },
+   {
+    "backend": "experts4bit",
+    "bounds": {
+     "link_bytes_per_step": 22932360576,
+     "link_gbps": 31.504,
+     "link_gbps_basis": "inferred",
+     "link_gbps_source": "theoretical PCIe gen4 x16 ceiling",
+     "s_per_step_lower_bound": 0.7279190126968004
+    },
+    "device_bytes": 15089410257,
+    "feasible": true,
+    "host_bytes": 15451815936,
+    "label_text": "experts on host, reference kernel",
+    "lines": [
+     {
+      "basis": "derived",
+      "bytes": 424673344,
+      "detail": "offload streams one layer's stack to the GPU at a time",
+      "name": "frozen expert stacks, one layer staged",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 12230590464,
+      "detail": "11.47 GB of nf4, blocksize 64, each pinned tensor rounded up to a power of two",
+      "name": "frozen expert stacks, host homes (pinned)",
+      "where": "host"
+     },
+     {
+      "basis": "derived",
+      "bytes": 22932360576,
+      "detail": "each layer's stack is copied once for its forward and once for the checkpoint recompute (engines/offload.py)",
+      "name": "expert staging, host to device per micro-batch",
+      "where": "link"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 1192860057,
+      "detail": "0.79 x one layer's bf16 dequantized experts (measured ratio on OLMoE, reference loop; mechanism unexplained)",
+      "name": "offload staging transient",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 2882240896,
+      "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+      "name": "dense weights (bf16)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 268959744,
+      "detail": "ExpertsLoRA r=8, bf16",
+      "name": "expert LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 7340032,
+      "detail": "112 projections, r=8, bf16",
+      "name": "attention LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 276299776,
+      "detail": "one gradient per trainable parameter, in its dtype",
+      "name": "adapter gradients",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 552599552,
+      "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+      "name": "optimizer state (adamw)",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 4194304,
+      "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)",
+      "name": "small allocations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 5670699008,
+      "detail": "28 saved layer inputs (T x H bf16) + max(logits and loss, three fp32 logits-sized tensors = 5.08 GB, 2 x one layer's recompute = 0.81 GB) at T=4096",
+      "name": "activations",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 847249408,
+      "detail": "the stock loss's bf16 logits, T x V x 2 = 0.85 GB, live through the backward while the caller holds the model output (zero if it keeps only the loss)",
+      "name": "logits held by the caller",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 0,
+      "detail": "a no-grad forward of one 4096-token micro-batch with labels: 5.33 GB held (no gradients) + max(the stock loss, bf16 logits + their fp32 upcast + its log-softmax = 4.34 GB, one layer's working set = 0.40 GB) = 9.67 GB against the training step's 12.13 GB",
+      "name": "held-out evaluation, above the training step",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 2425423224,
+      "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+      "name": "allocator reserve (cached, unallocated blocks)",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 536870912,
+      "detail": "default; no receipt on file measured this GPU + driver",
+      "name": "CUDA context + library workspaces",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3221225472,
+      "detail": "default; no receipt on file measured this host",
+      "name": "process baseline (torch, CUDA, libraries, model objects)",
+      "where": "host"
+     }
+    ],
+    "rank": [
+     1,
+     1,
+     0,
+     0,
+     0
+    ],
+    "rank_note": "objective speed: ordered by measured evidence (see Why)",
+    "rejected": [],
+    "setup": {
+     "adapter_dtype": "bf16",
+     "alpha": 16,
+     "attention_adapter_dtype": null,
+     "attn_4bit": false,
+     "blocksize": 64,
+     "dgrad": true,
+     "expert_kernel": "reference",
+     "expert_residency": "host",
+     "keep_moe_layers": 0,
+     "pin": true,
+     "quant_type": "nf4",
+     "r": 8,
+     "train_attention": true,
+     "train_experts": true
+    },
+    "unmodelled": [
+     "load-time transients (the streaming loader's per-tensor quantize; host page cache)"
+    ]
+   },
+   {
+    "backend": "experts4bit",
+    "bounds": {
+     "link_bytes_per_step": 22932360576,
+     "link_gbps": 31.504,
+     "link_gbps_basis": "inferred",
+     "link_gbps_source": "theoretical PCIe gen4 x16 ceiling",
+     "s_per_step_lower_bound": 0.7279190126968004
+    },
+    "device_bytes": 15089410257,
+    "feasible": true,
+    "host_bytes": 14687404032,
+    "label_text": "experts on host, reference kernel, pageable",
+    "lines": [
+     {
+      "basis": "derived",
+      "bytes": 424673344,
+      "detail": "offload streams one layer's stack to the GPU at a time",
+      "name": "frozen expert stacks, one layer staged",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 11466178560,
+      "detail": "11.47 GB of nf4, blocksize 64",
+      "name": "frozen expert stacks, host homes",
+      "where": "host"
+     },
+     {
+      "basis": "derived",
+      "bytes": 22932360576,
+      "detail": "each layer's stack is copied once for its forward and once for the checkpoint recompute (engines/offload.py)",
+      "name": "expert staging, host to device per micro-batch",
+      "where": "link"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 1192860057,
+      "detail": "0.79 x one layer's bf16 dequantized experts (measured ratio on OLMoE, reference loop; mechanism unexplained)",
+      "name": "offload staging transient",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 2882240896,
+      "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+      "name": "dense weights (bf16)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 268959744,
+      "detail": "ExpertsLoRA r=8, bf16",
+      "name": "expert LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 7340032,
+      "detail": "112 projections, r=8, bf16",
+      "name": "attention LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 276299776,
+      "detail": "one gradient per trainable parameter, in its dtype",
+      "name": "adapter gradients",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 552599552,
+      "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+      "name": "optimizer state (adamw)",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 4194304,
+      "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)",
+      "name": "small allocations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 5670699008,
+      "detail": "28 saved layer inputs (T x H bf16) + max(logits and loss, three fp32 logits-sized tensors = 5.08 GB, 2 x one layer's recompute = 0.81 GB) at T=4096",
+      "name": "activations",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 847249408,
+      "detail": "the stock loss's bf16 logits, T x V x 2 = 0.85 GB, live through the backward while the caller holds the model output (zero if it keeps only the loss)",
+      "name": "logits held by the caller",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 0,
+      "detail": "a no-grad forward of one 4096-token micro-batch with labels: 5.33 GB held (no gradients) + max(the stock loss, bf16 logits + their fp32 upcast + its log-softmax = 4.34 GB, one layer's working set = 0.40 GB) = 9.67 GB against the training step's 12.13 GB",
+      "name": "held-out evaluation, above the training step",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 2425423224,
+      "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+      "name": "allocator reserve (cached, unallocated blocks)",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 536870912,
+      "detail": "default; no receipt on file measured this GPU + driver",
+      "name": "CUDA context + library workspaces",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3221225472,
+      "detail": "default; no receipt on file measured this host",
+      "name": "process baseline (torch, CUDA, libraries, model objects)",
+      "where": "host"
+     }
+    ],
+    "rank": [
+     1,
+     1,
+     0,
+     1,
+     0
+    ],
+    "rank_note": "objective speed: ordered by measured evidence (see Why)",
+    "rejected": [],
+    "setup": {
+     "adapter_dtype": "bf16",
+     "alpha": 16,
+     "attention_adapter_dtype": null,
+     "attn_4bit": false,
+     "blocksize": 64,
+     "dgrad": true,
+     "expert_kernel": "reference",
+     "expert_residency": "host",
+     "keep_moe_layers": 0,
+     "pin": false,
+     "quant_type": "nf4",
+     "r": 8,
+     "train_attention": true,
+     "train_experts": true
+    },
+    "unmodelled": [
+     "load-time transients (the streaming loader's per-tensor quantize; host page cache)"
+    ]
+   },
+   {
+    "backend": "experts4bit",
+    "bounds": {
+     "link_bytes_per_step": 22932360576,
+     "link_gbps": 31.504,
+     "link_gbps_basis": "inferred",
+     "link_gbps_source": "theoretical PCIe gen4 x16 ceiling",
+     "s_per_step_lower_bound": 0.7279190126968004
+    },
+    "device_bytes": 14305073361,
+    "feasible": true,
+    "host_bytes": 15451815936,
+    "label_text": "experts on host, reference kernel, NF4 attention",
+    "lines": [
+     {
+      "basis": "derived",
+      "bytes": 424673344,
+      "detail": "offload streams one layer's stack to the GPU at a time",
+      "name": "frozen expert stacks, one layer staged",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 12230590464,
+      "detail": "11.47 GB of nf4, blocksize 64, each pinned tensor rounded up to a power of two",
+      "name": "frozen expert stacks, host homes (pinned)",
+      "where": "host"
+     },
+     {
+      "basis": "derived",
+      "bytes": 22932360576,
+      "detail": "each layer's stack is copied once for its forward and once for the checkpoint recompute (engines/offload.py)",
+      "name": "expert staging, host to device per micro-batch",
+      "where": "link"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 1192860057,
+      "detail": "0.79 x one layer's bf16 dequantized experts (measured ratio on OLMoE, reference loop; mechanism unexplained)",
+      "name": "offload staging transient",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 227189760,
+      "detail": "112 projections, bitsandbytes nested statistics",
+      "name": "attention projections (NF4)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 2001437056,
+      "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+      "name": "dense weights (bf16)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 268959744,
+      "detail": "ExpertsLoRA r=8, bf16",
+      "name": "expert LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 7340032,
+      "detail": "112 projections, r=8, bf16",
+      "name": "attention LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 276299776,
+      "detail": "one gradient per trainable parameter, in its dtype",
+      "name": "adapter gradients",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 552599552,
+      "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+      "name": "optimizer state (adamw)",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 4194304,
+      "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)",
+      "name": "small allocations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 5670699008,
+      "detail": "28 saved layer inputs (T x H bf16) + max(logits and loss, three fp32 logits-sized tensors = 5.08 GB, 2 x one layer's recompute = 0.81 GB) at T=4096",
+      "name": "activations",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 847249408,
+      "detail": "the stock loss's bf16 logits, T x V x 2 = 0.85 GB, live through the backward while the caller holds the model output (zero if it keeps only the loss)",
+      "name": "logits held by the caller",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 0,
+      "detail": "a no-grad forward of one 4096-token micro-batch with labels: 4.68 GB held (no gradients) + max(the stock loss, bf16 logits + their fp32 upcast + its log-softmax = 4.34 GB, one layer's working set = 0.40 GB) = 9.02 GB against the training step's 11.47 GB",
+      "name": "held-out evaluation, above the training step",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 2294700408,
+      "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+      "name": "allocator reserve (cached, unallocated blocks)",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 536870912,
+      "detail": "default; no receipt on file measured this GPU + driver",
+      "name": "CUDA context + library workspaces",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3221225472,
+      "detail": "default; no receipt on file measured this host",
+      "name": "process baseline (torch, CUDA, libraries, model objects)",
+      "where": "host"
+     }
+    ],
+    "rank": [
+     1,
+     1,
+     1,
+     0,
+     0
+    ],
+    "rank_note": "objective speed: ordered by measured evidence (see Why)",
+    "rejected": [],
+    "setup": {
+     "adapter_dtype": "bf16",
+     "alpha": 16,
+     "attention_adapter_dtype": null,
+     "attn_4bit": true,
+     "blocksize": 64,
+     "dgrad": true,
+     "expert_kernel": "reference",
+     "expert_residency": "host",
+     "keep_moe_layers": 0,
+     "pin": true,
+     "quant_type": "nf4",
+     "r": 8,
+     "train_attention": true,
+     "train_experts": true
+    },
+    "unmodelled": [
+     "load-time transients (the streaming loader's per-tensor quantize; host page cache)"
+    ]
+   },
+   {
+    "backend": "experts4bit",
+    "bounds": {
+     "link_bytes_per_step": 22932360576,
+     "link_gbps": 31.504,
+     "link_gbps_basis": "inferred",
+     "link_gbps_source": "theoretical PCIe gen4 x16 ceiling",
+     "s_per_step_lower_bound": 0.7279190126968004
+    },
+    "device_bytes": 14305073361,
+    "feasible": true,
+    "host_bytes": 14687404032,
+    "label_text": "experts on host, reference kernel, NF4 attention, pageable",
+    "lines": [
+     {
+      "basis": "derived",
+      "bytes": 424673344,
+      "detail": "offload streams one layer's stack to the GPU at a time",
+      "name": "frozen expert stacks, one layer staged",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 11466178560,
+      "detail": "11.47 GB of nf4, blocksize 64",
+      "name": "frozen expert stacks, host homes",
+      "where": "host"
+     },
+     {
+      "basis": "derived",
+      "bytes": 22932360576,
+      "detail": "each layer's stack is copied once for its forward and once for the checkpoint recompute (engines/offload.py)",
+      "name": "expert staging, host to device per micro-batch",
+      "where": "link"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 1192860057,
+      "detail": "0.79 x one layer's bf16 dequantized experts (measured ratio on OLMoE, reference loop; mechanism unexplained)",
+      "name": "offload staging transient",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 227189760,
+      "detail": "112 projections, bitsandbytes nested statistics",
+      "name": "attention projections (NF4)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 2001437056,
+      "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+      "name": "dense weights (bf16)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 268959744,
+      "detail": "ExpertsLoRA r=8, bf16",
+      "name": "expert LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 7340032,
+      "detail": "112 projections, r=8, bf16",
+      "name": "attention LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 276299776,
+      "detail": "one gradient per trainable parameter, in its dtype",
+      "name": "adapter gradients",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 552599552,
+      "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+      "name": "optimizer state (adamw)",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 4194304,
+      "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)",
+      "name": "small allocations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 5670699008,
+      "detail": "28 saved layer inputs (T x H bf16) + max(logits and loss, three fp32 logits-sized tensors = 5.08 GB, 2 x one layer's recompute = 0.81 GB) at T=4096",
+      "name": "activations",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 847249408,
+      "detail": "the stock loss's bf16 logits, T x V x 2 = 0.85 GB, live through the backward while the caller holds the model output (zero if it keeps only the loss)",
+      "name": "logits held by the caller",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 0,
+      "detail": "a no-grad forward of one 4096-token micro-batch with labels: 4.68 GB held (no gradients) + max(the stock loss, bf16 logits + their fp32 upcast + its log-softmax = 4.34 GB, one layer's working set = 0.40 GB) = 9.02 GB against the training step's 11.47 GB",
+      "name": "held-out evaluation, above the training step",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 2294700408,
+      "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+      "name": "allocator reserve (cached, unallocated blocks)",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 536870912,
+      "detail": "default; no receipt on file measured this GPU + driver",
+      "name": "CUDA context + library workspaces",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3221225472,
+      "detail": "default; no receipt on file measured this host",
+      "name": "process baseline (torch, CUDA, libraries, model objects)",
+      "where": "host"
+     }
+    ],
+    "rank": [
+     1,
+     1,
+     1,
+     1,
+     0
+    ],
+    "rank_note": "objective speed: ordered by measured evidence (see Why)",
+    "rejected": [],
+    "setup": {
+     "adapter_dtype": "bf16",
+     "alpha": 16,
+     "attention_adapter_dtype": null,
+     "attn_4bit": true,
+     "blocksize": 64,
+     "dgrad": true,
+     "expert_kernel": "reference",
+     "expert_residency": "host",
+     "keep_moe_layers": 0,
+     "pin": false,
+     "quant_type": "nf4",
+     "r": 8,
+     "train_attention": true,
+     "train_experts": true
+    },
+    "unmodelled": [
+     "load-time transients (the streaming loader's per-tensor quantize; host page cache)"
+    ]
+   },
+   {
+    "backend": "experts4bit",
+    "bounds": {},
+    "device_bytes": 20101958787,
+    "feasible": false,
+    "host_bytes": 3221225472,
+    "label_text": "experts on device, grouped_nf4 kernel, NF4 attention",
+    "lines": [
+     {
+      "basis": "derived",
+      "bytes": 10515697560,
+      "detail": "27 stacks in nf4, blocksize 64 (packed + absmax, absmax double-quantized: the enable_fast_train default, E4B_ABSMAX_DQ=0 keeps fp32)",
+      "name": "frozen expert stacks",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 227189760,
+      "detail": "112 projections, bitsandbytes nested statistics",
+      "name": "attention projections (NF4)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 2001437056,
+      "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+      "name": "dense weights (bf16)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 268959744,
+      "detail": "ExpertsLoRA r=8, bf16",
+      "name": "expert LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 7340032,
+      "detail": "112 projections, r=8, bf16",
+      "name": "attention LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 276299776,
+      "detail": "one gradient per trainable parameter, in its dtype",
+      "name": "adapter gradients",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 552599552,
+      "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+      "name": "optimizer state (adamw)",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 4194304,
+      "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)",
+      "name": "small allocations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 2450522112,
+      "detail": "28 saved layer inputs (T x H bf16) + max(the chunked LM loss in 512-token chunks = 0.66 GB, 2 x one layer's recompute = 0.81 GB, the grouped_nf4 MoE backward = padded LoRA delta 0.70 GB (49152 rows x (H + first_out + I = 2560 + 3072 + 1536) x 2 B; bucketed (T x top_k = 24576 >= 16384): at most 2 x T x top_k) + fused workspaces 0.75 GB (5 x T x top_k x first_out bf16) + one layer's recompute 0.40 GB) at T=4096",
+      "name": "activations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 0,
+      "detail": "a no-grad forward of one 4096-token micro-batch with labels: 13.58 GB held (no gradients) + max(the chunked loss: bf16 logits + 512-token fp32 chunks = 1.38 GB, one layer's working set = 0.40 GB) = 14.95 GB against the training step's 16.30 GB",
+      "name": "held-out evaluation, above the training step",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3260847979,
+      "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+      "name": "allocator reserve (cached, unallocated blocks)",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 536870912,
+      "detail": "default; no receipt on file measured this GPU + driver",
+      "name": "CUDA context + library workspaces",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3221225472,
+      "detail": "default; no receipt on file measured this host",
+      "name": "process baseline (torch, CUDA, libraries, model objects)",
+      "where": "host"
+     }
+    ],
+    "rank": [
+     0,
+     0,
+     1,
+     0,
+     0
+    ],
+    "rank_note": "objective speed: ordered by measured evidence (see Why)",
+    "rejected": [
+     "device 18.72 + headroom 0.78 GiB > budget 15.58 GiB"
+    ],
+    "setup": {
+     "adapter_dtype": "bf16",
+     "alpha": 16,
+     "attention_adapter_dtype": null,
+     "attn_4bit": true,
+     "blocksize": 64,
+     "dgrad": true,
+     "expert_kernel": "grouped_nf4",
+     "expert_residency": "device",
+     "keep_moe_layers": 0,
+     "pin": true,
+     "quant_type": "nf4",
+     "r": 8,
+     "train_attention": true,
+     "train_experts": true
+    },
+    "unmodelled": [
+     "load-time transients (the streaming loader's per-tensor quantize; host page cache)",
+     "grouped_nf4 LoRA-delta overrides read at run time and not by this estimate: NF4_QLORA_LORA_PATH, NF4_QLORA_PAD_BYTES_LIMIT, NF4_QLORA_PAD_WASTE_LIMIT, NF4_QLORA_PAD_BUCKETS(_MIN_ROWS), NF4_QLORA_PAD_BUCKETS_LADDER, NF4_QLORA_SINGLE_LADDER, NF4_QLORA_COMPACT_DELTA"
+    ]
+   },
+   {
+    "backend": "experts4bit",
+    "bounds": {},
+    "device_bytes": 20886295683,
+    "feasible": false,
+    "host_bytes": 3221225472,
+    "label_text": "experts on device, grouped_nf4 kernel",
+    "lines": [
+     {
+      "basis": "derived",
+      "bytes": 10515697560,
+      "detail": "27 stacks in nf4, blocksize 64 (packed + absmax, absmax double-quantized: the enable_fast_train default, E4B_ABSMAX_DQ=0 keeps fp32)",
+      "name": "frozen expert stacks",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 2882240896,
+      "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+      "name": "dense weights (bf16)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 268959744,
+      "detail": "ExpertsLoRA r=8, bf16",
+      "name": "expert LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 7340032,
+      "detail": "112 projections, r=8, bf16",
+      "name": "attention LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 276299776,
+      "detail": "one gradient per trainable parameter, in its dtype",
+      "name": "adapter gradients",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 552599552,
+      "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+      "name": "optimizer state (adamw)",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 4194304,
+      "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)",
+      "name": "small allocations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 2450522112,
+      "detail": "28 saved layer inputs (T x H bf16) + max(the chunked LM loss in 512-token chunks = 0.66 GB, 2 x one layer's recompute = 0.81 GB, the grouped_nf4 MoE backward = padded LoRA delta 0.70 GB (49152 rows x (H + first_out + I = 2560 + 3072 + 1536) x 2 B; bucketed (T x top_k = 24576 >= 16384): at most 2 x T x top_k) + fused workspaces 0.75 GB (5 x T x top_k x first_out bf16) + one layer's recompute 0.40 GB) at T=4096",
+      "name": "activations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 0,
+      "detail": "a no-grad forward of one 4096-token micro-batch with labels: 14.23 GB held (no gradients) + max(the chunked loss: bf16 logits + 512-token fp32 chunks = 1.38 GB, one layer's working set = 0.40 GB) = 15.61 GB against the training step's 16.96 GB",
+      "name": "held-out evaluation, above the training step",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3391570795,
+      "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+      "name": "allocator reserve (cached, unallocated blocks)",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 536870912,
+      "detail": "default; no receipt on file measured this GPU + driver",
+      "name": "CUDA context + library workspaces",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3221225472,
+      "detail": "default; no receipt on file measured this host",
+      "name": "process baseline (torch, CUDA, libraries, model objects)",
+      "where": "host"
+     }
+    ],
+    "rank": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "rank_note": "objective speed: ordered by measured evidence (see Why)",
+    "rejected": [
+     "device 19.45 + headroom 0.78 GiB > budget 15.58 GiB"
+    ],
+    "setup": {
+     "adapter_dtype": "bf16",
+     "alpha": 16,
+     "attention_adapter_dtype": null,
+     "attn_4bit": false,
+     "blocksize": 64,
+     "dgrad": true,
+     "expert_kernel": "grouped_nf4",
+     "expert_residency": "device",
+     "keep_moe_layers": 0,
+     "pin": true,
+     "quant_type": "nf4",
+     "r": 8,
+     "train_attention": true,
+     "train_experts": true
+    },
+    "unmodelled": [
+     "load-time transients (the streaming loader's per-tensor quantize; host page cache)",
+     "grouped_nf4 LoRA-delta overrides read at run time and not by this estimate: NF4_QLORA_LORA_PATH, NF4_QLORA_PAD_BYTES_LIMIT, NF4_QLORA_PAD_WASTE_LIMIT, NF4_QLORA_PAD_BUCKETS(_MIN_ROWS), NF4_QLORA_PAD_BUCKETS_LADDER, NF4_QLORA_SINGLE_LADDER, NF4_QLORA_COMPACT_DELTA"
+    ]
+   },
+   {
+    "backend": "experts4bit",
+    "bounds": {},
+    "device_bytes": 26123449625,
+    "feasible": false,
+    "host_bytes": 3221225472,
+    "label_text": "experts on device, reference kernel, NF4 attention",
+    "lines": [
+     {
+      "basis": "derived",
+      "bytes": 11466180288,
+      "detail": "27 stacks in nf4, blocksize 64 (packed + absmax, absmax fp32)",
+      "name": "frozen expert stacks",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 227189760,
+      "detail": "112 projections, bitsandbytes nested statistics",
+      "name": "attention projections (NF4)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 2001437056,
+      "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+      "name": "dense weights (bf16)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 268959744,
+      "detail": "ExpertsLoRA r=8, bf16",
+      "name": "expert LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 7340032,
+      "detail": "112 projections, r=8, bf16",
+      "name": "attention LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 276299776,
+      "detail": "one gradient per trainable parameter, in its dtype",
+      "name": "adapter gradients",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 552599552,
+      "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+      "name": "optimizer state (adamw)",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 4194304,
+      "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)",
+      "name": "small allocations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 5670699008,
+      "detail": "28 saved layer inputs (T x H bf16) + max(logits and loss, three fp32 logits-sized tensors = 5.08 GB, 2 x one layer's recompute = 0.81 GB) at T=4096",
+      "name": "activations",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 847249408,
+      "detail": "the stock loss's bf16 logits, T x V x 2 = 0.85 GB, live through the backward while the caller holds the model output (zero if it keeps only the loss)",
+      "name": "logits held by the caller",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 0,
+      "detail": "a no-grad forward of one 4096-token micro-batch with labels: 14.53 GB held (no gradients) + max(the stock loss, bf16 logits + their fp32 upcast + its log-softmax = 4.34 GB, one layer's working set = 0.40 GB) = 18.87 GB against the training step's 21.32 GB",
+      "name": "held-out evaluation, above the training step",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 4264429785,
+      "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+      "name": "allocator reserve (cached, unallocated blocks)",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 536870912,
+      "detail": "default; no receipt on file measured this GPU + driver",
+      "name": "CUDA context + library workspaces",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3221225472,
+      "detail": "default; no receipt on file measured this host",
+      "name": "process baseline (torch, CUDA, libraries, model objects)",
+      "where": "host"
+     }
+    ],
+    "rank": [
+     0,
+     1,
+     1,
+     0,
+     0
+    ],
+    "rank_note": "objective speed: ordered by measured evidence (see Why)",
+    "rejected": [
+     "device 24.33 + headroom 0.78 GiB > budget 15.58 GiB"
+    ],
+    "setup": {
+     "adapter_dtype": "bf16",
+     "alpha": 16,
+     "attention_adapter_dtype": null,
+     "attn_4bit": true,
+     "blocksize": 64,
+     "dgrad": true,
+     "expert_kernel": "reference",
+     "expert_residency": "device",
+     "keep_moe_layers": 0,
+     "pin": true,
+     "quant_type": "nf4",
+     "r": 8,
+     "train_attention": true,
+     "train_experts": true
+    },
+    "unmodelled": [
+     "load-time transients (the streaming loader's per-tensor quantize; host page cache)"
+    ]
+   },
+   {
+    "backend": "experts4bit",
+    "bounds": {},
+    "device_bytes": 26907786521,
+    "feasible": false,
+    "host_bytes": 3221225472,
+    "label_text": "experts on device, reference kernel",
+    "lines": [
+     {
+      "basis": "derived",
+      "bytes": 11466180288,
+      "detail": "27 stacks in nf4, blocksize 64 (packed + absmax, absmax fp32)",
+      "name": "frozen expert stacks",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 2882240896,
+      "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+      "name": "dense weights (bf16)",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 268959744,
+      "detail": "ExpertsLoRA r=8, bf16",
+      "name": "expert LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 7340032,
+      "detail": "112 projections, r=8, bf16",
+      "name": "attention LoRA adapters",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 276299776,
+      "detail": "one gradient per trainable parameter, in its dtype",
+      "name": "adapter gradients",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 552599552,
+      "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+      "name": "optimizer state (adamw)",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 4194304,
+      "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)",
+      "name": "small allocations",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 5670699008,
+      "detail": "28 saved layer inputs (T x H bf16) + max(logits and loss, three fp32 logits-sized tensors = 5.08 GB, 2 x one layer's recompute = 0.81 GB) at T=4096",
+      "name": "activations",
+      "where": "device"
+     },
+     {
+      "basis": "derived",
+      "bytes": 847249408,
+      "detail": "the stock loss's bf16 logits, T x V x 2 = 0.85 GB, live through the backward while the caller holds the model output (zero if it keeps only the loss)",
+      "name": "logits held by the caller",
+      "where": "device"
+     },
+     {
+      "basis": "heuristic",
+      "bytes": 0,
+      "detail": "a no-grad forward of one 4096-token micro-batch with labels: 15.18 GB held (no gradients) + max(the stock loss, bf16 logits + their fp32 upcast + its log-softmax = 4.34 GB, one layer's working set = 0.40 GB) = 19.52 GB against the training step's 21.98 GB",
+      "name": "held-out evaluation, above the training step",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 4395152601,
+      "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+      "name": "allocator reserve (cached, unallocated blocks)",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 536870912,
+      "detail": "default; no receipt on file measured this GPU + driver",
+      "name": "CUDA context + library workspaces",
+      "where": "device"
+     },
+     {
+      "basis": "inferred",
+      "bytes": 3221225472,
+      "detail": "default; no receipt on file measured this host",
+      "name": "process baseline (torch, CUDA, libraries, model objects)",
+      "where": "host"
+     }
+    ],
+    "rank": [
+     0,
+     1,
+     0,
+     0,
+     0
+    ],
+    "rank_note": "objective speed: ordered by measured evidence (see Why)",
+    "rejected": [
+     "device 25.06 + headroom 0.78 GiB > budget 15.58 GiB"
+    ],
+    "setup": {
+     "adapter_dtype": "bf16",
+     "alpha": 16,
+     "attention_adapter_dtype": null,
+     "attn_4bit": false,
+     "blocksize": 64,
+     "dgrad": true,
+     "expert_kernel": "reference",
+     "expert_residency": "device",
+     "keep_moe_layers": 0,
+     "pin": true,
+     "quant_type": "nf4",
+     "r": 8,
+     "train_attention": true,
+     "train_experts": true
+    },
+    "unmodelled": [
+     "load-time transients (the streaming loader's per-tensor quantize; host page cache)"
+    ]
+   }
+  ],
+  "budget": {
+   "device": 16726884352,
+   "device_source": "reported: free now",
+   "headroom": 836344217,
+   "host": 182342144000,
+   "host_source": "reported: available now"
+  },
+  "constraints": {
+   "device": 0,
+   "expert_residency": null,
+   "fixed": {},
+   "headroom": null,
+   "objective": "speed",
+   "ram_budget": null,
+   "target_s_per_step": null,
+   "vram_budget": null
+  },
+  "data_profile": {
+   "encoded_sha256": "2566c061cce27559d8da5b0e7b1f5da42d7dcecc83596a3a194881018f9229c2",
+   "encoding": "per example in source order: its length, then its ids with EOS, as little-endian int64",
+   "format": "text",
+   "histogram": [
+    [
+     0,
+     64,
+     7506
+    ],
+    [
+     64,
+     128,
+     28171
+    ],
+    [
+     128,
+     192,
+     11998
+    ],
+    [
+     192,
+     256,
+     2832
+    ],
+    [
+     256,
+     320,
+     878
+    ],
+    [
+     320,
+     384,
+     360
+    ],
+    [
+     384,
+     448,
+     131
+    ],
+    [
+     448,
+     512,
+     68
+    ],
+    [
+     512,
+     576,
+     21
+    ],
+    [
+     576,
+     640,
+     16
+    ],
+    [
+     640,
+     704,
+     8
+    ],
+    [
+     704,
+     768,
+     7
+    ],
+    [
+     768,
+     832,
+     2
+    ],
+    [
+     832,
+     896,
+     2
+    ],
+    [
+     960,
+     1024,
+     1
+    ],
+    [
+     1152,
+     1216,
+     1
+    ]
+   ],
+   "lengths": {
+    "max": 1178,
+    "mean": 114.57,
+    "min": 37,
+    "p50": 99,
+    "p90": 183,
+    "p99": 332
+   },
+   "loss": "full-sequence, including prompts",
+   "loss_mode": "all",
+   "loss_tokens": 5957839,
+   "options": {
+    "config": null,
+    "format": "text",
+    "input_field": "input",
+    "instruction_field": "instruction",
+    "loss": "auto",
+    "messages_field": "messages",
+    "output_field": "output",
+    "packing": "auto",
+    "repeat": false,
+    "revision": "dce01c9b08f87459cf36a430d809084718273017",
+    "shuffle": false,
+    "skip_empty_output": false,
+    "source": "tatsu-lab/alpaca",
+    "split": "train",
+    "text_field": "text"
+   },
+   "packing": "concatenated examples separated by EOS; attention is not isolated between examples",
+   "packing_mode": "concat",
+   "rows": 52002,
+   "schema": "data-profile/1",
+   "source": {
+    "config": null,
+    "id": "tatsu-lab/alpaca",
+    "kind": "hub",
+    "requested_revision": "dce01c9b08f87459cf36a430d809084718273017",
+    "revision_note": null
+   },
+   "split": "train",
+   "tokenizer": {
+    "chat_template_sha256": "471fb571976770318fe6f27749e37940be8d29c0a7770558140f141f5906f2a2",
+    "class": "TokenizersBackend",
+    "eos_token_id": 2,
+    "name": "baidu/ERNIE-4.5-21B-A3B-PT",
+    "vocab_size": 101304
+   },
+   "tokens": 5957839
+  },
+  "hardware": {
+   "cpu": "AMD Ryzen Threadripper 3970X 32-Core Processor",
+   "cpus": 30.71999,
+   "gpu": {
+    "compute_capability": [
+     8,
+     6
+    ],
+    "driver": "595.84",
+    "index": 0,
+    "memory_free": 16726884352,
+    "memory_free_source": "reported",
+    "memory_total": 17171480576,
+    "name": "NVIDIA RTX A4000",
+    "pcie": [
+     1,
+     16,
+     4,
+     16
+    ],
+    "uuid": null
+   },
+   "gpus": 1,
+   "platform": "Linux x86_64",
+   "ram_available": 182342144000,
+   "ram_available_source": "reported",
+   "ram_limit": 183355047936,
+   "torch": {
+    "available": true,
+    "cuda": "12.8",
+    "device_count": 1,
+    "note": "",
+    "version": "2.8.0+cu128",
+    "visible_devices": null
+   }
+  },
+  "model": {
+   "convention": "qwen2_moe",
+   "dense_params": 1441120448,
+   "expert_params": 20384317440,
+   "loader_refusal": null,
+   "model": "baidu/ERNIE-4.5-21B-A3B-PT",
+   "model_type": "ernie4_5_moe",
+   "moe_layers": 27,
+   "n_experts": 64,
+   "n_layers": 28,
+   "provenance": {
+    "config": "baidu/ERNIE-4.5-21B-A3B-PT",
+    "int4_attention_linears": "engines.int4_attn.attention_linears (the serving swap's rule) on the meta tree",
+    "kv": "serve_paged._kv_geometry + paged_runner.kv_layers over decoder_layers (the paged server's rules)",
+    "paged_state_refusal": "engines.paged_runner.paged_state_refusal (the runner's own rules) on the meta tree",
+    "structure": "module tree built on meta from the config (no weights read)",
+    "tied_embeddings": "config tie_word_embeddings (the loader's rule when no lm_head.weight ships)",
+    "top_k": "config: first of ROUTED_TOP_K_KEYS present",
+    "transformers": "5.17.0"
+   },
+   "revision": "87db95487941cb39592ee0abca3b9155a6d19c5c",
+   "summary": "baidu/ERNIE-4.5-21B-A3B-PT (ernie4_5_moe, qwen2_moe): 27/28 MoE layers, E=64 H=2560 I=1536, top-6; 20.38B expert + 1.44B dense params",
+   "top_k": 6
+  },
+  "performance": {
+   "estimate": null,
+   "statement": "not predicted: no performance model is calibrated for this backend yet; the ordering below rests on measured relative speeds, not on a time estimate"
+  },
+  "provenance": {
+   "backend_versions": {
+    "bitsandbytes": "0.50.2",
+    "experts4bit-qlora": "0.56.1",
+    "grouped-nf4-gemm": "0.49.0",
+    "torch": "2.8.0+cu128",
+    "transformers": "5.17.0"
+   },
+   "estimate_env": {
+    "E4B_ABSMAX_DQ": true,
+    "E4B_CHUNKED_EVAL_LOSS": true,
+    "E4B_CHUNKED_LM_LOSS": {
+     "auto_gate_bytes": 1073741824,
+     "chunk": 512
+    },
+    "E4B_TRAIN_FUSE_QKV": true
+   }
+  },
+  "reasons": [
+   "data: this plan reads 81,920 tokens of the 5,957,839 the dataset holds (0.01 passes)",
+   "experts host-backed (pinned, streamed one layer at a time): the cheapest resident setup needs 18.72 GiB + headroom, over the 15.58 GiB budget",
+   "expert kernel grouped_nf4: grouped-nf4-gemm 0.49.0 (training route 'fused': auto: compute capability 8.6 is not 9.0 (a call with 1 to 16 present groups takes the dense route))",
+   "ordering, expert_kernel: grouped_nf4 before reference: e4b.train.h2h.unsloth.olmoe.5090.2026-09-19 (1.39 vs 14.88 s/step), gnf4.kernel.e2e-training-real-prose (4.50x on a 4090)",
+   "ordering, expert_residency: device before host: host residency adds a per-layer host-to-device copy in every forward and every recompute (structural; the register has no same-card resident/offload ratio)",
+   "ordering, attn_4bit: bf16 attention before NF4: NF4 attention measured 1.013x step cost for -1.34 GB (experts4bit_qlora.lora.quantize_attention_projections_4bit, audit VRAMCENSUS)",
+   "ordering, pin: pinned host homes before pageable: a pageable copy is staged through a bounce buffer (CUDA), so it is slower per byte; pinned requests round up to a power of two (grouped-nf4-gemm#71), pageable ones do not",
+   "activation policy: every decoder layer checkpointed (recomputed in backward); no MoE activations kept (keep_moe_layers is a dial the planner does not choose yet)"
+  ],
+  "refusal": null,
+  "schema": "execution-plan/1",
+  "selected": {
+   "backend": "experts4bit",
+   "bounds": {
+    "link_bytes_per_step": 22932360576,
+    "link_gbps": 31.504,
+    "link_gbps_basis": "inferred",
+    "link_gbps_source": "theoretical PCIe gen4 x16 ceiling",
+    "s_per_step_lower_bound": 0.7279190126968004
+   },
+   "device_bytes": 8777066624,
+   "feasible": true,
+   "host_bytes": 15451815936,
+   "label_text": "experts on host, grouped_nf4 kernel",
+   "lines": [
+    {
+     "basis": "derived",
+     "bytes": 424673344,
+     "detail": "offload streams one layer's stack to the GPU at a time",
+     "name": "frozen expert stacks, one layer staged",
+     "where": "device"
+    },
+    {
+     "basis": "derived",
+     "bytes": 12230590464,
+     "detail": "11.47 GB of nf4, blocksize 64, each pinned tensor rounded up to a power of two",
+     "name": "frozen expert stacks, host homes (pinned)",
+     "where": "host"
+    },
+    {
+     "basis": "derived",
+     "bytes": 22932360576,
+     "detail": "each layer's stack is copied once for its forward and once for the checkpoint recompute (engines/offload.py)",
+     "name": "expert staging, host to device per micro-batch",
+     "where": "link"
+    },
+    {
+     "basis": "derived",
+     "bytes": 2882240896,
+     "detail": "embeddings, attention, norms, routers, dense/shared MLPs; tied head counted once",
+     "name": "dense weights (bf16)",
+     "where": "device"
+    },
+    {
+     "basis": "derived",
+     "bytes": 268959744,
+     "detail": "ExpertsLoRA r=8, bf16",
+     "name": "expert LoRA adapters",
+     "where": "device"
+    },
+    {
+     "basis": "derived",
+     "bytes": 7340032,
+     "detail": "112 projections, r=8, bf16",
+     "name": "attention LoRA adapters",
+     "where": "device"
+    },
+    {
+     "basis": "derived",
+     "bytes": 276299776,
+     "detail": "one gradient per trainable parameter, in its dtype",
+     "name": "adapter gradients",
+     "where": "device"
+    },
+    {
+     "basis": "derived",
+     "bytes": 552599552,
+     "detail": "exp_avg + exp_avg_sq per trainable parameter, in its dtype (torch.optim.AdamW)",
+     "name": "optimizer state (adamw)",
+     "where": "device"
+    },
+    {
+     "basis": "heuristic",
+     "bytes": 4194304,
+     "detail": "kernel scratch, lookup tables, index and staging buffers under 1 MiB each (measured 0.4-2.0 MB at TC1's census peaks)",
+     "name": "small allocations",
+     "where": "device"
+    },
+    {
+     "basis": "heuristic",
+     "bytes": 2450522112,
+     "detail": "28 saved layer inputs (T x H bf16) + max(the chunked LM loss in 512-token chunks = 0.66 GB, 2 x one layer's recompute = 0.81 GB, the grouped_nf4 MoE backward = padded LoRA delta 0.70 GB (49152 rows x (H + first_out + I = 2560 + 3072 + 1536) x 2 B; bucketed (T x top_k = 24576 >= 16384): at most 2 x T x top_k) + fused workspaces 0.75 GB (5 x T x top_k x first_out bf16) + one layer's recompute 0.40 GB) at T=4096",
+     "name": "activations",
+     "where": "device"
+    },
+    {
+     "basis": "heuristic",
+     "bytes": 0,
+     "detail": "a no-grad forward of one 4096-token micro-batch with labels: 4.14 GB held (no gradients) + max(the chunked loss: bf16 logits + 512-token fp32 chunks = 1.38 GB, one layer's working set = 0.40 GB) = 5.52 GB against the training step's 6.87 GB",
+     "name": "held-out evaluation, above the training step",
+     "where": "device"
+    },
+    {
+     "basis": "inferred",
+     "bytes": 1373365952,
+     "detail": "default 20% of the allocator estimate; no receipt on file measured this GPU + driver",
+     "name": "allocator reserve (cached, unallocated blocks)",
+     "where": "device"
+    },
+    {
+     "basis": "inferred",
+     "bytes": 536870912,
+     "detail": "default; no receipt on file measured this GPU + driver",
+     "name": "CUDA context + library workspaces",
+     "where": "device"
+    },
+    {
+     "basis": "inferred",
+     "bytes": 3221225472,
+     "detail": "default; no receipt on file measured this host",
+     "name": "process baseline (torch, CUDA, libraries, model objects)",
+     "where": "host"
+    }
+   ],
+   "rank": [
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "rank_note": "objective speed: ordered by measured evidence (see Why)",
+   "rejected": [],
+   "setup": {
+    "adapter_dtype": "bf16",
+    "alpha": 16,
+    "attention_adapter_dtype": null,
+    "attn_4bit": false,
+    "blocksize": 64,
+    "dgrad": true,
+    "expert_kernel": "grouped_nf4",
+    "expert_residency": "host",
+    "keep_moe_layers": 0,
+    "pin": true,
+    "quant_type": "nf4",
+    "r": 8,
+    "train_attention": true,
+    "train_experts": true
+   },
+   "unmodelled": [
+    "offload staging transient on the fused kernel path (unmeasured)",
+    "load-time transients (the streaming loader's per-tensor quantize; host page cache)",
+    "grouped_nf4 LoRA-delta overrides read at run time and not by this estimate: NF4_QLORA_LORA_PATH, NF4_QLORA_PAD_BYTES_LIMIT, NF4_QLORA_PAD_WASTE_LIMIT, NF4_QLORA_PAD_BUCKETS(_MIN_ROWS), NF4_QLORA_PAD_BUCKETS_LADDER, NF4_QLORA_SINGLE_LADDER, NF4_QLORA_COMPACT_DELTA"
+   ]
+  },
+  "status": "feasible",
+  "warnings": [
+   "Data preparation buffers and temporary token-file disk space are not included in the training memory estimate; data is validated before planning and checked again before model loading. A feasible plan is an estimate, not a guarantee against out-of-memory errors."
+  ],
+  "workload": {
+   "concurrency": null,
+   "context_len": null,
+   "data": {
+    "config": null,
+    "format": "text",
+    "input_field": "input",
+    "instruction_field": "instruction",
+    "loss": "auto",
+    "messages_field": "messages",
+    "output_field": "output",
+    "packing": "auto",
+    "repeat": false,
+    "revision": "dce01c9b08f87459cf36a430d809084718273017",
+    "shuffle": false,
+    "skip_empty_output": false,
+    "source": "tatsu-lab/alpaca",
+    "split": "train",
+    "text_field": "text"
+   },
+   "grad_accum": 1,
+   "kind": "train",
+   "lr_schedule": "cosine",
+   "micro_batch": 2,
+   "optimizer": "adamw",
+   "phase": null,
+   "seq_len": 2048,
+   "steps": 20
+  }
+ },
+ "provenance": {
+  "argv": [
+   "/opt/conda/lib/python3.11/site-packages/loggetta/__main__.py",
+   "train",
+   "baidu/ERNIE-4.5-21B-A3B-PT",
+   "--revision",
+   "87db95487941cb39592ee0abca3b9155a6d19c5c",
+   "--dataset",
+   "tatsu-lab/alpaca",
+   "--dataset-revision",
+   "dce01c9b08f87459cf36a430d809084718273017",
+   "--format",
+   "text",
+   "--text-field",
+   "text",
+   "--seq",
+   "2048",
+   "--micro-batch",
+   "2",
+   "--steps",
+   "20",
+   "--seed",
+   "0",
+   "--out",
+   "/root/ho3/run/receipts_ernie_2048",
+   "--adapter-out",
+   "/root/ho3/run/adapter_ernie_2048"
+  ],
+  "changed_during_run": [],
+  "estimate_env": {
+   "differs": [],
+   "planned": {
+    "E4B_ABSMAX_DQ": true,
+    "E4B_CHUNKED_EVAL_LOSS": true,
+    "E4B_CHUNKED_LM_LOSS": {
+     "auto_gate_bytes": 1073741824,
+     "chunk": 512
+    },
+    "E4B_TRAIN_FUSE_QKV": true
+   },
+   "running": {
+    "E4B_ABSMAX_DQ": true,
+    "E4B_CHUNKED_EVAL_LOSS": true,
+    "E4B_CHUNKED_LM_LOSS": {
+     "auto_gate_bytes": 1073741824,
+     "chunk": 512
+    },
+    "E4B_TRAIN_FUSE_QKV": true
+   }
+  },
+  "python": "3.11.13",
+  "runtime_seconds": 234.06334853172302,
+  "seed": 0,
+  "sources": {
+   "experts4bit_qlora": {
+    "file": "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/__init__.py"
+   },
+   "loggetta": {
+    "file": "/opt/conda/lib/python3.11/site-packages/loggetta/__init__.py"
+   },
+   "nf4_grouped": {
+    "file": "/opt/conda/lib/python3.11/site-packages/nf4_grouped.py"
+   }
+  },
+  "started_at": "2026-10-23T14:59:49Z",
+  "taken": "at process start, before the measured code was imported",
+  "versions": {
+   "accelerate": "1.15.0",
+   "bitsandbytes": "0.50.2",
+   "experts4bit-qlora": "0.56.1",
+   "grouped-nf4-gemm": "0.49.0",
+   "torch": "2.8.0+cu128",
+   "transformers": "5.17.0",
+   "triton": "3.4.0"
+  }
+ },
+ "run_id": "ERNIE-4.5-21B-A3B-PT-host-grouped_nf4-t4096-20261023T150029Z-239fb25a",
+ "schema": "execution-receipt/1",
+ "setup": {
+  "adapter_dtype": "bf16",
+  "alpha": 16,
+  "attention_adapter_dtype": null,
+  "attn_4bit": false,
+  "blocksize": 64,
+  "dgrad": true,
+  "expert_kernel": "grouped_nf4",
+  "expert_residency": "host",
+  "keep_moe_layers": 0,
+  "pin": true,
+  "quant_type": "nf4",
+  "r": 8,
+  "train_attention": true,
+  "train_experts": true
+ },
+ "status": "OK",
+ "workload": {
+  "concurrency": null,
+  "context_len": null,
+  "data": {
+   "config": null,
+   "format": "text",
+   "input_field": "input",
+   "instruction_field": "instruction",
+   "loss": "auto",
+   "messages_field": "messages",
+   "output_field": "output",
+   "packing": "auto",
+   "repeat": false,
+   "revision": "dce01c9b08f87459cf36a430d809084718273017",
+   "shuffle": false,
+   "skip_empty_output": false,
+   "source": "tatsu-lab/alpaca",
+   "split": "train",
+   "text_field": "text"
+  },
+  "epochs": null,
+  "grad_accum": 1,
+  "kind": "train",
+  "learning_rate": 0.0002,
+  "lr_schedule": "cosine",
+  "micro_batch": 2,
+  "optimizer": "adamw",
+  "phase": null,
+  "seq_len": 2048,
+  "steps": 20,
+  "tokens_per_microbatch": 4096,
+  "warmup_steps": null
+ }
+}
