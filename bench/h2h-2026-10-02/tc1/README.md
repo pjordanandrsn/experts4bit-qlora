@@ -1751,3 +1751,39 @@ ones; fd and cd1 ran 240 small (stock) calls. GB = 1e9 bytes.
   the bf16 logits: `linear.py:134`'s group, 151,936 × 2,260 bytes, live at fd's delta peak. The registered LM-loss target names the
   `cross_entropy` site and the vocab-shaped frameless groups, not that site, so cl1 reads "nothing to credit". The next registration's
   target names it too.
+
+## Amendment 78 (2026-10-24): TC1's field recipe fits a 24 GiB RTX 4090 (FIT, two draws on two machines)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 78, the fit reading. Two RTX 4090s, each one
+pb1cl256 draw at 60 steps: `tc1-4090-1` (AMD EPYC 7702P) and `tc1-4090-2` (AMD EPYC 9684X), each with a 30.72-CPU quota. e4b
+`576d99e9` with grouped-nf4-gemm `efdda943`, torch 2.12.1+cu130. USD 1.621 for the lane.
+
+Read: [`RESULTS-tc1-pos78fit.md`](RESULTS-tc1-pos78fit.md), the registered lane rule (`tc1_reduce.py --pos78-lane`) run on the receipt
+store, where each run's launcher receipt carries its machine id. The maintainer re-derived it from the store. Each box's own RESULTS
+rebuilds from this repository's copy ([`receipts/tc1-4090-1/`](receipts/tc1-4090-1/README.md),
+[`receipts/tc1-4090-2/`](receipts/tc1-4090-2/README.md)); the machine ids stay in the store.
+
+**FIT.** Both draws trained all 60 steps of TC1's field recipe with no out-of-memory error, on two different machines. Their steps 1-2
+losses are bitwise equal, the registered plumbing check. FIT covers this fixture only.
+
+| draw | box | usable - max allocated | usable - max reserved | total - device used | held-out at 60 | s/step (recorded) |
+|---|---|---|---|---|---|---|
+| 1 | `tc1-4090-1` | 1,260 MiB (step 32) | 586 MiB (step 29) | 586 MiB (step 29) | 0.75444 | 3.960 |
+| 2 | `tc1-4090-2` | 1,258 MiB (step 22) | 686 MiB (step 34) | 686 MiB (step 34) | 0.75667 | 3.549 |
+
+- **It fits; it does not fit with room.** The least headrooms over both draws, as the registration requires them quoted:
+  - 1,258 MiB between usable memory and the max allocated;
+  - 586 MiB between usable memory and the max reserved;
+  - 586 MiB of the card's 24,564 MiB total left unused by the device at its fullest step.
+
+  Usable is `memory.total` minus the step's CUDA context (its device used minus its reserved). There is no headroom floor.
+- **The levers are opt-in.** pb1cl256 is `NF4_QLORA_COMPACT_DELTA=1`, `NF4_QLORA_PAD_BUCKETS=1` (every LoRA delta width-bucketed
+  through the compact bucketed node) and `E4B_CHUNKED_LM_LOSS=256`. A default change is not part of this amendment; it needs its own PR
+  citing this reading.
+- **Scope.** Qwen3-30B-A3B at `ad44e777`, the alpaca tokens (`tc1-5090-155`'s), sequence 2048, micro-batch 2, accumulation 4, r 16,
+  the pb1cl256 levers, and a 24 GiB card by both its listing and its `memory.total`. The longest padded micro-batch in these tokens is
+  565 tokens (step 22). Datasets with longer batches are not covered.
+- **Held-out** is reported beside `tc1-5090-155`'s cd1cl1 (0.75489). That is not like-for-like, and no quality claim follows. s/step is
+  recorded, never gated.
+- **The load gate.** `tc1-4090-1`'s host voided two attempts for host load (load1 medians 17.84 and 18.09 against 6.0). The third
+  (18.22) stands, as amendment 33 registers. `tc1-4090-2` passed at 1.41.
