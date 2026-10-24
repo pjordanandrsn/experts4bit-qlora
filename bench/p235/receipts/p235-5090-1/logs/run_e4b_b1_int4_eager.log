@@ -1,0 +1,17 @@
+P235 arm=e4b_b1_int4_eager gnf4=0.51.0 at=2026-10-24T20:28:53Z
+No prebuilt binary for CUDA 12.9, loading CUDA 12.8 instead. Set BNB_CUDA_VERSION to override.
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+[20:28:57]   host CPUs: 24 visible, quota 23.04, torch threads 24, OMP_NUM_THREADS=None
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1722.78it/s]
+[20:28:58]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested main, unpinned)
+[20:28:58]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[20:28:58]   quantized experts on 48/48 MoE layers (128 experts each)
+[20:28:58]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[20:28:58]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[20:29:17]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 1517.90it/s]
+INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+ATTNINT4 rtn: 192 projections (uncalibrated; model_type=qwen3_moe)
+fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+B1D_TIMED_EAGER steps=127 step=42.07ms compile=None recompiles=0 out=/root/p235/e4b_b1_int4_eager.json

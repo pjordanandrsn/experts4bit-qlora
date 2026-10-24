@@ -1,0 +1,7 @@
+{
+ "vllm": {
+  "direct_url": null,
+  "provenance": "pypi",
+  "version": "0.32.0"
+ }
+}

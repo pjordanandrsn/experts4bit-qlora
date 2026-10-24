@@ -1,0 +1,12 @@
+P235 arm=e4b_b1_nf4_r2 gnf4=0.51.0 at=2026-10-24T20:21:05Z
+No prebuilt binary for CUDA 12.9, loading CUDA 12.8 instead. Set BNB_CUDA_VERSION to override.
+[20:21:08]   host CPUs: 24 visible, quota 23.04, torch threads 24, OMP_NUM_THREADS=None
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 2343.76it/s]
+[20:21:09]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested main, unpinned)
+[20:21:09]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[20:21:09]   quantized experts on 48/48 MoE layers (128 experts each)
+[20:21:09]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[20:21:09]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[20:21:29]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+B1D_TIMED_GRAPH steps=127 step=6.59ms compile=None recompiles=0 out=/root/p235/e4b_b1_nf4_r2.json

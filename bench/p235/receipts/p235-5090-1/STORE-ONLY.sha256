@@ -1,0 +1,14 @@
+# p235-5090-1: files kept only in the private receipt store, byte-exact; receipts are never rewritten. The vLLM arm
+# receipts record the provider's instance id; the launcher's teardown proof and instance record name the instance.
+# sha256, then the file's path within this run's receipt.
+84ad3c85c2666d7ab57fc800e46d206a826c56fb5c7fd34cb991617f56381ed0  teardown-proof.json
+3167171fae098dfd5aa1276000797d0f1042163fccc6cef92515bf3ee1f40fa2  instance.json
+92e6970063290ed0fdbebc362f273264b1ec730bf1f36f502a809393e7170e38  p235/vllm_primary_b16_graph_r1.json
+647fdc26f67a8418bd01d4b2cf055606b9e18a38bf6a769f38288ad602004384  p235/vllm_primary_b16_graph_r2.json
+667aed78d3fb68c34b25e199b3a39febe7d8692a062c5d948202c42843c34044  p235/vllm_primary_b1_eager.json
+f5aac14c1db9f34c317f96adf3d37ec13d1e5f6e5f190ad8c95d03fb79b9f8b0  p235/vllm_primary_b1_graph_r1.json
+510316381a0194c98b48494e7271ed5f35bc8577a807b4cb28fa37f7ae3c7917  p235/vllm_primary_b1_graph_r2.json
+d93539a43e4c134c14a1b4803fb87e788cf0b4a2e227d03675bfbd97ec3e95bc  p235/vllm_secondary_b16_graph_r1.json
+d31154ea81446dd2b503737bff799dda3ec4398b16385642df92e6281a63161e  p235/vllm_secondary_b16_graph_r2.json
+bb9e4d8953a009c97d52cff9129befb1ef406e993474f84300b9428549f9abc1  p235/vllm_secondary_b1_graph_r1.json
+86391455457ee8b74c92ada2d7250bd468b3f252ba79dbea891fc999d21fb93b  p235/vllm_secondary_b1_graph_r2.json

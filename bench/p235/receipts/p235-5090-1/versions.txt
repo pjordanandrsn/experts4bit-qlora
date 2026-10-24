@@ -1,0 +1,13 @@
+PYTHONPYCACHEPREFIX /root/p235/pycache-ce386ce4e97748987e8f8f3ec0a174b80bccfbb21f40235c57d05a2a98748327
+e4b 0.58.0 (PyPI; provenance.json) harness@7be9e6108910d1c3a8296754948bcda0492bff04
+gnf4 0.51.0 (PyPI; provenance.json)
+torch(e4b) 2.8.0+cu129
+triton(e4b) 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.1
+vllm(primary) 0.32.0
+torch(vllm primary) 2.13.0+cu130
+triton(vllm primary) 3.7.1
+vllm(secondary) 0.30.0
+torch(vllm secondary) 2.13.0+cu130
+triton(vllm secondary) 3.7.1

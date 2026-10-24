@@ -484,8 +484,12 @@ e4b's own NF4 control on the same box.
 
 **Against vLLM, vLLM is ahead: 1.087 at B=1 and 1.396 at B=16** (P58: one box, identical prompt ids; vLLM 0.30.0 on
 Qwen's GPTQ-Int4 checkpoint against e4b's int4 stack). The B=16 gap is mostly the experts (P86); K19 and K23's lean
-glue have since taken the int4 B=16 step to 0.905× and a further 0.950×. No later same-box vLLM reading is in the
-register. `e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22`,
+glue have since taken the int4 B=16 step to 0.905× and a further 0.950×. At the 0.58.0 release (P235, P58's harness
+on another box, one RTX 5090 at a 470 W limit), vLLM 0.32.0 / e4b int4 reads **1.038 at B=1 and 1.203 at B=16**, vLLM
+still ahead, with every distribution proven to be its published release; it sits beside P58's figures and is not
+divided into them, since the box differs. `e4b.serve.h2h.vllm-0.32.0.p235.qwen3.b1.5090.2026-10-24`,
+`e4b.serve.h2h.vllm-0.32.0.p235.qwen3.b16.5090.2026-10-24` ([P235](../bench/p235/RESULTS-p235.md)).
+`e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22`,
 `e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22`,
 `e4b.serve.p86.qwen3.b16.kernel-census-vs-vllm-0.30.0.5090.2026-10-01` ([P58](../bench/p58/RESULTS-p58.md)).
 
