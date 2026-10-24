@@ -301,10 +301,6 @@ def _dry_env(tmp_path, run_id, **extra):
             "E4B_RENT_RUN_ID": run_id, "E4B_RENT_DEADLINE_EPOCH": "4102444800", "E4B_RENT_INSTANCE_ID": "0", **extra}
 
 
-def _clean_checkout():
-    return subprocess.run(["git", "-C", str(REPO), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
-
-
 def _drive(tmp_path, run_id, **extra):
     if sys.platform == "win32" or shutil.which("bash") is None:
         pytest.skip("the driver needs a POSIX bash")
@@ -323,11 +319,32 @@ def test_the_driver_refuses_an_e4b_sha_override(tmp_path):
     assert out.returncode == 78 and "E4B_SHA override" in out.stdout + out.stderr
 
 
+@pytest.fixture
+def reading_tree(tmp_path):
+    """A detached git worktree at READ_AT, the commit P232 read at: clean by construction, so the driver there stages
+    exactly what the reading staged (a later repo file, tests/test_int8_head_bw.py among them, can never make it refuse).
+    A missing commit or history fails under CI and skips, with the reason named, outside it; the worktree is removed."""
+    wt = tmp_path / "at-read"
+    add = subprocess.run(["git", "-C", str(REPO), "worktree", "add", "--detach", str(wt), READ_AT],
+                         capture_output=True, text=True)
+    if add.returncode != 0:
+        why = f"no worktree at {READ_AT}: {add.stderr.strip()[:160]}"
+        if os.environ.get("CI"):
+            pytest.fail(f"{why} (CI must hold the full history and the reading commit)")
+        pytest.skip(why)
+    try:
+        yield wt
+    finally:
+        subprocess.run(["git", "-C", str(REPO), "worktree", "remove", "--force", str(wt)], capture_output=True)
+
+
 @pytest.mark.parametrize("run_id", ["p232-5090-1", "p232-5090-3", "p232-shake-1"])
-def test_the_drivers_dry_run_names_the_launch(tmp_path, run_id):
-    if not _clean_checkout():
-        pytest.skip("the driver refuses a dirty tree (it derives the launch commit from HEAD)")
-    out = _drive(tmp_path, run_id)
+def test_the_drivers_dry_run_names_the_launch(tmp_path, reading_tree, run_id):
+    """The driver at its launch commit still dry-runs: that commit's p232_drive.sh, run in its own clean worktree."""
+    if sys.platform == "win32" or shutil.which("bash") is None:
+        pytest.skip("the driver needs a POSIX bash")
+    out = subprocess.run(["bash", str(reading_tree / "bench" / "p232" / "p232_drive.sh")], capture_output=True, text=True,
+                         env=_dry_env(tmp_path, run_id), timeout=120)
     assert out.returncode == 0, out.stdout + out.stderr
     assert f"DRYRUN stage {len(SOURCES) + 1} files -> root@h:/root/p232" in out.stdout and "bash p232_run.sh" in out.stdout
     assert f"fetch -> {tmp_path}/p232" in out.stdout
