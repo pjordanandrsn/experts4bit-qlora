@@ -213,3 +213,64 @@ The first rung that applies decides.
   every cap. The head knobs are the same in every arm, so they cannot enter the S-against-A comparison. Naming them
   only fixes which head path all three arms share.
 - Pre-data: no P233 box has run, and the kit is not yet written.
+
+## Amendment 2 (2026-10-24, before any data): what the kit implements exactly
+
+Written with the kit (`p233_run.sh`, `p233_box.py`, `p233_reduce.py`, `p233_drive.sh`), before any box. No bar, arm,
+group size, window count or cap moves. Each item fixes something the registration left open.
+
+- **Arm A is exactly `p115_quality`'s instrument.**
+  - The box passes `measure_phase` the keywords `p115_quality.main()` passes, by name and in order, with main's
+    defaults (prompt 512, continuation 128, chunk 512, floor chunk 256). It passes no `arms`, `ref_kw` or `stand_in`.
+  - So A scores the instrument's full off-phase arms: R, rep, half, chunk and mutant_scale. Only R (the reference) and
+    rep (the floor) are read by the rule; the rest are reported.
+  - A test asserts the equality three ways: from main's source, against captured calls of main and of the box, and on
+    `measure_phase`'s real record shape (P232's committed quality records).
+- **The placement proof, read after the build from each MoE layer's tier state.** `build_engine` keeps no solver
+  manifest.
+  - **Experts per tier:** VRAM, DRAM and NVMe.
+  - **Bytes per tier:** the expert count times the arena's bytes per expert. The resident stacks' own bytes are
+    reported beside them, never ruled.
+  - **Each layer's static path:** the collapse only when the layer is collapse-resident, not amortized and all-hot.
+  - **Per-call path counts at every T,** from counters added for the phase and removed after it.
+  - **VOID** when:
+    - a layer is never called at some T, or its calls disagree with its static path;
+    - A holds any expert outside VRAM or any layer off the collapse;
+    - S has zero bytes on any tier, budgets other than 8.0 / 3.0, or no layer tiered;
+    - C has a non-empty DRAM tier, an empty NVMe tier, budgets other than 8.0 / 0, or no layer tiered.
+  - Whether the DRAM tier ran rows on the host CPU at a given T is reported, not ruled.
+- **The same model in every phase:** the configured revision and the loaded model's commit hash, equal across phases.
+  The arena is the full file's sha256 and its index's sha256, hashed inside each phase.
+- **The head check (Amendment 1):** in every phase,
+  - one int8 head module at [151936, 2048], mode 1, source `explicit`;
+  - `rows_max` 8, source `explicit`.
+
+  The head's call counts per T are recorded, not ruled.
+- **The same resolved defaults:** the head, the split cap (cap and source) and the fusion modes and sources must be equal
+  across phases, and the cap's and fusions' sources must be defaults. The census and the other lever records are kept.
+- **No captures:** `config.graphs` is False, the build's graph status names no captured bucket, and every pass's
+  engagement shows no graph and zero replays.
+- **Missing values:**
+  - A missing per-window NLL, argmax or KL on S or on C is a VOID, as is an R without an NLL in every window.
+  - Window ids must run 0..W-1 once each, and `rep` must hold T entries.
+- **The pass KV:** 4,096 tokens (256 blocks), the phase's own cap, at least W/T passes and no plan clash. The plan values
+  are reported, not ruled.
+- **The premise:** exactly **37 passed** from the tier's GPU tests (`tests/test_hybrid_cold_dest.py`) and **6 passed**
+  from the compose tests (`tests/test_serve_hybrid_compose.py`), with no skips, or rc 25. `fastapi` joins the install,
+  which the compose tests import.
+- **Argmax positions (reported):** S's and C's positions that differ from A's are read from the instrument's own
+  scoring calls, which are observed and never changed. S against C argmax agreement is computed from those lists;
+  S-against-C KL is unread.
+- **The CPU record:** the first processor's flags from `/proc/cpuinfo` (unread, never False, when absent), the CPU
+  kernels' pool size, the CPU count, the affinity, torch's thread count and the NUMA node count.
+- **Config pins:**
+  - `E4B_PAGED_MAX_SEQS=16`;
+  - A leaves the tier budgets unset;
+  - S's and C's budget strings are exactly `8.0` / `3.0` and `8.0` / `0`;
+  - the disk refuses below 140 GB free on the 150 GB rental.
+- **Phases:** A, then S, then C, each its own process, with caps of 2,400 s for A and 4,800 s for S and C, all under the
+  deadline. A failed phase stops the later ones, and the read is then a VOID.
+- **The shakedown:** 8 windows (a shakedown at 24 is a VOID), any card at compute capability 8.6 or later with at least
+  30,000 MiB.
+- **Run ids:** `p233-5090-r1` to `-r6` are accepted by the runner and the drive exactly as the reading ids are.
+- Pre-data: no P233 box has run.
