@@ -47,7 +47,7 @@ SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 POLL=${D0S_POLL_S:-60}; W=/root/d0s
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
-PASS="D0S_RUN_ID=$RUN_ID D0S_RUN_NONCE=$NONCE D0S_DEADLINE_EPOCH=$DEADLINE D0S_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA D0S_SHAKE=$SHAKE"
+PASS="D0S_RUN_ID=$RUN_ID D0S_RUN_NONCE=$NONCE D0S_DEADLINE_EPOCH=$DEADLINE D0S_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA D0S_SHAKE=$SHAKE D0S_PROBE=${D0S_PROBE:-0}"
 if [ "${D0S_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash d0s_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/d0s"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE shake=$SHAKE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); receipts -> $RUN_DIR/d0s; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/adapters /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }

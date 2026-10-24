@@ -1,8 +1,9 @@
 # Repository paths of the kit's box-side files, as the box's clean checkout of the launch commit holds them: the box
 # runs `sha256sum -c` on this file from that checkout, and d0s_drive.sh compares each against the controller's tree.
 e85144de14dae78d7350d23e92f3cbea967a314d157df720530513af66f444e2  bench/d0s/d0s_box.py
-f463e4a39556fcb53a6cc2a8aa184fc19b9430c7b9f7027b0d2d1b30b52a4f51  bench/d0s/d0s_run.sh
+513ac4bfcf2eaf03d062180d20d4152333a5599ced9789d0e703a83ef9a377bd  bench/d0s/d0s_run.sh
 9cbfee575be22ba7e17582e0ac791fd8db348860c8328405daf3e19e0339d0ca  bench/smoke/gpu_serve_smoke.py
 4a362e1a74e810ee15d2f534c4861853f4778282a6bc3a07a8056ec280f44308  tests/test_merged_arena_gpu.py
 bcbd5a70876e7d65e74b64210130612e79bd444002f8014465fdff44c7d0368a  bench/d0/receipts/d0-p224s3/nodq/heldout.json
 bcbd5a70876e7d65e74b64210130612e79bd444002f8014465fdff44c7d0368a  bench/d0/receipts/d0-p224s3/dq/heldout.json
+d2f58925ae7695280ee5a5dc65bad7dbbf59e61cabe987da82f4dae8ef44301c  bench/d0s/d0s_writer_probe.py
