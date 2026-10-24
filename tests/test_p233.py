@@ -232,20 +232,24 @@ SSH_READY_S, STAGING_MARGIN_S = 420, 120   # pod-launch's longest wait for ssh o
 
 
 def test_the_guard_fit_is_the_prereg_arithmetic():
-    """The budget: FIT = install 600 + fetch 1,500 + bake 400 + phase A 600 + phase S 2,400 + phase C 2,400 + reserve
-    600 = 8,500 s, x 1.25 = 10,625 s; (boot 300 + 8,500) x 1.25 = 11,000 s <= the 3.25 h guard (11,700 s)."""
+    """The budget: FIT = install 600 + fetch 1,500 + bake 400 + phase A 1,026 (Amendment 4's re-fit; registered 600) +
+    phase S 2,400 + phase C 2,400 + reserve 600 = 8,926 s, x 1.25 = 11,157 s; (boot 300 + 8,926) x 1.25 = 11,532.5 s
+    <= the 3.25 h guard (11,700 s)."""
     terms = tuple(_get(v) for v in ("INSTALL_TO_GATE_S", "NEED_FETCH", "NEED_BAKE", "NEED_A", "NEED_S", "NEED_C", "RESERVE"))
-    assert terms == (600, 1500, 400, 600, 2400, 2400, 600)
+    assert terms == (600, 1500, 400, 1026, 2400, 2400, 600)
+    assert round(1.25 * (315.1 + 2 * (195.9 + 56.9)), 1) == 1025.9 and _get("NEED_A") == 1026   # 1.25 x A at 24 windows
     assert "FIT=$((INSTALL_TO_GATE_S + NEED_FETCH + NEED_BAKE + NEED_A + NEED_S + NEED_C + RESERVE))" in RUN
     fit = sum(terms)
-    assert fit == 8500 and fit * _get("FIT_HEADROOM_PCT") // 100 == 10625 and (300 + fit) * 1.25 == 11000 <= 11700
+    assert fit == 8926 and fit * _get("FIT_HEADROOM_PCT") // 100 == 11157 and (300 + fit) * 1.25 == 11532.5 <= 11700
     guard_s = round(float(re.findall(r"\*\*Guard ([\d.]+) h\*\*", PREREG)[-1]) * 3600)
-    assert guard_s == 11700 and guard_s - 10625 >= SSH_READY_S + STAGING_MARGIN_S, "a slow-ssh host clears the fit check"
+    assert guard_s == 11700 and guard_s - 11157 >= SSH_READY_S + STAGING_MARGIN_S, "a slow-ssh host clears the fit check"
     assert 57e9 / 40e6 <= _get("NEED_FETCH"), "57 GB at the probe's 40 MB/s floor fits the fetch need"
     assert abs(3.25 * 1.05 + 70 * 0.04 - 6.2125) < 1e-9 and abs(2 * 6.2125 + 6 * 0.30 - 14.225) < 1e-9
     for s in ("install 600 s; fetch 1,500 s", "bake 400 s; phase A at two group sizes, about 600 s",
               "phase S about 2,400 s and phase C about 2,400 s", "**FIT = 8,500 s, x 1.25 = 10,625 s.**",
-              "((boot 300 + 8,500) x 1.25 = 11,000 s <= 11,700 s)", "**$6.21**", "**$14.23**", "Host RAM at least **60 GiB**"):
+              "((boot 300 + 8,500) x 1.25 = 11,000 s <= 11,700 s)", "**$6.21**", "**$14.23**", "Host RAM at least **60 GiB**",
+              "**8,926 s, x 1.25 = 11,157 s**", "(boot 300 + 8,926) x 1.25 = 11,532.5 s <= 11,700 s",
+              "**re-fit to 1,026 s** (1.25 x 820.7)", "The TRIPWIRE's terms and bounds do not move:**"):
         assert s in FLAT, s
 
 
@@ -870,3 +874,59 @@ def test_each_box_mutant_fails_the_self_test(tmp_path, old, new):
     (tmp_path / "p233_box.py").write_bytes(src.replace(old, new).encode("utf-8"))
     out = _run(tmp_path / "p233_box.py", "--self-test", cwd=tmp_path)
     assert out.returncode != 0 and "FAILED" in out.stdout, out.stdout + out.stderr
+
+
+# ---- the real record first (Amendment 4): p233-shake-2, the explore-tier shakedown at Amendment 3's head, sha256-pinned
+FIXTURE = LANE / "fixtures" / "p233-shake-2"
+FIXTURE_SHA256 = {
+    "quality_A.json": "a9fc989a2dc5f4f33ba9f3fce8e0fc72d3e6fad47b7be8212d189c56e722cac8",
+    "quality_S.json": "b34419e945279e51aef1e656e2890e990fea64f968c418606b19f66722186a44",
+    "quality_C.json": "267423c5dd519688855d9f8bb0b6c1d8f7416e8ce366018531a248f91ad8e2e3",
+}
+FIXTURE_E4B = "9d19079ec20fcefafc697fe6277c39ef75319f82"     # the controller HEAD that staged p233-shake-2's kit
+FIXTURE_TRIPWIRE = [
+    "T=1: |NLL gap| 0.005613 > 0.005",
+    "T=1: argmax agreement 0.978516 < 0.98",
+    "T=1: KL 0.003766 > max(3 x floor 0.0, 0.002) = 0.002000",
+    "T=8: argmax agreement 0.974609 < 0.98",
+    "T=8: KL 0.003739 > max(3 x floor 0.0, 0.002) = 0.002000",
+]
+
+
+def _real_quality():
+    """The quality records as the reducer's main() loads them, each file checked against its pin first."""
+    assert sorted(p.name for p in FIXTURE.iterdir()) == sorted(FIXTURE_SHA256)
+    out = {}
+    for name, want in FIXTURE_SHA256.items():
+        raw = (FIXTURE / name).read_bytes()
+        assert hashlib.sha256(raw).hexdigest() == want, f"the pinned shakedown record {name} changed"
+        out[name[len("quality_"):-len(".json")]] = json.loads(raw)
+    return out
+
+
+def test_the_real_shakedown_record_reduces_to_shakedown_solver_sane_with_its_five_tripwire_lines():
+    q = _real_quality()
+    assert all(r["shakedown"] is True and r["config"]["hot_rows"] == 128 for r in q.values())
+    v = R.reduce(q, FIXTURE_E4B)
+    assert v["verdict"] == "SHAKEDOWN" and v["would_read"] == "SOLVER_SANE", v["reasons"][:4]
+    assert v["reasons"][:3] == ["a shakedown record is never a reading", "T=1: SANE", "T=8: SANE"]
+    assert v["tripwire"] == FIXTURE_TRIPWIRE                     # the bounds, unmoved (Amendment 4), on the real bytes
+    assert R.reduce(_real_quality(), "0" * 40)["verdict"] == "VOID"      # the e4b pin is read on the real bytes
+
+
+def test_the_real_record_made_a_reading_voids_on_the_window_count_alone():
+    """Made reading-shaped (shakedown off), the 8-window records VOID, and every reason comes from the window count:
+    the windows' shape, the R and ON windows not 0..23, and the pass count W/T. Nothing else in the record is a
+    fault."""
+    q = _real_quality()
+    for r in q.values():
+        r["shakedown"] = False
+    v = R.reduce(q, FIXTURE_E4B)
+    assert v["verdict"] == "VOID" and v["tripwire"] == ["unread"] and len(v["reasons"]) == 22, v["reasons"][:3]
+    window = (r"windows \{'wikitext': 8\} x 128 after 512, registered 24 wikitext windows x 128 after 512",
+              r"8 (R|ON) windows, registered 24", r"the (R|ON) windows are not 0\.\.23 once each",
+              r"the pass's KV \{'passes': (8|1), .*\}: registered 4096 tokens \(256 blocks\) "
+              r"with the server's cap 16, "
+              r"one KV per group of (1|8)")
+    assert all(any(re.fullmatch(rf"quality_[ASC] T=(1|8): {w}", x) for w in window) for x in v["reasons"]), \
+        [x for x in v["reasons"] if not any(re.fullmatch(rf"quality_[ASC] T=(1|8): {w}", x) for w in window)]
