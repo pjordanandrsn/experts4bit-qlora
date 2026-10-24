@@ -274,3 +274,33 @@ group size, window count or cap moves. Each item fixes something the registratio
   30,000 MiB.
 - **Run ids:** `p233-5090-r1` to `-r6` are accepted by the runner and the drive exactly as the reading ids are.
 - Pre-data: no P233 box has run.
+
+## Amendment 3 (2026-10-24, before any data): the NVMe tier's pinned rows named in every arm
+
+- **What the first shakedown showed:** the first shakedown box ran A to completion and then stopped in S's first
+  prefill, before any S or C number existed: `nvme_residency` refused "request of 95 unique rows exceeds hot_rows=64".
+  A shakedown is never a reading, and nothing was read.
+- **Why it happens:** `E4B_PAGED_HOT_ROWS` was left unset, so the tier held the server's default, 64 pinned rows. The
+  tier's contract (`experts4bit_qlora/engines/nvme_experts.py`, `enable_nvme_residency`) states a hard floor: `hot_rows`
+  must be at least the number of unique cold experts one forward routes. For a prefill of T tokens that approaches
+  min(T x k, E minus the hot experts). The instrument prefills in 512-token chunks with k = 8 and E = 128, so 64 is below
+  the floor at the solver split. The same holds for the server itself at its own defaults (`E4B_PAGED_CHUNK_TOKENS=512`,
+  `E4B_PAGED_HOT_ROWS=64`); that is a separate e4b change, not this registration's.
+- **The change:** every arm (A, S and C) sets **`E4B_PAGED_HOT_ROWS=128`** (E), so the floor holds at any prefill, and the
+  arms still differ only in placement.
+  - The box refuses an arm whose knob is not exactly 128 (unset included).
+  - Each phase records the tier's resolved `hot_rows` (`config.hot_rows`). The reducer VOIDs a phase whose recorded value
+    is not the integer 128, or whose knob record is not "128" (rung 1, beside Amendment 1's head knobs).
+  - The runner's tripwire asserts that the config reads `E4B_PAGED_HOT_ROWS` (default 64) and that `build_engine` hands
+    `cfg.hot_rows` to the tier.
+- **The cost:** the pinned rows take about 0.34 GB of host RAM (128 rows x 2,654,208 bytes, the arena's bytes per expert
+  as the shakedown's placement record reads it), inside the 60 GiB host floor. The DRAM tier's 3 GiB budget is
+  unchanged.
+- **What it does not change:** no byte the forward computes. The same NF4 rows reach the same kernels; only how many cold
+  rows the tier may stage at once moves. The arms, the instrument, the windows, the bar, the tripwire, the verdict, the
+  budget and the ids are unchanged.
+- **The scope:** the read speaks for **solver placement with `E4B_PAGED_HOT_ROWS=128`**. A doc or lane that cites it to
+  propose solver serving names that value. A build-time floor check, if e4b adds one, is met: for this server the floor is
+  min(max(chunk tokens, max sequences) x k, E) = min(512 x 8, 128) = 128.
+- **The shakedown:** the next shakedown runs from this amendment's head before merge (a shakedown is never a reading); the
+  reading launches only from the merged commit.

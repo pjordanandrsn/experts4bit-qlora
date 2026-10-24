@@ -25,7 +25,8 @@ The rule, first rung that applies:
                      C  DRAM empty, NVMe non-empty, budgets 8.0 / 0, at least one layer tiered;
                    graphs on in any arm or any decode bucket captured; the head not the int8 head at rows 8 (both
                    ``explicit``, Amendment 1), or the head, the split cap or the fusions resolving differently between
-                   phases; the pass KV off the server's 4096 tokens; a missing per-window NLL, argmax or KL on a scored
+                   phases; the NVMe tier's pinned rows not resolved to 128 in a phase, or not named so (Amendment 3);
+                   the pass KV off the server's 4096 tokens; a missing per-window NLL, argmax or KL on a scored
                    arm (S or C), or a missing NLL on A's R (never read as 0); an agreement that is not k/128.
   per T            SANE when S against A holds |mean NLL(S) - mean NLL(A)| <= 0.02 and argmax agreement >= 0.95 (exact
                    pooled counts), both unrounded; NOT_SANE otherwise, each failed bar named.
@@ -67,7 +68,8 @@ MODEL, REV = "Qwen/Qwen3-30B-A3B", "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"
 CC, SMS = "12.0", 170                                     # the RTX 5090
 HEAD_SHAPE = [151936, 2048]                               # Qwen3-30B-A3B's lm_head (N, K), untied
 HEAD_MODE, HEAD_SOURCE, ROWS_MAX, ROWS_SOURCE = "1", "explicit", 8, "explicit"   # Amendment 1, every arm
-KNOBS = {"E4B_PAGED_GRAPHS": "0", "E4B_INT8_HEAD_BW": "1", "E4B_INT8_HEAD_ROWS": "8"}
+KNOBS = {"E4B_PAGED_GRAPHS": "0", "E4B_INT8_HEAD_BW": "1", "E4B_INT8_HEAD_ROWS": "8", "E4B_PAGED_HOT_ROWS": "128"}
+HOT_ROWS = 128                                            # Amendment 3: the NVMe tier's pinned rows, E, in every arm
 Q_WINDOWS, SHAKE_WINDOWS, Q_PROMPT, Q_CONT = 24, 8, 512, 128   # 24 (and the shakedown's 8) divide by 1 and 8
 SERVED_TOKENS, SERVED_BLOCKS = 4096, 256                  # the server's KV per sequence (16-token blocks)
 Q_BIAS, Q_ARGMAX = 0.02, 0.95                             # P153's bars, at each T on its own
@@ -135,9 +137,13 @@ def record_faults(name, r, e4b_sha, arm, shake=False) -> list:
         out.append(f"{name}: the build captured decode buckets {sorted(b for b, v in g.items() if v == 'graph')}")
     if cfg.get("max_tokens_per_seq") != SERVED_TOKENS:
         out.append(f"{name}: {cfg.get('max_tokens_per_seq')} tokens per sequence, the server's {SERVED_TOKENS}")
+    if type(cfg.get("hot_rows")) is not int or cfg.get("hot_rows") != HOT_ROWS:   # an absent or non-int value VOIDs
+        out.append(f"{name}: the NVMe tier's pinned rows resolved {cfg.get('hot_rows')!r}, registered {HOT_ROWS} in every "
+                   f"arm (Amendment 3)")
     kn = r.get("knobs") or {}
     if any((kn.get(k) or "").strip() != v for k, v in KNOBS.items()):
-        out.append(f"{name}: knobs {({k: kn.get(k) for k in KNOBS})}, registered {KNOBS} in every arm (Amendment 1)")
+        out.append(f"{name}: knobs {({k: kn.get(k) for k in KNOBS})}, registered {KNOBS} in every arm (Amendments 1 "
+                   f"and 3)")
     out += head_faults(name, r)
     return out
 
@@ -565,7 +571,7 @@ def _fake_quality(arm, *, per_t=None, shake=False, e4b=E, sms=SMS, cc=CC, torch_
     return {"mode": "quality", "arm": arm, "status": status, "shakedown": shake, "e4b_sha": e4b, "gnf4_sha": gnf4,
             "torch": torch_v, "model": MODEL, "revision": rev, "served_revision": served, "sm_count": sms, "cc": cc,
             "config": {"placement": PLACEMENT[arm], "vram_gb": budget[0], "dram_gb": budget[1], "graphs": False,
-                       "max_tokens_per_seq": SERVED_TOKENS, **(config or {})},
+                       "max_tokens_per_seq": SERVED_TOKENS, "hot_rows": HOT_ROWS, **(config or {})},
             "knobs": {**KNOBS, **(knobs or {})},
             "levers": {"int8_head_bw": head if head is not None else _head(),
                        "attn_split_cap": {"cap": cap, "source": cap_source},
@@ -713,6 +719,12 @@ def _cases() -> list:
          v(qual(**{a: {"head": _head(rows_source="default-allowlisted")} for a in ARMS})) == "VOID"),
         ("the head at another shape", v(one("A", head=_head(shape=[151936, 4096]))) == "VOID"),
         ("a knob record off the registered value", v(one("C", knobs={"E4B_INT8_HEAD_ROWS": None})) == "VOID"),
+        # ---- VOID: the NVMe tier's pinned rows (Amendment 3)
+        ("the tier's rows at the serve default 64 in a phase", v(one("S", config={"hot_rows": 64})) == "VOID"),
+        ("the tier's rows unrecorded in a phase", v(one("C", config={"hot_rows": None})) == "VOID"),
+        ("the tier's rows recorded as the string '128'", v(one("A", config={"hot_rows": "128"})) == "VOID"),
+        ("the hot-rows knob unset in a phase's record", v(one("A", knobs={"E4B_PAGED_HOT_ROWS": None})) == "VOID"),
+        ("the hot-rows knob at 64 in a phase's record", v(one("S", knobs={"E4B_PAGED_HOT_ROWS": "64"})) == "VOID"),
         ("the split cap resolved differently between phases", v(one("S", cap=8)) == "VOID"),
         ("the split cap named explicitly in every phase", v(qual(**{a: {"cap_source": "explicit"} for a in ARMS})) == "VOID"),
         ("a fusion mode resolved differently", v(one("C", modes={"E4B_PAGED_FUSE_QKV": "0", "E4B_FUSE_T1_GLUE": "auto",
