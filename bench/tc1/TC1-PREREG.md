@@ -3715,8 +3715,8 @@ venv-unsloth (torch 2.12.1+cu130, from `unsloth[cu130-torch2121]`). e4b runs `fu
 
 **The pins: constants of the reviewed kit, never launch-time values.** `tc1_run.sh` (`POS79_*`), `tc1_reduce.py` (`POS79_*`), the launch
 template and this text carry one value each, and `tests/test_tc1_pos79.py` holds them equal:
-- e4b: `experts4bit-qlora` 0.58.0, a git install at v0.58.0's peeled tag commit from github.com/pjordanandrsn/experts4bit-qlora. The
-  commit is written here, in the kit and in the reducer when the tag line posts, before this registration merges. The t212 tripwire
+- e4b: `experts4bit-qlora` 0.58.0, a git install at v0.58.0's peeled tag commit `f15cb7d695cf7148067c6bcea543484f31dc3abd` from
+  github.com/pjordanandrsn/experts4bit-qlora (the tag object peels to it; read with `git ls-remote` at the tag line). The t212 tripwire
   asserts the installed commit, and the commit is the byte proof.
 - grouped-nf4-gemm: 0.51.0, a git install at v0.51.0's peeled tag commit `30adb1bfa76f95f9ce4a4c29734b8f36de907eca` from
   github.com/pjordanandrsn/grouped-nf4-gemm, asserted the same way.

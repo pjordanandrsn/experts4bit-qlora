@@ -73,13 +73,11 @@ def test_the_pins_agree_across_the_kit_the_reducer_the_template_and_the_registra
         assert e4b in A79
 
 
-@pytest.mark.xfail(strict=True, reason="unfilled until the v0.58.0 tag line: the commit that fills the pin removes this marker")
 def test_the_e4b_pin_is_filled_before_merge():
-    """v0.58.0's peeled tag commit must be written into the kit, the reducer, the template and the registration before this registration
-    merges (the maintainer's ruling: a constant the review saw, never a launch-time lookup). Until then it is a strict xfail; filling the
-    pin without removing the marker turns it into a failure, so the fill commit carries both. The box's pin gate refuses an unfilled pin."""
+    """v0.58.0's peeled tag commit is written into the kit, the reducer, the template and the registration (the maintainer's ruling: a
+    constant the review saw, never a launch-time lookup). The box's pin gate refuses an unfilled pin."""
     pin = _run_const("POS79_E4B_SHA")
-    assert re.fullmatch(r"[0-9a-f]{40}", pin), "fill POS79_E4B_SHA with v0.58.0's peeled tag commit when the tag line posts"
+    assert re.fullmatch(r"[0-9a-f]{40}", pin) and pin == "f15cb7d695cf7148067c6bcea543484f31dc3abd", "POS79_E4B_SHA is v0.58.0's peeled tag commit"
 
 
 def test_the_staged_helper_is_loggettas_frozen_release_proof():
@@ -99,7 +97,7 @@ def _gate(tmp: Path, families="qwen3pos79", e4b=STAND_IN, gnf4="30adb1bfa76f95f9
     w.mkdir(exist_ok=True)
     if staged:
         (w / "release_proof.py").write_text("x")
-    gate = GATE.replace('POS79_E4B_SHA=""', f"POS79_E4B_SHA={pin}", 1)
+    gate = re.sub(r"^POS79_E4B_SHA=\S*", f"POS79_E4B_SHA={pin}", GATE, count=1, flags=re.MULTILINE)   # a stand-in pin for the gate's cases
     script = ("say(){ echo \"SAY $*\"; }\nfinish(){ echo \"FINISH $1\"; exit $1; }\n" + f"W={w}\nFAMILIES='{families}'\nE4B_SHA={e4b}\n"
               f"GNF4_SHA={gnf4}\nTC1_UNSLOTH_VERSION={uns}\nTC1_UNSLOTH_ZOO_VERSION={zoo}\n{extra}\ncd {w}\n" + gate + "echo PASSED\n")
     p = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
@@ -189,7 +187,7 @@ def test_the_box_records_from_the_drives_real_environment_pass_the_reducers_box_
            '"record_equal": true, "first_diff": null, "imports": {"%s": "/v"}, "pycache_prefix": "%s", "pycache_fresh": true}\\n')
     py.write_text("#!/usr/bin/env bash\nfor d in unsloth unsloth_zoo; do\n  printf '" + rec + "' \"$d\" \"$d\" \"$d\" \"$PYTHONPYCACHEPREFIX\"\ndone\n")
     py.chmod(0o755)
-    gate = GATE.replace('POS79_E4B_SHA=""', f"POS79_E4B_SHA={STAND_IN}", 1)
+    gate = re.sub(r"^POS79_E4B_SHA=\S*", f"POS79_E4B_SHA={STAND_IN}", GATE, count=1, flags=re.MULTILINE)
     script = "\n".join(("say(){ :; }", "finish(){ echo FINISH $1; exit $1; }", f"W={w}", "FAMILIES=qwen3pos79", f"PY_UNS={py}", "UNS_OK=1",
                         "T212_OK=1", f"cd {w}")) + "\n" + gate + PROOF + "pos79_release_proof || exit 9\n"
     p = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)

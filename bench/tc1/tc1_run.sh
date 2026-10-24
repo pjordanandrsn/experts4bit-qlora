@@ -213,7 +213,7 @@ esac
 # v0.58.0's peeled tag commit and grouped-nf4-gemm at v0.51.0's (both git installs from the canonical repositories, byte-proven by the
 # commit, which the t212 tripwire asserts), Unsloth and unsloth_zoo at PyPI's latest at registration (proven by release_proof.py before any
 # arm). The token runs alone. Any other value refuses here (rc 78), before any staging.
-POS79_E4B_SHA=""                                           # v0.58.0's peeled tag commit: filled when the tag line posts, before merge
+POS79_E4B_SHA=f15cb7d695cf7148067c6bcea543484f31dc3abd     # v0.58.0's peeled tag commit
 POS79_GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca     # v0.51.0's peeled tag commit
 POS79_UNSLOTH=2026.10.8; POS79_UNSLOTH_ZOO=2026.10.8
 case " $FAMILIES " in *" qwen3pos79 "*)

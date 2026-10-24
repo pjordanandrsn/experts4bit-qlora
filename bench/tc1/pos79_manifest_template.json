@@ -22,7 +22,7 @@
   "max_download_usd_per_gb": 0.02,
   "ssh_ready_s": 420,
   "avoid_vast_machine_receipts": [],
-  "command": "E4B_SHA= GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca TC1_UNSLOTH_VERSION=2026.10.8 TC1_UNSLOTH_ZOO_VERSION=2026.10.8 TC1_BOX=A TC1_GPU_CLASS=5090 TC1_FAMILIES=qwen3pos79 TC1_STEPS=60 TC1_LOAD_GATE=6.0 TC1_LOAD_RETRIES=2 bash bench/tc1/tc1_drive.sh",
+  "command": "E4B_SHA=f15cb7d695cf7148067c6bcea543484f31dc3abd GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca TC1_UNSLOTH_VERSION=2026.10.8 TC1_UNSLOTH_ZOO_VERSION=2026.10.8 TC1_BOX=A TC1_GPU_CLASS=5090 TC1_FAMILIES=qwen3pos79 TC1_STEPS=60 TC1_LOAD_GATE=6.0 TC1_LOAD_RETRIES=2 bash bench/tc1/tc1_drive.sh",
   "command_cwd": "e4b",
   "guards": [
     {"repo": "e4b", "path": "bench/tc1/tc1_drive.sh", "pattern": "lane TC1, CONTROLLER side"},
