@@ -1,0 +1,29 @@
+{
+ "band_computed": false,
+ "card": "NVIDIA GeForce RTX 4090",
+ "cause": "lfm2: lfm2_1024: status 'ALARM'; ernie: ernie_1024: 0 receipts (not exactly one)",
+ "cohorts": {
+  "ernie": {
+   "card": "NVIDIA GeForce RTX 4090",
+   "cause": "ernie_1024: 0 receipts (not exactly one)",
+   "verdict": "VOID"
+  },
+  "lfm2": {
+   "card": "NVIDIA GeForce RTX 4090",
+   "cause": "lfm2_1024: status 'ALARM'",
+   "verdict": "VOID"
+  }
+ },
+ "n_covered": 0,
+ "n_rows": 0,
+ "pins": {
+  "e4b": "f6e66fd65b28fe493a89062b02aa91d3970ff995",
+  "gnf4": "a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7",
+  "launch": "78a2e5cd1ea1eafc678251a9450b1130012effe9",
+  "loggetta": "9348f8b865f9e429f0628ae6e5be412787447331"
+ },
+ "plan_findings": [],
+ "rows": [],
+ "run_id": "ho3-4090-2",
+ "verdict": "VOID"
+}

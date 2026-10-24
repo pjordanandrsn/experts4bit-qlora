@@ -1,0 +1,24 @@
+KNOBS launch=e4230f8270f0675020a6c0ee587814a76723a8d0 e4b_stack=f6e66fd65b28fe493a89062b02aa91d3970ff995 gnf4=a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7 loggetta=9348f8b865f9e429f0628ae6e5be412787447331 alpaca=dce01c9b08f87459cf36a430d809084718273017 class=RTX A4000 need_work=7200
+CUDA_PROBE ok
+GUARD_FIT fit=8250s need=10312s left=11180s
+experts4bit-qlora 0.56.1
+grouped-nf4-gemm 0.49.0
+loggetta 0.6.2
+torch 2.8.0+cu128
+transformers 5.17.0
+bitsandbytes 0.50.2
+datasets 5.1.0
+cc (8, 6)
+ho3 reducer self-test OK (17 HO2 cases + 11 HO3 cases)
+FETCHED LiquidAI/LFM2-8B-A1B@c1c44ff9fc00db3ebf4516970563f5f383d23670
+FETCHED baidu/ERNIE-4.5-21B-A3B-PT@87db95487941cb39592ee0abca3b9155a6d19c5c
+plan lfm2_1024 rc=0
+plan lfm2_2048 rc=0
+plan ernie_1024 rc=0
+plan ernie_2048 rc=0
+train lfm2_1024 rc=0
+train lfm2_2048 rc=0
+train ernie_1024 rc=0
+train ernie_2048 rc=0
+{"verdict": "MISS", "cause": null, "n_covered": 3, "n_rows": 4}
+HO3 MISS
