@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -144,7 +145,7 @@ def test_the_family_is_amendment_69s_four_arms_in_abba_order(tmp_path):
     assert "FREE qwen3pos79" in p.stdout
 
 
-PROOF = _cut(r"^pos79_release_proof\(\)\{.*?pycache_prefix \$PC\" \| tee -a summary\.txt; \}\n")
+PROOF = _cut(r"^pos79_release_proof\(\)\{.*?POS79_KNOB_ENV .*?\| tee -a summary\.txt; \}\n")
 FAKE_PY = r"""#!/usr/bin/env bash
 echo "CWD=$PWD PREFIX=$PYTHONPYCACHEPREFIX MARK=$RELEASE_PROOF_FRESH_PYCACHE ARGS=$*" >> "$CALLS"
 [ -d "$PYTHONPYCACHEPREFIX" ] && [ -z "$(ls -A "$PYTHONPYCACHEPREFIX")" ] && echo "PREFIX_FRESH" >> "$CALLS"
@@ -154,7 +155,7 @@ exit 0
 """
 
 
-def _proof(tmp: Path, uns_ok=1, t212_ok=1, fail=False):
+def _proof(tmp: Path, uns_ok=1, t212_ok=1, fail=False, knob=""):
     w = tmp / "w"
     (w / "logs").mkdir(parents=True, exist_ok=True)
     py = tmp / "py"
@@ -162,9 +163,11 @@ def _proof(tmp: Path, uns_ok=1, t212_ok=1, fail=False):
     py.chmod(0o755)
     calls = tmp / "calls"
     script = (f"say(){{ echo \"SAY $*\"; }}\nW={w}\nPY_UNS={py}\nUNS_OK={uns_ok}\nT212_OK={t212_ok}\nPOS79_UNSLOTH=2026.10.8\n"
-              f"POS79_UNSLOTH_ZOO=2026.10.8\nexport CALLS={calls}\n{'export FAKE_FAIL=1' if fail else ''}\ncd {w}\n" + PROOF
+              f"POS79_UNSLOTH_ZOO=2026.10.8\nexport CALLS={calls}\n{'export FAKE_FAIL=1' if fail else ''}\n"
+              f"export E4B_SHA={STAND_IN} GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca {knob}\ncd {w}\n" + PROOF
               + "pos79_release_proof; rc=$?; echo \"RC=$rc PREFIX_AFTER=${PYTHONPYCACHEPREFIX:-} MARK_AFTER=${RELEASE_PROOF_FRESH_PYCACHE:-}\"\n")
-    p = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    clean = {k: v for k, v in os.environ.items() if not k.startswith(("E4B_", "NF4_QLORA_", "GNF4_"))}   # the box's own, not this runner's
+    p = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=clean)
     summary = (w / "summary.txt").read_text() if (w / "summary.txt").exists() else ""
     return p, summary, (calls.read_text() if calls.exists() else ""), w
 
@@ -178,6 +181,21 @@ def test_the_proof_runs_under_one_fresh_prefix_that_the_arms_inherit(tmp_path):
     assert f"PREFIX_AFTER={m.group(2)} MARK_AFTER={m.group(2)}" in p.stdout            # exported: every later arm reads under it
     assert f"RELEASE_PROOF OK unsloth==2026.10.8 unsloth_zoo==2026.10.8 pycache_prefix {m.group(2)}" in summary
     assert (w / "release_proof_unsloth.json").read_text().count('"dist"') == 2
+    kn = [ln for ln in summary.splitlines() if ln.startswith("POS79_KNOB_ENV")]
+    assert len(kn) == 1 and kn[0].split()[1:] == ["E4B_SHA", "GNF4_SHA"], summary
+
+
+def test_the_knob_line_names_every_e4b_and_gnf4_variable_the_arms_inherit(tmp_path):
+    _, summary, _, _ = _proof(tmp_path, knob="NF4_QLORA_COMPACT_DELTA=1 E4B_CHUNKED_LM_LOSS=256 GNF4_X=1 TC1_STEPS=60")
+    kn = [ln for ln in summary.splitlines() if ln.startswith("POS79_KNOB_ENV")][0].split()[1:]
+    assert kn == ["E4B_CHUNKED_LM_LOSS", "E4B_SHA", "GNF4_SHA", "GNF4_X", "NF4_QLORA_COMPACT_DELTA"], kn
+
+
+def test_the_arm_driver_is_not_changed_by_this_amendment():
+    """bench/q235's kit pins tc1_arm.py by sha256 (q235.sha256): this amendment records its box facts in tc1_run.sh and leaves the arm
+    driver byte-identical."""
+    want = [ln.split()[0] for ln in (REPO / "bench" / "q235" / "q235.sha256").read_text().splitlines() if ln.endswith(" tc1_arm.py")]
+    assert want == [hashlib.sha256((TC1 / "tc1_arm.py").read_bytes()).hexdigest()]
 
 
 def test_a_refused_or_unrunnable_proof_ends_the_box_before_any_arm(tmp_path):

@@ -1114,7 +1114,7 @@ POS79_GNF4_SHA = "30adb1bfa76f95f9ce4a4c29734b8f36de907eca"     # v0.51.0's peel
 POS79_PINS = {"experts4bit-qlora": "0.58.0", "grouped-nf4-gemm": "0.51.0", "unsloth": "2026.10.8", "unsloth_zoo": "2026.10.8"}
 POS79_RELEASE_PROOF_SHA256 = "aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0"   # bench/tc1/release_proof.py
 POS79_PROVEN = ("unsloth", "unsloth_zoo")                        # the dists release_proof.py proves on the box
-POS79_HARNESS_ENV = ("E4B_SHA", "E4B_VENV")                      # names the harness itself sets: never an e4b or gnf4 knob
+POS79_HARNESS_ENV = ("E4B_SHA", "E4B_VENV", "GNF4_SHA", "GNF4_SHA_B")   # names the harness itself sets: never an e4b or gnf4 knob
 POS79_PYCACHE_PREFIX = "/tmp/tc1-pycache-"                       # tc1_run.sh's pos79_release_proof mktemp template
 POS79_HELDOUT_MAX = 0.01                                         # amendment 69's P209, here a gate before any ratio is quoted
 POS79_STABLE = {"e4b": 0.05, "unsloth": 0.10}                    # TC1's stability rule, |d1 - d2| / mean, on s/step and on device ms
@@ -3159,9 +3159,9 @@ def score_pos69(F, fam=POS69_FAM):
 
 def pos79_why(tag, r):
     """Amendment 79's predicates on one row: torch 2.12; the kit's pins as the arm recorded them (e4b, grouped-nf4-gemm, Unsloth and
-    unsloth_zoo versions, grouped-nf4-gemm's commit); no e4b or grouped-nf4-gemm knob in the arm's environment (every default unset, as
-    the 0.58.0 release resolves it -- amendment 69's asserted 0.49.0 values are not carried over); the bytecode prefix the proof made; the
-    registered arm tags; a profile with CPU ops on every arm. Empty string = as registered."""
+    unsloth_zoo versions, grouped-nf4-gemm's commit); the registered arm tags; a profile with CPU ops on every arm. The knob environment
+    and the bytecode prefix are box facts (pos79_box): the family hands its arms no extra environment, so every arm inherits the box's.
+    Empty string = as registered."""
     r = r or {}
     env = r.get("env") or {}
     bad = []
@@ -3174,16 +3174,6 @@ def pos79_why(tag, r):
     gc = (env.get("gnf4_code") or {}).get("commit")
     if gc != POS79_GNF4_SHA:
         bad.append(f"grouped-nf4-gemm commit {gc!r} != {POS79_GNF4_SHA}, the kit's pin")
-    ke = env.get("knob_env")
-    if not isinstance(ke, dict):
-        bad.append("no knob_env on the receipt: the arm's e4b / grouped-nf4-gemm knobs are unread")
-    else:
-        knobs = sorted(k for k in ke if k not in POS79_HARNESS_ENV and not k.startswith("E4B_RENT_"))
-        if knobs:
-            bad.append(f"knobs set in the arm's environment: {knobs} (amendment 79 reads every default unset)")
-    pp = env.get("pycache_prefix")
-    if not (isinstance(pp, str) and pp.startswith(POS79_PYCACHE_PREFIX)):
-        bad.append(f"pycache_prefix {pp!r}: the arm did not read under the proof's fresh prefix")
     fw = r.get("framework")
     want = {"e4b": ("fused_attn4_m_fd", "fused_attn4_m_fd_d2"), "unsloth": ("ckpt_unsloth_m_fv", "ckpt_unsloth_m_fv_d2")}.get(fw, ())
     if tag not in want:
@@ -3196,9 +3186,11 @@ def pos79_why(tag, r):
 
 def pos79_box(d):
     """Amendment 79's box facts outside its rows, each fail-closed: the summary's POS79_PINS line at the kit's pins and helper sha, its
-    RELEASE_PROOF OK line and prefix, the proof's JSON (one record per proven dist: its version, RECORD equal, no first_diff, a fresh
-    prefix equal to the summary's, its own name among the imports), versions.txt's e4b and grouped-nf4-gemm commits (the t212 tripwire's),
-    and the host CPU (box.json). Returns (facts, [failures])."""
+    RELEASE_PROOF OK line and its fresh /tmp/tc1-pycache-* prefix (exported there, so every arm inherits it), the proof's JSON (one record
+    per proven dist: its version, RECORD equal, no first_diff, a fresh prefix equal to the summary's, its own name among the imports), the
+    POS79_KNOB_ENV line with no e4b or grouped-nf4-gemm knob bar the harness's own names (every default unset, as the 0.58.0 release
+    resolves it -- amendment 69's asserted 0.49.0 values are not carried over), versions.txt's e4b and grouped-nf4-gemm commits (the t212
+    tripwire's), and the host CPU (box.json). Returns (facts, [failures])."""
     fx = {"prefix": None, "proofs": {}, "cpu": None}
     bad = []
     sp = os.path.join(d or "", "summary.txt")
@@ -3211,10 +3203,17 @@ def pos79_box(d):
         bad.append("no POS79_PINS line at the kit's pins and helper sha in summary.txt")
     ok = [ln for ln in lines if ln.startswith("RELEASE_PROOF OK ")]
     m = re.match(r"RELEASE_PROOF OK .* pycache_prefix (\S+)$", ok[-1]) if len(ok) == 1 else None
-    if not m:
-        bad.append(f"summary.txt carries {len(ok)} RELEASE_PROOF OK lines, not one with its prefix")
+    if not m or not m.group(1).startswith(POS79_PYCACHE_PREFIX):
+        bad.append(f"summary.txt carries {len(ok)} RELEASE_PROOF OK lines, not one with a fresh {POS79_PYCACHE_PREFIX}* prefix")
     else:
         fx["prefix"] = m.group(1)
+    kl = [ln for ln in lines if ln.startswith("POS79_KNOB_ENV")]
+    if len(kl) != 1:
+        bad.append(f"summary.txt carries {len(kl)} POS79_KNOB_ENV lines, not one: the arms' knob environment is unread")
+    else:
+        knobs = sorted(k for k in kl[0].split()[1:] if k not in POS79_HARNESS_ENV and not k.startswith("E4B_RENT_"))
+        if knobs:
+            bad.append(f"knobs set in the arms' environment: {knobs} (amendment 79 reads every default unset)")
     jp = os.path.join(d or "", "release_proof_unsloth.json")
     recs = []
     if d and os.path.exists(jp):
@@ -3258,7 +3257,7 @@ def _pos79_draws(R, fw, tag):
 
 
 def score_pos79(F, d, fam=POS79_FAM):
-    """TC1 amendment 79's rule, in order: the box facts (pos79_box) and every arm under the proof's prefix, else NOT_READ; two VALID
+    """TC1 amendment 79's rule, in order: the box facts (pos79_box), else NOT_READ; two VALID
     profiled draws a side, else NOT_READ; each side stable on s/step and on device ms (POS79_STABLE), else UNSTABLE; |mean held-out at N,
     e4b - Unsloth| <= POS79_HELDOUT_MAX, else QUALITY_DIFFERS; then QUOTED -- the device ratio (Unsloth / e4b ms per profiled step) first,
     the wall ratio second, named with the host CPU. Returns (verdict, [evidence lines], quote or None)."""
@@ -3266,10 +3265,6 @@ def score_pos79(F, d, fam=POS79_FAM):
     if not R:
         return "NOT_READ", [f"no {fam} family on this box"], None
     fx, bad = pos79_box(d)
-    for x in R["rows"]:
-        pp = ((x.get("r") or {}).get("env") or {}).get("pycache_prefix")
-        if fx["prefix"] and pp != fx["prefix"]:
-            bad.append(f"{x['fw']}/{x['tag']} read under prefix {pp!r}, not the proof's {fx['prefix']}")
     if bad:
         return "NOT_READ", bad, None
     e, u = _profiled_sides(R, "fused_attn4_m_fd", "ckpt_unsloth_m_fv")
@@ -12623,9 +12618,10 @@ def selftest():
         assert pos78_draw(P8(_pos78_rec()), nb)[0] == "VOID"
     cases += 1
     # 133. TC1 amendment 79 (qwen3pos79): amendment 69's box at the 0.58.0 release vs Unsloth 2026.10.8. QUOTED on the default fixture
-    #      (device 2.278 first, wall second, with the host CPU); an unfilled e4b pin, a missing or not-RECORD-equal or stale-prefix proof,
-    #      an arm under another prefix, or a missing versions.txt commit read NOT_READ; a knob in an arm's environment or an off-pin version
-    #      is VOID (NOT_READ: not two VALID draws a side); unstable draws read UNSTABLE; a held-out gap over 0.01 reads QUALITY_DIFFERS
+    #      (device 2.278 first, wall second, with the host CPU); an unfilled e4b pin, a missing pins line, a missing or not-RECORD-equal or
+    #      stale-prefix proof, a prefix that is not fresh, a knob in the arms' environment or no record of it, a proof without its own
+    #      import or at another wheel, or a missing versions.txt commit read NOT_READ; an off-pin version, torch, commit or tag, or no
+    #      profile, is VOID (NOT_READ: not two VALID draws a side); unstable draws read UNSTABLE; a held-out gap over 0.01 QUALITY_DIFFERS
     g79 = globals()
     e4b_pin = g79["POS79_E4B_SHA"]
     stand_in = "ab" * 20                                       # a stand-in commit for the fixture; the kit's real pin is filled at the tag
@@ -12637,22 +12633,24 @@ def selftest():
         for (fw, tag), r in R.items():
             r = json.loads(json.dumps(r))
             r["fam"] = POS79_FAM
-            env = dict(r.get("env") or {}, torch="2.12.1+cu130", knob_env={"E4B_SHA": stand_in, "E4B_VENV": "t212"}, pycache_prefix=pfx,
-                       gnf4_code={"commit": POS79_GNF4_SHA, "nf4_qlora_sha256": "c" * 64}, **POS79_PINS)
+            env = dict(r.get("env") or {}, torch="2.12.1+cu130", gnf4_code={"commit": POS79_GNF4_SHA, "nf4_qlora_sha256": "c" * 64},
+                       **POS79_PINS)
             r["env"] = env
             for k, v in ((rec or {}).get(tag) or {}).items():
                 r[k] = v(r) if callable(v) else v
             out[(fw, tag)] = r
         return {POS79_FAM: reduce_family(POS79_FAM, out, {}, 20)}
 
-    def box79(name, pins=True, proof=True, fresh=True, jprefix=None, versions=True, patch=None):
+    def box79(name, pins=True, proof=True, fresh=True, jprefix=None, versions=True, patch=None, knobs="E4B_SHA GNF4_SHA", spfx=None):
         bd = os.path.join(d, name)
         os.makedirs(bd, exist_ok=True)
         sm = []
         if pins:
             sm.append(f"POS79_PINS e4b {g79['POS79_E4B_SHA']} gnf4 {POS79_GNF4_SHA} unsloth {POS79_PINS['unsloth']} unsloth_zoo "
                       f"{POS79_PINS['unsloth_zoo']} release_proof {POS79_RELEASE_PROOF_SHA256}")
-        sm.append(f"RELEASE_PROOF OK unsloth=={POS79_PINS['unsloth']} unsloth_zoo=={POS79_PINS['unsloth_zoo']} pycache_prefix {pfx}")
+        sm.append(f"RELEASE_PROOF OK unsloth=={POS79_PINS['unsloth']} unsloth_zoo=={POS79_PINS['unsloth_zoo']} pycache_prefix {spfx or pfx}")
+        if knobs is not None:
+            sm.append(f"POS79_KNOB_ENV {knobs} ")
         open(os.path.join(bd, "summary.txt"), "w").write("\n".join(sm) + "\n")
         if proof:
             open(os.path.join(bd, "release_proof_unsloth.json"), "w").write("".join(json.dumps(
@@ -12680,21 +12678,16 @@ def selftest():
                                  ("p79-jpfx", {"jprefix": POS79_PYCACHE_PREFIX + "other"}, "a prefix other than the summary's"),
                                  ("p79-nover", {"versions": False}, "versions.txt has no line"),
                                  ("p79-noimp", {"patch": {"unsloth_zoo": {"imports": {"unsloth": "/v/u.py"}}}}, "own name not among the imports"),
-                                 ("p79-whl", {"patch": {"unsloth": {"wheel": "unsloth-2026.10.7-py3-none-any.whl"}}}, "wheel 'unsloth-2026.10.7")):
+                                 ("p79-whl", {"patch": {"unsloth": {"wheel": "unsloth-2026.10.7-py3-none-any.whl"}}}, "wheel 'unsloth-2026.10.7"),
+                                 ("p79-knob", {"knobs": "E4B_SHA GNF4_SHA NF4_QLORA_COMPACT_DELTA"}, "knobs set in the arms' environment"),
+                                 ("p79-noknob", {"knobs": None}, "0 POS79_KNOB_ENV lines"),
+                                 ("p79-spfx", {"spfx": "/var/tmp/x", "jprefix": "/var/tmp/x"}, "not one with a fresh")):
             v, ev, _ = score_pos79(F79, box79(name, **kw))
             assert v == "NOT_READ" and any(needle in x for x in ev), (name, v, ev)
-        rp = set79(rec={"ckpt_unsloth_m_fv_d2": {"env": lambda r: dict(r["env"], pycache_prefix=POS79_PYCACHE_PREFIX + "other")}})
-        v, ev, _ = score_pos79(rp, os.path.join(d, "p79-ok"))
-        assert v == "NOT_READ" and any("not the proof's" in x for x in ev), (v, ev)
-        knob = set79(rec={"fused_attn4_m_fd_d2": {"env": lambda r: dict(r["env"], knob_env=dict(r["env"]["knob_env"], NF4_QLORA_COMPACT_DELTA="1"))}})
-        assert knob[POS79_FAM]["verdicts"][("e4b", "fused_attn4_m_fd_d2")] == "VOID"
-        assert score_pos79(knob, os.path.join(d, "p79-ok"))[0] == "NOT_READ"
         old = set79(rec={"ckpt_unsloth_m_fv": {"env": lambda r: dict(r["env"], unsloth="2026.9.14")}})
         assert old[POS79_FAM]["verdicts"][("unsloth", "ckpt_unsloth_m_fv")] == "VOID"
         for tag, rec, needle in (("fused_attn4_m_fd", {"env": lambda r: dict(r["env"], torch="2.8.0+cu128")}, "not 2.12"),
                                  ("fused_attn4_m_fd", {"env": lambda r: dict(r["env"], gnf4_code={"commit": "ef" * 20})}, "grouped-nf4-gemm commit"),
-                                 ("ckpt_unsloth_m_fv", {"env": lambda r: dict(r["env"], pycache_prefix=None)}, "fresh prefix"),
-                                 ("ckpt_unsloth_m_fv", {"env": lambda r: {k: v for k, v in r["env"].items() if k != "knob_env"}}, "knob_env"),
                                  ("ckpt_unsloth_m_fv_d2", {"profile": None}, "no profile")):
             row = [x for x in set79(rec={tag: rec})[POS79_FAM]["rows"] if x["tag"] == tag][0]
             assert row["verdict"] == "VOID" and needle in row["why"], (tag, needle, row["verdict"], row["why"])

@@ -4095,8 +4095,6 @@ def run_arm(a, load_fn, sampler=True):
            "host": host_fingerprint(), "anchor_json": os.environ.get("TC1_ANCHOR_JSON"), "box_class": os.environ.get("TC1_BOX_CLASS"),
            "hf_hub_offline": os.environ.get("HF_HUB_OFFLINE"), "unsloth_loader": a.unsloth_loader if a.framework == "unsloth" else None,
            "pytorch_cuda_alloc_conf": os.environ.get("PYTORCH_CUDA_ALLOC_CONF"),      # the allocator setting the arm ran under (tc1_run.sh sets it)
-           "pycache_prefix": sys.pycache_prefix,                                       # TC1 amendment 79: the bytecode prefix the arm read under
-           "knob_env": {k: v for k, v in sorted(os.environ.items()) if k.startswith(("E4B_", "NF4_QLORA_", "GNF4_"))},   # amendment 79: every e4b / gnf4 knob as the arm saw it
            "unsloth_env": {k: v for k, v in os.environ.items() if k.startswith("UNSLOTH_")}}
     for pkg in ("transformers", "experts4bit-qlora", "grouped-nf4-gemm", "bitsandbytes", "peft", "unsloth", "unsloth_zoo", "triton", "huggingface_hub"):
         try:
@@ -6104,7 +6102,7 @@ def selftest(a):
                   "grouped-nf4-gemm", "hf_hub_offline", "host", "huggingface_hub", "peft", "torch", "transformers", "triton", "unsloth",
                   "unsloth_env", "unsloth_loader", "unsloth_zoo"}
     assert set(fu["arm_facts"]) - facts_before == {"threads"} and facts_before <= set(fu["arm_facts"]), sorted(fu["arm_facts"])
-    assert set(fu["env"]) - env_before == {"pytorch_cuda_alloc_conf", "pycache_prefix", "knob_env"} and env_before <= set(fu["env"]), sorted(fu["env"])
+    assert set(fu["env"]) - env_before == {"pytorch_cuda_alloc_conf"} and env_before <= set(fu["env"]), sorted(fu["env"])
     assert set(fu["arm_facts"]["threads"]) == {"torch_num_threads", "torch_interop_threads", "omp", "mkl", "openblas", "affinity_cpus",
                                               "quota_cpus", "nr_throttled", "nr_throttled_end"}, fu["arm_facts"]["threads"]
     assert "threads" in ro["arm_facts"] and "nr_throttled_end" in ro["arm_facts"]["threads"], ro["arm_facts"]

@@ -1936,7 +1936,9 @@ tc1_pos79_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
 # PyPI publishes (release_proof.py: the RECORD compare on disk, the import origin, the fresh bytecode prefix). The bytecode prefix is
 # exported here, after the installs (pip's own compile stays in-tree, which the proof's rule (b) allows), so the proof and every arm read
 # under one fresh, empty prefix; RELEASE_PROOF_FRESH_PYCACHE names the same directory. The proof runs as the arms run: venv-unsloth's
-# python, cwd $W, this environment. Any refusal ends the box here (rc 9) and no arm runs.
+# python, cwd $W, this environment. Any refusal ends the box here (rc 9) and no arm runs. The e4b / grouped-nf4-gemm knob environment
+# every arm inherits is recorded here too (POS79_KNOB_ENV: the names of every E4B_*, NF4_QLORA_* and GNF4_* variable), since the family
+# hands its arms no extra environment; the reducer reads the defaults unset from it.
 pos79_release_proof(){ local PC rc
   [ "$UNS_OK" = 1 ] && [ "$T212_OK" = 1 ] || { say "RELEASE PROOF NOT RUN: venv-unsloth ok=$UNS_OK, e4b in it ok=$T212_OK"; echo "RELEASE_PROOF NOT_RUN uns_ok=$UNS_OK t212_ok=$T212_OK" >> summary.txt; return 1; }
   PC=$(mktemp -d /tmp/tc1-pycache-XXXXXX) || return 1
@@ -1944,7 +1946,8 @@ pos79_release_proof(){ local PC rc
   (cd $W && perl -e 'alarm 900; exec @ARGV' $PY_UNS $W/release_proof.py "unsloth==$POS79_UNSLOTH" "unsloth_zoo==$POS79_UNSLOTH_ZOO") \
     > $W/release_proof_unsloth.json 2> logs/release_proof.log; rc=$?
   if [ $rc -ne 0 ]; then tail -3 logs/release_proof.log; say "RELEASE PROOF FAILED rc=$rc"; echo "RELEASE_PROOF FAILED rc=$rc $(tail -1 logs/release_proof.log | cut -c1-300)" >> summary.txt; return 1; fi
-  echo "RELEASE_PROOF OK unsloth==$POS79_UNSLOTH unsloth_zoo==$POS79_UNSLOTH_ZOO pycache_prefix $PC" | tee -a summary.txt; }
+  echo "RELEASE_PROOF OK unsloth==$POS79_UNSLOTH unsloth_zoo==$POS79_UNSLOTH_ZOO pycache_prefix $PC" | tee -a summary.txt
+  echo "POS79_KNOB_ENV $(env | grep -E '^(E4B_|NF4_QLORA_|GNF4_)' | cut -d= -f1 | sort | tr '\n' ' ')" | tee -a summary.txt; }
 # tc1_pos69mc_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 73 (2026-10-21): amendment 69's field recipe with the memory census --
 # its two matched arms (fd, fv), one draw each in venv-unsloth, --mem-census 1 and no profile (a profiler would sit inside the census window);
 # 60 steps with the field recipe's in-loop evaluations, as the claim's peak counted them. e4b and grouped-nf4-gemm are the drive's E4B_SHA /

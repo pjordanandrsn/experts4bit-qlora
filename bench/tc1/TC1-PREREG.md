@@ -3741,15 +3741,13 @@ byte-identical to loggetta's `bench/release_proof.py` at loggetta#126's merge. I
 - **Its record:** the JSON goes to `release_proof_unsloth.json`, and an OK line naming the prefix goes to the summary.
 - **A refusal** ends the box (rc 9), and no arm runs.
 
-Every arm then reads under that prefix, and its receipt records it (`env.pycache_prefix`).
+Every arm then reads under that prefix, which stays exported for the rest of the box. The box also records the knob environment every
+arm inherits (`POS79_KNOB_ENV`: the name of every `E4B_*`, `NF4_QLORA_*` and `GNF4_*` variable). The family hands its arms no extra
+environment, so the box's environment is theirs. `tc1_arm.py` is unchanged: bench/q235's kit pins it by sha256.
 
 **Validity** (`pos79_why`, per row):
 - torch 2.12;
 - the kit's pins as the arm recorded them (the four versions, and grouped-nf4-gemm's installed commit);
-- every e4b and grouped-nf4-gemm default unset, read from the arm's whole knob environment (`env.knob_env`: every `E4B_*`, `NF4_QLORA_*`
-  and `GNF4_*` variable, bar the harness's own `E4B_SHA` and `E4B_VENV`). Amendment 69 asserted the values 0.49.0's defaults resolved to;
-  this amendment reads 0.58.0's defaults as 0.58.0 resolves them, so those values are not carried over;
-- the proof's prefix;
 - the registered tags;
 - a profile with CPU ops on every arm.
 
@@ -3757,14 +3755,17 @@ A row off any of these is VOID.
 
 **The box facts** (`pos79_box`, each fail-closed):
 - the `POS79_PINS` line at the kit's pins and the helper's sha256;
-- one `RELEASE_PROOF OK` line, and its prefix;
+- one `RELEASE_PROOF OK` line, and its fresh `/tmp/tc1-pycache-*` prefix;
+- one `POS79_KNOB_ENV` line, with no e4b or grouped-nf4-gemm knob in it bar the harness's own `E4B_SHA`, `E4B_VENV`, `GNF4_SHA` and
+  `GNF4_SHA_B`. Every default is therefore unset. Amendment 69 asserted the values 0.49.0's defaults resolved to; this amendment reads
+  0.58.0's defaults as 0.58.0 resolves them, so those values are not carried over;
 - the proof's JSON: one record per proven dist, at its version, `RECORD equal` with no `first_diff`, `pycache_fresh` true, the summary's
   prefix, and its own name among the imports;
 - `versions.txt`'s t212 lines at the e4b and grouped-nf4-gemm commits;
 - the host CPU (`box.json`).
 
 **The rule** (`score_pos79`, in this order; the first that applies is the reading):
-1. **NOT_READ**: a box fact fails, or an arm read under any prefix but the proof's;
+1. **NOT_READ**: a box fact fails;
 2. **NOT_READ**: fewer than two VALID profiled draws a side;
 3. **UNSTABLE**: a side's draws differ by more than TC1's stability bound, |d1 - d2| / mean <= 0.05 for e4b and 0.10 for Unsloth, on
    s/step or on device ms per profiled step;
@@ -3788,7 +3789,7 @@ another recipe, model, card or host, or another release of either framework.
    re-run under this amendment.
 5. **Boot slack:** a 3.5 h guard against amendment 69's box at about 1.2 h leaves far more than 540 s.
 6. **Frozen pins:** once the row is read, the tests assert this amendment's pins at its frozen commit.
-7. **Fail closed:** every gate fails closed. A missing pin line, proof record, prefix, commit line, knob record, profile or host reads
+7. **Fail closed:** every gate fails closed. A missing pin line, proof record, prefix, knob line, commit line, profile or host reads
    VOID or NOT_READ, and the reducer self-test (case 133) removes each one.
 8. **The fetch imports no links** (`tc1_drive.sh`'s `--no-links`).
 

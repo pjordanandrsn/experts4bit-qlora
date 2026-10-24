@@ -30,7 +30,7 @@
     {"repo": "e4b", "path": "bench/tc1/tc1_run.sh", "pattern": "lane TC1, BOX side"},
     {"repo": "e4b", "path": "bench/tc1/tc1_run.sh", "pattern": "tc1_pos79_family"},
     {"repo": "e4b", "path": "bench/tc1/tc1_run.sh", "pattern": "pos79_release_proof(){"},
-    {"repo": "e4b", "path": "bench/tc1/tc1_arm.py", "pattern": "\"knob_env\":"},
+    {"repo": "e4b", "path": "bench/tc1/tc1_run.sh", "pattern": "echo \"POS79_KNOB_ENV $(env"},
     {"repo": "e4b", "path": "bench/tc1/TC1-PREREG.md", "pattern": "### Amendment 79 "},
     {"repo": "e4b", "path": "bench/tc1/tc1_reduce.py", "pattern": "def score_pos79"},
     {"repo": "e4b", "path": "bench/tc1/pos79_kit.py", "pattern": "WORST_CAP_USD = 6.00"}
