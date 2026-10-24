@@ -203,7 +203,7 @@ The first rung that applies decides.
   at the 151936 x 2048 head, from lane P232's read (`e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24`). A served
   Qwen3 registration launching at or after that commit names the knob explicitly rather than relying on an unset default
   whose meaning changed.
-- **The change:** the Instrument's defaults bullet now reads as follows. Every arm (A, S and C) sets
+- **The change:** this supersedes the Instrument's defaults bullet. Every arm (A, S and C) sets
   **`E4B_INT8_HEAD_BW=1`** and **`E4B_INT8_HEAD_ROWS=8`** explicitly; an unset knob is never relied on.
   - Each phase records the resolved values: `levers.int8_head_bw`, with its `rows` and `source`.
   - The reducer requires the same resolved values in every phase. A phase whose head is not the int8 head, or whose
