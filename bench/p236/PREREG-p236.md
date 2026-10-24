@@ -174,3 +174,17 @@ Fetched to the run directory's `p236/` and committed to `bench/p236/receipts/<ru
 `verdict_p236.json`, `summary.txt`, `versions.txt`, `logs/`, with `SHA256SUMS`; `forensics.txt` and `outer.log` (the
 card's identity) are kept only in the private receipt store and named in `STORE-ONLY.sha256`. `RESULTS-p236.md` is
 written from those files.
+
+## Amendment 1 (2026-10-24, before any data): the driver's staging loop, and the launch commit
+
+The registration's `p236_drive.sh` line 22 carried a literal backslash-n (two characters) where its line continuation
+belongs. bash reads it as the word `n`, so the driver tried to stage a file named `n` and refused every launch (exit 78,
+"stage missing: n") before staging anything. No box was created. The tests only read the driver's text, so CI passed it.
+- **The fix:** line 22 becomes a real line continuation. Those bytes are the only change to the driver. The runner,
+  the bench, the reducer, `release_proof.py` and `staged-p236.sha256` are unchanged, and so are every bar, rule, pin,
+  run id and budget above.
+- **The launch commit** is this amendment's merge, not the registration's. The maintainer's Approved names it and the
+  reading kit's hash.
+- **New tests:** `tests/test_p236.py` dry-runs the driver itself for every registered id (it must stage the five pinned
+  files and print its launch line), refuses unregistered ids, runs `bash -n` on every `bench/p236/*.sh`, and refuses
+  a backslash-n followed by indentation in any of them. Each new test fails on the registration's driver.

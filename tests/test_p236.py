@@ -11,6 +11,7 @@ import os
 import pathlib
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 
@@ -282,3 +283,67 @@ def test_every_install_skips_bytecode_so_the_release_proof_can_hold():
     installs = [ln for ln in RUN.splitlines() if "pip install" in ln and not ln.lstrip().startswith("#")]
     assert installs and all("--no-compile" in ln.split() for ln in installs), installs
     assert RUN.index("export PYTHONPYCACHEPREFIX") < RUN.index("pip install")
+
+
+def _dry_env(tmp_path, run_id):
+    return {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(tmp_path), "P236_DRIVE_DRYRUN": "1",
+            "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-q", "E4B_RENT_RUN_DIR": str(tmp_path),
+            "E4B_RENT_RUN_ID": run_id, "E4B_RENT_DEADLINE_EPOCH": "4102444800"}
+
+
+def _drive(tmp_path, run_id):
+    if sys.platform == "win32" or shutil.which("bash") is None:
+        pytest.skip("the driver needs a POSIX bash")
+    return subprocess.run(["bash", str(LANE / "p236_drive.sh")], capture_output=True, text=True,
+                          env=_dry_env(tmp_path, run_id), timeout=120)
+
+
+def _clean_or_skip(dirty):
+    """The driver refuses a dirty tree by design, so a dirty local checkout skips the dry run, named. Under CI the
+    checkout is fresh: a dirty one is broken and fails, never a silent skip that drops the dry-run asserts."""
+    if dirty.strip():
+        why = f"the checkout is dirty ({dirty.splitlines()[0][:80]}): the driver refuses a dirty tree by design"
+        if os.environ.get("CI"):
+            pytest.fail(why + " (CI must run on a clean checkout)")
+        pytest.skip(why)
+
+
+@pytest.mark.parametrize("run_id", RUN_IDS)
+def test_the_drivers_dry_run_stages_every_pinned_file(tmp_path, run_id):
+    """The driver stages, checks staged-p236.sha256 and reaches its dry-run line on a clean checkout, for every
+    registered id. Grepping DRIVE's text never ran its staging loop: a literal backslash-n in that loop (the
+    registration's line 22) made bash stage a file named "n" and refuse every launch."""
+    if sys.platform == "win32" or shutil.which("bash") is None:
+        pytest.skip("the driver needs a POSIX bash")
+    _clean_or_skip(subprocess.run(["git", "-C", str(REPO), "status", "--porcelain", "--untracked-files=no"],
+                                  capture_output=True, text=True).stdout)
+    out = _drive(tmp_path, run_id)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert f"DRYRUN stage {len(STAGED) + 1} files -> root@h:/root/p236" in out.stdout, out.stdout
+    assert "run p236_run.sh" in out.stdout and f"fetch -> {tmp_path}/p236" in out.stdout
+
+
+@pytest.mark.parametrize("run_id", ["p236-5090-3", "p236-5090-r4", "p235-5090-1", "p236-shake-1"])
+def test_the_driver_refuses_an_unregistered_id(tmp_path, run_id):
+    out = _drive(tmp_path, run_id)
+    assert out.returncode == 78 and f"refusing unregistered run ID: {run_id}" in out.stdout, out.stdout + out.stderr
+
+
+def test_every_lane_shell_script_parses():
+    """``bash -n`` on every bench/p236/*.sh: a parse check catches the next defect of another shape (it does not catch
+    the backslash-n, which parses as a word; the dry run and the check below do)."""
+    if sys.platform == "win32" or shutil.which("bash") is None:
+        pytest.skip("needs a POSIX bash")
+    scripts = sorted(LANE.glob("*.sh"))
+    assert {s.name for s in scripts} >= {"p236_drive.sh", "p236_run.sh"}, scripts
+    for sh in scripts:
+        out = subprocess.run(["bash", "-n", str(sh)], capture_output=True, text=True, timeout=60)
+        assert out.returncode == 0, f"{sh.name}: {out.stderr}"
+
+
+def test_no_lane_script_carries_a_mangled_line_continuation():
+    """A backslash-n followed by indentation is a line continuation an editor wrote as two characters: bash reads it as
+    the word "n" (bash -n passes it), so it is refused in every shell script of the lane."""
+    for sh in sorted(LANE.glob("*.sh")):
+        for i, line in enumerate(sh.read_text(encoding="utf-8").splitlines(), 1):
+            assert not re.search(r"\\n {2,}\S", line), f"{sh.name}:{i}: {line.strip()[:120]}"
