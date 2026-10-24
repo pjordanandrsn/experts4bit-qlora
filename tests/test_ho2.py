@@ -68,9 +68,27 @@ def test_staged_pins_match_their_sources():
         assert hashlib.sha256((SOURCES[name] / name).read_bytes()).hexdigest() == want, name
 
 
+#: HO2 is CLOSED: its read merged at 512614e6 (e4b#1987, RESULTS-ho2.md), where CI's pin and the runner's GNF4_SHA were
+#: last asserted equal. A closed lane asserts its own literal pins against that commit, never the live tree, so a later
+#: move of CI's pin (e4b#2030) does not re-pin or fail it.
+HO2_FROZEN = "512614e6c698fdc0d5ac724ebdfc2f725553113b"
+
+
+def at_frozen(rel):
+    import os
+
+    r = subprocess.run(["git", "-C", str(REPO), "show", f"{HO2_FROZEN}:{rel}"], capture_output=True)
+    if r.returncode != 0:
+        # CI checks out full history (fetch-depth: 0), so a miss there is a failure, never a skip
+        if os.environ.get("CI") == "true":
+            pytest.fail(f"HO2's frozen commit {HO2_FROZEN[:12]} is not readable: {r.stderr.decode()[:200]}")
+        pytest.skip("HO2's frozen commit is not in this checkout's history (a shallow clone)")
+    return r.stdout
+
+
 def test_runner_pins_are_the_registered_ones():
-    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert f"grouped-nf4-gemm.git@{_var(RUN, 'GNF4_SHA')}" in ci                       # e4b CI's pin
+    ci = at_frozen(".github/workflows/ci.yml").decode("utf-8")
+    assert f"grouped-nf4-gemm.git@{_var(RUN, 'GNF4_SHA')}" in ci                       # e4b CI's pin at HO2's close
     assert _var(RUN, "ALPACA_REV") == "dce01c9b08f87459cf36a430d809084718273017" and _var(RUN, "ALPACA_REV") in PREREG
     for fam, rev in (("LFM2", "c1c44ff9fc00db3ebf4516970563f5f383d23670"), ("ERNIE", "87db95487941cb39592ee0abca3b9155a6d19c5c")):
         assert _var(RUN, f"{fam}_REV") == rev and rev in PREREG and rev in REDUCE

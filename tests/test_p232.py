@@ -46,7 +46,9 @@ PREREG = (LANE / "PREREG-p232.md").read_text(encoding="utf-8")
 READ_AT = "f7589a02"
 FLAT = " ".join(PREREG.split())     # the PREREG's wrapped lines joined: a phrase reads across a line break
 NEW_FILES = [LANE / f for f in ("p232_run.sh", "p232_box.py", "p232_reduce.py", "p232_drive.sh", "staged-p232.sha256")] + [
-    REPO / "tests" / "test_p232.py", REPO / "changelog.d" / "p232-kit.md"]
+    REPO / "tests" / "test_p232.py"]
+# The kit's changelog fragment (changelog.d/p232-kit.md) was folded into CHANGELOG.md by the 0.58.0 release, so it is
+# no longer a file; its text is checked there with the rest of the release section.
 
 
 def _pins(path):

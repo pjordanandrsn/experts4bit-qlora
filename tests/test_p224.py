@@ -183,19 +183,21 @@ def _var(text, name):
 P224_FROZEN = "8140f8b004943f6f00dac7795b01deded666a6e6"
 
 
-def test_staged_pins_match_their_sources():
-    import hashlib
+def at_frozen(rel):
     import os
     import subprocess
 
-    def at_frozen(rel):
-        r = subprocess.run(["git", "-C", str(REPO), "show", f"{P224_FROZEN}:{rel}"], capture_output=True)
-        if r.returncode != 0:
-            # CI checks out full history (fetch-depth: 0), so a miss there is a failure, never a skip
-            if os.environ.get("CI") == "true":
-                pytest.fail(f"P224's frozen commit {P224_FROZEN[:12]} is not readable: {r.stderr.decode()[:200]}")
-            pytest.skip("P224's frozen commit is not in this checkout's history (a shallow clone)")
-        return r.stdout
+    r = subprocess.run(["git", "-C", str(REPO), "show", f"{P224_FROZEN}:{rel}"], capture_output=True)
+    if r.returncode != 0:
+        # CI checks out full history (fetch-depth: 0), so a miss there is a failure, never a skip
+        if os.environ.get("CI") == "true":
+            pytest.fail(f"P224's frozen commit {P224_FROZEN[:12]} is not readable: {r.stderr.decode()[:200]}")
+        pytest.skip("P224's frozen commit is not in this checkout's history (a shallow clone)")
+    return r.stdout
+
+
+def test_staged_pins_match_their_sources():
+    import hashlib
 
     staged = (LANE / "staged-p224.sha256").read_text(encoding="ascii")
     assert staged.encode("ascii") == at_frozen("bench/p224/staged-p224.sha256"), "P224's pins changed after it closed"
@@ -208,8 +210,9 @@ def test_staged_pins_match_their_sources():
 
 
 def test_runner_pins_are_the_registered_ones():
-    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert f"grouped-nf4-gemm.git@{_var(RUN, 'GNF4_SHA')}" in ci            # e4b CI's pin
+    # CI's pin as it stood when P224 closed: the live ci.yml moves on (e4b#2030), the closed lane's runner does not
+    ci = at_frozen(".github/workflows/ci.yml").decode("utf-8")
+    assert f"grouped-nf4-gemm.git@{_var(RUN, 'GNF4_SHA')}" in ci            # e4b CI's pin at P224's close
     assert _var(RUN, "LOGGETTA_SHA").startswith("90a7697d") and len(_var(RUN, "LOGGETTA_SHA")) == 40
     assert _var(RUN, "CANARY_SHA256") == CANARY_SHA256
     assert _var(RUN, "FIXTURE_REV") == "7f1c97f440f06ce36705e4f2b843edb5925f4498" and _var(RUN, "FIXTURE_REV") in PREREG
