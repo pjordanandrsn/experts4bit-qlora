@@ -114,6 +114,12 @@ dev = torch.device("cuda")
 # the gnf4 arm: K33 engages at every registered shape on this card, with every knob at its default
 shapes = [(28672, 4096), (4096, 14336), (1536, 2048), (2048, 768), (2048, 2048), (2048, 1024)]
 assert all(ng._bw_engages(n, k, dev) for n, k in shapes), "K33 auto does not engage at a registered shape"
+# Amendment 2: the plan's split on this card is the registered expectation (R.SPLITK), at every shape, before anything is
+# timed. It needs the install, so a drift here is rc 9 after STARTED; the check before any box is the lane test against
+# the same pinned commit (tests/test_p236.py, CI's grouped-nf4-gemm 30adb1bf). _bw_plan reads GNF4_GEMV_BW_PLAN before
+# _BW_PLANS, so this also covers an override in the environment: keep the call, never read _BW_PLANS directly
+plans = {name: ng._bw_plan(n, k)[3] for name, (n, k) in R.SHAPES.items()}
+assert plans == {name: R.SPLITK.get(name, 1) for name in R.SHAPES}, f"K33 split-K plans {plans} are not the registered {R.SPLITK}"
 assert ng._bw_decode(dev) == "prmt32", ng._bw_decode(dev)
 assert set(ng.dispatch_counts()) >= {"bw_prmt32", "bw_tree", "bw_splitk", "dotpad", "dotpad_splitk", "scalar", "scalar_splitk"}
 # the bnb arm: matmul_4bit dispatches bitsandbytes::gemm_4bit, whose CUDA kernel picks one of these two routes

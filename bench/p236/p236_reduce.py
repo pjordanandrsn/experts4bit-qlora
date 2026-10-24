@@ -47,6 +47,11 @@ LANE = "P236"
 SHAPES = {"mixtral.gate_up": (28672, 4096), "mixtral.down": (4096, 14336),
           "qwen3.gate_up": (1536, 2048), "qwen3.down": (2048, 768),
           "olmoe.gate_up": (2048, 2048), "olmoe.down": (2048, 1024)}
+#: Amendment 2: the read shapes whose K33 plan in grouped-nf4-gemm 0.51.0 splits K, and the split (``_BW_PLANS``:
+#: (4096, 14336) -> (16, 512, 4, 2); every other read shape is split 1). On such a call gnf4 bumps ``bw_splitk`` BESIDE
+#: ``bw_prmt32`` for its one launch (nf4_grouped.py at 30adb1bf), so the gate expects exactly one of each per call there.
+#: The runner's tripwire checks this constant against ``_bw_plan(N, K)`` on the card before anything is timed.
+SPLITK = {"mixtral.down": 2}
 MS = (1, 2, 4, 8, 16)
 ARMS = ("gnf4", "bnb")
 #: each rep visits the arms in a palindrome; odd reps swap the two arms (bnb gnf4 gnf4 bnb), so each arm leads half the
@@ -165,8 +170,15 @@ def cell_faults(key, c):
     g = eng.get("gnf4")
     if not isinstance(g, dict) or any(type(g.get(k_)) is not int for k_ in GEMV_KEYS + ("calls",)):
         out.append(f"{key}: no complete gnf4 dispatch record ({g!r})")
-    elif g["bw_prmt32"] != g["calls"] or g["calls"] < 1 or any(g[k_] for k_ in GEMV_KEYS if k_ != "bw_prmt32"):
-        out.append(f"{key}: gnf4 engagement {g}, registered one bw_prmt32 launch per call and no other route")
+    else:
+        split = key.split("|")[0] in SPLITK               # Amendment 2: a split-K plan also bumps bw_splitk, once a call
+        want = {k_: 0 for k_ in GEMV_KEYS}
+        want["bw_prmt32"] = g["calls"]
+        if split:
+            want["bw_splitk"] = g["calls"]
+        if g["calls"] < 1 or any(g[k_] != want[k_] for k_ in GEMV_KEYS):
+            out.append(f"{key}: gnf4 engagement {g}, registered one bw_prmt32 launch per call"
+                       + (" with its split-K mark (bw_splitk == calls)" if split else "") + " and no other route")
     b = eng.get("bnb")
     if not isinstance(b, dict) or any(type(b.get(k_)) is not int for k_ in BNB_ROUTES + ("calls",)):
         out.append(f"{key}: no complete bitsandbytes route record ({b!r})")
@@ -280,7 +292,9 @@ def fake_record(**over):
                 reps.append({"order": o, "ms_per_call": [0.10 if a == "gnf4" else 0.15 for a in o]})
             cells[cell_key(shape, m)] = {
                 "dequant_equal": True, "rel_err": {"gnf4": 0.004, "bnb": 0.003},
-                "engaged": {"gnf4": {**{k_: 0 for k_ in GEMV_KEYS}, "bw_prmt32": 3, "calls": 3},
+                "engaged": {"gnf4": {**{k_: 0 for k_ in GEMV_KEYS}, "bw_prmt32": 3, "calls": 3,
+                                     **({"bw_splitk": 3} if shape in SPLITK else {})},
+                            # an ARBITRARY route split for the fixture: the gate needs one route per cell, not which
                             "bnb": {"custom": 3 if m <= 4 else 0, "dequant": 0 if m <= 4 else 3, "calls": 3}},
                 "reps": reps, "copies": 2, "n": SHAPES[shape][0], "k": SHAPES[shape][1], "m": m}
     rec = {"lane": LANE, "status": "ok", "dry": False, "gnf4": GNF4_VERSION, "bnb": BNB_VERSION,
@@ -303,6 +317,7 @@ def fake_record(**over):
 def self_test():
     k0 = cell_key("mixtral.gate_up", 1)
     k4 = cell_key("qwen3.down", 4)
+    ks = cell_key("mixtral.down", 2)                       # the split-K shape (Amendment 2)
 
     def with_cell(key, **c):
         r = fake_record()
@@ -378,6 +393,12 @@ def self_test():
             "bw_prmt32": 3, "calls": 3}})) == "VOID"),
         ("gnf4 two launches a call", v(with_cell(k4, engaged={**good["cells"][k4]["engaged"], "gnf4": {
             **{k_: 0 for k_ in GEMV_KEYS}, "bw_prmt32": 6, "calls": 3}})) == "VOID"),
+        ("a split-K shape without its mark (Am. 2)", v(with_cell(ks, engaged={**good["cells"][ks]["engaged"], "gnf4": {
+            **{k_: 0 for k_ in GEMV_KEYS}, "bw_prmt32": 3, "calls": 3}})) == "VOID"),
+        ("a split-K mark twice a call (Am. 2)", v(with_cell(ks, engaged={**good["cells"][ks]["engaged"], "gnf4": {
+            **{k_: 0 for k_ in GEMV_KEYS}, "bw_prmt32": 3, "bw_splitk": 6, "calls": 3}})) == "VOID"),
+        ("a split-K mark on a split-1 shape (Am. 2)", v(with_cell(k4, engaged={**good["cells"][k4]["engaged"], "gnf4": {
+            **{k_: 0 for k_ in GEMV_KEYS}, "bw_prmt32": 3, "bw_splitk": 3, "calls": 3}})) == "VOID"),
         ("bnb mixed routes", v(with_cell(k4, engaged={**good["cells"][k4]["engaged"], "bnb": {
             "custom": 2, "dequant": 1, "calls": 3}})) == "VOID"),
         ("bnb fewer dispatches than calls", v(with_cell(k0, engaged={**good["cells"][k0]["engaged"], "bnb": {

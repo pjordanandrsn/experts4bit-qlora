@@ -131,10 +131,17 @@ class Dry(Real):
         return (x.float() @ self.ng.dequant_ref(w["B"][0], w["absmax"][0], w["n"], w["k"]).t()).to(self.torch.bfloat16)
 
     def gnf4(self, x, w, eids):
+        # as K33 counts (Amendment 2): one decode-key bump per call, and a bw_splitk mark beside it when the pinned
+        # module's plan for the cell's REGISTERED shape splits K (the dry tensors are small; the plan is the card's).
+        # Read from nf4_grouped itself, never a copy of R.SPLITK
         self.gemv["bw_prmt32"] += 1
+        if self.ng._bw_plan(*self.reg_shape)[3] > 1:
+            self.gemv["bw_splitk"] += 1
         return self._mm(x, w)
 
     def bnb_call(self, x, w):
+        # an ARBITRARY split for the control flow only: on the card bitsandbytes' own rule picks the route (p236-5090-1
+        # took custom at most cells), and the gate accepts either route as long as every call takes the same one
         self.route["custom" if x.shape[0] <= 4 else "dequant"] += 1
         return self._mm(x, w)
 
@@ -198,6 +205,7 @@ def run(a):
     try:
         g = torch.Generator(device=be.dev).manual_seed(236)
         for s_i, (shape, (n, k)) in enumerate(shapes.items()):
+            be.reg_shape = R.SHAPES[shape]          # the registered (N, K): Dry counts the plan the card would run
             n_copies = R.copies_for(n, k) if not be.dry else 2
             W = [be.quantize((torch.randn(n, k, generator=g, device=be.dev) * 0.02).to(torch.bfloat16))
                  for _ in range(n_copies)]
