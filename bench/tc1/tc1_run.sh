@@ -1960,8 +1960,10 @@ tc1_pos76_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   [ "${GNF4_SHA_B:-}" = "$POS76_GNF4_AFTER" ] || why="${why:+$why; }amendment 76's AFTER side is grouped-nf4-gemm $POS76_GNF4_AFTER (got GNF4_SHA_B ${GNF4_SHA_B:-unset})"
   [ "$T212_OK" = 1 ] || why="${why:+$why; }venv-unsloth's e4b (t212) is unavailable: $T212_REASON"
   if [ -z "$why" ]; then                             # the pre-check: the AFTER commit's compact-delta tests on THIS GPU
-    local PC=$W/gnf4-after
-    rm -rf "$PC"
+    # the clone sits BESIDE the work dir, never in it (the fetch copies $W, and a checkout under it wedges the receipt store), and is
+    # removed after the pre-check
+    local PC=${POS76_PRECHECK_DIR:-$(dirname "$W")/gnf4-pos76}
+    rm -rf "$PC" "$PC-site"
     # pytest goes into its own --target dir, on PYTHONPATH for the pre-check only: venv-unsloth (the measured venv) is not changed, and
     # its package set is read before and after; a difference refuses the family
     $PY_UNS -m pip freeze --all > logs/precheck_freeze_before.txt 2> logs/precheck_freeze.err
@@ -1975,6 +1977,7 @@ tc1_pos76_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
     $PY_UNS -m pip freeze --all > logs/precheck_freeze_after.txt 2>> logs/precheck_freeze.err
     [ -s logs/precheck_freeze_before.txt ] && cmp -s logs/precheck_freeze_before.txt logs/precheck_freeze_after.txt \
       || why="${why:+$why; }the pre-check changed venv-unsloth's package set, or it could not be read (logs/precheck_freeze_before.txt, _after.txt)"
+    rm -rf "$PC" "$PC-site"
     echo "PRECHECK $FAM ${why:-OK} $(tail -1 logs/precheck_compact_delta.log 2>/dev/null)" | tee -a summary.txt
   fi
   if [ -n "$why" ]; then
@@ -2216,24 +2219,26 @@ DECGATE_REQUIRED="route:test_decoded_route_passes_the_rd1_gate_against_the_dense
 tc1_decoded_gate(){
   [ -f $W/decgate.json ] && grep -q '"passed": true' $W/decgate.json && return 0
   say "===== DECODED-ROUTE GATE (amendment 46): grouped-nf4-gemm @$GNF4_SHA's compiled tests for the decoded route on this card, before any arm"
-  local SRC=$W/gnf4-src REASON=""
-  rm -rf $SRC; : > logs/decgate_rc.txt
-  if ! perl -e 'alarm 600; exec @ARGV' git clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git $SRC > logs/decgate_clone.log 2>&1 \
-     || ! git -C $SRC checkout -q "$GNF4_SHA" >> logs/decgate_clone.log 2>&1; then
+  # the checkout sits BESIDE the work dir, never in it: the fetch copies $W, and a .git or a nested receipt.json under it wedges the receipt
+  # store (tc1dec-5090-4). It is removed after the gate as before.
+  local SRC=${DECGATE_SRC_DIR:-$(dirname "$W")/gnf4-decgate} REASON=""
+  rm -rf "$SRC"; : > logs/decgate_rc.txt
+  if ! perl -e 'alarm 600; exec @ARGV' git clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git "$SRC" > logs/decgate_clone.log 2>&1 \
+     || ! git -C "$SRC" checkout -q "$GNF4_SHA" >> logs/decgate_clone.log 2>&1; then
     REASON="the grouped-nf4-gemm checkout at $GNF4_SHA failed (logs/decgate_clone.log)"
   elif ! $PY_E4B -m pytest --version > /dev/null 2>&1 \
        && ! perl -e 'alarm 600; exec @ARGV' $PY_E4B -m pip install -q --no-input pytest > logs/decgate_pytest.log 2>&1; then
     REASON="pytest could not be installed into venv-e4b (logs/decgate_pytest.log)"
   fi
   if [ -z "$REASON" ]; then
-    (cd $SRC/kernel && env -u TRITON_INTERPRET perl -e 'alarm 1500; exec @ARGV' $PY_E4B -m pytest -q -p no:cacheprovider test_nf4_route.py \
+    (cd "$SRC/kernel" && env -u TRITON_INTERPRET perl -e 'alarm 1500; exec @ARGV' $PY_E4B -m pytest -q -p no:cacheprovider test_nf4_route.py \
        -k "$DECGATE_K" --junitxml=$W/logs/decgate_route.xml) > logs/decgate_route.log 2>&1
     echo "decgate route rc=$?" >> logs/decgate_rc.txt
-    (cd $SRC/kernel && env -u TRITON_INTERPRET perl -e 'alarm 600; exec @ARGV' $PY_E4B -m pytest -q -p no:cacheprovider test_nf4_route_decision.py \
+    (cd "$SRC/kernel" && env -u TRITON_INTERPRET perl -e 'alarm 600; exec @ARGV' $PY_E4B -m pytest -q -p no:cacheprovider test_nf4_route_decision.py \
        --junitxml=$W/logs/decgate_decision.xml) > logs/decgate_decision.log 2>&1
     echo "decgate decision rc=$?" >> logs/decgate_rc.txt
   fi
-  local HEAD_AT; HEAD_AT=$(git -C $SRC rev-parse HEAD 2>/dev/null)
+  local HEAD_AT; HEAD_AT=$(git -C "$SRC" rev-parse HEAD 2>/dev/null)
   TC1_W="$W" DECGATE_REASON="$REASON" GNF4_SHA="$GNF4_SHA" DECGATE_K="$DECGATE_K" DECGATE_REQUIRED="$DECGATE_REQUIRED" DECGATE_HEAD="$HEAD_AT" \
     $PY_E4B - <<'PYG' 2>&1 | tee -a summary.txt
 import json, os, re, xml.etree.ElementTree as ET
@@ -2277,7 +2282,7 @@ print(f"DECODED GATE {'PASSED' if passed else 'NOT PASSED'} on {gpu} (torch {tv}
 PYG
   # the checkout is not evidence (decgate.json, logs/decgate_* are): gone before any arm, so no partial pull or fetch carries its files --
   # its docs/receipts-ab/receipt.json once failed adertha's reconciler for every launch on the account (tc1dec-5090-4, 2026-10-06)
-  rm -rf $SRC
+  rm -rf "$SRC"
   grep -q '"passed": true' $W/decgate.json 2>/dev/null && return 0
   say "BOX REFUSED: the decoded route's correctness gate did not pass on this card ($W/decgate.json) -- no arm runs"
   echo "BOX_REFUSED decoded-gate" | tee -a summary.txt

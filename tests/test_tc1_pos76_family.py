@@ -60,13 +60,14 @@ def _run(tmp: Path, gnf4_b: str = AFTER, **env) -> tuple[subprocess.CompletedPro
     for name, body in (("py", FAKE_PY), ("git", FAKE_GIT)):
         (bindir / name).write_text(body)
         (bindir / name).chmod(0o755)
-    (tmp / "logs").mkdir(exist_ok=True)
+    w = tmp / "w"                                       # the work dir; the pre-check's clone goes beside it, in tmp
+    (w / "logs").mkdir(parents=True, exist_ok=True)
     calls = tmp / "calls.txt"
-    script = (f'W="{tmp}"; STEPS=60; EVAL_EVERY=20; EVAL_N=8; GNF4_SHA={BEFORE}; GNF4_SHA_B={gnf4_b}; T212_OK=1; T212_REASON=""\n'
+    script = (f'W="{w}"; STEPS=60; EVAL_EVERY=20; EVAL_N=8; GNF4_SHA={BEFORE}; GNF4_SHA_B={gnf4_b}; T212_OK=1; T212_REASON=""\n'
               f'PY_UNS="{bindir}/py"; MATCHED_SEED=0\n' + STUBS + FUNCS + "tc1_pos76_family qwen3pos76co M rev 1 1\n")
-    r = subprocess.run(["bash", "-c", script], cwd=tmp, check=False, capture_output=True, text=True, timeout=60,
+    r = subprocess.run(["bash", "-c", script], cwd=w, check=False, capture_output=True, text=True, timeout=60,
                        env={**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "CALLS": str(calls), **env})
-    summary = (tmp / "summary.txt").read_text() if (tmp / "summary.txt").exists() else ""
+    summary = (w / "summary.txt").read_text() if (w / "summary.txt").exists() else ""
     return r, calls.read_text().splitlines() if calls.exists() else [], summary
 
 
@@ -80,7 +81,11 @@ def test_a_clean_pre_check_runs_the_four_arms_in_abba_order(tmp_path: Path):
     assert "PRECHECK qwen3pos76co OK 3 passed" in summary and "QWEN3POS76CO DONE" in summary, summary
     pytest_at = next(i for i, c in enumerate(calls) if "-m pytest" in c)
     assert pytest_at < calls.index("PREPARE")                       # the pre-check runs before the model is fetched
-    assert any(c == f"GIT -C {tmp_path}/gnf4-after checkout -q {AFTER}" for c in calls), calls
+    pc = tmp_path / "gnf4-pos76"                        # beside the work dir, not in it: the fetch copies the work dir
+    assert any(c == f"GIT clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git {pc}" for c in calls), calls
+    assert any(c == f"GIT -C {pc} checkout -q {AFTER}" for c in calls), calls
+    assert not pc.exists() and not (tmp_path / "gnf4-pos76-site").exists()      # removed after the pre-check
+    assert not any(p.name.startswith("gnf4") for p in (tmp_path / "w").iterdir()), list((tmp_path / "w").iterdir())
     x = "[NF4_QLORA_COMPACT_DELTA=1 E4B_CHUNKED_LM_LOSS=1]"
     assert _runs(calls) == [f"ARM fused_attn4_m_cd1cl1_gb {x}", f"ARM fused_attn4_m_cd1cl1_ga {x}",
                             f"DRAW2 fused_attn4_m_cd1cl1_ga {x}", f"DRAW2 fused_attn4_m_cd1cl1_gb {x}"]
@@ -93,8 +98,8 @@ def test_a_clean_pre_check_runs_the_four_arms_in_abba_order(tmp_path: Path):
 
 def test_the_pre_check_installs_pytest_beside_the_measured_venv_and_refuses_if_the_venv_changes(tmp_path: Path):
     r, calls, summary = _run(tmp_path)
-    assert any("-m pip install" in c and f"--target {tmp_path}/gnf4-after-site pytest" in c for c in calls), calls
-    assert f"PYTEST_PYTHONPATH={tmp_path}/gnf4-after-site" in calls, calls
+    assert any("-m pip install" in c and f"--target {tmp_path}/gnf4-pos76-site pytest" in c for c in calls), calls
+    assert f"PYTEST_PYTHONPATH={tmp_path}/gnf4-pos76-site" in calls, calls
     assert [c for c in calls if "pip freeze" in c] == ["PY -m pip freeze --all"] * 2
     d = tmp_path / "dirty"
     d.mkdir()

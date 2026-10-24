@@ -2204,6 +2204,7 @@ def test_tc1_amendment_46_decoded_route_tokens():
 
 _FAKE_GIT = r'''#!/bin/sh
 # a stand-in for `git` in amendment 46's gate test: `git clone ... DEST` writes a kernel/ with the two test files; checkout succeeds
+echo "$*" >> "$DECGATE_GIT_LOG"
 if [ "$1" = clone ]; then
   [ -n "$DECGATE_FAKE_CLONE_FAIL" ] && exit 128
   for a in "$@"; do d="$a"; done
@@ -2246,12 +2247,14 @@ def test_tc1_amendment_46_decoded_gate_refuses_the_box_before_any_arm(tmp_path, 
     script = (f'set -uo pipefail\nW={W}; cd $W; NONCE=t; TC1_BOX=A; PY_E4B={sys.executable}; GNF4_SHA={"g" * 40}; : > summary.txt\n'
               f'{helpers}\n{gate}\ntc1_decoded_gate; tc1_decoded_gate; echo GATE-DONE\n')
     r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=300,
-                       env={**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", **env})
+                       env={**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "DECGATE_GIT_LOG": str(tmp_path / "git.log"), **env})
     rec = json.loads((W / "decgate.json").read_text())
+    clones = [ln for ln in (tmp_path / "git.log").read_text().splitlines() if ln.startswith("clone ")]
+    assert clones == [f"clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git {tmp_path / 'gnf4-decgate'}"], clones   # once, beside W
     summ = (W / "summary.txt").read_text()
     # the checkout is gone before any arm on every path (its nested receipt.json once refused every launch on the account), and the
     # record names the commit it was at
-    assert not (W / "gnf4-src").exists(), case
+    assert not (W / "gnf4-src").exists() and not (tmp_path / "gnf4-decgate").exists(), case     # beside W, and removed after the gate
     assert not list(W.rglob("receipt.json")), list(W.rglob("receipt.json"))
     assert rec["checkout_head"] == ("f" * 40 if case != "no_clone" else None), rec
     assert r.returncode == want_rc, (case, r.returncode, r.stdout[-800:], r.stderr[-800:])
