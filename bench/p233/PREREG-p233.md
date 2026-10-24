@@ -196,3 +196,20 @@ The first rung that applies decides.
 4. The reading runs at that amendment's merge, after an Approved on the launch commit.
 5. On SOLVER_SANE with TRIPWIRE none, a doc or lane may propose serving at `solver` as an opt-in placement, citing this
    read. On SOLVER_NOT_SANE, or with the TRIPWIRE fired, it may not, until a written look or a later read.
+
+## Amendment 1 (2026-10-24, before any data): the head knobs named explicitly in every arm
+
+- **Why:** since e4b#2095 (merged after this registration), an UNSET `E4B_INT8_HEAD_ROWS` resolves to 8 on `qwen3_moe`
+  at the 151936 x 2048 head, from lane P232's read (`e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24`). A served
+  Qwen3 registration launching at or after that commit names the knob explicitly rather than relying on an unset default
+  whose meaning changed.
+- **The change:** the Instrument's defaults bullet now reads as follows. Every arm (A, S and C) sets
+  **`E4B_INT8_HEAD_BW=1`** and **`E4B_INT8_HEAD_ROWS=8`** explicitly; an unset knob is never relied on.
+  - Each phase records the resolved values: `levers.int8_head_bw`, with its `rows` and `source`.
+  - The reducer requires the same resolved values in every phase. A phase whose head is not the int8 head, or whose
+    rows did not resolve to 8, is a VOID (rung 1).
+  - The split cap and the fusions stay at the e4b default at the launch commit, the same in every arm, and recorded.
+- **What does not change:** the arms, the instrument, the windows, the bar, the tripwire, the verdict, the budget and
+  every cap. The head knobs are the same in every arm, so they cannot enter the S-against-A comparison. Naming them
+  only fixes which head path all three arms share.
+- Pre-data: no P233 box has run, and the kit is not yet written.
