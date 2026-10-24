@@ -490,10 +490,32 @@ def _drive(tmp_path, **env):
     return r.returncode, r.stdout + r.stderr
 
 
-@pytest.mark.skipif(shutil.which("bash") is None or subprocess.run(["bash", "-c", "command -v python3"],
-                                                                   capture_output=True).returncode != 0,
-                    reason="needs bash with python3 (the driver's nonce)")
+def _bash_has_python3() -> bool:
+    return shutil.which("bash") is not None and subprocess.run(["bash", "-c", "command -v python3"],
+                                                               capture_output=True).returncode == 0
+
+
+def _need_driver(ready: bool, ci) -> None:
+    """The driver's tests need bash with python3 (its nonce). A machine without it skips them, except under CI=true,
+    where it FAILS: CI never passes the driver's tests by skipping them."""
+    if ready:
+        return
+    why = "the driver's tests need bash with python3 (the driver's nonce)"
+    if str(ci or "").lower() == "true":
+        pytest.fail(why)
+    pytest.skip(why)
+
+
+def test_a_driver_test_without_python3_fails_under_ci_and_skips_elsewhere():
+    with pytest.raises(pytest.fail.Exception, match="python3"):
+        _need_driver(False, "true")
+    with pytest.raises(pytest.skip.Exception, match="python3"):
+        _need_driver(False, None)
+    _need_driver(True, "true")
+
+
 def test_the_driver_refuses_a_reading_without_adapters_and_dry_runs_the_shake(tmp_path):
+    _need_driver(_bash_has_python3(), os.environ.get("CI"))
     rc, out = _drive(tmp_path)
     assert rc == 78 and "D0S_ADAPTERS" in out, out
     rc, out = _drive(tmp_path, D0S_SHAKE="1")
