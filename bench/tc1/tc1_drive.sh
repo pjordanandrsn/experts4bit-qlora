@@ -40,6 +40,8 @@ case " ${TC1_FAMILIES:-} " in *" qwen3hbd "*) STAGE="$STAGE $REPO/bench/hp1/hp1_
 # HP3 (the qwen3hp3 / qwen3hp3shake tokens; bench/hp3/HP3-PREREG.md): HP1's library, cut, tokens, evaluator and reducer (hp3_reduce reuses
 # it), AXO1767's reducer (the engagement check), the build probe and HP3's reducer
 case " ${TC1_FAMILIES:-} " in *" qwen3hp3 "*|*" qwen3hp3shake "*|*" qwen3hp3r "*|*" qwen3hp3rshake "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_trunc.py $REPO/bench/hp1/hp1_caltokens.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/tc1/axo1767_reduce.py $REPO/bench/hp3/hp3_build.py $REPO/bench/hp3/hp3_reduce.py";; esac
+# TC1 amendment 79: the release proof (bench/tc1/release_proof.py, byte-identical to loggetta's, its sha256 pinned in the PREREG and the tests)
+case " ${TC1_FAMILIES:-} " in *" qwen3pos79 "*) STAGE="$STAGE $HERE/release_proof.py";; esac
 STAGE="$STAGE ${TC1_EXTRA_STAGE:-}"; RUNNER=${TC1_RUNNER:-tc1_run.sh}
 case " $STAGE " in *"/$RUNNER "*) ;; *) say "refusing: TC1_RUNNER=$RUNNER is not a staged file"; exit 78;; esac
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
