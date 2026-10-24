@@ -3,7 +3,8 @@
 **Status: registered 2026-10-21, before any data**, on #1932: one review outside the HP lane, then the maintainer's pass. Ruling
 5 was added on the harness PR, also before any data. Nothing launches without the maintainer's exec ACK with the kit hash, from
 main. **Amendment 2 (2026-10-24, before any reading box):** the spare shakedown triggered the registered (R) fallback,
-and HP3 reads e4b vs Unsloth 2026.9.14 on torch 2.8.0+cu128; axolotl waits for an amendment.
+and HP3 reads e4b vs Unsloth 2026.9.14 on torch 2.8.0+cu128; axolotl waits for an amendment. **Amendment 3 (2026-10-24, before any reading box):** the
+(R) shakedown `hp3r-shake-1` read `HP3 SHAKEDOWN_OK`, and the read launches from Amendment 3's merge.
 
 **Scope label, in every verdict line:** *parity of the exported adapters under one evaluator on byte-identical bases*. HP3 says
 nothing about any framework's own in-loop loss.
@@ -475,6 +476,40 @@ PARITY-only test and strengthens the case. This amendment merges before the read
        changes (R).
    - **What the read still adds beyond the cut:** e4b and Unsloth at all 48 layers on the RTX 5090. A read box on which either
      framework fails to install or run is a harness fault: NOT_READ, with no read and no strike, and its spare id follows a fix.
+
+## Amendment 3 (2026-10-24, before any reading box): the (R) shakedown's record; the read launches from this merge
+
+Amendment 2 (item 7) put an (R) shakedown before the read, and its "Outcomes" say the read launches from the merge of a later
+amendment that cites the shakedown's committed record. This is that amendment. Nothing else in the registration changes.
+
+1. **The record.** `hp3r-shake-1` (explore tier, never data) ran on one L4.
+   - It ran from e4b `db5387eb` (Amendment 2's merge), and the controller was verified equal to it before the create.
+   - Receipt status OK, committed to the private receipt store as `cbafcf16`.
+   - It ran 26 min and cost $0.154 (10.5 GB downloaded). Teardown is complete and the instance is gone.
+   - The spare `hp3r-shake-2` was not needed.
+2. **What it read** (the box's own `summary.txt` and `hp3/` records):
+   - `HP3_BUILD=MATCHED`: the (R) build record, with both frameworks probed in `venv-unsloth-t28` and compared at torch
+     2.8.0+cu128;
+   - `HP3_G1=PASS`, with e4b PASS and Unsloth PASS;
+   - the reducer in its `--fallback-r` mode: three-way NOT_APPLICABLE, and the e4b–Unsloth pair NOT_READ at one seed. Its only
+     VOIDs are seeds 3411–3414 of both frameworks, each `absent`, as a one-seed shakedown leaves them;
+   - `HP3 SHAKEDOWN_OK`. The evaluator ran both passes on the cut, with its trainable check off under the `hp3r-shake` id.
+3. **The code it proved is the code the read runs** (the maintainer's condition, 2026-10-24 05:21Z). This PR shows
+   `git diff db5387eb..<its head> -- bench/tc1/tc1_run.sh bench/tc1/tc1_drive.sh bench/hp3/ bench/hp1/ tests/test_hp3.py
+   tests/test_hp3_driver.py`. At this PR's head it touches only this file, `bench/hp3/HP3-PREREG.md`, which no box executes.
+   - If main moves before the merge, the same diff is read at the merge commit and checked before any approval for an
+     `hp3r-5090` id.
+   - Every change in it outside this file must be reviewed and argued harmless, or a new shakedown runs before the read.
+4. **The read:** unchanged from Amendment 2 items 1–5. One RTX 5090, `hp3r-5090-1` with the pre-create spare `hp3r-5090-2`, a
+   guard of 6.5 h and a worst case of $6.63.
+   - It launches from THIS amendment's merge.
+   - It needs a $0 dry run from that merge, and then the maintainer's explicit approval comment on this PR, before the create.
+5. **Lane spend and worst case** (bench/common rule 4's form):
+   - spent: the shakedowns, $0.373 + $0.154 = $0.527;
+   - the read: one started box, $6.63;
+   - a created read box that does not start: at most $0.54, once (Amendment 2 item 6).
+   - So $0.527 + $6.63 + $0.54 = **$7.70**, under $15. It is below Amendment 2's $9.20, because the (R) shakedown's spare was not
+     used.
 
 ## Harness
 
