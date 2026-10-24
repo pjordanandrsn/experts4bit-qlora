@@ -4,6 +4,1070 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.58.0 — 2026-10-24 — the int8 lm_head serves 2 to 8 requests by default on Qwen3-30B-A3B; a served adapter's base is verified
+
+**0.58.0.** Serving Qwen3-30B-A3B at 2 to 8 concurrent requests is faster by default. With the int8 lm_head on (its
+default at Qwen3-30B-A3B's 151936 x 2048 head), the head's 2- to 8-row calls now run grouped-nf4-gemm K37's
+`linear_i8` over the head's own int8 codes instead of `F.linear` on their bf16 rounding (`E4B_INT8_HEAD_ROWS` defaults
+to 8 there): 2, 4 and 8 requests decode 1.0311x, 1.0243x and 1.0165x as fast (P232, the smallest of four ABBA pairs at
+each), inside P153's quality bars. Greedy text can differ at those request counts, because the two routes round
+differently within bf16's output rounding of the same grid; one request and 9 or more are unchanged, and
+`E4B_INT8_HEAD_ROWS=1` restores the previous output. A served `backend-adapter/2` adapter's expert base is now measured
+against the arena the server serves instead of reported unverified: a matching base serves with no opt-in, and a
+mismatch is refusal 12. Also new and opt-in: serving a merged NF4 arena with the adapter it was merged from
+(`E4B_PAGED_MERGED_ARENA=1`), a shared KV pool sized from free memory (`E4B_PAGED_KV_POOL=shared`), prefill spacing
+while requests decode, four small-batch serving levers (`E4B_NF4_SMALLM_BW`, `E4B_DENSE_LT_PIN`, `E4B_K25_PLAN=m1`,
+`E4B_ATTN_SPLIT_FIXED`), and a deterministic training mode (`E4B_TRAIN_DETERMINISTIC=1`). Affects serving Qwen3-30B-A3B
+on NVIDIA at small batch, and anyone serving a trained adapter; other families' defaults and the training numerics are
+unchanged. Upgrade if you serve Qwen3-30B-A3B or a trained adapter. If you served a `/2` adapter under
+`E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts` against an arena baked from another checkpoint or recipe, it now
+refuses; set `E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts` to serve it anyway. The grouped-nf4-gemm floor is
+unchanged: K37 ships in 0.49.0, and below it the new default resolves to 1.
+
+### P234 registered: `E4B_NF4_SMALLM_BW=1` on Mixtral-8x7B's default NF4 server at 2 and 4 requests, read against bucket 1 (lever B, step B3 re-registered)
+
+A served registration, no box yet. P231 asked the same question and read FUNCTION_FAIL: B1's tokens moved on its
+sixteen-request workload, whose admission ramp runs the buckets the switch acts on. P234 is P231's kit by named edits:
+- `bench/p234/p234_reduce.py`: token identity between B1 and B0 is ruled on W1 only (bucket 1, where the switch takes no
+  call); sixteen requests keep P231's 0.99 line as a speed regression bar, and their B1-against-B0 tokens are reported by
+  row (`token_diffs`). P231's quality rung, bars and bands are unchanged.
+- `bench/p234/p234_run.sh` and `p234_box.py`: a third premise on the card, e4b's `tests/test_nf4_smallm_bw_gpu.py`
+  (20 passed: each row at T = 2..8 bitwise its own T == 1 row through K33), staged byte-identical to the copy P227's
+  box passed at `b7146363`.
+- `tests/test_nf4_smallm_bw_bucket1.py` (new, CPU): the served one-token decode call is the same call for call, kernel
+  arguments, tallies and output bytes, with the switch unset or `0` against `1`; the same recorder sees the switch act
+  at buckets 2 and 4.
+- `tests/test_p234.py`: P231's checks, carried, plus the kernel premise's pins and CPU call path and the W1-only rung.
+
+### Fixed
+
+- The paged server at `E4B_PAGED_PLACEMENT=solver` now refuses at startup, by name, an `E4B_PAGED_HOT_ROWS` below the
+  cold tier's hard floor, instead of failing mid-request on a long prompt ("request of N unique rows exceeds
+  hot_rows"). The floor is `min(F x top_k, the most NVMe experts in any MoE layer)`, with
+  `F = max(E4B_PAGED_CHUNK_TOKENS, max_seqs)` the most tokens one forward carries. It is checked right after the
+  placement is solved and before the tier pins any row, and recorded in `/health` under `levers.hot_rows_floor`. The
+  default `hot_rows` and `all-vram` are unchanged. Tests tie the floor to the real cold path on CPU: a forward of F
+  tokens through `enable_hybrid_tier` passes at the floor and raises one row below it, and DRAM and VRAM experts never
+  reach the tier.
+
+### Changed
+
+- P233 Amendment 4 (after the shakedown, before any reading). The shakedown's three quality records are the reducer's
+  real fixture: sha256-pinned under `bench/p233/fixtures/p233-shake-2/`, they reduce to the shakedown's own verdict and
+  its five TRIPWIRE lines, and made reading-shaped they VOID on the 8-window count alone. The TRIPWIRE's terms and bounds
+  are unchanged. Phase A's fit term is re-fit from the shakedown's measured time, 600 s to 1,026 s (1.25 x 820.7 s at
+  24 windows); the guard stays 3.25 h and the worst case $6.2125 a started box.
+
+### HO3 read: ERNIE's host estimate is low with its experts on the host; every device row held
+
+- Part B (two RTX A4000 machines, the first held-out rows with host offload): LFM2 COVERED 4 of 4. ERNIE, with its experts
+  on the host as planned, is MISS on both boxes: its host estimate was under the measured host peak on 3 of 4 rows
+  (1.0056× to 1.0548×, at most 808 MiB over), while its device side held on all four (driver / plan 0.73 to 0.79).
+- Part A: the RTX 5090's second box COVERED 4 of 4. The RTX 4090's two started boxes both read VOID (a host whose
+  `nvidia-smi` listed no per-process memory, then a numerics failure), which ends that part, so its cohort keeps one box.
+- Every read box planned what the registration registered. USD 2.103 against the USD 27.23 worst.
+- `bench/ho3/RESULTS-ho3.md`: the read. `bench/ho3/receipts/<box>/`: each started box's identifier-free files, byte-identical,
+  with its row receipts and plans with the GPU UUID nulled (`public/`). `forensics.txt` and `outer.log` stay store-only.
+- `bench/ho3/ho3_public.py` derives those copies and rebuilds each box's verdict byte for byte; `tests/test_ho3_public.py`.
+- HO3 is closed: `tests/test_ho3.py` reads its staged pins at `5790042a` (bench/common rule 6).
+
+### Changed
+
+- The private-marker guard adds a second added-lines-only rule for a GPU's UUID without nvidia-smi's `GPU-` prefix: as
+  torch prints it (`torch.cuda.get_device_properties()`: `uuid=` and the 8-4-4-4-12 hex) and as a receipt records it
+  (`"uuid": "..."`, `uuid='...'`, `uuid = ...`), with canary lines for both shapes. It matches only after a uuid key
+  and its separator, so run ids, commit shas, nonces and other bare hex never trip it.
+
+### D0s kit: the served read's box runner, its controller driver, the REF argmax tool and the reducer
+
+- `bench/d0s/d0s_ref.py` (CPU, USD 0, run before any rental) computes REF's and Q's per-position argmax on D0's 64
+  held-out rows. It uses D0's own pinned forward, checked against its SHA256SUMS before import. Every row's NLL must
+  reproduce D0's `arms.csv` to a relative 1e-6, or the output says VOID and the read does not rent.
+- `bench/d0s/d0s_box.py` and `d0s_run.sh` run on the box from a clean checkout of the launch commit, its kit files
+  checked against `staged.sha256`:
+  - the refusals and the version tripwire come first, then the premise (`tests/test_merged_arena_gpu.py`, 2 passed
+    with no skips);
+  - each arm is one subprocess: the base arena baked on the card, the attention-only adapter derived from each
+    fixture's /2, and the merged-arena writer for MERGED-Q and MERGED-W (a refusal is recorded as WRITER_REFUSED);
+  - each arm's pass is a teacher-forced pass on the paged runner, then W1/W16 cost.
+  `D0S_SHAKE=1` is the shakedown: a tiny model, no checkpoint, no adapters.
+- `bench/d0s/d0s_drive.sh` is the launcher's `--command`. It refuses unless every staged pin equals the tree and, for
+  the reading, unless both derived adapters are present and hold no links. It starts the lane under a fresh nonce and
+  fetches with `rsync --no-links` (rule 8), never the checkpoint, the arenas or the adapters' weights.
+- `bench/d0s/d0s_reduce.py` (CPU, standard library) applies the registration's rule to the arm records:
+  - the retention CI and the registered absolute margin, two-sided, with the side named (BEYOND_REF, an artifact to
+    explain, or BELOW_REF);
+  - the pooled canary;
+  - cost slower-only, with any speedup beyond 3 % named;
+  - gate 5 first: an incomplete record, or an arm served on another path (merged block, source, adapter, expert
+    base, placement, graph status, device), is VOID and never read.
+
+  It also names WRITER_REFUSED and NOT_READ.
+- `tests/test_d0s_kit.py` (CPU) covers:
+  - the reducer at each gate's boundary, and every gate-5 check by a case that fails without it;
+  - the REF walk on a tiny OLMoE-shaped checkpoint (REF equals Q without an expert delta, and differs with one);
+  - the reproduction check;
+  - the attention-only derivation;
+  - the staged pins;
+  - the driver's refusal and dry run.
+
+### Changed
+
+- P233 Amendment 3 (pre-data): every arm names `E4B_PAGED_HOT_ROWS=128`, so the NVMe tier holds at least as many pinned
+  rows as one 512-token prefill can route (the tier's documented floor). The server's default of 64 is below that floor
+  at the solver split, and the first shakedown stopped in phase S on it before any number was read. The box refuses an
+  arm without the knob; the reducer VOIDs a phase whose recorded `hot_rows` is not 128; `staged-p233.sha256` is re-pinned.
+  The read now speaks for solver placement with `E4B_PAGED_HOT_ROWS=128`.
+
+### Changed
+
+- Eight receipt directories merged on 2026-10-23 (p223-5090-1, p225-5090-r3, p226-5090-1, p227-5090-1, p228-5090-r1,
+  p229-5090-3, p230-5090-r1, p232-5090-1) no longer carry the rented card's GPU UUID. `forensics.txt` and `outer.log`
+  are store-only (`STORE-ONLY.sha256`, byte-exact in the private receipt store), as the receipts rule has required since
+  2026-10-20. p225's trainer receipt is replaced by a public projection of the three fields `p225_gate.py` reads, and
+  the gate's check passes the same on it. Every `SHA256SUMS` still verifies.
+- The private-marker guard adds an added-lines-only rule for GPU UUIDs, with its canary line, so a new receipt cannot
+  add one. Files merged before the rule keep theirs.
+
+### TC1 amendment 78: the field recipe on a 24 GiB RTX 4090 (the fit reading)
+
+- A new family, `qwen3pos78fit`, with one arm, pb1cl256: e4b's matched arm at the field recipe for 60 steps, with every LoRA delta
+  padded per bucket through the compact bucketed node (`NF4_QLORA_PAD_BUCKETS=1`) and the training loss in 256-token chunks
+  (`E4B_CHUNKED_LM_LOSS=256`), at grouped-nf4-gemm `efdda943`. No recipe term changes.
+- Before the arm, each refusing at cents: the card's `memory.total` must be a 24 GiB card's (23,500 to 24,600 MiB, rc 18); grouped-nf4-gemm's
+  `test_compact_delta.py` and `test_compact_buckets.py` must pass on the GPU, from a clone outside the fetched work dir; a probe must find
+  the installed module bucketing; and the tokens must equal `tc1-5090-155`'s.
+- The rule, over the started boxes in launch order: one OOM whose record proves the arm ran as registered reads NOT_FIT and ends the
+  lane; the first two complete draws on different machines read FIT, or VOID if steps 1-2 differ between them; a draw off its
+  registration or not read never pairs, and two in a row stop the lane NOT_READ, as does the cap of three without two read draws. The
+  least of three headrooms over the draws the verdict used is quoted with it. Held-out is reported beside `tc1-5090-155`'s cd1cl1 and is
+  not a bar.
+- `bench/tc1/tc1_arm.py`: an e4b OOM row carries `oom_path`, the knobs as the process saw them and grouped-nf4-gemm's and the chunked
+  loss's counters up to the OOM, so the reducer can bind it.
+- `bench/tc1/tc1_run.sh` (`tc1_pos78_family`, the card band), `bench/tc1/tc1_reduce.py` (`pos78_why`, `pos78_oom_why`, `pos78_draw`,
+  `pos78_lane`, `pos78_block`, `--pos78-lane`, self-test case 132), `tests/test_tc1_pos78_family.py`.
+- `bench/tc1/pos78_kit.py` and `bench/tc1/pos78_manifest_template.json`: the lane's launch caps. The kit's offer screen and the
+  template's `max_download_usd_per_gb` both refuse download above $0.02/GB, so a started box costs at most $3.50 and the lane at most
+  $13.94. `tests/test_tc1_pos78_kit.py` refuses an offer at $0.021/GB and checks that the template carries the screen's caps.
+
+### Added
+
+- P231 results (`bench/p231/RESULTS-p231.md`): `E4B_NF4_SMALLM_BW=1` on Mixtral-8x7B's default NF4 server, read once
+  on one RTX 5090: **FUNCTION_FAIL**. B1's tokens differ from B0's on the W16 control (both pairs; the box is
+  deterministic, and W1 is equal), so the switch stays opt-in until that is explained. Reported, never graded: W2 decodes
+  2.096x and W4 1.729x as fast (W8 1.207x), with the controls unchanged. A reading that rows ended early is refuted by
+  the records; the prefill ramp is an untested candidate. Receipts in `bench/p231/receipts/p231-5090-3/`.
+
+### TC1: source checkouts sit beside the run's work dir, never in it
+
+- `bench/tc1/tc1_run.sh`: amendment 76's pre-check clones grouped-nf4-gemm beside the work dir (`gnf4-pos76`) instead of into it, and
+  removes the clone and its pytest dir after the pre-check. Amendment 46's decoded-route gate checks out beside the work dir too
+  (`gnf4-decgate`); it was already removed after the gate and excluded from the fetch. The fetch copies the work dir, and a checkout
+  inside it can carry a `.git` or a nested receipt into the receipt store.
+- `tests/test_tc1_clone_targets.py`: every `git clone` target, every `git -C DIR checkout` and every `git worktree add` path in
+  `tc1_run.sh` must resolve outside the work dir. Quotes are removed; variables expand recursively from their nearest assignment;
+  `${NAME:-X}` is judged as X and as NAME's own assignment; a relative target counts as inside (the runner runs from the work dir);
+  an unresolvable target fails the test.
+
+### P233 kit: does serving at the solver placement keep quality? (`E4B_PAGED_PLACEMENT=solver` against `all-vram`)
+
+The registration's code PR, no box yet. P232's kit by counted edits.
+- **Runner** (`bench/p233/p233_run.sh`): the refusals (CUDA 18, torch image 28, card 15, disk below 140 GB 13, host RAM
+  below 60 GiB 16), P231's download probe (40 MB/s, rc 19) and the pre-install guard fit (FIT 8,500 s x 1.25, rc 41)
+  before any install; no power floor (the limit is recorded, never ruled); the card's GPU UUID is never collected; e4b at the launch commit and grouped-nf4-gemm
+  v0.50.0, with a tripwire on the head's explicit knobs, K36's quantizer and K37's plan, and eager decode at both
+  placements; the premise on the card (the tier's tests 37 and the solver composition's 6 passed, rc 25); then the three
+  phases A (all-vram), S (solver at 8.0 / 3.0 GiB) and C (solver at 8.0 / 0), every arm with `E4B_PAGED_GRAPHS=0`,
+  `E4B_INT8_HEAD_BW=1` and `E4B_INT8_HEAD_ROWS=8`.
+- **Box** (`p233_box.py`): P115's `measure_phase`, unmodified and with exactly the keywords `p115_quality.main()` passes,
+  at group T = 1 and 8 in one process; beside it the placement proof (experts and bytes per tier, resident bytes, each
+  layer's static path), the path counts per T (collapse and tiered calls, DRAM rows on the CPU or the GPU), S's and C's
+  argmax and the positions differing from A's, the arena's sha, the revision, the resolved levers, the host CPU with its
+  ISA flags and the CPU kernels' thread count.
+- **Reducer** (`p233_reduce.py`): VOID (the placement proof per arm included) / per-T SANE / SOLVER_SANE or
+  SOLVER_NOT_SANE, and the reported TRIPWIRE (a zero or absent A floor falls to 0.002); a `p233-shake-N` run reads
+  SHAKEDOWN. No real fixture yet: the shakedown's record becomes one by amendment.
+- **Drive** (`p233_drive.sh`): pod-launch's contract (the launch commit from the clean HEAD, `E4B_SHA` refused, the box
+  tree fetched into `$RUN_DIR/p233/` with `--no-links`, a non-empty target refused); the premise staged under `t/`.
+- **Tests** (`tests/test_p233.py`): the pins, the PREREG's constants and fit, the runner's order, the drive's refusals
+  and fetch, arm A's call proven equal to `p115_quality.main()`'s (its AST and a captured run), the box against a
+  committed P232 quality record, the int8 head resolving on at `solver` on CPU, and the reducer and box mutants.
+
+### Changed
+
+- P233 Amendment 1 (before any data): every arm of the solver-vs-all-VRAM quality read names `E4B_INT8_HEAD_BW=1` and
+  `E4B_INT8_HEAD_ROWS=8` explicitly, since an unset `E4B_INT8_HEAD_ROWS` now resolves to 8 on `qwen3_moe` (e4b#2095).
+  Each phase records the resolved head values, and the reducer requires them equal across phases. Nothing else changes.
+
+### Changed
+
+- `E4B_INT8_HEAD_ROWS` defaults to **8 on `qwen3_moe` at Qwen3-30B-A3B's head shape** (151936 x 2048; lane P232). The
+  int8 lm_head's 2- to 8-row calls run grouped-nf4-gemm K37's `dense_i8.linear_i8` over the head's own codes and scales,
+  instead of `F.linear` on the grid's bf16 rounding; one row keeps K36's GEMV, and more rows keep `F.linear`.
+  - **Read:** P232 (`p232-5090-1`, `bench/p232/RESULTS-p232.md`) on an RTX 5090 at 575 W read FLIP_ROWS_8, TRIPWIRE
+    none. 2, 4 and 8 requests decode **1.0311x, 1.0243x and 1.0165x** as fast as at `1` (the smallest of four ABBA pairs
+    at each), after P229's captured microbench of the head call (GO_ROWS_8, `bench/p229/RESULTS-p229.md`).
+  - **Outputs change by default at 2 to 8 concurrent requests:** K37 and `F.linear` round differently within bf16's
+    output rounding of the same int8 grid, so greedy text can differ (76 of 112 greedy rows matched in P232). One
+    request and 9 or more are unchanged. `E4B_INT8_HEAD_ROWS=1` restores the previous output.
+  - **Quality:** inside P153's bars at every group size (NLL gap at most 0.0001 nats, argmax 3064-3066 of 3072), read on
+    Qwen3-30B-A3B. Same-shape checkpoints inherit the default unread.
+  - **Scope:** gated on the head's shape and on the int8 head being on (`E4B_INT8_HEAD_BW` resolved 1). Other heads
+    (Qwen3-235B-A22B's 151936 x 4096) and every other family stay at 1 until a read of their own.
+  - **Requirement:** K37 ships in grouped-nf4-gemm 0.49.0; below it the default resolves to 1 (recorded). The `[fast]`
+    floor is not moved here.
+  - **Never a crash:** with the int8 head off, a grouped-nf4-gemm without K37, or speculative decode (`E4B_PAGED_SPEC`,
+    whose gate and draft were read with the head on `F.linear`) on, the default resolves to 1 with the reason in
+    `/health`'s `levers.int8_head_bw.rows.source`. An explicit `2` to `8` still refuses each of them.
+  - The claims are `e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24` and
+    `e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23`.
+
+### Added
+
+- `E4B_ATTN_SPLIT_FIXED=S` (`1` to `32`; opt-in, not yet read): the paged FP8 attention decode runs a fixed split
+  count S at every graph bucket and hands every other per-call choice of `fp8_paged_decode_attention` explicitly
+  (`engines/fp8_paged_kv.SPLIT_FIXED_PINS`), so a call differs across buckets only in its row count. It is the
+  follow-up lane P223 registered for a cheaper schedule-invariant decode at one request. It replaces any split cap (a
+  per-family default included), is refused beside an explicit `E4B_ATTN_SPLIT_CAP`, never runs on speculative verify
+  or the f32 path, and is reported per captured bucket in `attn_split_fixed`. Default unset: nothing changes.
+
+### D0s registered: the served read of the merged NF4 arena, both D0 fixtures on one card (USD 0 to register)
+
+- `bench/d0s/PREREG-d0s.md`, registered before any data. The paged server serves a merged arena with its own adapter
+  on D0's 64 held-out rows, for both fixtures and both writer sources, against D0's registered REF.
+- Gated by the spec's rule: retention CI lower bound ≥ 0.95, |gap| within an absolute margin fixed from D0's record
+  (two-sided: an R above 1.05 fails as BEYOND_REF, an artifact to explain), an argmax canary in pooled exact counts,
+  cost slower-only within the self-pair band floored at 3 %, and an engagement check that VOIDs an arm served on the
+  wrong path. A shakedown runs first; at most two reading boxes start, lane worst USD 11.58.
+
+### P233 registered: does serving at the solver placement keep quality? (MAP 2)
+
+- `bench/p233/PREREG-p233.md`: `serve_paged` at `E4B_PAGED_PLACEMENT=solver` with Qwen3-30B-A3B's experts across VRAM,
+  host DRAM and NVMe (arm S), against the same server at `all-vram` (arm A), both eager, teacher-forced with P115 Phase
+  B's `measure_phase` at group T = 1 and 8 over 24 wikitext windows x 128 positions, P153's bars per T. A VRAM+NVMe arm
+  (C) is reported only, to split S's gap into the tiered forward's part and the DRAM tier's. Each arm's tier placement
+  is proved from its record, or the read is VOID. The verdict (SOLVER_SANE / SOLVER_NOT_SANE) decides only whether a doc
+  or lane may propose serving at `solver`; it says nothing about speed, and `solver` stays non-default. The kit follows
+  as its own PR.
+
+### D0 served read: a derived backend-adapter/2 manifest for D0's v1 fixtures, and a shared absmax installer
+
+- `bench/d0s/d0s_v2.py` (CPU, USD 0) writes a NEW adapter directory for a backend-adapter/1 fixture. It holds byte
+  copies of every file the v1 manifest lists, so the adapter id is unchanged, and a /2 manifest whose added fields come
+  from evidence:
+  - the training receipt's recorded `engaged` block;
+  - e4b's `quant_fingerprint` over the STORED trained base, after Loggetta's `_expert_digest` over it equals the
+    trainer's recorded digest;
+  - qfp-v1 over the checkpoint's bf16 attention.
+
+  The scale is "equal by the reader rule; the training code applies alpha/r", checked by reading `lora.py` at the
+  training commit. Every link that does not verify refuses. Two runs give byte-identical manifests. `derived_from`
+  records every input's sha256 and the limitation: the fingerprints were measured after training, over the verified
+  stored base, not recorded by the trainer, and 2 of 16 stacks are verified against the trainer digest.
+- `absmax_dq.install_compressed_absmax_(mod, payloads)` installs a GIVEN double-quantized payload exactly as
+  `compress_expert_absmax_` leaves a stack, which now installs through it. A stored payload is installed, never
+  recomputed: a CPU recompression of a CUDA payload is not byte-identical.
+- `tests/test_d0s_v2.py` (CPU) covers:
+  - a tiny trained fixture of both forms derives a /2 that the reader, the merged-arena writer and refusal 13 accept;
+  - two runs give byte-identical manifests;
+  - each broken link refuses.
+
+### P231 Amendment 3 (after `p231-5090-2`, before any reading): the rows premise resolves the switch; every no-checkpoint phase runs in CI
+
+- `bench/p231/p231_box.py`: the rows premise (`--mode rows`) makes the real `resolve_nf4_smallm_bw` call on stand-in modules at its expert shapes on the box's device before its T loop (`rows_resolve`), records the resolution, and undoes it in a `finally`. Without it the switch's guard refused the premise's first 2-token call (`p231-5090-2`, rc 25).
+- `tests/test_p231.py`: every box phase that needs no checkpoint runs end to end on CPU with only CUDA stubbed (the tripwire's routing lines, the three self-tests, the rows premise's own `rows_main`, and the served premise's pytest line and junit read). The real kits of the two lost boxes, read from git, fail it at the phase that failed on the card.
+- `bench/p231/p231_run.sh`: shakedowns stop after both premises, before the fetch. The runner and `bench/p231/p231_drive.sh` accept the new reading id `p231-5090-3`.
+
+### The shared KV pool leaves the prefill graph room to engage
+
+- `E4B_PAGED_KV_POOL=shared` sizes its pool to the most rows that fit. That consumed the slack claim-all's margins
+  rely on, so at 64 slots on Qwen3-30B-A3B int4 (RTX 5090, 4,096 tokens a slot) only 724 MiB was free after the
+  prefill graph's capture, and `auto` refused the graph: its runtime gate wants 745 MiB (its pool again plus the bulk
+  KV flush).
+- `size_shared_pool` now holds back the prefill graph's runtime headroom, computed by the same function the gate applies
+  (`serve_recipe.prefill_graph_headroom_bytes`, with the flush bound from the same `append_prompt_peak_bytes`). On that
+  configuration the pool gives back about 1,344 rows (~1.06 GiB). Claim-all sizing is unchanged.
+
+### Added
+
+- P223 results (`bench/p223/RESULTS-p223.md`): the price of a schedule-invariant decode for Mixtral-8x7B on
+  `serve_paged`, read once on one RTX 5090 at 575 W: **READ**. With `E4B_ATTN_SPLIT_CAP=1` and
+  `E4B_PAGED_BUCKETS=2,4,8,16`, both the bf16-attention and the int8-attention servers are **schedule-invariant** on the
+  full model, where both defaults are not. At sixteen requests the knobs cost 0.09 % and 0.40 % (p16 0.9991, 0.9960);
+  at one request they cost about 3.5x and 3.9x (p1 0.2849, 0.2568), below the predicted range, with the cause not
+  named by the read. The knobs stay opt-in; receipts in `bench/p223/receipts/p223-5090-1/`.
+
+### Added
+
+- P232 results (`bench/p232/RESULTS-p232.md`). `p232-5090-1`, the one reading of PREREG-p232.md (Amendments 1-2) at e4b
+  `f7589a02`, read `FLIP_ROWS_8`, TRIPWIRE none. On Qwen3-30B-A3B's default server with the lm_head on its per-row int8
+  grid, `E4B_INT8_HEAD_ROWS=8` (grouped-nf4-gemm K37's `linear_i8` at 2 to 8 rows, in place of `F.linear` on the grid's
+  bf16 rounding) decodes 2, 4 and 8 requests 1.0311x, 1.0243x and 1.0165x as fast (the smallest of four ABBA pairs),
+  inside P153's quality bars at every group size (NLL gap at most 0.0001 nats; argmax 0.9974-0.9980). As registered, a
+  separate PR may make 8 qwen3_moe's default, citing this read and P229; until then the knob stays opt-in. $1.00. The
+  receipt copy is under `bench/p232/receipts/p232-5090-1/`.
+
+### The paged server serves a merged arena with its own adapter, opt-in (refusal 13)
+
+- `E4B_PAGED_MERGED_ARENA=1` serves a merged arena (`experts4bit_qlora.merged_arena`) with the adapter it was merged
+  from. It is off by default and stays opt-in until the registered served read gates it (bench/d0/ARENA-DESIGN.md).
+- **Refusal 13** is decided before the load, from records only, for every config. It refuses a merged arena:
+  - without the opt-in;
+  - without an adapter, which would serve a trained function under the base's name;
+  - with an adapter other than the one it was merged from: its id, expert tensors, recorded base or scale.
+
+  The opt-in without a merged arena is a loose flag.
+- When refusal 13 passes, a live expert LoRA is not refusal 1. The delta is already in the arena's rows, so the server
+  applies none of the adapter's expert tensors; the attention LoRA merges once at load, as for any adapter.
+- After the load, the served experts are compared with the merged arena's own fingerprint (`merge.merged_qfp_v1`). A
+  mismatch is refusal 12, with no override.
+- Only the arena's own verified `merge` block lets the loader (`merged_arena=`) and the hybrid tier (`merged_arena=`)
+  read a merged arena. `/health` carries the block, and `base_match.experts` reads `merged (...)`.
+- `docs/ADAPTER_PORTABILITY.md`'s expert matrix names the path and its gate.
+
+### The merged-arena writer: a trained expert delta baked offline into a new NF4 arena (serves nothing yet)
+
+- `experts4bit_qlora.merged_arena.write(base_arena, adapter_dir, out, source="arena" | "checkpoint")` writes an arena
+  with the base's geometry, each row re-quantized from `S + s * B[e] @ A[e]` with the bake's own quantizer call
+  (bench/d0/ARENA-DESIGN.md, path (a)).
+  - It proves the base first. The base arena's qfp-v1 must equal the adapter's recorded expert fingerprint, and every
+    row of S, re-quantized with no delta, must reproduce the base bytes exactly. The scale is the manifest's
+    `lora_scale_applied.experts`, which must equal alpha / r.
+  - `source="checkpoint"` runs grouped-nf4-gemm's own `bake_nf4` with a quantizer that adds the delta.
+  - The index records a `merge` block (`bake_mode: "nf4-merged"`), including the merged arena's own fingerprint, and a
+    retention receipt (D0's Step-1 sums) is written beside it, as a record that does not gate.
+- **A merged arena is refused wherever an arena is opened** (the loader, the NF4, MXFP4 and training NVMe residencies,
+  and the hybrid tier), so it is never read as a base. Serving one with its own adapter is a later, opt-in change.
+- `adapter_schema.arena_expert_fingerprint(arena, stacks)`: an arena's expert qfp-v1 with no model loaded, read through
+  the same path as the served one.
+- `tests/test_merged_arena.py` (CPU, on a real `bake_nf4` arena) covers:
+  - ΔW = 0 reproduces the bake byte for byte from both sources;
+  - the merged rows equal D0's `NF4(S + ΔW)`;
+  - the delta is checked against ExpertsLoRA's own low-rank path, with doubled-scale and transpose mutants caught by
+    value;
+  - the receipt equals D0's sums;
+  - the merge block is complete;
+  - every refusal.
+
+### Changed
+
+- P232 Amendment 2 (after the shakedown, before any reading). `p232-shake-1` (an RTX 5090 on a 500 W board, explore tier)
+  ran the kit end to end at three reps and reduced to `SHAKEDOWN`. Its twelve reducer inputs are now the reducer's real
+  fixture (`bench/p232/fixtures/p232-shake-1/`, sha256-pinned): they reduce to `SHAKEDOWN` with every integrity check
+  passed, six departures each VOID, and made reading-shaped they VOID on the 575 W floor alone (108 reasons, every one
+  the 500 W cap), which a reducer without the power check does not catch. The guard read 609 s over its need after this
+  host's boot. `p232_reduce.py`'s docstring names the fixture, so its staged pin moves; no rule or output changes.
+
+### Added
+
+- P228 results (`bench/p228/RESULTS-p228.md`). `p228-5090-r1`, the one reading of PREREG-p228.md (Amendments 1-7) at e4b
+  `32fda64d`, read `o_proj=PASS router=PASS`. On one RTX 5090 (cuBLASLt 120804), the cuBLASLt configuration selected on
+  the card for both of Qwen3-30B-A3B's dense sites (algo 21, tile 5, split_k 16, reduction scheme 4) runs `o_proj` in a
+  median 0.60 of `F.linear`'s time at 2 and 4 rows (upper bounds 0.5981 and 0.6009; bar 0.85) and the router gate in a
+  median 0.28 (upper bounds 0.2832 and 0.2843). At 8 rows, which never rules, the router reads 0.88 (above the bar): the
+  pin is flat, and cuBLAS's own choice goes split-K there. All three predictions held. As registered, a code PR fills
+  `LT_PINS` from the verdict's pin table, a served read with B3's quality bar comes before any default, and
+  `E4B_DENSE_LT_PIN` stays opt-in. $0.04 (the lane $0.052 with three boxes that did not start). The receipt copy is
+  under `bench/p228/receipts/p228-5090-r1/`.
+
+### P231 Amendment 2 (after `p231-5090-1`, before any reading): the tripwire proves the switch's guard; shakedowns
+
+- `bench/p231/p231_run.sh`: the tripwire's routing block first asserts that `E4B_NF4_SMALLM_BW=1`, unresolved, refuses with the guard's message, then makes the real `resolve_nf4_smallm_bw` call on stand-in modules at Mixtral's expert shapes on the box's device, reads the routing, and restores every switch in a `finally`. New ids `p231-shake-1` to `-3` stop with rc 0 before the premise.
+- `tests/test_p231.py`: the routing block is extracted from the runner and run on CPU against the repository; the pre-amendment lines, a deleted guard and a non-engaging device each fail it.
+- `bench/p231/p231_reduce.py`: shakedowns classify as `SHAKE_OK`, `SHAKE_HOST_REFUSED` (a host or fit code: no halt) or `SHAKE_FAIL` (halts), never counted; `bench/p231/p231_drive.sh` accepts their ids.
+
+### SC2f Amendment 6, SC2h Amendment 4, SC2i Amendment 3: the HOLD gate's declared exceptions (pre-data)
+
+- `bench/sc2/sc2_kit_hold.py`'s HOLD gate keeps its byte identity with `7b8f1f69`, with exactly two declared
+  exceptions: rule 8's one `--no-links` on `pull_box`'s rsync line, and box Q's own `sc2j_<name>` files changed or
+  added (staged by name in the drivers, with INERT re-run at the launch commit). Anything else, a removed entry, an
+  unreferenced non-sc2j file, or a staging checkout that is dirty or not at the launch commit refuses.
+- The self-test covers each refusal, including names only a prefix or substring match would pass; a test reads the registered `main` commit `ac7e6ed1` as OK.
+
+### P232 kit: the served read of the int8 lm_head at 2, 4 and 8 rows (`E4B_INT8_HEAD_ROWS=8`, lever K, K2b)
+
+The registration's code PR, no box yet. P153's kit by counted edits, on today's harness.
+- **Runner** (`bench/p232/p232_run.sh`): the refusals (CUDA 18, torch image 28, card 15, disk 13, host RAM 16, the
+  575 W floor 17), P231's download probe (40 MB/s, rc 19) and the pre-install guard fit (FIT 7,360 s x 1.25, rc 41; Amendment 1)
+  before any install; e4b at the launch commit and grouped-nf4-gemm v0.50.0, with a tripwire on the head's grid, its
+  qwen3_moe default and K37's shipped plan; P229's premise on the card (11 and 45 passed, rc 25); then the warm-up
+  and eight ABBA speed arms at W2, W4 and W8, and the three quality phases (R, K, B16) at group 2, 4 and 8.
+- **Box** (`p232_box.py`): speed records the head's engagement at the build and, per workload, the graph replays and
+  the head's eager calls; quality runs P115's `measure_phase` once per T in one process (references per T), records
+  the head's calls during each T, and reports per-row bucket stability from saved T-row decode inputs.
+- **Reducer** (`p232_reduce.py`): VOID / NOISY / FUNCTION_FAIL / per-T PASS / FLIP_ROWS_8, _4, _2 or NO_FLIP, and
+  the reported TRIPWIRE (a zero or absent R floor falls to 0.002). A `p232-shake-N` run reads SHAKEDOWN. No real
+  fixture yet: the shakedown's record becomes one by amendment.
+- **Drive** (`p232_drive.sh`): pod-launch's contract (the launch commit from the clean HEAD, `E4B_SHA` refused, the box
+  tree fetched into `$RUN_DIR/p232/` with `--no-links`, a non-empty target refused); P229's premise staged under `t/`.
+- **Tests** (`tests/test_p232.py`): the pins (shared pieces at P153's and P229's), the PREREG's constants and fit, the
+  runner's order, the drive's refusals and fetch, P153's pieces carried verbatim, and the reducer and box mutants.
+- **Amendment 1** (`PREREG-p232.md`, pre-data): what the kit could implement exactly. K against B16 is read by its NLL
+  gap only; the one-row route is checked at the speed builds; the tripwire floor is per T; `TRIPWIRE unread` on a VOID;
+  argmax compared as exact pooled counts; a missing KL or argmax on the scored arm is a VOID; the shakedown runs 3
+  reps; the speed arm need is 240 s, so FIT 7,360 s, guard 2.75 h, worst $5.69; the box refuses below 140 GB free.
+
+### TC1 amendment 77: amendment 76's host floor screens single-thread speed, under a 3 h guard
+
+- `qwen3pos76co`'s pre-flight no longer screens the container's CPU allotment. It times the launcher's own `cpu_loop_mops` loop (the same
+  body as P225's probe), the median of 5 runs of at least 2 s, and refuses under 15 Mops (rc 18) before any venv or fetch.
+- The floor is sized from box tc1-5090-155's 25.91 Mops with amendment 76's phase table, every arm run three times and 25 % headroom,
+  for a 3 h guard. The worst case moves from $3.20 to $4.25.
+- `bench/tc1/tc1_run.sh` (`single_thread_mops`, `POS77_MIN_MOPS`); amendment 76's floor and budget lines are marked superseded.
+  `tests/test_tc1_pos76_family.py` covers the floor (refused under 15 or unreadable, passed at 15 and above, other families untouched)
+  and checks that the probe is the launcher's loop.
+
+### D0 follow-on design note: a merged, re-quantized expert arena (USD 0, no code)
+
+- `bench/d0/ARENA-DESIGN.md`: how path (a) bakes a trained expert delta into a new NF4 arena offline. It covers a
+  byte-for-byte parity test against the real bake plus a self-check on every base row, the merge source D0 measured, the
+  provenance it records (the merged arena's own fingerprint included), and the server rules, grouped by phase, that keep
+  serving it opt-in and fail-closed until the registered served read licenses it.
+
+### D0 results: a trained expert-LoRA delta survives repacking (one OLMoE-1B-7B fixture)
+
+- `bench/d0/RESULTS-d0.md` reports D0, run on CPU under its registration and re-derived from the receipt store.
+  - The expert delta's held-out improvement is RESOLVED at about 11 SE.
+  - All 12 cells (NF4, INT4 and MXFP4, from the trained base or raw W, on two fixtures) are RETAINED. The merged-and-repacked
+    model sits within −0.0036 to +0.0167 nats of the unmerged adapter.
+  - The registration's prediction that NF4 from the trained base would lose the delta is MISSED.
+  - The scope is one fixture.
+- The receipt is under `bench/d0/receipts/d0-p224s3/`, including the tools as run. `bench/d0/REDERIVE.md` and
+  `tests/test_d0_results.py` re-derive both summaries from it.
+
+### P223 Amendment 3 (before any reading): no links on the fetch, a download probe, retry ids
+
+P223's reading gains three pre-data guards, none a term of the read. The driver's fetch passes `rsync --no-links`
+(bench/common rule 8). A download probe before the start refuses a host below 40 MB/s with rc 14 (HOST_REFUSED, never a
+strike), writes `download_probe.json` on every box, and three consecutive refusals stop the renting. The retry ids
+`p223-5090-r1` to `-r8` follow boxes that did not start. The lane worst is re-priced to USD 11.98 (2 starts × USD 4.81 +
+9 non-starts × USD 0.26).
+
+### P232 registered: the served read of the int8 lm_head at 2, 4 and 8 rows (lever K, K2b)
+
+- `bench/p232/PREREG-p232.md`: on Qwen3-30B-A3B's default server, `E4B_INT8_HEAD_ROWS=8` against unset at W2, W4 and W8
+  (speed, ABBA twice) and at T = 2, 4 and 8 (quality, P153's bars per T). The default already serves the int8-rounded
+  head, so the ruling pair is K37 against `F.linear` on the identical grid; the bf16 head is reported only. The verdict
+  (FLIP_ROWS_N / NO_FLIP) decides whether a separate PR may make the knob a default. The kit follows as its own PR.
+
+### SC2j Amendment 3 (pre-reading): the stack under test is pinned to Amendment 1's merge
+
+- SC2j's box installs `E4B_SHA=ea298854` (Amendment 1's merge) explicitly; the kit comes from a later `main` checkout.
+  An opt-in training change landed in between, so a package-identity check against the checkout could never pass.
+- `bench/sc2/sc2_kit_hold.py package-hold --e4b-sha` refuses unless `E4B_SHA` is that commit in full, then checks the
+  staged kit, `make_pin.sh` and rule 8's one driver token. `verdict-stack --stack` reads the fetched run's installed
+  commit and launch `E4B_SHA` against the lane's pin, a VOID condition of SC2j's rule.
+
+### Added
+
+- P229 results (`bench/p229/RESULTS-p229.md`). `p229-5090-3`, the one reading of PREREG-p229.md (Amendments 1-6) at e4b
+  `32fda64d`, read `GO_ROWS_8`. At 2, 4 and 8 rows of Qwen3-30B-A3B's 151936 x 2048 lm_head on its per-row int8 grid, the
+  `E4B_INT8_HEAD_ROWS` route (grouped-nf4-gemm K37's `linear_i8` at its shipped plan) runs the head call in a median 0.51
+  of `F.linear`'s time on the grid's bf16 rounding (upper bounds 0.5109, 0.5148 and 0.5085; bar 0.70), and within a
+  median 1.01-1.03 of the one-row int8 GEMV (bar 1.25). The knob is licensed to its maximum of 8 rows, so `MAX_ROWS` is
+  unchanged. As registered, the served read with P153's quality bars comes next, and the default stays off. $0.061. The
+  receipt copy is under `bench/p229/receipts/p229-5090-3/`.
+
+### HC design note: serve_paged at the solver placement (USD 0, no box)
+
+- `bench/serve-hybrid/DESIGN-HC.md`: what composes with the hybrid tier today, why a tiered layer cannot be captured
+  into a decode graph (and why no capture can silently skip a cold expert), what is unread, and the one explore box.
+- `tests/test_serve_hybrid_compose.py` (CPU) pins the startup matrix, the collapse gate and the sync-before-branch order.
+
+### serve_paged: a forced E4B_PAGED_GRAPHS=1 at the solver placement is refused at startup
+
+- A tiered MoE layer syncs on the host every step, so decode graphs at `E4B_PAGED_PLACEMENT=solver` would capture
+  nothing (every bucket raising and running eagerly). The forced knob is now refused by name, as every other
+  unsupported graph mode at solver already was; `auto` and `0` keep eager decode there.
+
+### Rule 8 for the SC1 harness and the G1/G3 smoke kits: fetches never import links; SC2j Amendment 2 (pre-data)
+
+- `bench/sc1/sc1_drive.sh`'s `pull_box` and the G1/G3 smoke drivers fetch with `rsync -az --no-links`
+  (bench/common rule 8: a fetch never imports links).
+- SC2j Amendment 2: the launch checkout takes the fix. `bench/sc2/sc2_kit_hold.py package-hold` refuses unless the
+  package under test (the `experts4bit_qlora/` tree, `pyproject.toml`, `MANIFEST.in`), the staged kit and `make_pin.sh`
+  equal Amendment 1's merge's, and `sc1_drive.sh` differs only by that one token on `pull_box`'s rsync line. Its
+  self-test removes or alters each; tests run it and the driver check on registered commits.
+
+### HO3 Amendment 3: the fetch never imports links
+
+- `bench/ho3/ho3_drive.sh` fetches with `rsync --no-links`, and refuses (exit 22) if a fetched tree still holds a
+  symbolic link, so nothing a rented box leaves behind can point a store commit at a file on the controller.
+
+### P231 Amendment 1 (pre-data): the fetch imports no links
+
+P231's driver now fetches the box's records with `rsync --no-links`, so a symbolic link left on a rented host is never
+copied to the controller, where the receipt writers would follow it (bench/common rule 8). Nothing else in the lane
+changes; the launch commit becomes this amendment's merge. `tests/test_p231.py` checks every rsync in the driver.
+
+### P228 Amendment 7 and P229 Amendment 6: the fetch never imports a link
+
+- Each drive fetches the box tree with `rsync -az --no-links`, so a symbolic link left on a rented box never
+  reaches the controller (bench/common rule 8). Only the fetch line moved; no staged pin and no runner byte changes.
+
+### Added
+
+- `E4B_TRAIN_DETERMINISTIC=1` (opt-in, `engines/train_determinism.py`): the fused training path's deterministic mode. It
+  turns on the deterministic token gather (`E4B_TRAIN_DET_GATHER=1`), `torch.use_deterministic_algorithms(True)` scoped
+  to each backward only (try/finally; the forward and its loss run with it off), and
+  `torch.utils.deterministic.fill_uninitialized_memory = False`. It refuses by name at trainer start unless
+  `CUBLAS_WORKSPACE_CONFIG` is `:4096:8` or `:16:8`. The mode is this knob PLUS a self-identity check in the gate's own
+  run (two blocks of three steps, every trainable gradient bitwise), never the flag alone: the fill-off piece is safe
+  only while no kernel reads memory it did not write. No default changes; no cost is stated here.
+
+### tc1_drive.sh: the fetch never imports a link
+
+- Both fetches (the incremental `tc1_partial_fetch` and the final fetch) pass `--no-links`, so a symbolic link left
+  on a rented box never reaches the controller (bench/common rule 8). No other line of the driver changes.
+
+### SC2j Amendment 1 (pre-reading): QUALITY reduced by P117's reducer at box Q's stack constants
+
+- The proof `sc2j-r3` passed every gate but QUALITY, which P117's reducer read VOID on two constants naming P117's own
+  registration: its grouped-nf4-gemm commit (v0.42.0; box Q runs v0.50.0 and did not export `GNF4_SHA` to
+  `p117_box.py`) and its window counts (the proof smokes 8 Granite windows).
+- `bench/sc2/sc2j_quality.py` runs `p117_reduce.reduce` with exactly those two constants set to box Q's, P117's bar
+  unchanged, and fails closed; `q_quality` exports `GNF4_SHA`. A test on `sc2j-r3`'s own record shows VOID as recorded and
+  AT_PARITY at box Q's constants, with each refusal turning it VOID.
+- The staged kit gains `sc2j_quality.py`; the pin is regenerated.
+
+### SC2f Amendment 5, SC2h Amendment 3, SC2i Amendment 2: the kit is held at e4b#2041's merge (pre-data)
+
+- The three lanes' kit moves from `1a25b209` to e4b#2041's merge, which carries the shared harness's `brotli>=1.2.0`
+  pin and its single model-fetch retry. The stack under test stays `36cdd2d4`, set as `E4B_SHA` on the launch command.
+- Everything else that merge changed in the flat staged kit is declared inert for boxes N, O and P: box Q's wiring in
+  `sc1_run.sh`, seven new box Q files, and the staging lines in `sc1_drive.sh` and `make_pin.sh`.
+- `bench/sc2/sc2_kit_hold.py` checks this before the create and fails closed. Its five gates: the declared delta exactly
+  (DELTA), every pin matching its source at the hold (PIN), no N/O/P path sourcing or calling the new files (INERT), the
+  launch commit's kit identical to the hold (HOLD), and the launch's `E4B_SHA` the stack under test (STACK). Its self-test refuses each gate with its evidence removed;
+  `tests/test_sc2_kit_hold.py` runs it on the registered commits.
+- The stack under test is mechanical both ways: the check's STACK gate refuses a launch whose `E4B_SHA` is not
+  `36cdd2d4` in full, and `sc2_kit_hold.py verdict-stack` (a VOID condition of each lane's rule, with a required
+  `verdict_stack.json`) reads the fetched run's installed e4b commit and launch `E4B_SHA`, VOID unless both name it.
+
+### P225 results: FAIL on G3 alone, the latency control; the graded quality gates hold
+
+`p225-5090-r3` (one RTX 5090, $1.163) answered P225's question, and the lane ended at that answer. A Loggetta attention
+adapter trained 80/80 steps passed every adapter, engagement and identity check. It learned (5.21 nats on the assistant
+positions), and on the paged server it held G1, the ratio and the SE as graded. The verdict is FAIL because of G3, the
+two-sided latency control: the merged adapter reached the first token about 1 % faster than the base in both blocks
+(2.748 ms against a 2.388 ms band in block 0; 2.360 ms, just inside, in block 1). The reported, ungraded lines also show
+the merged path scoring better than the reference beyond its standard errors (all-token G1 would fail; both DiD flags
+set). Why the merged serve path differs is an open question, read next at $0. `bench/p225/RESULTS-p225.md`, receipts
+in `bench/p225/receipts/p225-5090-r3/`.
+
+### HO3 Amendment 2: a driver-peak probe before the install
+
+- A box now refuses before its install (rc 19, a host refusal counting toward nothing) when Loggetta 0.6.2's own driver
+  sampler, staged byte for byte and checked against the installed module, cannot sample this process's GPU memory. Such
+  a host would otherwise read VOID after its whole run.
+- `ho3_reduce.py --classify` names the runner's pre-install exits. The driver stops a card after three consecutive rc 19.
+
+### Added
+
+- `E4B_TRAIN_DET_GATHER=1` (opt-in): the fused training forward's token gather (`engines/fast.py`) takes the
+  deterministic backward the batched path already uses (`_GatherTokenRows`, #765) instead of `index_select`'s, whose
+  `index_add_` adds each token's k gradient copies with CUDA float atomics, so dL/dx changed in its last bits call to
+  call. The forward is unchanged bit for bit; the backward differs from the atomic one by float reordering only, not in
+  expectation. Off by default until it is shown self-identical on a card; `FAST_TRAIN_STATS["det_gather"]` counts the
+  forwards that took it.
+
+### Changed
+
+- P228 Amendment 6 and P229 Amendment 5 (pre-data): the pin screen admits RTX 5090 machines by their LATEST host
+  registry power record at any age (575 W or more, or no record), never one whose latest record is below 575 W; it no
+  longer requires a record read within 3 days, and each reading template sets pod-launch's `vast_power_limit_unknown`
+  to "eligible" so the launcher admits the same way. The box's own power read before the install (rc 17) enforces the
+  floor for hosts whose record is stale or missing, and three consecutive rc 17 boxes stop the lane. The floor, the
+  measurement, the rows, the rule and the caps are unchanged; no staged pin moves and no runner byte changes. The
+  screen and the templates are controller-side and change only after this merges, under their own review.
+
+### P231 registered: `E4B_NF4_SMALLM_BW=1` on Mixtral-8x7B's default NF4 server at 2 and 4 requests (serving roadmap lever B, step B3)
+
+A served registration, no box yet. P227's microbench read the per-row route (K33, one (token, slot) row per program) at
+0.356x and 0.461x K25's expert-call time at 2 and 4 tokens on Mixtral's shapes. This lane asks whether that survives the
+served decode step, and at what quality cost.
+
+- **Arms:** B0a B1a B1b B0b on the default server (graphs on, 16 x 768), B1 adding only `E4B_NF4_SMALLM_BW=1`;
+  decode-only timing; route and K33 dispatch read per decode bucket at capture, failing closed.
+- **Workloads:** W2 and W4 ruled (gain bar 1.03); W1 and W16 inert controls (no-regression line 0.99, and B1's tokens
+  must equal B0's there); W8 reported only, so 5 to 8 tokens stay opt-in whatever the verdict.
+- **Quality:** P115's instrument at group 4 only, behind an on-card premise: B1's expert call returns every
+  (token, slot) row bitwise identically at T = 1, 2 and 4 at Mixtral's shapes (`p231_box.py --mode rows`).
+- **Host screen:** a download probe before the start refuses a host below 40 MB/s (rc 19, HOST_REFUSED, never a
+  strike), so the 93 GB fetch fits its need; three consecutive rc 19 stop the renting, and every box records the
+  probe's bytes and MB/s (`download_probe.json`).
+- **Budget:** guard 4.8 h; worst USD 6.12 a box, USD 14.56 for the lane (10 ids, at most 2 started).
+- **Files:** `bench/p231/` (PREREG, box with a 30-case self-test, reducer with a 70-case self-test, runner, drive,
+  staged pins) and `tests/test_p231.py` (15 tests).
+
+### Added
+
+- P227 results (`bench/p227/RESULTS-p227.md`). `p227-5090-1`, the one reading of PREREG-p227.md (Amendments 1-4) at e4b
+  `b7146363`, read `qwen3=MISS mixtral=PASS`, and all three predictions held. On Mixtral-8x7B the per-row GEMV route
+  (`E4B_NF4_SMALLM_BW=1`) runs the expert call in a median 0.36 of K25's time at two decode tokens and 0.46 at four (upper
+  bounds 0.3601 and 0.4655; bar 0.70). On Qwen3-30B-A3B it runs in a median 0.74 and 0.90 (upper bounds 0.7478 and
+  0.9047), a MISS. B2's multi-row trigger fires on both families (B over
+  the byte floor at eight tokens: 2.00 and 1.59; threshold 1.25). As registered: Mixtral opens B3, a served read under
+  its own registration; B2 opens with a design note, Mixtral first; and the default stays off. $0.083. The receipt copy
+  is under `bench/p227/receipts/p227-5090-1/`.
+
+### SC2j: the shared KV pool's capacity read at the default 4,096 tokens a slot (registration and box Q)
+
+- `bench/sc2/SC2j-PREREG.md`: claim-all against shared, both at `E4B_PAGED_MAX_SEQS=auto`, on Qwen3-30B-A3B int4 on one
+  RTX 5090. It carries:
+  - a contract arm: shared at 32 slots token-identical to claim-all at 32 on one fixed schedule;
+  - SC2e's ladder, plus a long-context ladder whose reservations must bind (a PRESSURE gate);
+  - a re-run of P117's teacher-forced width check at the launch stack.
+  A licence would cover one allowlisted pair, `qwen3_moe` int4 on sm_120.
+- Box Q (`bench/sc2/sc2j_box_q.sh`, `sc2j_reduce.py`, `sc2j_contract.py`, `sc2j_prompts.py`) is wired into
+  `bench/sc1/sc1_run.sh` and `sc1_drive.sh` beside boxes A-P, with the staged pin regenerated. `tests/test_sc2j_box.py`
+  holds the lane's constants, Guard Fit's static form, the cap and the wiring; the other boxes' tests learn the new
+  letter.
+
+### Added
+
+- P230 results (`bench/p230/RESULTS-p230.md`): grouped-nf4-gemm's programmatic dependent launch, as it ships (on,
+  capped at 8 rows), read on the DEFAULT NF4 server for the first time: **KEEP**, at the bar's edge. With one request
+  the decode step runs 1.00526x the switch off (min over two palindromic pairs; 3.707 -> 3.687 ms) with identical
+  tokens on every row, and sixteen requests are untouched (the control, read PDL-free per bucket). The shipped default
+  stands; register row `e4b.serve.p230.gnf4-pdl.qwen3-nf4.5090.2026-10-23`; receipts in
+  `bench/p230/receipts/p230-5090-r1/`. Reported, not ruled on: the default build carries seven switched kernels and
+  buckets 2 to 8 also carry PDL. The PREREG's sentence on pre-create refusals is corrected to bench/common rule 3.
+
+### Changed
+
+- P225 Amendment 3 (pre-data): the runner's install line adds `brotli>=1.2.0` beside the unpinned
+  `huggingface_hub>=0.23`, whose newest releases decode brotli with an API older brotli builds lack, so a model fetch
+  could die with a TypeError on a br-encoded edge response. The runner's staged pin moves with it; no need, alarm,
+  floor, rule, cap or id changes.
+
+### HO3 registered: a second box for HO2's cohorts, and the first host-offload held-out rows
+
+- Part A: one more RTX 5090 and one more RTX 4090 run HO2's four rows on machines HO2 did not use (the driver refuses
+  HO2's two), on HO2's exact stack, so each LFM2 and ERNIE cohort rests on two boxes.
+- Part B: two RTX A4000 boxes, on two different machines (the driver refuses a repeat), run the same rows. On a 16 GB card the planner keeps ERNIE's
+  experts on the host: the first held-out rows with host offload. Each family is its own cohort result.
+- HO2's rule per row, plus HOST_UNDER for a host-offload row whose host peak exceeds its host estimate. Each row's plan is
+  compared with the registered one, and a difference is a finding beside the row. Every gate fails closed.
+- Prediction: every row COVERED. Lane worst $27.23 at the started-box caps; expected about $2.50.
+- `bench/ho3/`: the registration, the controller and runner (HO2's by counted edits), the reducer (28 self-test cases)
+  and the staged pins; `tests/test_ho3.py`.
+
+### Shared KV pool: one block claim per decode step, also when the step runs in pieces
+
+- Under `E4B_PAGED_KV_POOL=shared` with bulk KV, a decode step wider than the largest captured bucket runs as
+  consecutive replays of that bucket. Each piece made its own block claim (`Fp8PagedKV.claim_many`), and claims take
+  alternate buffers of a two-buffer pinned staging ring. Under the decode lookahead, the next step's second piece
+  therefore waited on an event recorded after this step's first replay, losing the host/device overlap the lookahead
+  exists for.
+- The synchronous path and the lookahead path now make ONE claim per step, over every piece's slots, before the first
+  piece. Rows are popped in the same order as before (the pieces' slots in step order), so the block tables, and the
+  tokens, are unchanged. Claim-all is unaffected.
+
+### Added
+
+- P230 registered: grouped-nf4-gemm's programmatic dependent launch, as it ships (on, capped at 8 rows), read for the
+  first time on the DEFAULT NF4 server (`bench/p230/PREREG-p230.md`). P113 read it on SC1's int4 configuration; since
+  K33 took the switch, the default server at one request launches four switched kernels a layer. Four arms in a
+  palindrome (`GNF4_PDL=0` against the shipped default) through W1, where the cap lets PDL engage, and W16, the control;
+  decode-only timing; identical tokens required; KEEP / NULL / SLOWER bars set from the instrument's self-pair spread
+  only. The runner refuses before any install, checks the pre-install fit with 1,048 s of boot slack, writes a start
+  marker before the first install, and every fetched box is classified mechanically (`p230_reduce.py --classify`). No
+  default, gate or claim moves.
+
+### TC1 arm: an OOM row keeps its environment and the allocator's text; the CPU pools and allocator setting recorded; an opt-in per-step allocator record
+
+- A training OOM's row (`status: oom`) now carries the arm's `env` block and `arm_facts`, as a trained row does, plus the micro-batches'
+  padded lengths up to the failure. Its reason keeps the allocator's message to 700 characters (it was 200), so the split between
+  memory PyTorch has allocated and memory it has reserved but not allocated survives into the receipt.
+- `env` records `PYTORCH_CUDA_ALLOC_CONF`, the allocator setting the arm ran under (`tc1_run.sh` sets `expandable_segments:True`).
+- `arm_facts.threads` records the CPU pools every arm ran with: torch's intra- and inter-op pools, OMP / MKL / OpenBLAS as set, the
+  affinity CPUs, the cgroup quota, and the cgroup's throttled-period count at the arm's start and end. These are recorded only and
+  never gated. The default path adds exactly these two keys to a trained row (`arm_facts.threads`, `env.pytorch_cuda_alloc_conf`);
+  real receipts reduce and render identically with or without them.
+- `TC1_STEP_MEM=1` (opt-in; off by default, and then no new key) adds `step_mem`: at each optimizer step's end, the running maxima of
+  allocated and reserved memory, the current allocated and reserved memory, and the device's used bytes. The record never resets peak
+  statistics, so `mem_census` and the record's window peaks are unchanged. Under `--phase-peaks 1`, where each phase boundary resets
+  the allocator's peaks, both maxima are folded back over the reset phases, so they stay running maxima. The row at which one first
+  rises bounds the step that set the window peak; in-loop evals run after a step's row, so a rise first seen at row N+1 may have been
+  set by the eval after step N. An OOM row carries the steps it completed.
+- `tc1_drive.sh` forwards `TC1_STEP_MEM` with the other knobs. `bench/q235/q235.sha256` re-seals `tc1_arm.py`.
+
+### Changed
+
+- P228 Amendment 5 (pre-data): P227's and P229's Amendment 4 in its final form. The retry run ids `p228-5090-r1` to
+  `-r8`, for any box that follows one that did not start (a refusal at create, a pre-flight teardown, or the box's own
+  refusal before the install), accepted by the runner and drive at the same tier and terms. A box STARTS when its
+  runner passes the refusals before the install and begins the install; at most three boxes start (the registered
+  budget), and only started boxes count toward the cap and the stop. A single rc 41 is not a strike and the registered
+  rc 41 pair rule is unchanged. The PREREG gains the "refused at create" outcome row and a slack check
+  (guard - FIT_NEED = 600 s >= 420 s + 120 s); the runner's staged pin moves.
+
+### The shared KV pool is sized from free memory (opt-in, `E4B_PAGED_KV_POOL=shared`)
+
+- With `E4B_PAGED_KV_POOL=shared` (step G3 of `bench/kv-pool-g/DESIGN.md`) the server sizes the FP8 KV pool from the
+  device's free memory before any weight is read, as `E4B_PAGED_MAX_SEQS=auto` prices a width. For each width the pool
+  takes the most rows whose estimate fits, beside the prefill graph's reserve, the int8 head's copy and the 1.5 GiB
+  margin, capped at the claim-all size (`serve_recipe.size_shared_pool`). A width qualifies when its rows hold the graph
+  scratch slots plus one full sequence and 1,024 tokens a slot on average; under `auto` the widest such width wins, and
+  an explicit width is kept. `E4B_PAGED_MAX_TOKENS_PER_SEQ` stays each slot's ceiling.
+- The pool can therefore hold fewer rows than its slots could ever reach. Slots claim blocks as they write (G1) and the
+  scheduler admits against the pool's rows less the scratch rows (G2), so a request waits for blocks rather than
+  running the pool dry. `Fp8PagedKV(pool_rows=...)` builds such a pool, and a claim-all runner refuses one.
+- `/health` reports `engine.kv_pool_sizing`: the pool's rows against the claim-all size, the blocks the scheduler admits
+  against, what it holds reserved, how often its queue head waited, and the sizing's inputs and arithmetic.
+- `claim-all` stays the default and is unchanged. With the free memory unknown, or under the solver placement, the
+  shared pool keeps the claim-all size.
+
+### Changed
+
+- P227 and P229 Amendment 4 (pre-data): the retry run ids `p227-5090-r1` to `-r8` and `p229-5090-r1` to `-r8`, for any
+  box that follows one that did not start (a refusal at create, a pre-flight teardown, or the box's own refusal before
+  the install), accepted by each runner and drive at the same tier and terms. The ids are labels, not budget. A box
+  STARTS when its runner passes the refusals before the install and begins the install; at most three boxes start
+  (the registered budget), and only started boxes count toward the cap and toward any stop (P227's Budget and
+  per-family stops, P229's stop). A single rc 41 is not a strike and the registered rc 41 pair rule is unchanged.
+  Each PREREG gains the "refused at create" outcome row and a slack check (guard - FIT_NEED >= 420 s + 120 s); the
+  runners' staged pins move.
+
+### P228 registered: K1's selection and microbench, a pinned cuBLASLt GEMM for o_proj and the router at 2..8 rows (serving roadmap lever K)
+
+A registration, no box yet. On one RTX 5090 at Qwen3-30B-A3B's `o_proj` (2048 x 4096, 48 copies) and router gate
+(128 x 2048, 384 copies), the lane selects, per M in 2, 4 and 8, the cuBLASLt configuration `E4B_DENSE_LT_PIN`
+(e4b#2019) should pin.
+- **The selection:** from cuBLASLt's own heuristic list. Each candidate is checked, must be bitwise run to run and
+  within 1.5e-2 of `F.linear`, and is timed. The fastest is chosen, with a scheme-2 preference within 1.02x.
+- **The reading:** e4b's installed pinned path (P) against the served `F.linear` (D) at the same M.
+- **The rule, per site:** PASS where P/D's upper bound, raw and clock-adjusted, is at most 0.85 at both M = 2 and M = 4.
+- **The premise:** K1's GPU and CPU suites on the 5090 itself (37 passed).
+- **What follows:** the verdict's `pin_table` feeds the code PR that fills `LT_PINS`.
+- **Files:** `bench/p228/` (PREREG, bench, reducer with its self-test, runner, drive, staged pins) and
+  `tests/test_p228.py` (16 tests, 9 reducer mutants).
+
+### Changed
+
+- P225 Amendment 2 (pre-data): the guard's boot term rises from 300 s to 880 s (`bench/p225/p225_derive.py`,
+  `bench/p225/PREREG-p225.md`): the launcher alone may wait 420 s for ssh before staging, and `p225-5090-r1` halted
+  at the pre-install fit after a 443 s launch-to-check. The guard is 21,230 s (5.90 h, inside the 5.9 h fill limit) and
+  the worst case USD 6.92 a box. No need, alarm, floor or runner byte changes, and rc 41 stays PRE_INSTALL_HALT. A new
+  test keeps the boot allowance at least the launcher's ssh wait plus a 300 s staging margin.
+
+### Changed
+
+- P225 Amendment 1 (pre-data): the retry run ids `p225-5090-r1` to `p225-5090-r8` for any box that follows one that did
+  not start (HOST_REFUSED, or NOT_RUN when the launcher's pre-flight tore the instance down before the runner ran),
+  accepted by the runner and driver at the same tier and terms (`bench/p225/PREREG-p225.md`). The ids are labels, not
+  budget: the 3-box-started cap, the HOST_REFUSED caps (4 a trip, 8 in all), the strike rules and the stop are
+  unchanged, and started-box accounting is by outcome, never by id. The Outcomes table gains the NOT_RUN row (no strike,
+  no cap, one id), and `p225-5090-1` is recorded under it.
+
+### `E4B_DENSE_LT_PIN`: a pinned cuBLASLt GEMM for named dense projections at 2..8 rows, opt-in (serving roadmap lever K, step K1)
+
+`engines/dense_lt_pin.py`, following the design note `bench/dense-small-m/DESIGN.md`. `E4B_DENSE_LT_PIN=o_proj[,router]`
+routes the named projections' 2..8-row calls through one cuBLASLt algorithm configuration, pinned per (cuBLASLt version,
+compute capability, SM count, (N, K), M). It is off by default, and no speed is claimed.
+
+- **The pin table (`LT_PINS`) is empty:** a registered selection on the reading box fills it by a code PR. Until then
+  the knob is refused at build for want of a pin.
+- **The library:** ctypes against the one `libcublasLt` mapped in the process, which is torch's, read from
+  `/proc/self/maps` and opened `RTLD_NOLOAD`, with its version in the key. No new dependency.
+- **Capture and determinism:** one persistent workspace sized from `cublasLtMatmulAlgoCheck`, and one serving stream,
+  enforced. Reduction schemes are limited to 0, 2 and 4 (INPLACE refused).
+- **Rows:** 2..8 rows with a pin route through it. 2..8 rows without one pass to what ran before and are counted, by
+  site, M and prefill/decode, in `/health`'s `dense_lt_pin`. A captured decode bucket without a pin is refused at build.
+- **o_proj** wraps an exact bias-free `nn.Linear`, or K35's one-row `DenseGemvLinear`; one row still reaches K35.
+- **The router** routes only on the router epilogue's softmax-then-top-k forward. That forward now marks its kind and
+  calls `router_linear`, which is `F.linear` exactly when no pin is set.
+- **The adapter census:** classes the knob as adapter-neutral. It reads the merged weight and re-quantizes nothing.
+- **Tests:**
+  - `tests/test_dense_lt_pin.py` (CPU, a fake library, 24): every refusal, the routing, the counts, and the
+    serve_paged and epilogue wiring;
+  - `tests/test_dense_lt_pin_gpu.py` (GPU, the real library): within 1.5e-2 of `F.linear`, bitwise run to run, bitwise
+    under graph replay, and a rejected configuration refused. All 34 passed on an RTX A4000 shakedown.
+
+### Added
+
+- **P226's record** (#1313), E32, K25's plan at Qwen3-30B-A3B's bucket 32: `bench/p226/RESULTS-p226.md` and the public
+  receipt copy under `bench/p226/receipts/`.
+  - **The read** is NO_GO. Every plan the selection carried is slower than `c1` at 256 routed rows: the first is 0.968x
+    (lower bound 0.967, clock-adjusted 0.964, against the 1.05 bar), over 64 held-out steps of 32 requests' routing. The
+    self-pair read 1.0001.
+  - **The contract held:** all 144 plans per projection kept `c1`'s bits, and every arm matched on every rep.
+  - **Reported only:** `c1` runs at 81 % of the copy rate at bucket 32 (at most 1.50 ms a step of headroom), and 1.77x
+    faster than K25's built-in plan.
+  - **Total:** $0.305. **Default:** this record changes none; `c1` stays qwen3_moe's plan at bucket 32.
+
+### SC2f Amendment 4, SC2h Amendment 2, SC2i Amendment 1: the launch commit is a `main` commit at or after `1a25b209`
+
+- The three lanes named their launch commit as the first `main` commit containing both `v0.57.0` and e4b#2011. Read
+  literally, that commit predates the lanes' own kit (box N's and box O's kernels pin, the default check, box P). Before
+  any run, each lane now names a `main` commit at or after `1a25b209`, the merge that holds all of it. The launch-time
+  default check against `v0.57.0` is recorded with each run, as before. No constant, threshold or cost changes.
+- The lanes' kit is held at `1a25b209`: at the launch commit, every `bench/sc1/staged.sha256` entry a lane's box stages,
+  the shared `sc1_run.sh` included, must be byte-identical to that entry at `1a25b209`. Any difference is its own pre-run
+  amendment.
+
+### Added
+
+- P225 registered: the Train->Serve successor to the closed P224. `bench/p225/PREREG-p225.md` registers, before any
+  data, the same end-to-end read of one trained attention adapter on the paged server against its reference path, with
+  the changes P224's runs called for: a host screen on the box before any install (single-thread speed by the
+  launcher's own loop, sustained download, host RAM and disk; a failure is HOST_REFUSED, never a strike, capped
+  separately); every phase alarm derived per tier from the slowest admitted host (`p225_derive.py`); "trained" proven
+  on the real files (80/80 steps from the trainer's record, every attention target present with a nonzero B, the
+  manifest's revision and sha, the quantization fingerprint, and a LEARNED gate on REF vs HF0); the paged server's own
+  merge record for engagement; the held-out set extended byte-exact from P224's, sized from the between-adapter
+  variance only (`p225_size.py`); and INCONCLUSIVE as a final answer. The probe, gate, canary, reducer and runner are
+  fixed with their self-tests (`tests/test_p225.py`). No default, gate or claim moves.
+
+### Added
+
+- A double-quantized-absmax backend-adapter/2 manifest's expert base now VERIFIES against an fp32 arena. Such an adapter
+  always carries expert LoRA, so the paged server still refuses it first with refusal 1; this check serves a `/2` with
+  zero expert LoRA and the expert-serving path to come. `compress_expert_absmax_` hashes each stack's full fp32 absmax before compressing it, and
+  `quant_fingerprint(model, "experts")` carries `fp32_source` (the base's qfp-v1 digest with those fp32 absmax, plus
+  the hash per stack). The server compares it with its fp32 arena exactly: equal reads `base_match.experts = verified
+  (source, ...); trained on double-quantized absmax, served on fp32 absmax` and serves without an override; different
+  is refusal 12 naming the first stack that differs. It proves the base is the trained one, not that the served
+  absmax equals the trained one: the quality effect of serving the fp32 form is not read. A /2 manifest without the
+  field is refusal 12 as before. The writer needs no change (it records `quant_fingerprint`'s dict as returned); the
+  hash adds one host copy and sha256 of the expert absmax at compression (about 1.8 GB on Qwen3-30B-A3B).
+
+### The paged server can claim KV blocks as slots write them (opt-in, `E4B_PAGED_KV_POOL=shared`)
+
+- Under the decode graphs a slot used to claim every block it could ever reach (its whole `E4B_PAGED_MAX_TOKENS_PER_SEQ`)
+  at its first graphed decode. With `E4B_PAGED_KV_POOL=shared` (step G1 of `bench/kv-pool-g/DESIGN.md`):
+  - the prompt flush claims the prompt's blocks and the one its first decode writes;
+  - before each step a slot claims through the block its write position lands in. The lookahead adds its in-flight
+    steps, and a speculative verify adds k_eff, which the request's budget bounds.
+- Under bulk KV a step's claims go in one host-to-device copy (`Fp8PagedKV.claim_many`): a pinned two-buffer ring that
+  grows to the largest step, scattered into the same block-table tensor with one `index_put_`. Without bulk KV, each slot
+  claims per layer. Either way the write is queued on the engine stream ahead of the step's gather and replay, so the
+  captured graphs read it. Graph capture, scratch and alias slots are unchanged.
+- The scheduler admits by reserved blocks (G2) in this mode. The pool keeps its claim-all size, so the reservation does
+  not bind yet; sizing the pool from free memory (G3) is separate and later. `/health` reports `kv_pool`.
+- `claim-all` stays the default until a GPU smoke shows the contract: identical tokens on the same schedule.
+- `tests/test_kv_pool_shared.py` covers, on the real pool and buckets with a stand-in graph:
+  - every real row owns its write block at replay, under the synchronous path and the lookahead, with and without bulk
+    KV;
+  - identical streams to claim-all, and fewer rows held;
+  - the free lists whole at idle;
+  - the block-edge arithmetic, the prompt flush at lengths on and off a multiple of 16, and the budget-bounded
+    speculative claim;
+  - `claim_many` assigning the rows and table entries consecutive claims would, and popping nothing when a step
+    does not fit;
+  - the server switch.
+
+  With the per-step claim disabled, the replay check trips.
+
+### Changed
+
+- The paged server now VERIFIES a backend-adapter/2 adapter's base instead of reporting it unverified. After the load and
+  before the attention merge, `adapter_dir.fingerprint_check` compares each qfp-v1 fingerprint the manifest records with
+  the served base's: the attention projections as loaded, and the expert stacks read from the arena the server serves
+  (`quant_fingerprint(..., source="arena")`, PA-1; byte-identical to training's on a real `bake_nf4` arena, tested).
+  A match reads `base_match.experts = verified`; `/health` carries both fingerprints per scope.
+- An expert fingerprint mismatch is **refusal 12**. `E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts` serves it anyway
+  (reported in `/health`); `E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE` does not cover a measured mismatch. An attention
+  fingerprint mismatch is **refusal 11**, with no override. v1 adapters are unchanged (refusal 9).
+- **Behavior change for an upgrade from 0.57.0:** 0.57.0 served a backend-adapter/2 adapter's expert base as
+  "unverified" under `E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts`. It is now MEASURED. An adapter whose base
+  matches the arena serves as verified with no opt-in. One whose base does not match (an arena baked from another
+  checkpoint or recipe) is refusal 12, which that opt-in no longer covers; set
+  `E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts` to serve it anyway, reported in `/health`.
+- A double-quantized-absmax adapter always carries expert LoRA (the recipe compresses only under `grouped_nf4`, which
+  requires `train_experts=true`), so the paged server refuses it with refusal 1 before the fingerprint check, as
+  0.57.0 did. The dq-vs-fp32 branch of refusal 12 applies to a `/2` manifest with zero expert LoRA and to the
+  expert-serving path to come.
+
+### P229 registered: K2b's microbench, the int8 lm_head at 2, 4 and 8 rows on K37's released `linear_i8` (serving roadmap lever K)
+
+A registration, no box yet. On one RTX 5090, at Qwen3-30B-A3B's lm_head (151936 x 2048, one random head swapped by
+e4b's own resolvers), the lane reads the route `E4B_INT8_HEAD_ROWS` (e4b#2024) installs: grouped-nf4-gemm K37's
+`linear_i8` at its shipped plan, from the v0.50.0 release.
+- **The arms:** the route at M rows (I) against the served path at those rows (`F.linear` on the grid's bf16 rounding,
+  D) and against the head's one-row route (K36, K).
+- **The rule, per M in 2, 4 and 8:** PASS where I/D's upper bound is at most 0.70 and I/K's at most 1.25, raw and
+  clock-adjusted. The verdict is GO_ROWS_N for the largest N with every read M up to it passing (the knob's licensed
+  bound), or NO_GO at M = 2, which makes K2a the explicit next decision.
+- **The premise:** the route's real kernels compiled on the 5090 (11 passed) and its CPU suite (45 passed).
+- **What follows:** the served read with P153's quality bars per bucket, before any default.
+- **Files:** `bench/p229/` (PREREG, bench, reducer with its self-test, runner, drive, staged pins) and
+  `tests/test_p229.py` (25 tests: 10 reducer mutants, and p229-shake-1's record as the real fixture with five
+  departures and a mutant).
+
+### SC2i registered (#846): does spacing or shortening prefill lift `serve_paged`'s served decode under load at 64 slots?
+
+- Lane SC2i reads e4b#2017's two opt-in scheduler knobs on one RTX 5090, at 64 slots, on SC2h's `base` server (SC2f's
+  `on`: SC2e's s64a at the release's defaults). Five arms:
+  - `base` (both knobs unset);
+  - `E4B_PAGED_PREFILL_EVERY` 2 and 4;
+  - `E4B_PAGED_LOADED_CHUNK_TOKENS` 256 and 128.
+- Two draws of six servers each. Each draw brackets the four knob arms between two `base` servers, which measure its
+  noise. The ladder is 4, 8 and 12 req/s.
+- Each knob arm reads FASTER, FLAT or REGRESSED on TPOT p50 at 12 req/s against the draw's `base` mean, with a bar of
+  max(0.05, the `base` pair's spread). FASTER also needs no loss of attainment and no TTFT p99 rise past 1 s. Nothing is
+  licensed: a FASTER arm goes to a quality read first, because chunking a prompt differently can change its tokens.
+- Box P (`bench/sc2/sc2i_box_p.sh`, `bench/sc2/sc2i_reduce.py`), wired into `bench/sc1/sc1_run.sh` and `sc1_drive.sh`
+  beside boxes N and O, at grouped-nf4-gemm v0.50.0. SC2e's ENGAGED gate is adapted for the loaded-chunk arms only: a
+  capped first chunk runs eagerly there by design.
+- `tests/test_sc2i_box.py` covers box P; the SC1/SC2 box tests and the staged pins read the new box letter.
+- The box runs after SC2f's and SC2h's, on its own rental, inside the launcher's 6 h cap (reading guard 4.5 h); lane worst $13.21.
+
+### Added
+
+- P226 registered: the K25 plan at bucket 32. `bench/p226/PREREG-p226.md` registers, before any data, whether any tile
+  plan in P156's 144-plan grid beats `c1` (qwen3_moe's served K25 plan, chosen at 16 rows) at bucket 32, where the
+  served decode sends 32 x top-8 = 256 routed rows through K25. The reading box first captures its own routing: 32
+  distinct requests at bucket 32 on the served default, the K25 route and the `c1` plan asserted over the window, the
+  picks hashed before any timing (`p226_capture.py`, over P154's routing pass). The router-replay file cannot stand in:
+  its 32 rows are 16 prompts recorded twice. Then P156's sweep (reported) carries three plan pairs, and P160's instrument
+  rules on the first against `c1` on held-out steps (`p226_bench.py`, `p226_reduce.py`, `tests/test_p226.py`). Bucket 64
+  is out of scope: it takes the M-tile route, not K25. No default, gate or claim moves.
+
+### The scheduler can admit by reserved KV blocks (opt-in, not yet wired to the server)
+
+- `ContinuousScheduler(kv_blocks=N, block_tokens=16)`: a request is admitted only if a slot is free and the blocks already
+  reserved plus its own need, `ceil((prompt_len + max_new_tokens) / block_tokens)`, fit `N`. The reservation is released
+  when the slot is freed, by a finish or an abort. FIFO is kept: a head that does not fit waits, and nothing behind it
+  is admitted first. A request that could never fit is refused when it is added.
+- `stats()` reports `kv_blocks`, `kv_blocks_reserved` and `kv_blocks_waits` when the pool is set. `kv_blocks=None`, the
+  default, admits exactly as before.
+- This is step G2 of the shared-pool design (`bench/kv-pool-g/DESIGN.md`). The server does not pass `kv_blocks` yet;
+  that comes with incremental block claims (G1) and stays opt-in until a GPU smoke.
+- `tests/test_scheduler_kv_blocks.py` covers: no pool and a non-binding pool making the same runner calls; a binding
+  pool keeping FIFO; the refusal; release on finish and abort; and the decode lookahead under a binding pool yielding
+  the synchronous streams.
+
+### Added
+
+- `E4B_INT8_HEAD_ROWS` (opt-in, `1` to `8`; unset is `1`, today's route): with the lm_head on its int8 grid, calls
+  of 2 to the set number of rows run grouped-nf4-gemm K37's `dense_i8.linear_i8` over the head's int8 codes and scales,
+  instead of `F.linear` on their bf16 rounding (half the bytes). One row keeps K36, and more rows keep `F.linear`.
+  Outputs at those rows change within bf16's output rounding of the same grid. Refused at startup when the head is not
+  on its int8 grid or the package lacks K37; unset imports nothing. The record is `levers.int8_head_bw.rows`, with the
+  kernel per row count in its engagement record. No speed or quality claim: the design is
+  `bench/dense-small-m/DESIGN-K2.md`, and its readings come first.
+
+### P227 registered: the per-row bandwidth GEMV against K25 at 2 to 8 decode tokens, two families (serving roadmap lever B)
+
+A microbench registration, no box yet. At 2, 4 and 8 decode tokens on the NF4 store, it times e4b's MoE expert call
+(the collapse's own `_fused_over_stack`) through the served route and through the per-row route. The served route is the
+device tile table and K25, at the family's served decode and plan. The per-row route is `E4B_NF4_SMALLM_BW=1`, which
+sends one group per (token, slot) row to grouped-nf4-gemm's K33.
+
+- **Two families, each ruled on its own:** Qwen3-30B-A3B (48 layers, routing from P153's router replay, stream S1) and
+  Mixtral-8x7B (8 layers, P222's seeded draw). The routing tables are pinned by sha256.
+- **The bar:** PASS where the per-row route's time over K25's has an upper bound (median + 2 SE), raw and
+  clock-adjusted, of at most 0.70 at both T = 2 and T = 4. Otherwise MISS, a finding that sizes the lever.
+- **B2's trigger:** the per-row route's median over the byte floor at T = 8 above 1.25 opens a multi-row GEMV for
+  that family.
+- **The rest:** K2 (the self-pair), a spacer before every timed replay, Williams order, NVML clocks with a 575 W floor.
+  The premise is e4b#2009's GPU contract. The guard fit has 25 % headroom.
+- **Amendment 1, before any reading:**
+  - review 1's four items: K's decode and plan from e4b's own tallies; a shakedown forces K33's gate; a run with no
+    family read is not a reading; an unreadable record is VOID;
+  - TOLERANCE_FAIL is final for its family;
+  - two shakedowns (`p227-shake-1`, `-2`, an RTX A4000, about $0.03 together). The second's record is the reducer's
+    sha256-pinned real fixture.
+- **Files:** `bench/p227/` (PREREG, bench, reducer with a 45-check self-test, runner, drive, staged pins, the fixture)
+  and `tests/test_p227.py` (29 tests: the real record, its departures and an old-rule mutant, and 9 reducer mutants).
+
+### SC2f Amendment 3 and SC2h Amendment 1: the release under test moves to 0.57.0, kernels to grouped-nf4-gemm 0.50.0
+
+- Both lanes were registered on e4b 0.54.0 and never read. They now run on the first `main` commit containing both
+  `v0.57.0` and e4b#2011 (the paged server's single wakeup per step). That commit's diff against the tag and its commits
+  are recorded at launch. `bench/sc2/sc2_defaults.py` dumps the serving defaults on CPU at `v0.57.0` and at the launch
+  commit: the resolved levers, plus a source scan of every `E4B_*` / `GNF4_*` environment read with its default. Any
+  difference refuses the launch by name. The exceptions are `--allow LEVER=reason` for an opt-in knob merged since the
+  tag that defaults off and is unset in the lane, and the four levers of #2017 named in the amendment
+  (`tests/test_sc2_defaults.py`, including two fake trees).
+  Each amendment says which moved defaults reach its int4 server (both arms alike) and why the comparison still reads its
+  knob alone. This changes the system under test; the old pin was never read.
+- grouped-nf4-gemm moves to v0.50.0 (`41ef086e`) for boxes N and O (`bench/sc1/sc1_run.sh`, re-pinned in
+  `bench/sc1/staged.sha256`). `tests/test_sc2f_box.py` and `tests/test_sc2h_box.py` read the new pin.
+- The price ceiling rises to $1.05 an hour, the RTX 5090 policy rate. Lane totals, with the registered re-run counted as a
+  reading: SC2f $11.11, SC2h $12.16; each run under $15.
+- SC2f's four refused proofs (2026-10-18, $0) are explained: one ghost listing on the only listed bar machine. The
+  launcher's offer-freshness check and same-pin ghost retry now cover that, so the boxes launch through it. The market
+  half is still live: no bar machine was rentable at the 2026-10-23 screen. No candidate means no launch, and a $0 screen
+  runs for at most 48 hours after the tag.
+- SC2f, SC2h and SC2i run on separate boxes in that order, pinning the same machine while it stays listed. Each lane keeps
+  its own verdict and strike count. Nothing in either lane's science (arms, knobs, ladder, knee rule, statistics,
+  outcomes, bar) changes.
+
+### The paged server can space and shorten prefill while requests decode (opt-in)
+
+- Two scheduler knobs reshape how prompt ingestion shares steps with running decodes. Both apply only while a decode
+  row is live, and their defaults compose exactly the plans the scheduler made before.
+  - `E4B_PAGED_PREFILL_EVERY=N` (`ContinuousScheduler(prefill_every=N)`, default 1): a step carries prefill only if the
+    previous `N - 1` steps carried none. Running decodes take at most one prefill stall every N steps. The next chunk
+    waits at most `N - 1` steps for its turn, so a given prompt waits about `N` steps per chunk owed ahead of it (its
+    own, and those of prompts admitted before it). With nothing decoding, prefill runs every step as before.
+  - `E4B_PAGED_LOADED_CHUNK_TOKENS=T` (`loaded_chunk_tokens`, default 0 = off): caps the chunk and the step's prefill
+    budget at `T`, so one long chunk becomes several short stalls.
+- `/health` reports both, and `stats()` counts `prefill_deferred` (steps that held pending prefill back) when
+  `N > 1`.
+- A first chunk shorter than the prefill graph's size runs eagerly, and the runner counts it as a `short_chunk`.
+  Chunking a prompt differently can change its tokens, as any change of `E4B_PAGED_CHUNK_TOKENS` can. Neither knob is a
+  default; a default needs a served read.
+- `tests/test_scheduler_interleave.py` checks the defaults call for call against the previous planner (kept in the
+  test verbatim), the spacing and the next chunk's `N - 1` bound under `prefill_every`, that an idle server never delays a prompt, the
+  cap on both the chunk and the budget, refusals, and the environment parsing.
+
+### The paged server wakes the event loop once per step, not once per stream
+
+- `PagedEngine._dispatch` now collects a step's token chunks and finishes and hands them to the event loop in ONE
+  `call_soon_threadsafe`. A new `_fanout` puts them into each stream's queue on the loop thread, in the engine's order. Before,
+  every stream with output cost its own cross-thread wakeup. At 64 slots that `dispatch` segment was the largest piece of
+  the exposed host gap between decode replays (`bench/h2h-2026-10-02/sc2e/decode64/README.md`, section (c)). The step
+  trace already records `dispatch`, so a served read shows the change before and after. No speed is claimed here.
+- Errors, shutdown and refused submits still wake the loop at once, as before. Stream queues are unbounded, so one
+  hand-off cannot fail part-way through a batch.
+- The batch is woken in a `finally`. If building a finish record raises part-way through a step's hand-off, what was
+  already handed off still reaches its streams. A failed hand-off now takes the same path as a failed step: the server
+  reports the error and every stream not yet finished gets an `error` item. Before, the exception ended the engine
+  thread silently and left its streams waiting.
+- `tests/test_serve_paged.py::test_one_cross_thread_wakeup_per_step_and_per_stream_order_is_kept` runs 64 streams
+  through the real engine thread. It asserts at most one wakeup per non-empty step, that a full decode step carries all
+  64 streams in one wakeup, and that every stream gets its tokens in order and then exactly one `done`. Against the
+  previous dispatch the same test counts 384 wakeups over 6 steps.
+
+### `E4B_NF4_SMALLM_BW`: 2..8-token steps on the bandwidth GEMV, opt-in (serving roadmap lever B, step B0)
+
+On the NF4 store's all-resident collapse, `E4B_NF4_SMALLM_BW=1` sends a call of 2 to 8 tokens to singleton groups, one
+group per (token, slot) row, as T == 1 already is. grouped-nf4-gemm then serves it through K33's bandwidth GEMV instead
+of the device tile table and K25. It is off by default (also when unset), and no speed is claimed: a registered
+microbench decides whether it beats K25, and whether a multi-row GEMV is worth building.
+
+- **Per-row identity:** K33 reads one row per program, so each row at 2..8 tokens is bitwise that row at one token
+  (`tests/test_nf4_smallm_bw_gpu.py`, run on a GPU box). Rows that share an expert each read its weights.
+- **Tokens differ from K25's** (a different function within the tolerance contract), so a default needs a quality bar.
+- **Refused, never dropped:** beside `E4B_NF4_GROUPED_SMALLM=1`, on an int4 or MXFP4 store, on a layer not on the
+  all-resident collapse, on a kernel package without K33, and at any expert shape where K33 does not engage on the
+  device (`GNF4_GEMV_BW`'s rule). `hot_residency.resolve_nf4_smallm_bw` runs at engine build, before capture.
+- **Reported:** `/health`'s `nf4_smallm_bw`, and `prefill_routes()["seen"]["moe_nf4_smallm_bw"]` (calls by token
+  count). gate_up reads the token rows (`gather_div=top_k`) on this route, as at T == 1.
+- **Tests:** `tests/test_nf4_smallm_bw.py` (CPU: routing, refusals, the token-row read, the resolver) and
+  `tests/test_nf4_smallm_bw_gpu.py` (GPU: K33 only, per-row bitwise vs T == 1, graph replay, T = 9 and off unchanged).
+
+### `E4B_K25_PLAN=m1`: lane P222's plan pair, opt-in (#1313)
+
+`hot_residency._K25_PLANS` gains `m1`, lane P222's selected pair M (`bench/p222/RESULTS-p222.md`): gate_up at c1's
+`{block_n 64, kc 256, warps 4, stages 2}`, down at `{block_n 32, kc 256, warps 4, stages 2}`. It is opt-in: no family
+default changes (`K25_PLAN_DEFAULT_FAMILIES` stays `{"qwen3_moe": "c1"}`), and no served speed is claimed. A served read
+with its own registration comes before any default.
+
+- **Only under `prmt`, like c1:** P222 read the pair only under K39's decode, so an explicit `m1` under any other decode
+  is refused at build and in the forward, never run, and so is an `m1` with K25 off or absent.
+- **The refusals are per plan now:** every plan but `today` is listed in `_K25_PLAN_PRMT_ONLY`, and the refusal names
+  the plan asked for (`_k25_plan_refusal`, was `_k25_c1_refusal`). An unknown `E4B_K25_PLAN` lists every name in
+  `_K25_PLANS`. c1's messages keep their substance.
+- **Tests** (`tests/test_k25_plan.py`): `m1` equals the record P222's box wrote (`bench_p222.json`'s `"m"`); explicit
+  `m1` under `prmt` gives each projection its shape and is counted as `m1` in `K25_PLAN_SEEN`; refused under the tree
+  (explicit or a family's default), with K25 off and with a kernel package without K25; an unset knob never resolves
+  to it.
+
 ## 0.57.0 — 2026-10-23 — the paged server serves a trained adapter, verified
 
 **0.57.0.** The paged server can now serve one adapter you trained: set `E4B_PAGED_ADAPTER` to its directory and
