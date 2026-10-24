@@ -881,7 +881,7 @@ def test_amendment_3_axolotl_family_uv_index_strategy_and_no_unsloth_venv_on_tha
     assert re.search(r'uv pip install --python \$PY_AX "axolotl==\$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > logs/pip_axolotl.log', body)
     # the token alone builds no Unsloth venv; every other token still builds both, behind the same driver gate
     assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab "|" qwen3reuseab "|" qwen3keepab "|" routebench "|" fusedsweep ") NEED_UNSLOTH=0;; esac' in body   # amendments 8, 10, 12-15 add their tokens
-    assert 'if [ "$NEED_UNSLOTH" = 1 ]; then\nUNS_T28_OK=1' in body and 'if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then' in body
+    assert 'if [ "$NEED_UNSLOTH" = 1 ]; then\nUNS_T28_OK=1' in body and 'if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ] && [ "$SKIP_UNS_CU130" != 1 ]; then' in body   # HP3 Amendment 2: (R) skips cu130
     assert body.index("NEED_UNSLOTH=1; case") < body.index("venv-unsloth-t28:") and body.count("runs no Unsloth arm (TC1-PREREG amendment 3)") == 2
 
 

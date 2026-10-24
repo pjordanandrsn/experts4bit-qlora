@@ -130,10 +130,10 @@ NEED_AXOLOTL=1; case " $FAMILIES " in " qwen3hp1cal ") NEED_UNSLOTH=0; NEED_AXOL
 case " $FAMILIES " in " qwen3hp2 ") NEED_AXOLOTL=0;; esac     # HP2 (bench/hp2/HP2-PREREG.md): e4b vs Unsloth only
 case " $FAMILIES " in " qwen3hpn ") NEED_AXOLOTL=0;; esac     # HPN (bench/hpn/HPN-DESIGN.md): e4b + Unsloth readers only
 case " $FAMILIES " in " qwen3hbd ") NEED_AXOLOTL=0;; esac     # HBD (bench/hbd/PREREG-hbd.md): e4b + Unsloth cells only
-case " $FAMILIES " in " qwen3hp3 "|" qwen3hp3shake ") NEED_UNSLOTH=0; NEED_AXOLOTL=0;; esac
+case " $FAMILIES " in " qwen3hp3 "|" qwen3hp3shake ") NEED_UNSLOTH=0; NEED_AXOLOTL=0;; esac   # HP3 (bench/hp3/HP3-PREREG.md): its own three venvs, on one build
 # HP3 Amendment 2, the (R) fallback (qwen3hp3r): e4b vs Unsloth 2026.9.14 on HPN's build, so only venv-unsloth-t28 (+ e4b in it, t28u);
 # no cu130 Unsloth venv and no axolotl
-SKIP_UNS_CU130=0; case " $FAMILIES " in " qwen3hp3r ") NEED_AXOLOTL=0; SKIP_UNS_CU130=1;; esac   # HP3 (bench/hp3/HP3-PREREG.md): its own three venvs, on one build
+SKIP_UNS_CU130=0; case " $FAMILIES " in " qwen3hp3r ") NEED_AXOLOTL=0; SKIP_UNS_CU130=1;; esac
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 FETCH_OK_N=0; FETCH_FAILED_N=0   # families whose model staged / did not (tc1_prepare); none staged and one failed = rc 15 at the end
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED pack=$PACK" | tee -a summary.txt
