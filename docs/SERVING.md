@@ -284,6 +284,17 @@ out_len, finish_reason -- server-side TTFT/ITL beside the client's), `E4B_PAGED_
 as above. `GET /stats` returns the scheduler's `stats()` (TTFT p50/p99 **from arrival**, queue wait,
 per-stream rate) and the runner's graph statistics.
 
+**The cold tier's floor at `E4B_PAGED_PLACEMENT=solver`.** The solver places experts across VRAM, DRAM and NVMe, and
+`E4B_PAGED_HOT_ROWS` (64) is how many NVMe-tier expert rows stay pinned in host RAM. A forward asks the cold tier for
+every unique NVMe expert it routes in one request, so the build refuses a `hot_rows` below
+`min(F x top_k, the most NVMe experts in any MoE layer)`, where `F = max(E4B_PAGED_CHUNK_TOKENS, max_seqs)` is the most
+tokens one forward carries (a prefill chunk is its own forward; decode at `solver` is eager, one token per sequence).
+Below it, a long prompt would fail mid-request. The refusal names the floor and every input to it, and `/health`
+records them under `levers.hot_rows_floor`. VRAM and DRAM experts never reach the cold tier, so they do not count. On
+Qwen3-30B-A3B (128 experts, top-8) at the default chunk of 512, the floor is the busiest layer's NVMe count, so
+`E4B_PAGED_HOT_ROWS=128` always meets it. At `all-vram` there is no floor. The default stays 64: raising it pins more
+host RAM, which is the operator's choice.
+
 **Slots: `E4B_PAGED_MAX_SEQS=auto` by default (lane SC2e, #846; `16` restores the old default).** When the engine
 builds, before any weight is read, `auto` takes the widest width lane SC2e read that the serve estimate fits in the
 device's free memory (`serve_recipe.choose_max_seqs`):
