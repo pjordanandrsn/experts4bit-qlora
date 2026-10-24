@@ -9,10 +9,12 @@ release.
   index install only. Editable, `file://`, other-host and every git install (whatever its URL or commit) are refused.
   It writes `provenance.json` into the receipts.
 - `bench/p235/release_proof.py` (new): loggetta's release proof (loggetta#125), staged byte-identical. It proves each
-  installed distribution IS the published wheel's bytes (wheel digest, every RECORD file equal on disk). It runs as
+  installed distribution IS the published wheel's bytes (wheel digest, every RECORD file equal on disk, every
+  top-level name importing from the proven install). It runs as
   the last step before each build's first arm, in that build's import environment, and writes
-  `release_proof*.jsonl` into the receipts. Every python uses a fresh `PYTHONPYCACHEPREFIX`, and every install uses
-  `--no-compile`.
+  `release_proof*.jsonl` into the receipts. A proof whose lines are not all `pycache_fresh` true refuses. Every
+  python uses a fresh `PYTHONPYCACHEPREFIX` (with `RELEASE_PROOF_FRESH_PYCACHE` set to the same value), and every
+  install uses `--no-compile`.
 - `bench/p235/p235_run.sh` and `p235_reduce.py`: P58's runner and reducer by named edits. The runner installs
   experts4bit-qlora, grouped-nf4-gemm and each vLLM build from PyPI wheels, with transformers 5.17.0 and constant vLLM
   versions. It runs the provenance check before the tripwire and every arm (rc 9) and in each vLLM venv (a failure

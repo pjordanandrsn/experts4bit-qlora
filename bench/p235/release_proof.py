@@ -14,13 +14,24 @@ its sha256 against the digest PyPI lists, then compare the wheel's own ``RECORD`
     outside site-packages whose name is one of the dist's own ``[console_scripts]``/``[gui_scripts]`` in
     ``entry_points.txt``; any other installed-only file (an added module, a ``.pth``) refuses.
 
+(c) every top-level name the wheel installs IMPORTS from the proven install, in this interpreter as it stands
+    (``importlib.util.find_spec``: a package's ``__init__.py``, a module's file, or a namespace package's one search
+    location, realpath'd, is the install's file the wheel records), so a checkout earlier on ``sys.path``
+    (``PYTHONPATH``, a ``.pth``, ``python -m`` from a repository root) cannot shadow the proven files while the metadata
+    still finds them. Call it in the same interpreter, with the same environment, as the read it proves.
+
+Bytecode: (b) allows ``__pycache__/*.pyc``, and CPython loads a ``.pyc`` whose header matches its source's mtime and size
+instead of the source. :func:`fresh_pycache` re-executes the caller under ``PYTHONPYCACHEPREFIX`` set to a fresh empty
+temporary directory (Python then reads and writes bytecode only there and compiles from the proven sources); the proof
+records ``pycache_prefix`` and whether it is that fresh directory.
+
 A wheel with ``.data/`` entries is refused: they install elsewhere and this check does not follow them. A refusal names
 the first file that differs, so a wheel built locally at the release's version, a checkout, or an index serving other
 bytes never reads as the release.
 
 Standalone and stdlib-only (urllib, hashlib, zipfile, importlib.metadata), so it drops into any kit unchanged:
 ``prove(dist, version)`` returns ``{"dist", "version", "wheel", "sha256", "files", "record": "RECORD equal",
-"record_equal": True, "first_diff": None}`` or raises :class:`ReleaseProofError` (its ``first_diff`` names the file when
+"record_equal": True, "first_diff": None, "imports": {name: path}, "pycache_prefix", "pycache_fresh"}`` or raises :class:`ReleaseProofError` (its ``first_diff`` names the file when
 there is one). The CLI prints one JSON object per pin and exits 1 with the reason on the first refusal.
 """
 from __future__ import annotations
@@ -28,6 +39,7 @@ from __future__ import annotations
 import base64
 import csv
 import hashlib
+import importlib.util
 import io
 import itertools
 import json
@@ -43,6 +55,8 @@ PYPI = "https://pypi.org/pypi/{dist}/{version}/json"
 #: the .dist-info files pip writes at install time, so they never match a wheel's
 PIP_WRITES = {"RECORD", "INSTALLER", "REQUESTED", "direct_url.json"}
 TIMEOUT_S = 60
+#: set, with PYTHONPYCACHEPREFIX, to the fresh directory fresh_pycache made, so a prefix someone else set never reads as fresh
+FRESH_MARK = "RELEASE_PROOF_FRESH_PYCACHE"
 CHUNK = 1 << 20
 
 
@@ -143,7 +157,61 @@ def published_record(wheel_path, filename):
     return out
 
 
-def prove(dist_name, version, get=fetch, fetch_to=download, distribution=metadata.distribution):
+def fresh_pycache(argv=None, execve=os.execve):
+    """Return the bytecode prefix when this process already runs under a fresh one this function made; otherwise
+    re-execute ``[sys.executable] + argv`` (default ``sys.argv``) with ``PYTHONPYCACHEPREFIX`` and :data:`FRESH_MARK` set to
+    a new empty temporary directory. Call it first thing, before the code under proof is imported."""
+    if sys.pycache_prefix and os.environ.get(FRESH_MARK) == sys.pycache_prefix:
+        return sys.pycache_prefix
+    d = tempfile.mkdtemp(prefix="release-proof-pycache-")
+    execve(sys.executable, [sys.executable, *(sys.argv if argv is None else argv)],
+           {**os.environ, "PYTHONPYCACHEPREFIX": d, FRESH_MARK: d})
+    return d                                # only reached when ``execve`` is a stand-in
+
+
+def top_level(published):
+    """{import name: (the RECORD path its spec must resolve to, or None for a namespace package; its top path)} for
+    every top-level package or module the wheel installs."""
+    out = {}
+    for path in published:
+        parts = path.split("/")
+        top = parts[0]
+        if len(parts) > 1:
+            if top.endswith((".dist-info", ".data")) or top in out:
+                continue
+            out[top] = (f"{top}/__init__.py" if f"{top}/__init__.py" in published else None, top)
+        elif top.endswith(".py"):
+            out[top[:-3]] = (top, top)
+        elif top.endswith((".so", ".pyd")):
+            out[top.split(".")[0]] = (top, top)
+    return out
+
+
+def check_imports(dist_name, dist, published, find_spec=importlib.util.find_spec):
+    """{name: origin} when every top-level name the wheel installs imports from the proven install (see (c))."""
+    out = {}
+    for name, (rel, top) in sorted(top_level(published).items()):
+        try:
+            spec = find_spec(name)
+        except (ImportError, ValueError):
+            spec = None
+        if spec is None:
+            raise ReleaseProofError(f"{dist_name}: {name} is not importable here", top)
+        if rel is not None:
+            origin = spec.origin and os.path.realpath(spec.origin)
+            if origin != os.path.realpath(dist.locate_file(rel)):
+                raise ReleaseProofError(f"{dist_name}: {name} imports from {spec.origin}, not the proven install", rel)
+        else:
+            locs = [os.path.realpath(x) for x in (spec.submodule_search_locations or [])]
+            origin = os.path.realpath(dist.locate_file(top))
+            if locs != [origin]:
+                raise ReleaseProofError(f"{dist_name}: namespace {name} searches {locs}, not only the proven install", top)
+        out[name] = origin
+    return out
+
+
+def prove(dist_name, version, get=fetch, fetch_to=download, distribution=metadata.distribution,
+          find_spec=importlib.util.find_spec):
     """The proof that the installed ``dist_name`` is byte-for-byte the wheel PyPI publishes for ``version`` (see the
     module docstring), or raises :class:`ReleaseProofError`."""
     try:
@@ -182,8 +250,11 @@ def prove(dist_name, version, get=fetch, fetch_to=download, distribution=metadat
     extra = sorted(p for p in _record_paths(installed) if p not in published and not generated_by_pip(p, launchers))
     if extra:
         raise ReleaseProofError(f"{dist_name}: {extra[0]} is installed but not in the published wheel", extra[0])
+    imports = check_imports(dist_name, dist, published, find_spec)
     return {"dist": dist_name, "version": version, "wheel": w["filename"], "sha256": w["digests"]["sha256"],
-            "files": len(published), "record": "RECORD equal", "record_equal": True, "first_diff": None}
+            "files": len(published), "record": "RECORD equal", "record_equal": True, "first_diff": None, "imports": imports,
+            "pycache_prefix": sys.pycache_prefix,
+            "pycache_fresh": bool(sys.pycache_prefix) and os.environ.get(FRESH_MARK) == sys.pycache_prefix}
 
 
 def main(argv):

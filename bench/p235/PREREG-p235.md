@@ -38,14 +38,19 @@ unconditionally, never behind a flag.
 bytes. `release_proof.py` is loggetta's helper (`bench/release_proof.py`, loggetta#125), staged byte-identical; its
 sha256 is pinned in `staged.sha256`. For each pin it takes the one published PyPI wheel whose tags are the installed
 `WHEEL` Tag lines, downloads it and checks its digest against PyPI's, then requires every file in the wheel's own
-`RECORD` to be on disk with an equal hash, and nothing installed beyond bytecode and entry-point launchers. A wheel
-with `.data/` entries is refused. Each proof is the last step before its build's first arm, after every install, run
-in that build's import environment: cwd `$W`, `PYTHONPATH=$W/hook`, the arms' python, no `-I`. The receipts carry
-`release_proof.jsonl` and `release_proof_vllm_<build>.jsonl`: per distribution, the wheel filename, its sha256 and
-"RECORD equal".
+`RECORD` to be on disk with an equal hash, and nothing installed beyond bytecode and entry-point launchers. It also
+checks, through `find_spec` in the calling interpreter, that every top-level name the wheel installs imports from
+the proven install, so nothing earlier on `sys.path` can shadow it. A wheel with `.data/` entries is refused.
+
+Each proof is the last step before its build's first arm, after every install. It runs in that build's import
+environment: cwd `$W`, `PYTHONPATH=$W/hook`, the arms' python, no `-I`. The receipts carry `release_proof.jsonl` and
+`release_proof_vllm_<build>.jsonl`. Each line, one per distribution, holds the wheel filename, its sha256, "RECORD
+equal", the import origins and `pycache_fresh`. A proof file whose lines are not all `"pycache_fresh": true`, or not
+one per pin, refuses like the proof itself.
 
 **Bytecode.** Every python the runner starts uses `PYTHONPYCACHEPREFIX=$W/pycache-<nonce>`, created empty per run and
-recorded in `versions.txt`, so no in-tree `.pyc` is loaded. Every install uses `--no-compile`. With the prefix set,
+recorded in `versions.txt`, so no in-tree `.pyc` is loaded. `RELEASE_PROOF_FRESH_PYCACHE` is exported on the same line
+with the same value, which is what lets the proof report `pycache_fresh`. Every install uses `--no-compile`. With the prefix set,
 pip writes its install-time bytecode outside site-packages and lists it in `RECORD` as `../` rows, which the proof
 refuses. Checked at $0 on e4b 0.57.0 and grouped-nf4-gemm 0.50.0: refused with pip's default compile, "RECORD equal"
 with `--no-compile`.

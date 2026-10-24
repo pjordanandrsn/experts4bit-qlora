@@ -43,8 +43,8 @@ NEW_FILES = [LANE / f for f in ("p235_run.sh", "p235_reduce.py", "provenance.py"
                                                                          REPO / "changelog.d" / "p235-registered.md"]
 #: loggetta's bench/release_proof.py, staged byte-identical: its source and sha256 (the ONE constant a new helper
 #: version edits, beside its ONE staged.sha256 line)
-RELEASE_PROOF = {"source": "loggetta#125 at d3d84173",
-                 "sha256": "341dd130b1cf681a86f3fa1aad2b3e1bf9a2e4e6c22388e0e35b5736fc446713"}
+RELEASE_PROOF = {"source": "loggetta#125 at 85d300a9",
+                 "sha256": "199d4f2faa49419090ef57e73fc34a86787ad5dcfe67060e92aaaf88a9bf6a63"}
 #: the top-level import names of the dists the arms import, read from the published wheels (experts4bit-qlora 0.57.0,
 #: grouped-nf4-gemm 0.50.0, vllm 0.32.0 and 0.30.0 x86_64; zip central directories) and from grouped-nf4-gemm's
 #: pyproject py-modules + packages at v0.50.0 and main (the same 43 names): a staged file must not shadow one
@@ -332,6 +332,11 @@ E4B_PROOF = ("(cd $W && PYTHONPATH=$W/hook python $W/release_proof.py experts4bi
              'say "RELEASE PROOF FAIL (e4b/gnf4)"; finish 9; }')
 VLLM_PROOF = ('  (cd $W && PYTHONPATH=$W/hook $W/venv-$VT/bin/python $W/release_proof.py "vllm==${VVER[$VT]}") '
               "> $W/release_proof_vllm_$VT.jsonl 2> logs/release_proof_vllm_$VT.log \\")
+E4B_FRESH = ("proof_fresh $W/release_proof.jsonl 2 || { cat $W/release_proof.jsonl; "
+             'say "RELEASE PROOF FAIL (e4b/gnf4): pycache_fresh is not true"; finish 9; }')
+VLLM_FRESH = ('  [ "${VOK[$VT]}" = 0 ] || proof_fresh $W/release_proof_vllm_$VT.jsonl 1 || { say "RELEASE PROOF FAIL (vllm $VT): '
+              'pycache_fresh is not true -- NO $VT COMPARATOR"; echo "RELEASE PROOF FAIL (vllm $VT ${VVER[$VT]}): pycache_fresh '
+              'not true, its rows are refused" >> summary.txt; VOK[$VT]=0; }')
 INSTALLS = re.compile(r"pip install|python -m venv|\bvllm_install (primary|secondary)\b")
 
 
@@ -345,8 +350,7 @@ def test_the_e4b_proof_is_the_last_step_before_the_first_e4b_arm():
     lines = RUN.splitlines()
     k = lines.index(E4B_PROOF)
     first_e4b = next(i for i, ln in enumerate(lines) if re.match(r"can_run \d+ e4b_\S+ +&& \{ e4b_arm", ln))
-    assert _last_install(lines) < k < first_e4b
-    assert all(ln.startswith("#") or ln.startswith("rc_any=0; rec(){") for ln in lines[k + 1:first_e4b]), lines[k + 1:first_e4b]
+    assert _last_install(lines) < k < first_e4b == k + 2 and lines[k + 1] == E4B_FRESH
     assert not any(INSTALLS.search(ln) for ln in lines[k:first_e4b])
 
 
@@ -359,9 +363,9 @@ def test_each_vllm_proof_is_the_last_step_before_that_builds_arms():
     assert loop == 'for VT in primary secondary; do [ "${VOK[$VT]:-0}" = 1 ] || continue   # no venv: its rows already read SKIPPED'
     fail = lines[k + 1]
     assert fail.lstrip().startswith("|| {") and fail.endswith("VOK[$VT]=0; }") and "finish" not in fail and "return" not in fail
-    assert lines[k + 2] == "done"
+    assert lines[k + 2] == VLLM_FRESH and lines[k + 3] == "done"
     first_vllm = next(i for i, ln in enumerate(lines) if "vllm_arm $VT graph_r1" in ln)
-    assert _last_install(lines) < lines.index(E4B_PROOF) < k < first_vllm == k + 3
+    assert _last_install(lines) < lines.index(E4B_PROOF) < k < first_vllm == k + 4
     assert 'vllm_arm(){ local VT=$1 ARM=$2 B=$3; [ "${VOK[$VT]:-0}" = 1 ]' in RUN       # a refused build's arms skip
 
 
@@ -374,17 +378,45 @@ def test_no_release_proof_runs_isolated_or_behind_a_switch():
     assert not re.search(r"\$\{?P235_[A-Z_]*PROOF", RUN)
 
 
+def _proof_fresh_code():
+    m = re.search(r"""^proof_fresh\(\)\{ python -c '([^']+)' "\$1" "\$2"; \}$""", RUN, re.M)
+    assert m, "proof_fresh is not defined as registered"
+    return m.group(1)
+
+
+@pytest.mark.parametrize("rows,n,ok", [
+    ([{"dist": "a", "pycache_fresh": True}, {"dist": "b", "pycache_fresh": True}], 2, True),
+    ([{"dist": "a", "pycache_fresh": True}, {"dist": "b", "pycache_fresh": False}], 2, False),
+    ([{"dist": "a", "pycache_fresh": True}, {"dist": "b"}], 2, False),
+    ([{"dist": "a", "pycache_fresh": "true"}], 1, False),
+    ([{"dist": "a", "pycache_fresh": True}], 2, False),
+    ([], 1, False),
+    (None, 1, False),
+])
+def test_proof_fresh_reads_every_line_and_the_count(tmp_path, rows, n, ok):
+    """The runner's own proof_fresh snippet, run: every line pycache_fresh true and one line per pin, else non-zero
+    (a missing or empty proof file, a missing key, a false or a string fails)."""
+    f = tmp_path / "proof.jsonl"
+    if rows is not None:
+        f.write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in rows), encoding="utf-8")
+    r = subprocess.run([sys.executable, "-c", _proof_fresh_code(), str(f), str(n)], capture_output=True, text=True)
+    assert (r.returncode == 0) == ok, (r.returncode, r.stderr[-300:])
+
+
 def test_the_pycache_prefix_is_fresh_exported_before_any_python_and_never_unset():
     lines = RUN.splitlines()
-    k = lines.index('mkdir "$W/pycache-$NONCE" && export PYTHONPYCACHEPREFIX=$W/pycache-$NONCE || '
-                    '{ say "refusing: no pycache prefix"; finish 78; }')
+    k = lines.index('mkdir "$W/pycache-$NONCE" && export PYTHONPYCACHEPREFIX=$W/pycache-$NONCE '
+                    'RELEASE_PROOF_FRESH_PYCACHE=$W/pycache-$NONCE || { say "refusing: no pycache prefix"; finish 78; }')
+    m = re.fullmatch(r'mkdir "(\S+)" && export PYTHONPYCACHEPREFIX=(\S+) RELEASE_PROOF_FRESH_PYCACHE=(\S+) \|\| .*', lines[k])
+    assert m and m.group(1) == m.group(2) == m.group(3)              # one value: the proof's pycache_fresh can be true
     assert lines[k - 1] == '[ -e "$W/pycache-$NONCE" ] && { say "refusing: $W/pycache-$NONCE exists"; finish 78; }'
     assert lines[k + 1] == 'echo "PYTHONPYCACHEPREFIX $PYTHONPYCACHEPREFIX" >> $W/versions.txt'
     first_python = next(i for i, ln in enumerate(lines) if re.search(r"\bpython3?\b|/pip\b", ln)
                         and not ln.lstrip().startswith("#"))
     assert k < first_python
     assert sum("PYTHONPYCACHEPREFIX" in ln for ln in lines) == 2
-    assert not re.search(r"unset[^\n]*PYTHONPYCACHEPREFIX|env -i|env -u|-u PYTHONPYCACHEPREFIX", RUN)
+    assert not re.search(r"unset[^\n]*(PYTHONPYCACHEPREFIX|RELEASE_PROOF_FRESH_PYCACHE)|env -i|env -u|-u PYTHONPYCACHEPREFIX", RUN)
+    assert sum("RELEASE_PROOF_FRESH_PYCACHE" in ln for ln in lines) == 1
     for ln in lines:                                       # every install leaves its .pyc out of the wheel's RECORD
         if re.search(r"pip install", ln):
             assert "--no-compile" in ln, ln
@@ -410,7 +442,7 @@ RUN_EDITS = [
     "VLLM_PRIMARY=0.32.0; VLLM_SECONDARY=0.30.0   #",
     "# every python this runner starts writes and reads bytecode under a fresh, empty prefix",
     '[ -e "$W/pycache-$NONCE" ] && { say "refusing: $W/pycache-$NONCE exists"; finish 78; }',
-    'mkdir "$W/pycache-$NONCE" && export PYTHONPYCACHEPREFIX=$W/pycache-$NONCE',
+    'mkdir "$W/pycache-$NONCE" && export PYTHONPYCACHEPREFIX=$W/pycache-$NONCE RELEASE_PROOF_FRESH_PYCACHE=$W/pycache-$NONCE ',
     'echo "PYTHONPYCACHEPREFIX $PYTHONPYCACHEPREFIX" >> $W/versions.txt',
     "for f in step_decomp.py k8_bake.py calib.json hook/usercustomize.py p37_vllm.py p58_reduce.py provenance.py "
     "release_proof.py staged.sha256; do",
@@ -441,12 +473,16 @@ RUN_EDITS = [
     '|| { cat logs/provenance_vllm_$TAG.log; say "PROVENANCE FAIL (vllm $TAG)',
     '{ echo "P58 arm=e4b_b${B}_$TAG gnf4=0.51.0 at=',
     "# ---- release proofs: the installed bytes ARE the published wheels', read as the arms import them",
-    "# PYTHONPATH=$W/hook, the arms' python, no -I), after every install and right before that build's first arm",
+    "# PYTHONPATH=$W/hook, the arms' python, no -I), after every install and right before that build's first arm;",
     E4B_PROOF,
     'for VT in primary secondary; do [ "${VOK[$VT]:-0}" = 1 ] || continue',
     VLLM_PROOF.strip(),
     '|| { cat logs/release_proof_vllm_$VT.log; say "RELEASE PROOF FAIL (vllm $VT)',
     "done",
+    "# file whose lines are not all pycache_fresh true (or not one per pin) refuses like the proof itself",
+    "proof_fresh(){ python -c 'import json, sys;",
+    E4B_FRESH,
+    VLLM_FRESH.strip(),
 ]
 
 
@@ -663,7 +699,10 @@ def test_the_prereg_states_the_pins_bars_sequencing_and_limits():
               "its sha256 is pinned in `staged.sha256`", "`release_proof.jsonl` and `release_proof_vllm_<build>.jsonl`",
               '"RECORD equal"', "cwd `$W`, `PYTHONPATH=$W/hook`, the arms' python, no `-I`",
               "`PYTHONPYCACHEPREFIX=$W/pycache-<nonce>`", "Every install uses `--no-compile`.",
-              "as staged, the release proof refuses both vLLM builds", "Neither wheel has `.data/` entries."):
+              "as staged, the release proof refuses both vLLM builds", "Neither wheel has `.data/` entries.",
+              "every top-level name the wheel installs imports from the proven install", "`pycache_fresh`",
+              'not all `"pycache_fresh": true`, or not one per pin, refuses like the proof itself',
+              "`RELEASE_PROOF_FRESH_PYCACHE` is exported on the same line with the same value"):
         assert s in FLAT, s
     assert "GNF4_SHA" not in PREREG and "placeholder" not in PREREG.lower()
 

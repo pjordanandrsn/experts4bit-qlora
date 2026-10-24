@@ -20,7 +20,7 @@ export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOK
 export PYTHONPATH=$W/hook E4B_INT4_GPTQ_DEVICE=cuda E4B_INT4_HESSIAN_BUDGET_GB=24 E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64
 # every python this runner starts writes and reads bytecode under a fresh, empty prefix: no in-tree .pyc is ever loaded
 [ -e "$W/pycache-$NONCE" ] && { say "refusing: $W/pycache-$NONCE exists"; finish 78; }
-mkdir "$W/pycache-$NONCE" && export PYTHONPYCACHEPREFIX=$W/pycache-$NONCE || { say "refusing: no pycache prefix"; finish 78; }
+mkdir "$W/pycache-$NONCE" && export PYTHONPYCACHEPREFIX=$W/pycache-$NONCE RELEASE_PROOF_FRESH_PYCACHE=$W/pycache-$NONCE || { say "refusing: no pycache prefix"; finish 78; }
 echo "PYTHONPYCACHEPREFIX $PYTHONPYCACHEPREFIX" >> $W/versions.txt
 MID=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39; export E4B_MODEL_ID=$MID
 GPTQ_MID=Qwen/Qwen3-30B-A3B-GPTQ-Int4; GPTQ_REV=9b534e4318b7ebc3c961a839f13eb18b1833f441   # P37's comparator checkpoint, unchanged
@@ -158,8 +158,11 @@ vllm_arm(){ local VT=$1 ARM=$2 B=$3; [ "${VOK[$VT]:-0}" = 1 ] || { echo "vllm-$V
 # ---- arms, in the pre-registered order: e4b control -> e4b int4 (first draws) -> both vLLM primaries -> repeats -> eager pairing
 rc_any=0; rec(){ local r=$1; [ "$r" = 0 ] || [ "$rc_any" != 0 ] || rc_any=$r; }
 # ---- release proofs: the installed bytes ARE the published wheels', read as the arms import them (cwd $W,
-# PYTHONPATH=$W/hook, the arms' python, no -I), after every install and right before that build's first arm
+# PYTHONPATH=$W/hook, the arms' python, no -I), after every install and right before that build's first arm; a proof
+# file whose lines are not all pycache_fresh true (or not one per pin) refuses like the proof itself
+proof_fresh(){ python -c 'import json, sys; rows = [json.loads(x) for x in open(sys.argv[1]) if x.strip()]; sys.exit(0 if len(rows) == int(sys.argv[2]) and all(r.get("pycache_fresh") is True for r in rows) else 1)' "$1" "$2"; }
 (cd $W && PYTHONPATH=$W/hook python $W/release_proof.py experts4bit-qlora==0.58.0 grouped-nf4-gemm==0.51.0) > $W/release_proof.jsonl 2> logs/release_proof_e4b.log || { cat logs/release_proof_e4b.log; say "RELEASE PROOF FAIL (e4b/gnf4)"; finish 9; }
+proof_fresh $W/release_proof.jsonl 2 || { cat $W/release_proof.jsonl; say "RELEASE PROOF FAIL (e4b/gnf4): pycache_fresh is not true"; finish 9; }
 can_run 900 e4b_nf4_r1_b1     && { e4b_arm nf4_r1  1  0 --no-fuse-qkv graph; rec $?; }
 can_run 900 e4b_nf4_r1_b16    && { e4b_arm nf4_r1  16 0 --no-fuse-qkv graph; rec $?; }
 can_run 900 e4b_int4_r1_b1    && { e4b_arm int4_r1 1  1 --fuse-qkv    graph; rec $?; }   # P54's licensed B=1 lever: fused q/k/v
@@ -167,6 +170,7 @@ can_run 900 e4b_int4_r1_b16   && { e4b_arm int4_r1 16 1 --no-fuse-qkv graph; rec
 for VT in primary secondary; do [ "${VOK[$VT]:-0}" = 1 ] || continue   # no venv: its rows already read SKIPPED
   (cd $W && PYTHONPATH=$W/hook $W/venv-$VT/bin/python $W/release_proof.py "vllm==${VVER[$VT]}") > $W/release_proof_vllm_$VT.jsonl 2> logs/release_proof_vllm_$VT.log \
     || { cat logs/release_proof_vllm_$VT.log; say "RELEASE PROOF FAIL (vllm $VT) -- e4b arms still run; NO $VT COMPARATOR"; echo "RELEASE PROOF FAIL (vllm $VT ${VVER[$VT]}): its rows are refused" >> summary.txt; VOK[$VT]=0; }
+  [ "${VOK[$VT]}" = 0 ] || proof_fresh $W/release_proof_vllm_$VT.jsonl 1 || { say "RELEASE PROOF FAIL (vllm $VT): pycache_fresh is not true -- NO $VT COMPARATOR"; echo "RELEASE PROOF FAIL (vllm $VT ${VVER[$VT]}): pycache_fresh not true, its rows are refused" >> summary.txt; VOK[$VT]=0; }
 done
 for VT in primary secondary; do for B in 1 16; do can_run 900 vllm_${VT}_graph_r1_b$B && { vllm_arm $VT graph_r1 $B; rec $?; }; done; done
 can_run 900 e4b_nf4_r2_b1     && { e4b_arm nf4_r2  1  0 --no-fuse-qkv graph; rec $?; }
