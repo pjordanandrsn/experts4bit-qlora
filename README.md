@@ -136,7 +136,7 @@ The offload row uses a different training setup.
   `NF4_QLORA_PAD_BUCKETS=1`, `E4B_CHUNKED_LM_LOSS=256`) and grouped-nf4-gemm 0.51.0: two RTX 4090s on two machines
   trained all 60 steps with no out-of-memory error, 586 MiB of the card's total left at the fullest step
   (`e4b.train.4090-fit.field.4090.2026-10-24`). FIT covers that fixture only (Qwen3-30B-A3B, sequence 2048, micro-batch
-  2 x accumulation 4, r 16); the levers stay opt-in, and where memory is not short they cost step time.
+  2 x accumulation 4, r 16); the levers stay opt-in, and no speed is claimed.
 - **A served adapter's base is verified, not reported unverified.** The paged server compares each qfp-v1 fingerprint
   a `backend-adapter/2` manifest records with the base it serves: the attention projections as loaded, and the expert
   stacks read from the served arena. A match serves with no opt-in; an expert mismatch is refusal 12
