@@ -1445,6 +1445,50 @@ def _routed_topk(cfg) -> int:
     return v
 
 
+HOT_ROWS_ENV = "E4B_PAGED_HOT_ROWS"
+
+
+def hot_rows_floor(manifest: dict, n_layers: int, n_experts: int, top_k: int, chunk_tokens: int, max_seqs: int) -> dict:
+    """``E4B_PAGED_HOT_ROWS``'s hard floor at this placement (``nvme_experts.enable_nvme_residency``, "Hard floor"): the
+    cold tier's pinned rows must hold every UNIQUE NVMe-tier expert one forward routes, because the cold path fetches
+    them in one ``ColdTier.ensure`` request and protects each slot from eviction; fewer rows raise mid-request. VRAM-hot
+    experts never reach the tier, and neither do DRAM experts (computed in place, or moved to the GPU from the DRAM
+    stacks, never through the tier: ``hybrid._dram_contrib_inner`` and ``_dram_on_gpu``).
+
+    One forward carries at most ``F = max(chunk_tokens, max_seqs)`` tokens at this server: a prefill chunk is its own
+    forward (``paged_runner.run_prefill``), and decode at a tiered placement is eager, one token per live sequence
+    (forced graphs, and so speculative decode and lookahead, are refused at ``solver``). So a layer's request is at most
+    ``min(F * top_k, its NVMe-tier experts)``, and the floor is the largest of those over the layers. At ``all-vram``
+    no expert is on NVMe and the floor is 0. ``manifest`` is :func:`~.engines.placement.solve_placement`'s, before
+    its layers are renumbered to arena ids (layers ``0..n_layers-1``).
+
+    The floor assumes the tier runs WITHOUT prefetch, as :func:`build_engine` builds it (``enable_hybrid_tier``'s
+    ``prefetch`` at its default, off). With prefetch on, the next layer's speculative rows share the same global
+    slots, so one forward could need both layers' rows and this floor would under-count."""
+    tokens = max(int(chunk_tokens), int(max_seqs))
+    nvme = [0] * int(n_layers)
+    for lay, _e in manifest["tiers"].get("nvme") or []:
+        nvme[int(lay)] += 1
+    worst = max(range(len(nvme)), key=lambda i: nvme[i]) if nvme else None
+    worst_n = nvme[worst] if worst is not None else 0
+    return {"floor": min(tokens * int(top_k), worst_n), "tokens_per_forward": tokens, "chunk_tokens": int(chunk_tokens),
+            "max_seqs": int(max_seqs), "top_k": int(top_k), "n_experts": int(n_experts), "worst_layer": worst,
+            "worst_layer_nvme_experts": worst_n}
+
+
+def hot_rows_refusal(hot_rows: int, rec: dict) -> str | None:
+    """None when ``hot_rows`` meets :func:`hot_rows_floor`'s floor, else the startup refusal, naming the knob, the floor
+    and every input to it. No silent raise: the rows are pinned host RAM, the operator's choice."""
+    if int(hot_rows) >= rec["floor"]:
+        return None
+    return (f"{HOT_ROWS_ENV}={hot_rows} is below its floor {rec['floor']} at this placement: one forward carries up to "
+            f"F = max(E4B_PAGED_CHUNK_TOKENS {rec['chunk_tokens']}, max_seqs {rec['max_seqs']}) = {rec['tokens_per_forward']} "
+            f"tokens x top_k {rec['top_k']} = {rec['tokens_per_forward'] * rec['top_k']} routed rows, and MoE layer "
+            f"{rec['worst_layer']} has {rec['worst_layer_nvme_experts']} of its {rec['n_experts']} experts on the NVMe tier, "
+            f"so a forward can ask the cold tier for {rec['floor']} unique rows at once and would fail mid-request. Set "
+            f"{HOT_ROWS_ENV} >= {rec['floor']} (each row is pinned host RAM), or lower E4B_PAGED_CHUNK_TOKENS.")
+
+
 def _kv_geometry(cfg):
     """step_decomp._kv_geometry: (kv heads, head_dim), scalars or per-layer lists.
 
@@ -2064,6 +2108,12 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         pairs = sorted(tuple(pp) for t in ("vram", "dram", "nvme") for pp in man["tiers"][t])
         man["tiers"] = {"vram": [list(pp) for pp in pairs], "dram": [], "nvme": []}
         man["masses"] = {"vram_frac": 1.0, "dram_frac": 0.0, "nvme_frac": 0.0}
+    # the cold tier's hard floor, refused at startup by name rather than mid-request (P233 shake-1: solver at the
+    # defaults asked for 95 unique rows of hot_rows 64); before the tier pins anything, on the solver's 0..L-1 layers
+    hot_floor = hot_rows_floor(man, L, E, k, cfg.chunk_tokens, cfg.max_seqs)
+    why = hot_rows_refusal(cfg.hot_rows, hot_floor)
+    if why:
+        raise ValueError(why)
     # the arena and the placement are keyed by the arena's layer ids; the solver numbered its layers 0..L-1
     ids = arena_layer_ids(cfg.arena, L)
     if ids != list(range(L)):
@@ -2168,6 +2218,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
             "graph_status": graph_status, "spec": spec_info, "grouping": grouping, "moe_residual": moe_resid, "prefill_graph": cfg.prefill_graph, "levers_env": {k_: env(k_) for k_ in LEVER_ENV if env(k_) is not None}}
     info.update(levers)
     info.update(fusions)
+    info["hot_rows_floor"] = {**hot_floor, "hot_rows": cfg.hot_rows}
     info["fusion_modes"] = fusion_report.get("modes")
     info["fusion_sources"] = fusion_report.get("sources")
     info["fusion_report"] = fusion_report.get("folds")
