@@ -2162,11 +2162,16 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         raise RuntimeError("int4 attention requested but no projection is Int4Linear")
     if 0 < int4_layers < L:
         log(f"WARNING int4 expert stores on {int4_layers}/{L} MoE layers -- a partial stack; see /health")
-    # E4B_NF4_SMALLM_BW (opt-in; serving roadmap lever B): 2..8-token calls on the NF4 collapse take K33 per row.
-    # Resolved after the levers built any int4 store and before any graph is captured; refused here where it cannot
-    # engage, never left to route silently
+    # E4B_NF4_SMALLM_BW (serving roadmap lever B): calls of 2..8 tokens on the NF4 collapse take K33 per row. Set to 1 on
+    # any family; unset, the per-family default (lane P234: mixtral at 2..4 tokens, buckets 2 and 4); 0 is off.
+    # Resolved after the levers built any int4 store and before any graph is captured; an explicit 1 is refused here
+    # where it cannot engage, and the default stays off there, never left to route silently
     from .engines.hot_residency import resolve_nf4_smallm_bw
-    nf4_smallm_bw = resolve_nf4_smallm_bw(mods, cfg.device)
+    _mc = model_config if model_config is not None else getattr(model, "config", None)
+    _tc = _mc.get_text_config() if hasattr(_mc, "get_text_config") else _mc
+    nf4_smallm_bw = resolve_nf4_smallm_bw(mods, cfg.device, model_type=(
+        getattr(model_config, "model_type", None) or getattr(getattr(model, "config", None), "model_type", None)),
+        routing=(getattr(_tc, "num_local_experts", None), getattr(_tc, "num_experts_per_tok", None)))
 
     hkv, hd = _kv_geometry(model.config)
     spec_k = cfg.spec_k if cfg.spec != "off" else 0

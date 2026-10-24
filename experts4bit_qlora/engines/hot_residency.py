@@ -681,7 +681,8 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     the GEMV instead of the kernel it gates (lane P87). K21's opt-in does the same on the MXFP4 store, and K25's
     (``E4B_NF4_GROUPED_SMALLM=1``) on the NF4 store.
 
-    ``E4B_NF4_SMALLM_BW=1`` (opt-in) goes the other way on the NF4 store: a call of 2..8 tokens takes singleton groups
+    ``E4B_NF4_SMALLM_BW`` (``1`` on any family; unset, the per-family default) goes the other way on the NF4 store: a
+    routed call of 2..8 tokens takes singleton groups
     like T == 1, with or without :data:`DEVICE_GROUPING`, so it reaches K33's bandwidth GEMV (:func:`_nf4_smallm_bw_env`).
 
     A T > 1 call that would take HOST grouping on a uniform-int4 store -- every prefill chunk with
@@ -722,27 +723,67 @@ def _nf4_t1_device_grouping_env() -> bool:
 #: The widest step ``E4B_NF4_SMALLM_BW`` routes, in tokens: the serving roadmap's small-M regime (lever B, 2 <= T <= 8).
 NF4_SMALLM_BW_MAX_T = 8
 
+#: ``E4B_NF4_SMALLM_BW``'s per-family default when it is UNSET: the widest call, in tokens, it routes on that family's NF4
+#: store. Lane P234 (``bench/p234/RESULTS-p234.md``, e4b#2120) read Mixtral-8x7B on one RTX 5090 LICENSED at buckets 2
+#: and 4 (2.12452x at two requests, 1.76481x at four, quality within P110's bars at group 4); calls of 5 to 8 tokens
+#: (bucket 8) stay opt-in. A family not listed keeps the switch off unless it is set to ``1``.
+NF4_SMALLM_BW_DEFAULT_FAMILIES = {"mixtral": 4}
+
+#: The part P234 read, as (compute capability, SM count): the RTX 5090 (sm_120, 170 SMs). The default is the READ's
+#: scope, not K33's (which engages on any part of 160 or more SMs): every other part keeps the switch off unless it is
+#: set to ``1``, until a read of its own.
+NF4_SMALLM_BW_DEFAULT_PART = ((12, 0), 170)
+
+#: The expert projections P234 read, as (N, K): Mixtral-8x7B's gate_up (28672, 4096) and down (4096, 14336). The
+#: default routes only a model whose every expert projection is one of these (same-shape checkpoints inherit it unread);
+#: any other shape keeps the switch off unless it is set to ``1``, even where K33 engages.
+NF4_SMALLM_BW_DEFAULT_SHAPES = frozenset({(28672, 4096), (4096, 14336)})
+
+#: The routing P234 read, as (experts per layer, experts per token): Mixtral-8x7B's 8 experts, top-2. The default routes
+#: only a model whose config names exactly this routing; any other, or one the config does not name, keeps it off.
+NF4_SMALLM_BW_DEFAULT_ROUTING = (8, 2)
+
+#: The widest call the DEFAULT routes in this process (0: off). :func:`resolve_nf4_smallm_bw` sets it at engine build
+#: from :data:`NF4_SMALLM_BW_DEFAULT_FAMILIES`, only when the switch is unset and every check an explicit ``1`` makes
+#: would pass; an unresolved process routes nothing by default.
+_NF4_SMALLM_BW_DEFAULT_MAX = [0]
+
+
+def _nf4_smallm_bw_raw():
+    """``E4B_NF4_SMALLM_BW`` as set: ``None`` when unset or empty (the per-family default applies), else ``"0"`` or
+    ``"1"``. Anything else is refused."""
+    v = os.environ.get("E4B_NF4_SMALLM_BW", "").strip() or None
+    if v is not None and v not in ("0", "1"):
+        raise ValueError(f"E4B_NF4_SMALLM_BW={v!r}: expected '0' or '1'")
+    return v
+
 
 def _nf4_smallm_bw_env() -> bool:
-    """``E4B_NF4_SMALLM_BW=1`` (opt-in; off by default, also when unset): on the NF4 store's all-resident collapse, a
+    """``E4B_NF4_SMALLM_BW=1`` (explicit opt-in on every family; unset is the per-family default,
+    :data:`NF4_SMALLM_BW_DEFAULT_FAMILIES`, and ``0`` is off): on the NF4 store's all-resident collapse, a
     call of 2 to :data:`NF4_SMALLM_BW_MAX_T` tokens takes singleton groups (every (token, slot) row its own group), as
     T == 1 does, instead of the device tile table and K25. grouped-nf4-gemm's ``gemm_4bit_grouped`` serves every
     singleton call through K33's bandwidth GEMV where :func:`resolve_nf4_smallm_bw` found it engages, so each row is
     computed as it is at T == 1: K33 reads one row per program, and its result never depends on the row count. Rows that
     share an expert each read its weights (no reuse across rows); what that costs against K25 is a registered read's
     to say, and none is claimed here. The tokens differ from K25's (a different function within the tolerance
-    contract), so a default needs a quality bar. Anything other than ``0``/``1`` is refused."""
-    v = os.environ.get("E4B_NF4_SMALLM_BW", "0").strip() or "0"
-    if v not in ("0", "1"):
-        raise ValueError(f"E4B_NF4_SMALLM_BW={v!r}: expected '0' or '1'")
-    return v == "1"
+    contract), so a default needs a quality bar: P234's, for Mixtral at buckets 2 and 4. Anything other than ``0``/``1``
+    is refused. Returns whether the switch is set to ``1`` (the default is read by :func:`_nf4_smallm_bw_takes`)."""
+    return _nf4_smallm_bw_raw() == "1"
 
 
 def _nf4_smallm_bw_takes(T: int, int4_stores) -> bool:
-    """Whether ``E4B_NF4_SMALLM_BW`` routes a call of ``T`` tokens. It names the NF4 store's rows only: on a layer with an
-    int4 or MXFP4 store, and beside ``E4B_NF4_GROUPED_SMALLM=1`` (which names the same rows for K25), it is refused,
-    never dropped."""
-    if not 1 < T <= NF4_SMALLM_BW_MAX_T or not _nf4_smallm_bw_env():
+    """Whether ``E4B_NF4_SMALLM_BW`` routes a call of ``T`` tokens. Set to ``1``, it names the NF4 store's rows only: on a
+    layer with an int4 or MXFP4 store, and beside ``E4B_NF4_GROUPED_SMALLM=1`` (which names the same rows for K25), it is
+    refused, never dropped. Unset, the per-family default resolved at build (:data:`_NF4_SMALLM_BW_DEFAULT_MAX`) routes
+    2 to that many tokens, never on an int4 or MXFP4 store and never beside ``E4B_NF4_GROUPED_SMALLM=1``, and never
+    refuses: a default must not break a build. ``0`` routes nothing."""
+    if not 1 < T <= NF4_SMALLM_BW_MAX_T:
+        return False
+    raw = _nf4_smallm_bw_raw()
+    if raw is None:
+        return T <= _NF4_SMALLM_BW_DEFAULT_MAX[0] and int4_stores is None and _k25_mode_env() != "1"
+    if raw != "1":
         return False
     if int4_stores is not None:
         raise RuntimeError("E4B_NF4_SMALLM_BW=1 routes the NF4 store's rows to K33's bandwidth GEMV, but this layer "
@@ -769,22 +810,84 @@ _NF4_SMALLM_BW_RESOLVED = [False]
 NF4_SMALLM_BW_SEEN: dict = {}
 
 
-def resolve_nf4_smallm_bw(modules, device) -> dict:
+def resolve_nf4_smallm_bw(modules, device, model_type=None, routing=None) -> dict:
     """``E4B_NF4_SMALLM_BW`` resolved once at engine build, after the levers and before any graph is captured, so a knob
     that cannot engage fails at startup, never as a silent route. ``modules`` are the MoE modules carrying
-    ``_hot_residency``. Returns ``{"env": the raw value or None, "on": bool, "max_tokens":`` :data:`NF4_SMALLM_BW_MAX_T`
-    ``, "why": the reason when off, "shapes": every expert projection's (N, K) when on}``.
+    ``_hot_residency``; ``model_type`` names the family for the default. Returns ``{"env": the raw value or None, "on":
+    bool, "max_tokens": the widest call routed (8 set to 1; the family's default unset, 0 when no default), "why": the
+    reason when off, "source": "explicit" | "default-allowlisted" | "default-off: <why>", "shapes": every expert
+    projection's (N, K) when on}``.
+
+    **Unset:** the per-family default (:data:`NF4_SMALLM_BW_DEFAULT_FAMILIES`, lane P234): on where ``model_type`` is
+    listed, ``routing`` (experts per layer, experts per token, from the model's config) is the read's
+    (:data:`NF4_SMALLM_BW_DEFAULT_ROUTING`), the device is the part P234 read (:data:`NF4_SMALLM_BW_DEFAULT_PART`), every
+    check below passes and every expert projection is a shape P234 read (:data:`NF4_SMALLM_BW_DEFAULT_SHAPES`), routing 2
+    to the listed token count; otherwise off, naming what it saw. Never a refusal. ``0`` is off.
 
     An explicit ``1`` is refused beside ``E4B_NF4_GROUPED_SMALLM=1``, on any layer with an int4 or MXFP4 store, on any
     layer that is not on the all-resident collapse (the only forward that reads the knob), on a kernel package without
     K33, and at any expert shape where K33 does not engage on this device (``GNF4_GEMV_BW``'s rule: there the singleton
     route would run dot-pad or the scalar GEMV). Only a resolution that passes lets the forward route the knob
-    (:data:`_NF4_SMALLM_BW_RESOLVED`); an unresolved process refuses it at the first 2..8-token call."""
-    raw = os.environ.get("E4B_NF4_SMALLM_BW", "").strip() or None
-    base = {"env": raw, "on": False, "max_tokens": NF4_SMALLM_BW_MAX_T}
+    (:data:`_NF4_SMALLM_BW_RESOLVED`); an unresolved process refuses an explicit ``1`` at the first 2..8-token call,
+    and routes nothing by default."""
+    raw = _nf4_smallm_bw_raw()
     _NF4_SMALLM_BW_RESOLVED[0] = False    # a refusal below leaves the knob unservable in this process
-    if not _nf4_smallm_bw_env():
-        return {**base, "why": "opt-in: E4B_NF4_SMALLM_BW is not 1"}
+    _NF4_SMALLM_BW_DEFAULT_MAX[0] = 0     # and the default unrouted
+    if raw is None:
+        want = NF4_SMALLM_BW_DEFAULT_FAMILIES.get(model_type)
+        base = {"env": None, "on": False, "max_tokens": want or 0}
+        if want is None:
+            why = f"no read licenses model_type {model_type!r}"
+            return {**base, "why": why, "source": f"default-off: {why}"}
+        seen = tuple(routing) if routing is not None else (None, None)
+        if seen != NF4_SMALLM_BW_DEFAULT_ROUTING:
+            why = (f"routing (experts {seen[0]}, top-{seen[1]}) not read by P234 (read: experts "
+                   f"{NF4_SMALLM_BW_DEFAULT_ROUTING[0]}, top-{NF4_SMALLM_BW_DEFAULT_ROUTING[1]})")
+            return {**base, "why": why, "source": f"default-off: {why}"}
+        part = _nf4_smallm_bw_part(device)
+        if part != NF4_SMALLM_BW_DEFAULT_PART:
+            why = f"no P234 read on this part ({_part_name(part)}; read on sm_120 at 170 SMs)"
+            return {**base, "why": why, "source": f"default-off: {why}"}
+        try:
+            shapes = _nf4_smallm_bw_servable(modules, device)
+        except RuntimeError as e:                            # the default never refuses: it stays off, with the reason
+            return {**base, "why": str(e), "source": f"default-off: {e}"}
+        unread = sorted({tuple(nk) for nk in shapes} - NF4_SMALLM_BW_DEFAULT_SHAPES)
+        if unread:                                           # the read's shapes, not the kernel's
+            why = (f"expert shapes {unread} not read by P234 (read: "
+                   f"{sorted(NF4_SMALLM_BW_DEFAULT_SHAPES)})")
+            return {**base, "why": why, "source": f"default-off: {why}"}
+        _NF4_SMALLM_BW_DEFAULT_MAX[0] = want
+        return {**base, "on": True, "why": None, "source": "default-allowlisted", "shapes": shapes}
+    base = {"env": raw, "on": False, "max_tokens": NF4_SMALLM_BW_MAX_T, "source": "explicit"}
+    if raw != "1":
+        return {**base, "why": "E4B_NF4_SMALLM_BW=0"}
+    shapes = _nf4_smallm_bw_servable(modules, device)
+    _NF4_SMALLM_BW_RESOLVED[0] = True
+    return {**base, "on": True, "why": None, "shapes": shapes}
+
+
+def _nf4_smallm_bw_part(device):
+    """``device``'s (compute capability, SM count), or None off CUDA and on a ROCm build (whose capability is a gfx
+    number, not an sm number)."""
+    try:
+        dev = torch.device(device)
+    except (RuntimeError, TypeError):
+        return None
+    if dev.type != "cuda" or torch.version.hip or not torch.cuda.is_available():
+        return None
+    p = torch.cuda.get_device_properties(dev)
+    return (p.major, p.minor), p.multi_processor_count
+
+
+def _part_name(part) -> str:
+    return "no CUDA device" if part is None else f"sm_{part[0][0]}{part[0][1]} at {part[1]} SMs"
+
+
+def _nf4_smallm_bw_servable(modules, device) -> list:
+    """Every check :func:`resolve_nf4_smallm_bw` makes before the switch may route, raising the first failure by name;
+    returns the expert projections' (N, K) when all pass. An explicit ``1`` refuses on the failure; the default stays
+    off with it."""
     if _k25_mode_env() == "1":
         raise RuntimeError("E4B_NF4_SMALLM_BW=1 and E4B_NF4_GROUPED_SMALLM=1 both name the rows of "
                            f"2..{NF4_SMALLM_BW_MAX_T} tokens (K33 and K25): unset one of them")
@@ -814,8 +917,7 @@ def resolve_nf4_smallm_bw(modules, device) -> dict:
         raise RuntimeError(f"E4B_NF4_SMALLM_BW=1: K33's bandwidth GEMV does not engage at (N, K) {off} on this device "
                            f"(GNF4_GEMV_BW={os.environ.get('GNF4_GEMV_BW') or 'auto'}), so the singleton route would "
                            "run dot-pad or the scalar GEMV there: unset E4B_NF4_SMALLM_BW, or set GNF4_GEMV_BW=1")
-    _NF4_SMALLM_BW_RESOLVED[0] = True
-    return {**base, "on": True, "why": None, "shapes": [list(nk) for nk in shapes]}
+    return [list(nk) for nk in shapes]
 
 
 def _decode_a16_default() -> bool:

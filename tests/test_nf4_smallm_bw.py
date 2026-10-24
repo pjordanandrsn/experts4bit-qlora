@@ -163,16 +163,20 @@ def engages(monkeypatch):
 
 
 def test_resolve_reports_the_knob_off_without_reading_anything(monkeypatch):
+    """Unset with no family the default lists (here none at all), and set to 0: off, read from nothing."""
     r = hr.resolve_nf4_smallm_bw([], "cpu")
-    assert r == {"env": None, "on": False, "max_tokens": 8, "why": "opt-in: E4B_NF4_SMALLM_BW is not 1"}
+    assert r == {"env": None, "on": False, "max_tokens": 0, "why": "no read licenses model_type None",
+                 "source": "default-off: no read licenses model_type None"}
     monkeypatch.setenv("E4B_NF4_SMALLM_BW", "0")
-    assert hr.resolve_nf4_smallm_bw([], "cpu")["env"] == "0"
+    assert hr.resolve_nf4_smallm_bw([], "cpu") == {"env": "0", "on": False, "max_tokens": 8, "source": "explicit",
+                                                   "why": "E4B_NF4_SMALLM_BW=0"}
 
 
 def test_resolve_on_names_every_expert_shape_k33_engages_at(monkeypatch, engages):
     monkeypatch.setenv("E4B_NF4_SMALLM_BW", "1")
     r = hr.resolve_nf4_smallm_bw(_mods(), "cpu")
-    assert r == {"env": "1", "on": True, "max_tokens": 8, "why": None, "shapes": [[K1, INTER], [2 * INTER, K1]]}
+    assert r == {"env": "1", "on": True, "max_tokens": 8, "why": None, "source": "explicit",
+                 "shapes": [[K1, INTER], [2 * INTER, K1]]}
     assert sorted(set(engages)) == [(K1, INTER, "cpu"), (2 * INTER, K1, "cpu")]
 
 

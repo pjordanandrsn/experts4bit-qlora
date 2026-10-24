@@ -407,15 +407,26 @@ RTX 5090 at a 400 W limit, each the smaller of two ABBA pairs, `e4b.serve.p134.g
 the smaller of two ABBA pairs, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`). The shapes are licensed, not the
 families. Every other shape, and every other GPU below 160 SMs, keeps the previous route.
 
-**The same GEMV at 2 to 8 requests (`E4B_NF4_SMALLM_BW=1`; opt-in, not yet read).** Steps of 2 to 8 tokens normally
-leave the GEMV for K25, the grouped small-M GEMM. With this knob, on the NF4 store with every expert resident, those
-steps take one group per (token, slot) row, so each row runs through the bandwidth GEMV exactly as it would at one
-request, bitwise. Rows that share an expert each read its weights. No speed is claimed: a registered read decides
-whether it is faster than K25, and the tokens differ from K25's (within the kernels' tolerance contract), so a default
-would need a quality bar. Startup refuses it, naming the reason, beside `E4B_NF4_GROUPED_SMALLM=1`, with an int4 or
-MXFP4 expert store, on a placement that is not all-resident, and at any expert shape where the bandwidth GEMV does not
-engage on the device. Reported in `nf4_smallm_bw`; which token counts it routed is
-`prefill_routes.seen.moe_nf4_smallm_bw`.
+**The same GEMV at 2 to 8 requests (`E4B_NF4_SMALLM_BW`; the default on Mixtral at 2 to 4 tokens).** Steps of 2 to 8
+tokens otherwise leave the GEMV for K25, the grouped small-M GEMM. On this route, on the NF4 store with every expert
+resident, those steps take one group per (token, slot) row, so each row runs through the bandwidth GEMV exactly as it
+would at one request, bitwise. Rows that share an expert each read its weights. The tokens differ from K25's (within
+the kernels' tolerance contract).
+- **Unset (the default):** Mixtral's NF4 store routes calls of 2 to 4 tokens (buckets 2 and 4), on the RTX 5090 only
+  (sm_120 at 170 SMs). Lane P234 read it on one RTX 5090: two requests decode 2.12452× and four 1.76481× as fast,
+  within P110's quality bars at group 4 (`e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24`). Served tokens at
+  two and four requests change. The default also needs Mixtral-8x7B's expert shapes, (28672, 4096) and (4096, 14336),
+  and its routing, 8 experts with top-2, as read from the model's config; checkpoints with the same shapes and routing
+  (fine-tunes of Mixtral-8x7B) inherit it unread. Every other family, part (including parts where the bandwidth GEMV
+  engages), shape or routing keeps K25 until a read of its own, and `nf4_smallm_bw` names what it saw. Where an
+  explicit `1` would refuse (below), the default resolves off instead, naming the reason, and never stops startup.
+- **`E4B_NF4_SMALLM_BW=0`:** off on every family, the way back.
+- **`E4B_NF4_SMALLM_BW=1`:** 2 to 8 tokens on any family; calls of 5 to 8 tokens are not read for speed. Startup
+  refuses it, naming the reason, beside `E4B_NF4_GROUPED_SMALLM=1`, with an int4 or MXFP4 expert store, on a
+  placement that is not all-resident, and at any expert shape where the bandwidth GEMV does not engage on the device.
+
+Reported in `nf4_smallm_bw` (its `source`: `explicit`, `default-allowlisted`, or `default-off:` with the reason); which
+token counts it routed is `prefill_routes.seen.moe_nf4_smallm_bw`.
 
 **A fixed attention split count (`E4B_ATTN_SPLIT_FIXED=S`, `1` to `32`; opt-in, not yet read).** By default the paged
 FP8 attention decode picks its split count from the batch's row count, so a sequence's attention is reduced in a
