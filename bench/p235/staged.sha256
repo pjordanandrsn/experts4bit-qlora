@@ -1,0 +1,12 @@
+# Names as the BOX sees them after staging (flat in $W, hook/ one level down); the box runs `sha256sum -c` on
+# this file and p235_drive.sh checks it in its stage directory. Every piece but this lane's three and loggetta's
+# release_proof.py is at P58's digest.
+a78d093ba3929c18eea5322071264154371f86e8ea1d9a6367f54e8c50ca01de  p235_run.sh
+028604b2936bb1f114d8b9b152e35dc0099dacdd52a03230d7f1dbdb2003dc16  p235_reduce.py
+843a8960c19fc51d811c73c8cb040b46eacaebf5742218f85811836539cae557  provenance.py
+aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0  release_proof.py
+8252c8e750d3b35e8a9807f38339177e3eecee46a8fdd935fdb641e040194a91  p37_vllm.py
+034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  step_decomp.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+216b0db19dc96bfa8cfc45042f79664377c80844872b18921a5b06e618021c05  hook/usercustomize.py
