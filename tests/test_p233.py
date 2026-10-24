@@ -315,15 +315,46 @@ def test_the_driver_refuses_an_e4b_sha_override(tmp_path):
     assert out.returncode == 78 and "E4B_SHA override" in out.stdout + out.stderr
 
 
+def _clean_or_skip(dirty):
+    """The driver refuses a dirty tree by design, so a dirty local checkout skips the dry run, named. Under CI the
+    checkout is fresh: a dirty one is broken and fails, never a silent skip that drops the dry-run asserts."""
+    if dirty.strip():
+        why = f"the checkout is dirty ({dirty.splitlines()[0][:80]}): the driver refuses a dirty tree by design"
+        if os.environ.get("CI"):
+            pytest.fail(why + " (CI must run on a clean checkout)")
+        pytest.skip(why)
+
+
+def _expect_outcome(call, outcome):
+    """``call()`` must end in exactly ``outcome`` (pytest.fail.Exception or pytest.skip.Exception). pytest.raises(outcome)
+    lets the other outcome escape, so a CI branch that regressed to a skip would be reported SKIPPED and pass CI."""
+    try:
+        call()
+    except (pytest.fail.Exception, pytest.skip.Exception) as e:
+        if not isinstance(e, outcome):
+            pytest.fail(f"expected {outcome.__name__}, got {type(e).__name__}: {e}")
+        return
+    pytest.fail(f"expected {outcome.__name__}, but the call returned")
+
+
+@pytest.mark.parametrize("ci,outcome", [("1", pytest.fail.Exception), ("", pytest.skip.Exception)],
+                         ids=["ci-fails", "local-skips"])
+def test_a_dirty_checkout_fails_under_ci_and_skips_locally(monkeypatch, ci, outcome):
+    if ci:
+        monkeypatch.setenv("CI", ci)
+    else:
+        monkeypatch.delenv("CI", raising=False)
+    _expect_outcome(lambda: _clean_or_skip(" M tests/test_p233.py\n"), outcome)
+    _clean_or_skip("")                                                   # a clean tree neither fails nor skips
+
+
 @pytest.mark.parametrize("run_id", ["p233-5090-1", "p233-5090-r6", "p233-shake-1"])
 def test_the_drivers_dry_run_names_the_launch(tmp_path, run_id):
-    """The driver dry-runs on a clean checkout (a new lane: this checkout is its launch tree). A dirty tree is refused
-    by the driver itself, so here it is a skip, named: the clean run is the CI's and the clean-checkout check's."""
+    """The driver dry-runs on a clean checkout (a new lane: this checkout is its launch tree)."""
     if sys.platform == "win32" or shutil.which("bash") is None:
         pytest.skip("the driver needs a POSIX bash")
-    dirty = subprocess.run(["git", "-C", str(REPO), "status", "--porcelain"], capture_output=True, text=True).stdout
-    if dirty.strip():
-        pytest.skip(f"the checkout is dirty ({dirty.splitlines()[0][:80]}): the driver refuses a dirty tree by design")
+    _clean_or_skip(subprocess.run(["git", "-C", str(REPO), "status", "--porcelain"], capture_output=True,
+                                  text=True).stdout)
     out = _drive(tmp_path, run_id)
     assert out.returncode == 0, out.stdout + out.stderr
     assert f"DRYRUN stage {len(SOURCES) + 1} files -> root@h:/root/p233" in out.stdout and "bash p233_run.sh" in out.stdout
