@@ -13111,6 +13111,56 @@
         "receipts/experts4bit-qlora/2026-10-24/p236-5090-2/ (receipt.json, teardown-proof.json)"
       ],
       "notes": "Pre-registered in #2116 (Amendment 1 #2122: the driver's staging loop; Amendment 2 #2124: the engagement gate accepts K33's split-K mark, after p236-5090-1 read VOID, whose timings are never read), before any reading. Predictions: Q1 held (bitsandbytes took dequant at Mixtral down and OLMoE gate_up at M = 16, custom elsewhere); Q2 (gnf4 faster at M = 1, ratio 1.2 to 3) was wrong; Q3 was wrong as written (its M = 16 clause held, bitsandbytes faster on both Mixtral projections there, but the ratio does not fall with M: only Mixtral's gate_up falls, not at every step, the others are near flat, and bitsandbytes is faster at every M); Q4 in part (16 self-pair bands outside [0.95, 1.05], 3 on Mixtral); Q5 READ. That per-call dispatch dominates the small projections is a reading of their flat-in-M times, untested. The box did not write the SHA256SUMS its registration lists; the committed one is computed over the committed files. Lane cost $0.010 (the reading)."
+    },
+    {
+      "id": "e4b.serve.h2h.vllm-0.32.0.p235.qwen3.b1.5090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P235 (P58's same-box head-to-head at the 0.58.0 release pins, one RTX 5090): vLLM 0.32.0 on Qwen's GPTQ-Int4 checkpoint decodes one request 1.038x as fast as e4b 0.58.0's int4 stack on Qwen3-30B-A3B (287.9 vs 277.4 tok/s, graph_r1 against int4_r1; vLLM 0.30.0 on the same box 1.031), identical prompt ids. Quoted beside P58's 1.087 (another box), never divided into it; the difference is not read as an e4b gain.",
+      "value": 1.038,
+      "unit": "ratio vLLM 0.32.0 / e4b 0.58.0 int4 stack, decode tok/s at B=1 (>1 = vLLM ahead)",
+      "hardware": "RTX 5090 (sm_120, driver 595.91.07, a 470 W power limit recorded on the box, never ruled: the ratio is read inside one box), one rented Vast.ai host (Intel Core Ultra 9 285K), image pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel",
+      "conditions": "P58's harness by named edits (bench/p235, e4b#2119, launch commit 7be9e610): experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0 installed from PyPI, provenance-checked and proven byte-identical to the published wheels (loggetta bench/release_proof.py at f09e5676, RECORD equal, pycache fresh, run in the arms' own import environment); e4b's int4 stack (fused q/k/v at B=1, unfused at B=16) in step_decomp's graph-replay window on torch 2.8.0+cu129; vLLM 0.32.0 (primary) and 0.30.0 (secondary) from PyPI in their own venvs on torch 2.13.0+cu130, Qwen/Qwen3-30B-A3B-GPTQ-Int4 @9b534e43, graphs, vLLM's defaults (0.90 memory utilisation); identical prompt ids on both engines (prompts_sha a8e6ea1d at B=1, f67e7e4d at B=16); every arm VALID, every self-pair inside 1.03x; verdict by bench/p235/p235_reduce.py, re-derived byte-identical from the private receipt store",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p235/RESULTS-p235.md",
+        "bench/p235/PREREG-p235.md",
+        "bench/p235/p235_reduce.py",
+        "bench/p235/receipts/p235-5090-1/RESULTS.txt",
+        "bench/p235/receipts/p235-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p235-5090-1 (receipt.json, teardown-proof.json, the vLLM arm receipts)"
+      ],
+      "notes": "Pre-registered in e4b#2119 (P58's harness by named edits; the release-provenance rule: PyPI wheels, provenance, release proofs as fast-check and binding; the pre-install guard fit), before any reading. Not measured: TTFT and prefill, other batch sizes or contexts, memory footprint, other checkpoints, GNF4_GEMV_FUSED_REDUCE=1, fp8-KV. The e4b window is not the shipped server's scheduler, and vLLM's slope includes its scheduler and detokenisation, so the engine advantage is understated, not inflated. It licenses nothing and moves no default. STOP-1 (informational): e4b's B=16 step 9.496 ms is outside +-8 % of P54's 11.42 ms on its box."
+    },
+    {
+      "id": "e4b.serve.h2h.vllm-0.32.0.p235.qwen3.b16.5090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P235 (P58's same-box head-to-head at the 0.58.0 release pins, one RTX 5090): at 16 requests vLLM 0.32.0 on Qwen's GPTQ-Int4 checkpoint decodes 1.203x as fast as e4b 0.58.0's int4 stack on Qwen3-30B-A3B (2026.9 vs 1684.9 aggregate tok/s, graph_r1 against int4_r1; vLLM 0.30.0 on the same box 1.187; build to build 1.013), identical prompt ids. Quoted beside P58's 1.396 (another box), never divided into it; the difference is not read as an e4b gain.",
+      "value": 1.203,
+      "unit": "ratio vLLM 0.32.0 / e4b 0.58.0 int4 stack, decode tok/s at B=16 (>1 = vLLM ahead)",
+      "hardware": "RTX 5090 (sm_120, driver 595.91.07, a 470 W power limit recorded on the box, never ruled: the ratio is read inside one box), one rented Vast.ai host (Intel Core Ultra 9 285K), image pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel",
+      "conditions": "P58's harness by named edits (bench/p235, e4b#2119, launch commit 7be9e610): experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0 installed from PyPI, provenance-checked and proven byte-identical to the published wheels (loggetta bench/release_proof.py at f09e5676, RECORD equal, pycache fresh, run in the arms' own import environment); e4b's int4 stack (fused q/k/v at B=1, unfused at B=16) in step_decomp's graph-replay window on torch 2.8.0+cu129; vLLM 0.32.0 (primary) and 0.30.0 (secondary) from PyPI in their own venvs on torch 2.13.0+cu130, Qwen/Qwen3-30B-A3B-GPTQ-Int4 @9b534e43, graphs, vLLM's defaults (0.90 memory utilisation); identical prompt ids on both engines (prompts_sha a8e6ea1d at B=1, f67e7e4d at B=16); every arm VALID, every self-pair inside 1.03x; verdict by bench/p235/p235_reduce.py, re-derived byte-identical from the private receipt store",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p235/RESULTS-p235.md",
+        "bench/p235/PREREG-p235.md",
+        "bench/p235/p235_reduce.py",
+        "bench/p235/receipts/p235-5090-1/RESULTS.txt",
+        "bench/p235/receipts/p235-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p235-5090-1 (receipt.json, teardown-proof.json, the vLLM arm receipts)"
+      ],
+      "notes": "Pre-registered in e4b#2119 (P58's harness by named edits; the release-provenance rule: PyPI wheels, provenance, release proofs as fast-check and binding; the pre-install guard fit), before any reading. Not measured: TTFT and prefill, other batch sizes or contexts, memory footprint, other checkpoints, GNF4_GEMV_FUSED_REDUCE=1, fp8-KV. The e4b window is not the shipped server's scheduler, and vLLM's slope includes its scheduler and detokenisation, so the engine advantage is understated, not inflated. It licenses nothing and moves no default. STOP-1 (informational): e4b's B=16 step 9.496 ms is outside +-8 % of P54's 11.42 ms on its box."
     }
   ]
 }

@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07
+power.limit,clocks.max.sm 470.00 W, 3090 MHz
+Model name:                              Intel(R) Core(TM) Ultra 9 285K
+               total        used        free      shared  buff/cache   available
+Mem:             188           2          15           0         170         183
+cgroup memory.max 193871216640
+Build cuda_12.9.r12.9/compiler.36037853_0
