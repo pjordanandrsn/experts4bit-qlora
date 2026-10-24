@@ -351,7 +351,7 @@ def test_no_lane_script_carries_a_mangled_line_continuation():
 
 # ---- Amendment 2: the gnf4 engagement gate under K33's split-K plan, on the VOID box's real records first
 FIXTURE = LANE / "fixtures" / "p236-5090-1-engaged.json"
-FIXTURE_SHA256 = "59e494b3a97400cc241941557d37791ec040ba388f706945cdf03e81c3492e17"
+FIXTURE_SHA256 = "ff40fbb31802cc16dc8e3fa12f8978f5eca93c12d5333c2a4a44348ddd94d61e"
 SOURCE_SHA256 = "6e60465f55c867c3eee832f306c7af4b6744b96d7a7c80caa4ea598c4116c0b2"   # the receipt's bench_p236.json
 
 
