@@ -21,7 +21,9 @@ same 64 held-out rows, within the margin, at the cost of the base arena?
     stored base, not recorded by the trainer. 2 of 16 stacks are verified against the trainer digest; the other 14 rest
     on the deterministic rebuild.
   - The adapter weights are the trained ones, byte for byte (the same adapter id).
-  - The scale is equal by the reader rule; the training code applies alpha/r.
+  - The scale is equal by the reader rule; the training code applies alpha/r: `lora.py` read at the training
+    version's release commit, `v0.56.1` = `b6bf338eb2a378c3273d4a84fb42a5d45992be5b` (an annotated tag; the tool
+    resolves it to the commit and records it, and the re-derivation checks it against the remote tag).
 - **Rows:** D0's 64 held-out rows per fixture (`bench/d0/receipts/d0-p224s3/{dq,nodq}/heldout.json`, 7,642 scored
   tokens), the same rows D0 scored.
 - **REF and Q (attention only):** D0's registered per-row NLL (`.../pass/arms.csv`, arms `REF` and `Q`). Their
