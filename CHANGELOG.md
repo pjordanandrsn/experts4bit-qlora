@@ -21,8 +21,23 @@ while requests decode, four small-batch serving levers (`E4B_NF4_SMALLM_BW`, `E4
 on NVIDIA at small batch, and anyone serving a trained adapter; other families' defaults and the training numerics are
 unchanged. Upgrade if you serve Qwen3-30B-A3B or a trained adapter. If you served a `/2` adapter under
 `E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts` against an arena baked from another checkpoint or recipe, it now
-refuses; set `E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts` to serve it anyway. The grouped-nf4-gemm floor is
-unchanged: K37 ships in 0.49.0, and below it the new default resolves to 1.
+refuses; set `E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts` to serve it anyway. TC1's field recipe now fits a 24 GiB RTX 4090 with three opt-in levers and grouped-nf4-gemm
+0.51.0 (TC1 amendment 78: two cards on two machines, 586 MiB left at the fullest step; that fixture only). The
+grouped-nf4-gemm floor is unchanged: K37 ships in 0.49.0, and below it the new default resolves to 1. CI now installs
+grouped-nf4-gemm from its v0.51.0 release commit.
+
+### TC1 amendment 78 read: TC1's field recipe fits a 24 GiB RTX 4090 (FIT, two draws on two machines)
+
+- Two rented RTX 4090s on two machines, one draw each, ran e4b's matched arm with the opt-in pb1cl256 levers:
+  `NF4_QLORA_COMPACT_DELTA=1`, `NF4_QLORA_PAD_BUCKETS=1` and `E4B_CHUNKED_LM_LOSS=256`.
+- **FIT.** Both draws trained the field recipe's 60 steps with no out-of-memory error, and their steps 1-2 losses are bitwise equal.
+- **The least headrooms over both draws:** 1,258 MiB usable minus max allocated, 586 MiB usable minus max reserved, and 586 MiB of
+  the card's total unused at the fullest step. It fits; it does not fit with room.
+- **Scope.** FIT covers this fixture only: Qwen3-30B-A3B, TC1's alpaca tokens, sequence 2048, micro-batch 2 × accumulation 4, r 16.
+  The levers stay opt-in; a default change needs its own PR.
+- Claim `e4b.train.4090-fit.field.4090.2026-10-24`, with a README section and STATUS lines. The receipts' public copies are under
+  `bench/h2h-2026-10-02/tc1/receipts/tc1-4090-1/` and `tc1-4090-2/`.
+- The amendment's tests now read its pins at its frozen launch commit (bench/common rule 6).
 
 ### P234 registered: `E4B_NF4_SMALLM_BW=1` on Mixtral-8x7B's default NF4 server at 2 and 4 requests, read against bucket 1 (lever B, step B3 re-registered)
 
@@ -941,6 +956,8 @@ e4b's own resolvers), the lane reads the route `E4B_INT8_HEAD_ROWS` (e4b#2024) i
 
 ### Added
 
+- *Release note: within this release, the Changed entry above (lane P232) makes 8 the default at Qwen3-30B-A3B's
+  151936 x 2048 head; this entry, as merged, describes the knob before that change.*
 - `E4B_INT8_HEAD_ROWS` (opt-in, `1` to `8`; unset is `1`, today's route): with the lm_head on its int8 grid, calls
   of 2 to the set number of rows run grouped-nf4-gemm K37's `dense_i8.linear_i8` over the head's int8 codes and scales,
   instead of `F.linear` on their bf16 rounding (half the bytes). One row keeps K36, and more rows keep `F.linear`.

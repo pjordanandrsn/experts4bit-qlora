@@ -128,9 +128,15 @@ The offload row uses a different training setup.
   151936 x 2048 head), the head's 2- to 8-row calls run grouped-nf4-gemm K37's `linear_i8` over the head's own int8
   codes instead of `F.linear` on their bf16 rounding: 2, 4 and 8 requests decode 1.0311x, 1.0243x and 1.0165x as fast
   (the smallest of four ABBA pairs at each, inside P153's quality bars;
-  `e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24`). Greedy text can differ at those request counts; one request
+  `e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24`). **Outputs change by default** at those request counts:
+  greedy text can differ (76 of 112 greedy rows matched in P232); one request
   and 9 or more are unchanged, and `E4B_INT8_HEAD_ROWS=1` restores the previous output. Other heads and families stay
   at 1 until a read of their own.
+- **TC1's field recipe fits a 24 GiB RTX 4090** with three opt-in levers (`NF4_QLORA_COMPACT_DELTA=1`,
+  `NF4_QLORA_PAD_BUCKETS=1`, `E4B_CHUNKED_LM_LOSS=256`) and grouped-nf4-gemm 0.51.0: two RTX 4090s on two machines
+  trained all 60 steps with no out-of-memory error, 586 MiB of the card's total left at the fullest step
+  (`e4b.train.4090-fit.field.4090.2026-10-24`). FIT covers that fixture only (Qwen3-30B-A3B, sequence 2048, micro-batch
+  2 x accumulation 4, r 16); the levers stay opt-in, and where memory is not short they cost step time.
 - **A served adapter's base is verified, not reported unverified.** The paged server compares each qfp-v1 fingerprint
   a `backend-adapter/2` manifest records with the base it serves: the attention projections as loaded, and the expert
   stacks read from the served arena. A match serves with no opt-in; an expert mismatch is refusal 12
