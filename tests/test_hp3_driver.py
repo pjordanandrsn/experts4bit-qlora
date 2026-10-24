@@ -26,7 +26,10 @@ HP3_PY = r"""  *"hp3_reduce.py g1"*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*
 
 
 def drive(tmp_path, **env):
-    """test_hp1_driver's harness with HP3's interpreters, the build flag, a per-arm HP3_VENV log and the HP3 reducer stubs."""
+    """test_hp1_driver's harness with HP3's interpreters, the build flag, a per-arm HP3_VENV log and the HP3 reducer stubs. The
+    shakedown token runs under a registered shakedown id unless a test names another (the runner refuses any other id)."""
+    if env.get("FAMILY_FAM") == "qwen3hp3shake":
+        env.setdefault("TC1_RUN_ID", "hp3-shake-1")
     fakepy, harness = D.FAKEPY, D.HARNESS
     try:
         D.FAKEPY = fakepy.replace('  *"hp2_reduce.py verdict"*)', HP3_PY + '  *"hp2_reduce.py verdict"*)')
@@ -293,3 +296,86 @@ def test_an_unwritable_seed_plan_is_a_harness_fault_never_host_limited(tmp_path)
         rc, out, _ = _seed_plan(Path(d), 600, 3, 100000)
         (Path(d) / "hp3").chmod(0o700)
         assert rc == 1 and out == "UNWRITABLE"
+
+
+
+
+def test_the_shakedown_evaluator_skips_the_registered_trainable_count_and_a_reading_id_never_does(tmp_path):
+    """hp3-shake-1 (2026-10-23): the 2-layer cut trains 26,771,456 parameters, not the registered 642,514,944, so the evaluator VOIDed
+    every calibration arm. --expect-trainable 0 turns the check OFF, so it is reachable only from a registered shakedown id: the
+    shakedown passes it to both evaluator calls; a READING id (hp3-5090-1) never carries it, so the registered count applies."""
+    (tmp_path / "s").mkdir()
+    drive(tmp_path / "s", FAMILY_FAM="qwen3hp3shake", HP3_SHAKE="1", TC1_RUN_ID="hp3-shake-2")
+    evs = [ln for ln in (tmp_path / "s" / "py.log").read_text().splitlines() if "hp1_eval.py" in ln]
+    assert len(evs) == 2 and all("--expect-trainable 0" in ln for ln in evs), evs
+    for rid in ("hp3-5090-1", "hp3-5090-2"):
+        (tmp_path / rid).mkdir()
+        drive(tmp_path / rid, FAMILY_FAM="qwen3hp3", TC1_RUN_ID=rid)
+        evs = [ln for ln in (tmp_path / rid / "py.log").read_text().splitlines() if "hp1_eval.py" in ln]
+        assert len(evs) == 2 and not any("--expect-trainable" in ln for ln in evs), evs     # the registered count, by default
+
+
+def test_the_shakedown_token_under_a_reading_id_refuses_before_any_arm(tmp_path):
+    arms, summary = drive(tmp_path, FAMILY_FAM="qwen3hp3shake", HP3_SHAKE="1", TC1_RUN_ID="hp3-5090-1")
+    assert "HP3 REFUSED: the shakedown token under run id 'hp3-5090-1'" in summary
+    log = tmp_path / "py.log"                                                  # it refuses before any interpreter call at all
+    assert not arms and (not log.exists() or "hp1_eval.py" not in log.read_text())
+
+
+def _cal_argv(tmp_path, fam, shake, rid):
+    """The calibration evaluator's argv exactly as tc1_hp3_family builds it (the driver records every interpreter call)."""
+    import shlex
+    drive(tmp_path, FAMILY_FAM=fam, HP3_SHAKE=shake, TC1_RUN_ID=rid)
+    line = next(ln for ln in (tmp_path / "py.log").read_text().splitlines() if "hp1_eval.py" in ln and "eval_cal" in ln)
+    argv = shlex.split(line.split("PY: ", 1)[1])
+    return argv[next(i for i, x in enumerate(argv) if x.endswith("hp1_eval.py")) + 1:]
+
+
+_REAL = {}
+
+
+def _run_hp1_eval(tmp_path, argv, monkeypatch, trainable):
+    """hp1_eval.main() on the runner's own argv (its real parse, tokens and evaluate()); only the model and the receipts are fixtures:
+    each receipt is a cut's arm with `trainable` parameters, and each base a store whose digest matches its training run."""
+    import importlib
+    import test_hp1_eval as TE
+    hp1_eval = importlib.import_module("hp1_eval")
+    tok = tmp_path / "tokens.json"
+    tok.write_text(json.dumps({"sha256": TE.TOK, "eval": [[1, 2]] * 300}))
+    out = tmp_path / "eval_cal.json"
+    a = list(argv)
+    a[a.index("--tokens") + 1], a[a.index("--out") + 1] = str(tok), str(out)
+    recs = a[a.index("--receipts") + 1:a.index("--bases")]
+    bases = a[a.index("--bases") + 1:a.index("--tokens")]
+    for r in recs:
+        Path(r).parent.mkdir(parents=True, exist_ok=True)
+        Path(r).write_text("{}")
+    fw_of = lambda p: next(f for f in ("e4b", "unsloth", "axolotl") if f"_{f}_" in Path(p).name)                     # noqa: E731
+    monkeypatch.setattr(hp1_eval, "load_tc1_arm", lambda: type("T", (), {})())
+    monkeypatch.setattr(hp1_eval, "receipt_arm", lambda p: TE.arm(Path(p).stem.split("_", 2)[2], framework=fw_of(p), trainable_params=trainable))
+    h = TE.Harness(stores={b: TE.Store() for b in bases})
+    real = _REAL.setdefault("evaluate", hp1_eval.evaluate)                     # the true evaluate(), cached before any patch
+
+    def evaluate(arms, base_dirs, rows, open_base, make_scorer, load_adapter, file_sha, tokens_sha, expect, write=None, release=None, **kw):
+        return real(arms, base_dirs, rows, h.open_base, h.make_scorer, h.load_adapter, lambda p: "sha-" + p.split(".")[0], tokens_sha,
+                    expect, write, None, **kw)
+    monkeypatch.setattr(hp1_eval, "evaluate", evaluate)
+    monkeypatch.setattr(sys, "argv", ["hp1_eval.py"] + a)
+    hp1_eval.main()
+    return json.loads(out.read_text())
+
+
+def test_the_shakedowns_evaluator_call_runs_on_a_cut_with_the_runners_real_arguments(tmp_path, monkeypatch):
+    """The maintainer (2026-10-24): a $0 CPU run of the shakedown's EVALUATOR path, with the arguments the runner builds, against a cut.
+    On 6602e763's runner (no --expect-trainable) every cut arm is VOID as "trainable 26771456 != the registered 642514944"; on the fix
+    no arm is VOID on the trainable count. The read's argv, on the same fixture, still applies the registered count."""
+    sys.path.insert(0, str(D.REPO / "bench" / "hp1"))
+    sys.path.insert(0, str(D.REPO / "tests"))
+    (tmp_path / "s").mkdir()
+    ev = _run_hp1_eval(tmp_path / "s", _cal_argv(tmp_path / "s", "qwen3hp3shake", "1", "hp3-shake-2"), monkeypatch, trainable=26771456)
+    bad = [x for x in ev["arms"] if "trainable" in str(x.get("reason") or "")]
+    assert len(ev["arms"]) == 3 and not bad, bad
+    (tmp_path / "r").mkdir()
+    ev = _run_hp1_eval(tmp_path / "r", _cal_argv(tmp_path / "r", "qwen3hp3", "0", "hp3-5090-1"), monkeypatch, trainable=26771456)
+    assert ev["expect_trainable"] == 642514944
+    assert all("trainable 26771456 != the registered 642514944" in str(x.get("reason")) for x in ev["arms"])
