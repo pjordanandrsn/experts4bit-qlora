@@ -4,6 +4,28 @@ This page is for someone outside the project who wants to check a published numb
 stack it was measured on, the command, the hardware, and what one reading cost. Losses and limits stand beside the
 wins. Every number comes from [`claims.json`](claims.json) by id, or is marked UNVERIFIED with its record.
 
+## Head-to-head at 0.58.0
+
+Each row below runs a reviewed harness again at the released pins against a competitor's latest release on the day:
+experts4bit-qlora 0.58.0, grouped-nf4-gemm 0.51.0 and loggetta 0.7.0. Every package in a row is checked to be the
+release itself, not a checkout carrying its version string. A run checks either that each package's installed files
+match, byte for byte, the wheel PyPI publishes, or that it was installed from git at the release tag's commit. The run
+refuses anything else before it times or scores anything. A row uses its harness's own bars. Its previous reading stands
+beside it, so you can see what moved, and the losses stand with the wins. A row that no lane registered reads "not read
+today". A row registered but not yet read when 0.58.1 shipped reads "not read at 0.58.1" and names its registration; it
+is filled in the next release. No older number fills either.
+
+| Piece | Against | At 0.58.0 | Before (claim, release) |
+|---|---|---|---|
+| grouped-nf4-gemm's decode GEMV, op level (M = 1, 2, 4, 8, 16 on Mixtral-8x7B, Qwen3-30B-A3B and OLMoE expert projections) | bitsandbytes 0.50.2 `matmul_4bit` | bitsandbytes faster at all 30 cells at the op level, eager (ratio 0.30–0.92). Results e4b#2127; registered as e4b#2116. | none: no earlier reading races bitsandbytes |
+| Training, TC1's field recipe (Qwen3-30B-A3B, seq 2048, micro-batch 2 x accum 4) | Unsloth 2026.10.8 | not read at 0.58.1. Both Unsloth draws failed TC1's standing engagement check (it counts torch-level grouped_mm calls, which read 0 under Unsloth 2026.10.8), so no ratio is quoted. Results e4b#2125; registered as e4b#2121. | Unsloth spends **1.924x** e4b's GPU time per step; 2.803x wall-clock on an EPYC 7713 (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`, e4b 0.49.0 vs Unsloth 2026.9.14) |
+| Training, packed 4,096-token rows | Unsloth | not read today (no lane registered it) | Unsloth spends **1.160x** e4b's GPU time per step; e4b's peak is 1.04 GB above Unsloth's (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`, `e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`, e4b 0.49.0) |
+| Training on a 24 GiB RTX 4090, TC1's field recipe | Unsloth, on the same card | not read today (its lane didn't register it) | **Unsloth fit resident and e4b as shipped did not:** Unsloth 24.219 GB peak at 10.032 s/step (`e4b.train.frontier.qwen3.4090-24gb.2026-10-02.unsloth-resident`, Unsloth 2026.9.14); e4b now fits with three opt-in levers, 586 MiB to spare, with no speed claimed (`e4b.train.4090-fit.field.4090.2026-10-24`, 0.58.0) |
+| Serving Qwen3-30B-A3B, decode rate at 1 and 16 requests (e4b's int4 stack) | vLLM | **vLLM ahead:** vLLM 0.32.0 / e4b 0.58.0 int4 **1.038** at 1 request and **1.203** at 16, both on one RTX 5090 (power limit 470 W; vLLM 0.30.0 on the same box: 1.031 / 1.187). Measured on a different box from the earlier figure, so the difference is not read as an e4b gain. Results e4b#2126; registered as e4b#2119. | **vLLM is ahead:** vLLM/e4b **1.087** at one request, **1.396** at sixteen (`e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22` and `.b16`, e4b 0.37.0 vs vLLM 0.30.0) |
+| Training Mixtral-8x7B, both frameworks on one stack | Unsloth | not read today (its lane didn't register it) | Unsloth/e4b **1.144** at the matched position (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-05.same-stack`, e4b 0.49.0); **Unsloth faster, 0.836**, with e4b at its defaults in the field image (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default`) |
+| Held-out loss parity, Qwen3-30B-A3B | Unsloth | not read at 0.58.1; registered as e4b#1932 | none: HP1 and HP2 closed before any competitor was scored. HP2's instrument could not resolve a bias difference below about 0.015 nats per row ([`RESULTS-HP2`](../bench/hp2/RESULTS-HP2.md)) |
+| loggetta's memory plan against measured held-out training rows (21 rows: LFM2-8B-A1B, ERNIE-4.5-21B-A3B and Qwen3-14B on RTX 5090, 4090 and A4000) | Hugging Face Accelerate 1.15.0 `estimate-memory` (a full-precision Adam estimate, not like-for-like) | **18 of 21 COVERED; 3 HOST_UNDER**, all ERNIE with its experts on the host on an RTX A4000, host peak 1.006-1.055x the host estimate. The plans equal the recorded ones on 20 of 21 rows. Accelerate's int4 totals (3.88, 10.16 and 6.51 GB) and fp16 Adam figures (62.14, 162.61 and 104.24 GB) sit beside them and rule nothing. CPU, USD 0; loggetta's [`RESULTS-h2h-planner.md`](https://github.com/pjordanandrsn/loggetta/blob/main/bench/h2h-planner/RESULTS-h2h-planner.md), re-derived independently | the same 21 rows as each run recorded them (loggetta 0.6.2; the Qwen3-14B row at `1dd862f7`, first released in 0.4.0): 18 COVERED, 3 HOST_UNDER |
+
 ## Read this first
 
 - **A reading is pinned to a commit, not a version string.** Each row names the e4b commit it was measured at and the
