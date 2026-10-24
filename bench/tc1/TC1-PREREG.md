@@ -3582,3 +3582,88 @@ same box is recorded beside it in the receipt.
 3 h × $1.05 + 100 GB × $0.011/GB = **$4.25**. Expected about $1.5.
 
 Everything else is amendment 76's: the arms, the pre-check, the validity predicates, the rule, the window and the read.
+
+### Amendment 78 (2026-10-24T01:30Z, after amendment 77, before any box): the field recipe on a 24 GiB RTX 4090 (the fit reading)
+
+**Why.** The goal is that TC1's matched field recipe trains on a real 24 GB RTX 4090, with no change to the recipe. Amendment 75's
+box (`tc1-5090-155`) found no arm that fits. Since then, three levers that change no recipe term have landed or been found in
+grouped-nf4-gemm and e4b: the compact delta (#584 and #585), the chunked LM loss in smaller chunks, and per-bucket padding of the LoRA
+delta through the compact bucketed node. Explore boxes, kept in the private receipt store, informed this design. They are design input
+only: no number from them is used here or in the rule.
+
+**The arm (one a box): pb1cl256.** e4b's matched arm at the field recipe for 60 steps (amendment 73's window: eval every 20 on 8 rows),
+with:
+- `NF4_QLORA_PAD_BUCKETS=1`: every LoRA delta padded per bucket (`_pad_buckets`: a bucket's width is at most twice its narrowest group's)
+  through the compact bucketed node, instead of every group padded to the widest;
+- `E4B_CHUNKED_LM_LOSS=256`: the training loss in 256-token chunks;
+- `NF4_QLORA_COMPACT_DELTA=1`, as set (with every call bucketed, it serves no call);
+- `TC1_STEP_MEM=1` and `--mem-census 1`; no profile.
+No recipe term changes: the model and its revision, the 60 steps, sequence 2048, micro-batch 2, accumulation 4, r 16, the adapter targets,
+fp32 matched adapters, expert residency, the optimizer and the loss masking are TC1's. The arithmetic order differs from the shipped arm,
+so a training trajectory may differ slightly.
+
+**Pins.** The launch commit and the stack under test are this amendment's merge. grouped-nf4-gemm `efdda943` (#587's merge: #584 and
+#585, with the corrected compact-delta test), release 0.50.0, bound by commit and the sha256 of the `nf4_qlora.py` it installs.
+Qwen3-30B-A3B at `ad44e777`. The tokens must equal `tc1-5090-155`'s (sha `bfc742f6…`, train-only sha `604f3140…`), else the box refuses.
+
+**Before the arm, each refusing at cents:**
+1. the card: `memory.total` must be 23,500 to 24,600 MiB, a 24 GiB card. Outside it the box refuses before any staging (rc 18, a host
+   floor). The market screen bands the listing's `gpu_ram` the same way, since the GPU name alone admits a 48 GB "RTX 4090";
+2. the pre-check: `efdda943`'s `kernel/test_compact_delta.py` and `kernel/test_compact_buckets.py` on this GPU. A failure, a skipped
+   CUDA case, or a change to venv-unsloth's package set refuses. The clone sits outside the fetched work dir and is removed after;
+3. a probe: the installed `nf4_qlora`, read in venv-unsloth with the arm's variable, must report bucketed padding on, the lean delta
+   on, the compact bucketed node on, and bucketing for any call;
+4. the tokens, as above.
+
+**Draws: two boxes on two different machines.** One machine is not a capability. The kit enforces it: each box's manifest lists every
+earlier read draw's committed receipt under `avoid_vast_machine_receipts`, and the launcher refuses a launch whose cited receipt is absent
+or not a completed run of the same class. The reducer also checks it.
+
+**The rule** (`tc1_reduce.py`: `pos78_draw` per box, `--pos78-pair DIR_1 DIR_2` for the verdict). Per box:
+- COMPLETE: a VALID trained row with all 60 steps and a step record for each. VALID binds the code (commit and file hash), the path
+  (every LoRA call width-bucketed, with no single-block, loop or grouped_mm call, and the compact bucketed node's calls equal to the
+  bucketed calls) and the loss (every training forward chunked at 256), on amendment 69's field defaults;
+- OOM: the arm died of an out-of-memory error at a step. Its step and the allocator's own line are kept;
+- VOID: a trained row off its registration, or a card outside the band;
+- NO_READ: no trained or OOM row.
+
+Over the two draws, in order:
+1. VOID if either draw is VOID;
+2. NOT_READ if either draw did not read;
+3. VOID if the two draws share a machine, or a machine id is unread;
+4. VOID if steps 1-2's losses are not bitwise equal across the draws. B starts at zero and the first learning rate is 0, so those two
+   forwards are the same; a miss is a plumbing fault;
+5. NOT_FIT if either draw ran out of memory at any step;
+6. otherwise **FIT**.
+
+**No headroom floor.** But the claim row and the results text quote the least of each of three headrooms over BOTH draws, so "fits" is
+never read as "fits with room": usable minus max allocated, usable minus max reserved, and `memory.total` minus device used. Usable is
+`memory.total` minus the step's CUDA context (its device used minus its reserved).
+
+**Reported, never a bar.** Held-out loss after 60 steps, beside `tc1-5090-155`'s cd1cl1 (0.75489). That is not like-for-like (a
+different family, arm and card), and no quality claim follows from this amendment. s/step is recorded.
+
+**The claim's scope.** A FIT covers this fixture only: Qwen3-30B-A3B at `ad44e777`, the alpaca tokens above, sequence 2048,
+micro-batch 2, accumulation 4, r 16, the pb1cl256 levers, and a 24 GiB card by both its listing and its `memory.total`. The longest
+padded micro-batch in these tokens is 565 tokens (step 22, from `tc1-5090-155`'s record). Datasets with longer batches are not covered.
+
+**bench/common's registration rules, stated:**
+1. launch commit and stack: this amendment's merge, with grouped-nf4-gemm `efdda943`;
+2. run ids: `tc1-4090-1` to `tc1-4090-3` (one for every box the cap allows to start), and retry ids `tc1-4090-r1` to `tc1-4090-r8`.
+   No code parses an id's number;
+3. outcome classes as in bench/common's table. A refusal at create or a NOT_RUN uses an id and is never a strike. The runner's card
+   refusal (rc 18) is a host refusal before the install;
+4. the cap: at most **three** boxes START. A strike is a started box that was not read; two consecutive strikes stop the lane. The third
+   started box is the last, whatever it reads;
+5. boot slack: a 1.5 h guard against about 30 minutes of phases leaves far more than 540 s;
+6. once closed, the tests assert this amendment's literal pins at its frozen commit;
+7. every gate fails closed: a missing memory.total, machine id, step record, path counter, loss record or code record reads VOID or
+   NO_READ, and the reducer self-test (case 132) removes each one;
+8. the fetch imports no links (`tc1_drive.sh`'s `--no-links`, rule 8).
+
+**Budget.** One RTX 4090 a box, at a declared $1.00/h with 220 GB of storage, a 1.5 h guard, and up to 100 GB downloaded at $0.03/GB.
+Worst case per box: 1.5 h × $1.00 + 100 GB × $0.03 = **$4.50**. Three started boxes: **$13.50**. The eight retry ids start nothing; each
+costs at most its boot term at the box rate (about $0.16), so the lane's worst is $13.50 + 8 × $0.16 = **$14.78**.
+
+A default change (bucketed padding or the 256-token chunk on 24 GiB cards) is not part of this amendment. It needs its own PR, citing
+this reading.

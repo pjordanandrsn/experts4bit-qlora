@@ -3021,6 +3021,49 @@ def pos76_why(tag, r):
     return "; ".join(bad)
 
 
+def pos78_why(tag, r):
+    """Amendment 78's predicates for a TRAINED pb1cl256 row: amendment 69's field defaults without a profile (torch 2.12, the double-quantized
+    absmax, the reentrant checkpoint on all 48 layers, the combine chunks unset), a census and a per-step memory record, grouped-nf4-gemm bound
+    by commit and nf4_qlora.py hash, and -- BINDING -- the path and the loss the arm's own counters record: every LoRA call width-bucketed
+    (padded, loop and grouped_mm all 0) through the compact bucketed node (its calls equal the bucketed calls), NF4_QLORA_PAD_BUCKETS=1
+    resolved with no bucket ladder, NF4_QLORA_COMPACT_DELTA=1 as set, and E4B_CHUNKED_LM_LOSS=256 with every training forward chunked.
+    An OOM row is never judged here: it is NOT_FIT at its step (pos78_draw). Empty string = as registered."""
+    if tag != POS78_ARMS[0][1]:
+        return f"amendment 78 registers no e4b arm for tag {tag}"
+    r = r or {}
+    cl = dict(r.get("chunked_lm_loss") or {})
+    la = dict(r.get("lean_ab") or {})
+    view = dict(r, chunked_lm_loss=dict(cl, env=None), lean_ab=dict(la, gnf4_pad_buckets_env=None, gnf4_pad_buckets_mode="auto"))
+    bad = [w for w in (pos69_why(tag, view, profile=False),) if w]    # the bucket mode and the loss are this arm's own checks below
+    if int(r.get("profile_steps") or 0) or r.get("profile"):
+        bad.append(f"profile_steps {r.get('profile_steps')!r}: amendment 78 runs no profile (it would sit inside the census window)")
+    if not isinstance(r.get("mem_census"), dict):
+        bad.append("no mem_census on the receipt: the registered instrument (--mem-census 1) did not run")
+    env = r.get("env") or {}
+    code = env.get("gnf4_code") or {}
+    if env.get("grouped-nf4-gemm") != POS78_GNF4_VERSION:
+        bad.append(f"env grouped-nf4-gemm {env.get('grouped-nf4-gemm')!r} != {POS78_GNF4_VERSION}")
+    if code.get("commit") != POS78_GNF4 or code.get("nf4_qlora_sha256") != POS78_NF4_QLORA_SHA:
+        bad.append(f"grouped-nf4-gemm code {code!r} != commit {POS78_GNF4} with nf4_qlora.py {POS78_NF4_QLORA_SHA}")
+    n_ch, n_small, n_stock = (int(cl.get(k) or 0) for k in ("chunked_calls", "small_calls", "stock_calls"))
+    if not (str(cl.get("env")) == POS78_CHUNK and n_ch > 0 and n_small == 0 and n_stock == 0 and int(cl.get("runtime_refusals") or 0) == 0):
+        bad.append(f"the chunked LM loss did not serve every training forward in {POS78_CHUNK}-token chunks (record {cl})")
+    calls = la.get("lora_path_calls") or {}
+    pd, lp, gm, pb = (int(calls.get(k) or 0) for k in ("padded", "loop", "grouped_mm", "padded_bucketed"))
+    cb = r.get("compact_buckets") or {}
+    ka = r.get("keep_ab") or {}
+    path = [("every LoRA call width-bucketed", pb > 0 and pd == lp == gm == 0),
+            ("NF4_QLORA_PAD_BUCKETS=1 resolved, no bucket ladder", la.get("gnf4_pad_buckets_env") == "1" and str(la.get("gnf4_pad_buckets_mode")) == "1"
+             and not la.get("gnf4_pad_ladder") and la.get("gnf4_pad_ladder_env") in (None, "")),
+            ("the compact bucketed node served every bucketed call", bool(cb.get("gnf4_has_compact_buckets")) and cb.get("env") in (None, "")
+             and int(cb.get("calls") or 0) == pb),
+            ("NF4_QLORA_COMPACT_DELTA=1 as set", ka.get("gnf4_compact_delta") == "1" and ka.get("gnf4_compact_delta_env") == "1")]
+    off = [k for k, ok in path if not ok]
+    if off:
+        bad.append(f"pb1cl256 is off its registered path ({'; '.join(off)}; calls {calls}, compact buckets {cb}, compact delta {ka.get('gnf4_compact_delta')!r})")
+    return "; ".join(bad)
+
+
 def pos74_why(tag, r):
     """Amendment 74's predicates: amendment 69's field defaults without a profile (torch 2.12, the double-quantized absmax, the reentrant
     checkpoint on all 48 layers, the chunked losses and combine chunks unset), grouped-nf4-gemm at its registered version, a census on the
@@ -3525,6 +3568,28 @@ ATTN_CENSUS[POS76_FAM] = 192
 DENSE_PINS[POS76_FAM] = DENSE_PINS[QDENSE_FAM]
 FAM_ANCHOR[POS76_FAM] = POS76_ARMS[0]
 EXPECTED[POS76_FAM] = list(POS76_ARMS)
+POS78_FAM = "qwen3pos78fit"
+#: TC1 amendment 78: the 24 GiB RTX 4090 fit reading. One arm a box, pb1cl256 -- the field recipe for 60 steps with every LoRA delta
+#: width-bucketed through the compact bucketed node (NF4_QLORA_PAD_BUCKETS=1; NF4_QLORA_COMPACT_DELTA=1 is set and serves no call) and the
+#: chunked LM loss in 256-token chunks -- on two boxes on two different machines, each a 24 GiB card by its listing and its memory.total.
+POS78_ARMS = (("e4b", "fused_attn4_m_fd_pb1cl256"),)
+POS78_LABELS = {POS78_ARMS[0]: "pb1cl256"}
+POS78_GNF4 = "efdda943d5a310343ed7fef2e23d1cbf2df27e51"    # grouped-nf4-gemm#587's merge: #584 and #585 with the corrected test
+POS78_GNF4_VERSION = "0.50.0"
+POS78_NF4_QLORA_SHA = "8e0bb5d0d434d661db8dec5fd34c76d43a9da49e8b72867c33ec45a4fbc4a162"   # the nf4_qlora.py that commit installs
+POS78_CHUNK = "256"
+POS78_STEPS = 60
+POS78_MIB_BAND = (23500, 24600)                    # the box's memory.total, MiB: a 24 GiB card (tc1_run.sh refuses outside it, rc 18)
+POS78_REF_HELDOUT = 0.75489                        # tc1-5090-155's cd1cl1 held-out at 60 steps: REPORTED beside, never a bar (not like-for-like)
+NO_SPEED_FAMS[POS78_FAM] = "e4b only, one arm a box; s/step is recorded, never gated (amendment 78)"
+FAMS.append(POS78_FAM)
+NAMES[POS78_FAM] = ("Qwen3-30B-A3B (amendment 78: the field recipe on a 24 GiB RTX 4090 -- pb1cl256, every LoRA delta width-bucketed "
+                    "through the compact bucketed node and 256-token LM-loss chunks, 60 steps; two boxes on two machines)")
+N_LAYERS[POS78_FAM] = 48
+ATTN_CENSUS[POS78_FAM] = 192
+DENSE_PINS[POS78_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[POS78_FAM] = POS78_ARMS[0]
+EXPECTED[POS78_FAM] = list(POS78_ARMS)
 
 
 def memc4kr_why(r):
@@ -4215,6 +4280,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == POS76_FAM:                               # amendment 76: cd1cl1 at two grouped-nf4-gemm commits, each arm bound to its code
         w = pos76_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == POS78_FAM:                               # amendment 78: pb1cl256 on a 24 GiB 4090, bound to its code, path and loss
+        w = pos78_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == POS75_FAM:                               # amendment 75: the 4090-fit read, each arm bound to its delta path and its loss
@@ -5701,6 +5770,132 @@ def pos76_block(F, d):
     lines.append("- No fit is claimed here. A CANDIDATE is a credited memory saving; a 4090 acceptance box needs its own registration.")
     return lines + memcensus_block(F, POS76_FAM, POS76_ARMS, POS76_LABELS,
                                    title="Amendment 76: the census tables (Qwen3-30B-A3B, cd1cl1, one row per draw; GB = 1e9 bytes)")
+
+
+def pos78_box_facts(d):
+    """(the box's memory.total in MiB, from its GPU_MEMORY_TOTAL line; the Vast machine id, from the launcher's receipt beside the tc1 dir)."""
+    mib = mach = None
+    p = os.path.join(d or "", "summary.txt")
+    if d and os.path.exists(p):
+        for ln in open(p, errors="replace"):
+            m = re.match(r"GPU_MEMORY_TOTAL (\d+) MiB", ln)
+            if m:
+                mib = int(m.group(1))
+    rp = os.path.join(d or "", os.pardir, "receipt.json")
+    if d and os.path.exists(rp):
+        try:
+            mach = str((json.load(open(rp)).get("environment") or {}).get("vast_machine_id") or "") or None
+        except (ValueError, AttributeError):
+            mach = None
+    return mib, mach
+
+
+def pos78_headroom(sm, mib):
+    """The three headrooms (MiB) of one draw, each the least over its steps with the step it fell at: usable minus max_allocated, usable
+    minus max_reserved, and memory.total minus device_used, where usable is memory.total minus the step's CUDA context (its device_used
+    minus its reserved). Max_allocated and max_reserved are the run's maxima so far (TC1_STEP_MEM never resets them)."""
+    if not sm or mib is None:
+        return {"h_alloc": None, "h_res": None, "h_dev": None}
+    M = 1048576
+    rows = []
+    for s in sm:
+        usable = mib - (int(s["device_used"]) - int(s["reserved"])) / M
+        rows.append((int(s["step"]), usable - int(s["max_allocated"]) / M, usable - int(s["max_reserved"]) / M, mib - int(s["device_used"]) / M))
+    least = {k: min(rows, key=lambda t: t[i]) for i, k in ((1, "h_alloc"), (2, "h_res"), (3, "h_dev"))}
+    return {k: (least[k][i], least[k][0]) for i, k in ((1, "h_alloc"), (2, "h_res"), (3, "h_dev"))}
+
+
+def pos78_draw(F, d):
+    """One box's draw -> (state, facts). COMPLETE: a VALID trained pb1cl256 row with all 60 steps and a step record for each. OOM: the arm
+    died of an OOM at a step (NOT_FIT; the allocator's own line is kept). VOID: a trained row off its registration, or a card outside the
+    24 GiB band. NO_READ: no trained and no OOM row (a refusal, a pre-check miss, a dead box)."""
+    R = F.get(POS78_FAM) or {}
+    row = next((x for x in R.get("rows", []) if (x["fw"], x["tag"]) == POS78_ARMS[0]), None)
+    r = (row or {}).get("r") or {}
+    mib, mach = pos78_box_facts(d)
+    x = {"mib": mib, "machine": mach, "losses": list(r.get("losses") or []), "held": r.get("eval_loss_final"), "status": r.get("status")}
+    x.update(pos78_headroom(r.get("step_mem") or [], mib))
+    if row is None:
+        return "NO_READ", dict(x, why="no pb1cl256 row on this box")
+    if mib is None or not POS78_MIB_BAND[0] <= mib <= POS78_MIB_BAND[1]:
+        return "VOID", dict(x, why=f"memory.total {mib} MiB is outside a 24 GiB card's {POS78_MIB_BAND[0]}-{POS78_MIB_BAND[1]}")
+    if r.get("status") == "oom":
+        return "OOM", dict(x, why=str(r.get("reason") or "")[:700])
+    if r.get("status") == "ok" and row.get("verdict") == "VALID":
+        n_sm = len(r.get("step_mem") or [])
+        if len(x["losses"]) == POS78_STEPS == n_sm and int(r.get("steps") or 0) == POS78_STEPS:
+            return "COMPLETE", dict(x, why="")
+        return "VOID", dict(x, why=f"a trained row without {POS78_STEPS} steps and a step record for each (losses {len(x['losses'])}, step_mem {n_sm})")
+    if row.get("verdict") == "VOID":
+        return "VOID", dict(x, why=row.get("why") or "VOID")
+    return "NO_READ", dict(x, why=f"status {r.get('status')!r}, no trained or OOM row: {str(r.get('reason') or '')[:200]}")
+
+
+def pos78_pair(a, b):
+    """Amendment 78's rule over the two draws -> (FIT | NOT_FIT | NOT_READ | VOID, why). In order: VOID when a draw is VOID; NOT_READ when a
+    draw did not read (a further id within the lane's cap may run); VOID when the two draws share a machine or either machine is unread (the
+    kit excludes draw 1's machine from draw 2), or when steps 1-2's losses are not bitwise equal across the draws (B starts at zero and the
+    first lr is 0, so those two forwards are the same; a miss is a plumbing fault); NOT_FIT when either draw OOM'd at a step; else FIT."""
+    (sa, xa), (sb, xb) = a, b
+    if "VOID" in (sa, sb):
+        return "VOID", "; ".join(f"draw {i}: {x['why']}" for i, (s, x) in enumerate((a, b), 1) if s == "VOID")
+    if "NO_READ" in (sa, sb):
+        return "NOT_READ", "; ".join(f"draw {i}: {x['why']}" for i, (s, x) in enumerate((a, b), 1) if s == "NO_READ")
+    if not (xa["machine"] and xb["machine"] and xa["machine"] != xb["machine"]):
+        return "VOID", ("the draws need two different machines (" + ("both ran on the same machine" if xa["machine"] and xa["machine"] == xb["machine"]
+                                                                 else "a machine id is unread") + ")")
+    if len(xa["losses"]) < 2 or len(xb["losses"]) < 2 or xa["losses"][:2] != xb["losses"][:2]:
+        return "VOID", f"steps 1-2's losses differ across the draws ({xa['losses'][:2]} vs {xb['losses'][:2]}): a plumbing fault"
+    if "OOM" in (sa, sb):
+        return "NOT_FIT", "; ".join(f"draw {i} OOM'd: {x['why']}" for i, (s, x) in enumerate((a, b), 1) if s == "OOM")
+    return "FIT", "both draws trained all 60 steps with no OOM"
+
+
+def _pos78_mib(h):
+    return "—" if h is None else f"{h[0]:,.0f} MiB (step {h[1]})"
+
+
+def pos78_block(F, d):
+    """Amendment 78's per-box read: this draw's state, its card and machine, the three headrooms (least over its steps), held-out at 60
+    (reported beside tc1-5090-155's cd1cl1, never a bar: not like-for-like), and on an OOM the allocator's own line. The verdict needs
+    both draws: `tc1_reduce.py --pos78-pair DIR_1 DIR_2`."""
+    if POS78_FAM not in F:
+        return []
+    s, x = pos78_draw(F, d)
+    held = "—" if x["held"] is None else f"{x['held']:.5f} (tc1-5090-155's cd1cl1 {POS78_REF_HELDOUT:.5f}; reported, not like-for-like)"
+    lines = ["\n## Amendment 78: the field recipe on a 24 GiB RTX 4090 (pb1cl256; this box is ONE draw -- the verdict reads both, "
+             "`--pos78-pair`)", "",
+             "| draw state | memory.total | machine id read | steps trained | usable - max allocated | usable - max reserved | total - device used | held-out at 60 |",
+             "|---|---|---|---|---|---|---|---|",
+             f"| {s} | {x['mib'] if x['mib'] is not None else '—'} MiB | {'yes' if x['machine'] else 'no'} | {len(x['losses'])} | {_pos78_mib(x['h_alloc'])} | "
+             f"{_pos78_mib(x['h_res'])} | {_pos78_mib(x['h_dev'])} | {held} |"]
+    if x["why"]:
+        lines.append(f"- **{s}:** {x['why']}")
+    return lines + memcensus_block(F, POS78_FAM, POS78_ARMS, POS78_LABELS,
+                                   title="Amendment 78: the census table (Qwen3-30B-A3B, pb1cl256, this draw; GB = 1e9 bytes)")
+
+
+def pos78_pair_block(a, b):
+    """The verdict over both draws, with the least of each headroom over BOTH draws quoted beside it (FIT never means 'fits with room').
+    Machine ids and run paths stay out of the text (results text is public); only whether the two machines differ is printed."""
+    v, why = pos78_pair(a, b)
+    lines = ["\n## Amendment 78's verdict: the field recipe on a 24 GiB RTX 4090 (pb1cl256, two draws on two machines)", "",
+             "| draw | state | steps | usable - max allocated | usable - max reserved | total - device used | held-out at 60 |",
+             "|---|---|---|---|---|---|---|"]
+    for i, (s, x) in enumerate((a, b), 1):
+        lines.append(f"| {i} | {s} | {len(x['losses'])} | {_pos78_mib(x['h_alloc'])} | {_pos78_mib(x['h_res'])} | "
+                     f"{_pos78_mib(x['h_dev'])} | {'—' if x['held'] is None else format(x['held'], '.5f')} |")
+    least = {k: min((x[k] for _, x in (a, b) if x[k] is not None), key=lambda h: h[0], default=None) for k in ("h_alloc", "h_res", "h_dev")}
+    two = bool(a[1]["machine"] and b[1]["machine"] and a[1]["machine"] != b[1]["machine"])
+    lines += ["", f"- **{v}:** {why}.", f"- **Two different machines:** {'yes' if two else 'no'} (the ids stay in the private store).",
+              f"- **The least headrooms over both draws:** usable - max allocated {_pos78_mib(least['h_alloc'])}; usable - max reserved "
+              f"{_pos78_mib(least['h_res'])}; total - device used {_pos78_mib(least['h_dev'])}.",
+              "- **Scope:** Qwen3-30B-A3B @ ad44e777, the alpaca tokens (tc1-5090-155's), seq 2048, micro-batch 2, accum 4, r 16, the pb1cl256 "
+              "levers, a 24 GiB card by its listing and its memory.total. The longest padded micro-batch is 565 tokens (step 22); datasets with "
+              "longer batches are not covered.",
+              f"- **Held-out** is reported beside tc1-5090-155's cd1cl1 ({POS78_REF_HELDOUT:.5f}), which is not like-for-like; no quality claim "
+              "follows from this amendment."]
+    return lines
 
 
 def _vs_4090(mib):
@@ -7464,6 +7659,8 @@ def render(F, d):
         out += pos75_block(F, d)
     if POS76_FAM in F:
         out += pos76_block(F, d)
+    if POS78_FAM in F:
+        out += pos78_block(F, d)
     if MEMCENSUS_FAM in F:
         out += memcensus_block(F)
         out += ["\n## Predictions P41 / P42 / P43 (TC1-PREREG amendment 23: the memory census, e4b against Unsloth at micro-batch 1; scored mechanically from the receipts)",
@@ -9119,6 +9316,29 @@ def _pos76_set(groups=None, gap=None, held=None, rec=None, code=None):
             r[k] = v
         R[(fw, tag)] = r
     return R
+
+
+def _pos78_rec(**over):
+    """Amendment 78: one pb1cl256 draw at 60 steps on its registered code, path and loss (the record fields a trained 4090 box writes): every
+    LoRA call bucketed through the compact bucketed node, 256-token LM-loss chunks, and a flat synthetic step record whose three headrooms on
+    a 24,564 MiB card are 1,264 / 664 / 664 MiB. `over` replaces whole fields."""
+    r = json.loads(json.dumps(_pos75_set()[POS75_ARMS[3]]))
+    r.update(fam=POS78_FAM, tag=POS78_ARMS[0][1], steps=POS78_STEPS, losses=[round(2.05 - 0.02 * i, 5) for i in range(POS78_STEPS)],
+             step_ms=[3000.0] * POS78_STEPS, eval_loss_final=0.7550)
+    for k in ("lora_loop_share", "tokens_per_step", "tokens_padded_per_step"):
+        if isinstance(r.get(k), list) and r[k]:
+            r[k] = (r[k] * POS78_STEPS)[:POS78_STEPS]
+    r["env"] = dict(r["env"], **{"grouped-nf4-gemm": POS78_GNF4_VERSION}, gnf4_code={"commit": POS78_GNF4, "nf4_qlora_sha256": POS78_NF4_QLORA_SHA})
+    r["chunked_lm_loss"] = dict(r["chunked_lm_loss"], env=POS78_CHUNK, chunked_calls=240, small_calls=0, stock_calls=0, runtime_refusals=0)
+    r["lean_ab"] = dict(r.get("lean_ab") or {}, lora_path_calls={"loop": 0, "padded": 0, "grouped_mm": 0, "padded_bucketed": 49152},
+                        gnf4_pad_buckets_env="1", gnf4_pad_buckets_mode="1", gnf4_pad_ladder=False, gnf4_pad_ladder_env=None)
+    r["compact_buckets"] = {"env": None, "gnf4_has_compact_buckets": True, "calls": 49152}
+    r["keep_ab"] = dict(r.get("keep_ab") or {}, gnf4_compact_delta="1", gnf4_compact_delta_env="1")
+    M = 1048576
+    r["step_mem"] = [{"step": i + 1, "max_allocated": 22800 * M, "max_reserved": 23400 * M, "allocated": 20600 * M, "reserved": 23400 * M,
+                      "device_used": 23900 * M} for i in range(POS78_STEPS)]
+    r.update(over)
+    return r
 
 
 def _pos76_vram(d, R, context=645_000_000):
@@ -11985,6 +12205,54 @@ def selftest():
     assert loss_and_logits_bytes(mc6) == POS76_FIX_LOGITS and _blocks_live(mc6, "gb") == 2 and _blocks_live(R6[POS76_ARMS[1]]["mem_census"], "ga") == 1
     assert x5["loss"] == 1_373_501_440 + 686_750_724 and x5["delta"] == 0 and x5["tail"] == 0 and x5["device"] == 26238 * 1048576, x5
     cases += 1
+
+    # 132. TC1 amendment 78 (qwen3pos78fit): pb1cl256 on a 24 GiB RTX 4090, two draws on two machines. A trained row on its registered code,
+    #      path and loss with all 60 steps is COMPLETE; two COMPLETE draws on two machines with steps 1-2 equal read FIT, with the least of each
+    #      headroom over both draws quoted; an OOM draw is NOT_FIT; the same machine twice, a card outside the band, steps 1-2 unequal, or a
+    #      row off its path, code, chunk or step count is VOID; a box with no row is NOT_READ. No machine id is printed.
+    P8 = lambda r: {POS78_FAM: reduce_family(POS78_FAM, {POS78_ARMS[0]: r}, {}, POS78_STEPS)}
+    with tempfile.TemporaryDirectory() as td8:
+        def box8(name, r, mib=24564, mach="host-id-aaa1"):
+            bd = os.path.join(td8, name, "tc1")
+            os.makedirs(bd, exist_ok=True)
+            open(os.path.join(bd, "summary.txt"), "w").write(f"GPU_MEMORY_TOTAL {mib} MiB (a 24 GiB card: 23500-24600)\n")
+            json.dump({"environment": {"vast_machine_id": mach}}, open(os.path.join(td8, name, "receipt.json"), "w"))
+            return pos78_draw(P8(r) if r is not None else {}, bd), bd
+        (a8, d8a), (b8, _) = box8("a", _pos78_rec()), box8("b", _pos78_rec(), mach="host-id-bbb2")
+        assert a8[0] == b8[0] == "COMPLETE", (a8, b8)
+        assert a8[1]["h_alloc"] == (1264.0, 1) and a8[1]["h_res"] == (664.0, 1) and a8[1]["h_dev"] == (664.0, 1), a8[1]
+        assert pos78_pair(a8, b8) == ("FIT", "both draws trained all 60 steps with no OOM")
+        t8 = "\n".join(pos78_pair_block(a8, b8))
+        assert "**FIT:**" in t8 and "usable - max allocated 1,264 MiB (step 1)" in t8 and "total - device used 664 MiB (step 1)" in t8, t8
+        assert "**Two different machines:** yes" in t8 and "host-id-" not in t8 and "565 tokens (step 22)" in t8 and "not like-for-like" in t8, t8
+        assert "host-id-" not in "\n".join(pos78_block(P8(_pos78_rec()), d8a)) and "Amendment 78: the field recipe" in render(P8(_pos78_rec()), d8a)
+        oom = _pos78_rec(status="oom", reason="OOM at step 22: CUDA out of memory. Tried to allocate 72.00 MiB.", steps=None,
+                         losses=_pos78_rec()["losses"][:21], step_mem=_pos78_rec()["step_mem"][:21])
+        (o8, _), = [box8("o", oom, mach="host-id-ccc3")]
+        assert o8[0] == "OOM" and "Tried to allocate 72.00 MiB" in o8[1]["why"], o8
+        assert pos78_pair(a8, o8)[0] == "NOT_FIT" and pos78_pair(o8, a8)[0] == "NOT_FIT"
+        assert pos78_pair(a8, box8("same", _pos78_rec())[0]) == ("VOID", "the draws need two different machines (both ran on the same machine)")
+        assert pos78_pair(a8, box8("unread", _pos78_rec(), mach="")[0])[0] == "VOID"
+        assert box8("wide", _pos78_rec(), mib=49140, mach="host-id-ddd4")[0][0] == "VOID"            # a 48 GB card by its memory.total
+        ls = _pos78_rec()["losses"]
+        assert pos78_pair(a8, box8("ls", _pos78_rec(losses=[ls[0] + 1e-5] + ls[1:]), mach="host-id-eee5")[0])[0] == "VOID"
+        la8 = _pos78_rec()["lean_ab"]
+        for bad in ({"lean_ab": dict(la8, lora_path_calls=dict(la8["lora_path_calls"], padded=8))},          # a single-block call
+                    {"lean_ab": dict(la8, gnf4_pad_buckets_env=None, gnf4_pad_buckets_mode="auto")},          # the buckets' unset auto
+                    {"compact_buckets": {"env": None, "gnf4_has_compact_buckets": True, "calls": 49000}},     # a bucketed call off the node
+                    {"chunked_lm_loss": dict(_pos78_rec()["chunked_lm_loss"], env="1")},                    # 512-token chunks
+                    {"env": dict(_pos78_rec()["env"], gnf4_code={"commit": POS76_GNF4["ga"], "nf4_qlora_sha256": POS78_NF4_QLORA_SHA})},
+                    {"steps": POS78_STEPS - 1, "losses": ls[:-1], "step_mem": _pos78_rec()["step_mem"][:-1]},
+                    {"lean_ab": {}}, {"compact_buckets": {}}, {"chunked_lm_loss": {}}, {"keep_ab": {}}, {"mem_census": None},   # evidence removed:
+                    {"env": dict(_pos78_rec()["env"], gnf4_code=None)}, {"step_mem": []}):                                    # each fails closed
+            assert box8("bad", _pos78_rec(**bad), mach="host-id-fff6")[0][0] == "VOID", bad
+        nb = os.path.join(td8, "nomib", "tc1")                                                     # no GPU_MEMORY_TOTAL line at all
+        os.makedirs(nb)
+        open(os.path.join(nb, "summary.txt"), "w").write("BOX A families: qwen3pos78fit\n")
+        assert pos78_draw(P8(_pos78_rec()), nb)[0] == "VOID"
+        (n8, _), = [box8("none", None, mach="host-id-ggg7")]
+        assert n8[0] == "NO_READ" and pos78_pair(a8, n8)[0] == "NOT_READ"
+    cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
 
@@ -11995,11 +12263,20 @@ def main():
     ap.add_argument("--md", default=None)
     ap.add_argument("--steps", type=int, default=None, help="registered N (default: read from the receipts)")
     ap.add_argument("--selftest", action="store_true", help="R7: hand-built receipts through every reading; exit 0 iff every case reads as registered")
+    ap.add_argument("--pos78-pair", nargs=2, metavar=("DIR_1", "DIR_2"), default=None,
+                    help="TC1 amendment 78: the verdict over two boxes' tc1 dirs (one pb1cl256 draw each, two machines)")
     ap.add_argument("--tc1-dir", default=None, help="R10 (d): a TC1 receipt dir (qwen3 / qwen3native tokens) whose quoted 11..20 s/step medians the qwen3curve arms are read beside (TRAVELS within 10 %%); "
                                                    "R11 (b): the frontier tokens' offload anchor is read against its resident e4b/fused_attn4_m (EQUIVALENT-TO-RESIDENT) and P4 is scored")
     a = ap.parse_args()
     if a.selftest:
         selftest()
+        return
+    if a.pos78_pair:
+        d1, d2 = a.pos78_pair
+        text = "\n".join(pos78_pair_block(pos78_draw(reduce_dir(d1), d1), pos78_draw(reduce_dir(d2), d2)))
+        print(text)
+        if a.md:
+            open(a.md, "w").write(text + "\n")
         return
     if not a.dir:
         ap.error("dir is required (or --selftest)")
