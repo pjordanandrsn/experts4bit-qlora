@@ -3615,29 +3615,40 @@ Qwen3-30B-A3B at `ad44e777`. The tokens must equal `tc1-5090-155`'s (sha `bfc742
    on, the compact bucketed node on, and bucketing for any call;
 4. the tokens, as above.
 
-**Draws: two boxes on two different machines.** One machine is not a capability. The kit enforces it: each box's manifest lists every
-earlier read draw's committed receipt under `avoid_vast_machine_receipts`, and the launcher refuses a launch whose cited receipt is absent
-or not a completed run of the same class. The reducer also checks it.
+**Draws: two read boxes on two different machines.** One machine is not a capability. The kit enforces it: each box's manifest lists
+every earlier read draw's committed receipt under `avoid_vast_machine_receipts`, and the launcher refuses a launch whose cited receipt is
+absent or not a completed run of the same class. The reducer also checks it.
 
-**The rule** (`tc1_reduce.py`: `pos78_draw` per box, `--pos78-pair DIR_1 DIR_2` for the verdict). Per box:
+**The rule** (`tc1_reduce.py`: `pos78_draw` per box, `--pos78-lane DIR_1 [DIR_2 [DIR_3]]` for the verdict over the started boxes in
+launch order). Per box:
 - COMPLETE: a VALID trained row with all 60 steps and a step record for each. VALID binds the code (commit and file hash), the path
   (every LoRA call width-bucketed, with no single-block, loop or grouped_mm call, and the compact bucketed node's calls equal to the
   bucketed calls) and the loss (every training forward chunked at 256), on amendment 69's field defaults;
-- OOM: the arm died of an out-of-memory error at a step. Its step and the allocator's own line are kept;
-- VOID: a trained row off its registration, or a card outside the band;
-- NO_READ: no trained or OOM row.
+- OOM: the arm died of an out-of-memory error at a step of the 60, and its record proves the arm ran as registered. An OOM row carries
+  no trained-row path record, so the arm writes one for it (`oom_path`): the knobs as the process saw them and the counters up to the
+  OOM. The binding is torch 2.12; grouped-nf4-gemm's version, commit and `nf4_qlora.py` hash; the three knobs
+  (`NF4_QLORA_PAD_BUCKETS=1`, `NF4_QLORA_COMPACT_DELTA=1`, `E4B_CHUNKED_LM_LOSS=256`, with no bucket ladder and the compact bucketed
+  node at its default) and the modes they resolved to; every LoRA call so far width-bucketed through the compact bucketed node, at least
+  one; the chunked loss patched, with no forward on the stock or small loss; a loss and a step record for each completed step; and the
+  census. Its step and the allocator's own line are kept;
+- VOID: a trained or OOM row off its registration, a card outside the band, an unread machine id, or a missing pass line for the
+  pre-check, the probe or the tokens in the box's summary;
+- NO_READ: no trained or OOM row (a refused pre-check, a dead box).
 
-Over the two draws, in order:
-1. VOID if either draw is VOID;
-2. NOT_READ if either draw did not read;
-3. VOID if the two draws share a machine, or a machine id is unread;
-4. VOID if steps 1-2's losses are not bitwise equal across the draws. B starts at zero and the first learning rate is 0, so those two
-   forwards are the same; a miss is a plumbing fault;
-5. NOT_FIT if either draw ran out of memory at any step;
-6. otherwise **FIT**.
+Over the started draws, in launch order:
+1. **NOT_FIT** on the first OOM draw. FIT needs both draws to complete, so one bound OOM on a 24 GiB card decides the lane, and no
+   further box starts. This holds at any step, step 1 or 2 included;
+2. a VOID or NO_READ draw is a strike. It never pairs and does not count toward the pair. So is a COMPLETE draw on a machine an
+   earlier draw read (the kit avoids every read machine). Two consecutive strikes stop the lane: **NOT_READ**;
+3. the first two COMPLETE draws on different machines pair. **VOID** if their steps 1-2 losses are not bitwise equal. B starts at zero
+   and the first learning rate is 0, so those two forwards are the same, and a miss is a plumbing fault. The check is between COMPLETE
+   draws only, never an OOM draw;
+4. otherwise **FIT**;
+5. **NOT_READ** if the cap's three started boxes give fewer than two read draws. Until then the lane is open, and the next box avoids
+   every machine already read.
 
-**No headroom floor.** But the claim row and the results text quote the least of each of three headrooms over BOTH draws, so "fits" is
-never read as "fits with room": usable minus max allocated, usable minus max reserved, and `memory.total` minus device used. Usable is
+**No headroom floor.** But the claim row and the results text quote the least of each of three headrooms over the draws the verdict
+used (both paired draws; on NOT_FIT, the OOM draw's steps before its OOM), so "fits" is never read as "fits with room": usable minus max allocated, usable minus max reserved, and `memory.total` minus device used. Usable is
 `memory.total` minus the step's CUDA context (its device used minus its reserved).
 
 **Reported, never a bar.** Held-out loss after 60 steps, beside `tc1-5090-155`'s cd1cl1 (0.75489). That is not like-for-like (a
@@ -3653,17 +3664,27 @@ padded micro-batch in these tokens is 565 tokens (step 22, from `tc1-5090-155`'s
    No code parses an id's number;
 3. outcome classes as in bench/common's table. A refusal at create or a NOT_RUN uses an id and is never a strike. The runner's card
    refusal (rc 18) is a host refusal before the install;
-4. the cap: at most **three** boxes START. A strike is a started box that was not read; two consecutive strikes stop the lane. The third
-   started box is the last, whatever it reads;
+4. the cap: at most **three** boxes START. A strike is a started box that was not read; two consecutive strikes stop the lane. One bound
+   OOM ends the lane. The third started box is the last, whatever it reads;
 5. boot slack: a 1.5 h guard against about 30 minutes of phases leaves far more than 540 s;
 6. once closed, the tests assert this amendment's literal pins at its frozen commit;
-7. every gate fails closed: a missing memory.total, machine id, step record, path counter, loss record or code record reads VOID or
-   NO_READ, and the reducer self-test (case 132) removes each one;
+7. every gate fails closed: a missing memory.total, machine id, gate line, step record, path counter, knob, loss record or code record
+   reads VOID or NO_READ, on a trained row and on an OOM row, and the reducer self-test (case 132) removes each one;
 8. the fetch imports no links (`tc1_drive.sh`'s `--no-links`, rule 8).
 
 **Budget.** One RTX 4090 a box, at a declared $1.00/h with 220 GB of storage, a 1.5 h guard, and up to 100 GB downloaded at $0.03/GB.
-Worst case per box: 1.5 h × $1.00 + 100 GB × $0.03 = **$4.50**. Three started boxes: **$13.50**. The eight retry ids start nothing; each
-costs at most its boot term at the box rate (about $0.16), so the lane's worst is $13.50 + 8 × $0.16 = **$14.78**.
+- **A started box:** 1.5 h × $1.00 + 100 GB × $0.03 = **$4.50**, the guard running from the create.
+- **A box that does not start** (a NOT_RUN at the launcher's pre-flight, or the runner's refusal before its install: the card band, the
+  GPU class, the disk, the driver) costs its time to the refusal plus its download before it. The time is at most:
+  - 600 s for the provider to run the instance (the launcher's pre-flight timeout);
+  - 420 s for ssh (the allowance the kit passes; bench/common rule 5);
+  - 180 s for the pre-flight's four bandwidth windows of 45 s each;
+  - 120 s to stage the kit (rule 5's margin);
+  - 120 s for the runner's refusal, the evidence pull and the destroy.
+  That is 1,440 s = 0.4 h × $1.00 = $0.40. The download is the pre-flight's probe files, at most 1.17 GB (75 MB and up to 105 MB from
+  the generic endpoints, and 440 MB and 548 MB from the HF CDN), × $0.03 = $0.04. Each such box costs at most **$0.44**.
+- **The lane:** bench/common rule 4 bounds the boxes by the ids: three reading ids plus r1 to r8 is 11 boxes, of which at most three
+  start. So the lane's worst is 3 × $4.50 + 8 × $0.44 = $13.50 + $3.52 = **$17.02**. A refusal at create uses no id and costs $0.
 
 A default change (bucketed padding or the 256-token chunk on 24 GiB cards) is not part of this amendment. It needs its own PR, citing
 this reading.
