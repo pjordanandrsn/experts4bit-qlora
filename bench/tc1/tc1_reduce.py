@@ -3580,6 +3580,7 @@ POS78_NF4_QLORA_SHA = "8e0bb5d0d434d661db8dec5fd34c76d43a9da49e8b72867c33ec45a4f
 POS78_CHUNK = "256"
 POS78_STEPS = 60
 POS78_CAP = 3                                      # the most draws that may START (bench/common rule 4)
+POS78_FOR_A_PERSON = "an OOM on a machine an earlier draw read: the avoid list failed; for a person"
 POS78_MIB_BAND = (23500, 24600)                    # the box's memory.total, MiB: a 24 GiB card (tc1_run.sh refuses outside it, rc 18)
 POS78_REF_HELDOUT = 0.75489                        # tc1-5090-155's cd1cl1 held-out at 60 steps: REPORTED beside, never a bar (not like-for-like)
 NO_SPEED_FAMS[POS78_FAM] = "e4b only, one arm a box; s/step is recorded, never gated (amendment 78)"
@@ -5907,7 +5908,9 @@ def pos78_draw(F, d):
 def pos78_lane(draws):
     """Amendment 78's rule over the started draws in launch order (the maintainer's rulings on the review) -> (FIT | NOT_FIT | VOID | NOT_READ
     | OPEN, why, roles). Each draw's role says how the rule used it.
-    - One bound OOM decides the lane NOT_FIT: FIT needs both draws to complete, and no further box starts.
+    - One bound OOM decides the lane NOT_FIT: FIT needs both draws to complete, and no further box starts. An OOM on a machine an earlier
+      draw read complete is VOID and a strike instead, flagged for a person: the kit's avoid list failed, and two records disagree about
+      one machine.
     - A VOID or NO_READ draw is a strike. It never pairs and does not count toward the pair; two consecutive strikes stop the lane.
     - The first two COMPLETE draws on different machines pair. A COMPLETE draw on a machine an earlier draw read is VOID (the kit avoids
       every read machine) and a strike.
@@ -5919,7 +5922,7 @@ def pos78_lane(draws):
         if done or len(read) == 2 or i > POS78_CAP:
             roles.append("after the verdict")
             continue
-        if s == "OOM":
+        if s == "OOM" and x["machine"] not in seen:
             roles.append("decides")
             done = True
             continue
@@ -5931,7 +5934,8 @@ def pos78_lane(draws):
             continue
         strikes += 1
         done = strikes == 2
-        roles.append(("the stop" if done else "strike") + (" (a machine already read)" if s == "COMPLETE" else ""))
+        roles.append(("the stop" if done else "strike") + {"COMPLETE": " (a machine already read)",
+                                                            "OOM": f" ({POS78_FOR_A_PERSON})"}.get(s, ""))
     if "decides" in roles:
         i = roles.index("decides") + 1
         return "NOT_FIT", f"draw {i} ran out of memory at a step, its arm bound to its registration: {draws[i - 1][1]['why']}", roles
@@ -5985,6 +5989,11 @@ def pos78_lane_block(draws):
     used = [x for (s, x), role in zip(draws, roles) if role in ("pairs", "decides")]
     least = {k: min((x[k] for x in used if x[k] is not None), key=lambda h: h[0], default=None) for k in ("h_alloc", "h_res", "h_dev")}
     lines += ["", f"- **{v}:** {why}."]
+    flagged = [i for i, role in enumerate(roles, 1) if POS78_FOR_A_PERSON in role]
+    if flagged:
+        lines.append(f"- **For a person:** draw(s) {flagged} ran out of memory on a machine an earlier draw read complete. The kit's avoid "
+                     "list should make that impossible, and the two records disagree about one machine, so each such draw is VOID and a "
+                     "strike, never NOT_FIT.")
     if v in ("FIT", "VOID") and len(used) == 2:
         two = bool(used[0]["machine"] and used[1]["machine"] and used[0]["machine"] != used[1]["machine"])
         lines.append(f"- **Two different machines:** {'yes' if two else 'no'} (the ids stay in the private store).")
@@ -9422,7 +9431,7 @@ def _pos76_set(groups=None, gap=None, held=None, rec=None, code=None):
 def _pos78_rec(**over):
     """Amendment 78: one pb1cl256 draw at 60 steps on its registered code, path and loss (the record fields a trained 4090 box writes): every
     LoRA call bucketed through the compact bucketed node, 256-token LM-loss chunks, and a flat synthetic step record whose three headrooms on
-    a 24,564 MiB card are 1,264 / 664 / 664 MiB. `over` replaces whole fields."""
+    a 24,564 MiB card fall at different steps: 1,264 MiB at step 22, 664 at step 30 and 664 at step 40. `over` replaces whole fields."""
     r = json.loads(json.dumps(_pos75_set()[POS75_ARMS[3]]))
     r.update(fam=POS78_FAM, tag=POS78_ARMS[0][1], steps=POS78_STEPS, losses=[round(2.05 - 0.02 * i, 5) for i in range(POS78_STEPS)],
              step_ms=[3000.0] * POS78_STEPS, eval_loss_final=0.7550)
@@ -9437,8 +9446,12 @@ def _pos78_rec(**over):
     r["compact_buckets"] = {"env": None, "gnf4_has_compact_buckets": True, "calls": 49152}
     r["keep_ab"] = dict(r.get("keep_ab") or {}, gnf4_compact_delta="1", gnf4_compact_delta_env="1")
     M = 1048576
-    r["step_mem"] = [{"step": i + 1, "max_allocated": 22800 * M, "max_reserved": 23400 * M, "allocated": 20600 * M, "reserved": 23400 * M,
-                      "device_used": 23900 * M} for i in range(POS78_STEPS)]
+
+    def sm(k):          # the running maxima rise at steps 22 and 30, the reserved pool at 40; the CUDA context stays 500 MiB
+        rs = 23400 if k >= 40 else 23000
+        return {"step": k, "max_allocated": (22800 if k >= 22 else 22000) * M, "max_reserved": (23400 if k >= 30 else 23000) * M,
+                "allocated": 20600 * M, "reserved": rs * M, "device_used": (rs + 500) * M}
+    r["step_mem"] = [sm(k) for k in range(1, POS78_STEPS + 1)]
     r.update(over)
     return r
 
@@ -12328,12 +12341,16 @@ def selftest():
             json.dump({"environment": {"vast_machine_id": mach}}, open(os.path.join(td8, f"b{n_box[0]}", "receipt.json"), "w"))
             return pos78_draw(P8(r) if r is not None else {}, bd), bd
         lane = lambda *ds: pos78_lane(list(ds))
-        (a8, d8a), (b8, _) = box8(_pos78_rec()), box8(_pos78_rec(), mach="host-id-bbb2")
+        M8 = 1048576
+        sm_b = [dict(x, max_allocated=x["max_allocated"] + 100 * M8) for x in _pos78_rec()["step_mem"]]    # 100 MiB less h_alloc
+        (a8, d8a), (b8, _) = box8(_pos78_rec()), box8(_pos78_rec(step_mem=sm_b), mach="host-id-bbb2")
         assert a8[0] == b8[0] == "COMPLETE", (a8, b8)
-        assert a8[1]["h_alloc"] == (1264.0, 1) and a8[1]["h_res"] == (664.0, 1) and a8[1]["h_dev"] == (664.0, 1), a8[1]
+        assert a8[1]["h_alloc"] == (1264.0, 22) and a8[1]["h_res"] == (664.0, 30) and a8[1]["h_dev"] == (664.0, 40), a8[1]
+        assert b8[1]["h_alloc"] == (1164.0, 22) and b8[1]["h_res"] == (664.0, 30), b8[1]
         assert lane(a8, b8) == ("FIT", "draws 1 and 2 trained all 60 steps with no out-of-memory error on two different machines", ["pairs", "pairs"])
         t8 = "\n".join(pos78_lane_block([a8, b8]))
-        assert "**FIT:**" in t8 and "usable - max allocated 1,264 MiB (step 1)" in t8 and "total - device used 664 MiB (step 1)" in t8, t8
+        assert "**FIT:**" in t8 and "usable - max allocated 1,164 MiB (step 22)" in t8 and "usable - max reserved 664 MiB (step 30)" in t8 \
+            and "total - device used 664 MiB (step 40)" in t8 and "For a person" not in t8, t8      # the least over BOTH draws
         assert "**Two different machines:** yes" in t8 and "host-id-" not in t8 and "565 tokens (step 22)" in t8 and "not like-for-like" in t8, t8
         assert "host-id-" not in "\n".join(pos78_block(P8(_pos78_rec()), d8a)) and "Amendment 78: the field recipe" in render(P8(_pos78_rec()), d8a)
         assert lane(a8)[0] == "OPEN" and lane()[0] == "OPEN"
@@ -12377,6 +12394,7 @@ def selftest():
                     {"oom_path": dict(op8, chunked_lm_loss=None)},
                     {"oom_path": dict(op8, chunked_lm_loss=dict(op8["chunked_lm_loss"], stock_calls=1))},
                     {"oom_path": dict(op8, chunked_lm_loss=dict(op8["chunked_lm_loss"], patched=0))},
+                    {"oom_path": dict(op8, chunked_lm_loss=dict(op8["chunked_lm_loss"], runtime_refusals=1))},
                     {"oom_path": dict(op8, chunked_lm_loss={"patched": 1})},
                     {"mem_census": None}, {"step_mem": sm[:20]}, {"step_mem": None}, {"losses": ls[:20]}, {"phase": "load"},
                     {"steps_done": None}, {"reason": "OOM at step 25: CUDA out of memory."}):
@@ -12384,6 +12402,10 @@ def selftest():
             assert v8[0] == "VOID" and "does not prove its arm ran as registered" in v8[1]["why"], (bad, v8)
             assert lane(a8, v8)[0] == "OPEN" and lane(v8, a8, b8)[::2] == ("FIT", ["strike", "pairs", "pairs"]), bad
         assert box8(oom8(61, steps_done=60, losses=ls, step_mem=sm), mach="host-id-fff6")[0][0] == "VOID"   # past the 60 steps
+        fail_pre = (f"PRECHECK {POS78_FAM} pre-check FAILED: grouped-nf4-gemm rc=1 on this GPU 1 failed, 5 passed\n",) + G8[1:]
+        fail_probe = G8[:1] + (f"PADBUCKETS_PROBE {POS78_FAM} 1 True False True (want: 1 True True True)\n",) + G8[2:]
+        for gs in (fail_pre, fail_probe):                                                        # a gate line that says it failed
+            assert box8(oom8(), mach="host-id-fff6", gates=gs)[0][0] == "VOID" and box8(_pos78_rec(), mach="host-id-fff6", gates=gs)[0][0] == "VOID", gs
         for g in range(3):                                                                       # each runner gate's line removed
             gs = G8[:g] + G8[g + 1:]
             assert box8(oom8(), mach="host-id-fff6", gates=gs)[0][0] == "VOID" and box8(_pos78_rec(), mach="host-id-fff6", gates=gs)[0][0] == "VOID", g
@@ -12400,6 +12422,11 @@ def selftest():
         same = box8(_pos78_rec())[0]
         assert lane(a8, same)[::2] == ("OPEN", ["pairs", "strike (a machine already read)"]) and lane(a8, same, b8)[0] == "FIT"
         assert lane(a8, b8, n8)[2] == ["pairs", "pairs", "after the verdict"] and lane(a8, n8, b8, b8)[2][-1] == "after the verdict"
+        o_same = box8(oom8(), mach="host-id-aaa1")[0]                                            # an OOM where draw 1 read complete
+        assert o_same[0] == "OOM" and lane(a8, o_same)[::2] == ("OPEN", ["pairs", f"strike ({POS78_FOR_A_PERSON})"]), lane(a8, o_same)
+        assert lane(a8, o_same, v8)[0] == "NOT_READ" and lane(a8, o_same, b8)[0] == "FIT" and lane(o_same, a8)[0] == "NOT_FIT"
+        t8p = "\n".join(pos78_lane_block([a8, o_same]))
+        assert "**For a person:** draw(s) [2]" in t8p and "host-id-" not in t8p, t8p
         assert box8(_pos78_rec(), mach="")[0][0] == "VOID"                                      # an unread machine id
         for g8 in ("NVIDIA GeForce RTX 3090", "", None):                                         # a 24 GiB card that is not a 4090; no name
             env8 = dict(_pos78_rec()["env"], gpu=g8)
@@ -12413,7 +12440,7 @@ def selftest():
                     {"compact_buckets": {"env": None, "gnf4_has_compact_buckets": True, "calls": 49000}},     # a bucketed call off the node
                     {"chunked_lm_loss": dict(_pos78_rec()["chunked_lm_loss"], env="1")},                    # 512-token chunks
                     {"env": dict(_pos78_rec()["env"], gnf4_code={"commit": POS76_GNF4["ga"], "nf4_qlora_sha256": POS78_NF4_QLORA_SHA})},
-                    {"steps": POS78_STEPS - 1, "losses": ls[:-1], "step_mem": sm[:-1]},
+                    {"steps": POS78_STEPS - 1, "losses": ls[:-1], "step_mem": sm[:-1]}, {"steps": POS78_STEPS - 1},
                     {"lean_ab": {}}, {"compact_buckets": {}}, {"chunked_lm_loss": {}}, {"keep_ab": {}}, {"mem_census": None},   # evidence removed:
                     {"env": dict(_pos78_rec()["env"], gnf4_code=None)}, {"step_mem": []}):                                    # each fails closed
             assert box8(_pos78_rec(**bad), mach="host-id-fff6")[0][0] == "VOID", bad

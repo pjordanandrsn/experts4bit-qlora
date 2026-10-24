@@ -3638,7 +3638,9 @@ launch order). Per box:
 
 Over the started draws, in launch order:
 1. **NOT_FIT** on the first OOM draw. FIT needs both draws to complete, so one bound OOM on a 24 GiB card decides the lane, and no
-   further box starts. This holds at any step, step 1 or 2 included;
+   further box starts. This holds at any step, step 1 or 2 included. The one exception: an OOM on a machine an earlier draw read
+   complete is VOID and a strike, never NOT_FIT. The kit's avoid list should make it impossible, so it means the enforcement failed,
+   and two records that disagree about one machine are not a clean answer. The verdict flags such a draw for a person;
 2. a VOID or NO_READ draw is a strike. It never pairs and does not count toward the pair. So is a COMPLETE draw on a machine an
    earlier draw read (the kit avoids every read machine). Two consecutive strikes stop the lane: **NOT_READ**;
 3. the first two COMPLETE draws on different machines pair. **VOID** if their steps 1-2 losses are not bitwise equal. B starts at zero
