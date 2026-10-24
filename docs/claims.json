@@ -12976,6 +12976,32 @@
         "the private receipt store, run p228-5090-r1 (receipt.json, teardown-proof.json)"
       ],
       "notes": "Pre-registered in #2021 (Amendments 1-7: the shakedown and real fixture, wording, a runner comment re-pinned, pod-launch's drive contract, the retry ids, the power admission by the latest record, and a fetch that imports no links), before any data. A microbench of the two dense projections, not a served read: a code PR fills K1's LT_PINS from the verdict's pin table with no speed claim, and a served read with B3's quality bar, per bucket and with the router as its own arm, comes before any default. E4B_DENSE_LT_PIN stays opt-in. The router claim is bounded to M <= 4: at 8 rows the default closes most of the gap."
+    },
+    {
+      "id": "e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P232 (one RTX 5090 at 575 W): on Qwen3-30B-A3B's default serve_paged server with the lm_head on its per-row int8 grid (E4B_INT8_HEAD_BW, the qwen3_moe default), routing the head's 2- to 8-row calls through grouped-nf4-gemm K37's linear_i8 (E4B_INT8_HEAD_ROWS=8) instead of F.linear on the grid's bf16 rounding decodes 2, 4 and 8 requests 1.0311x, 1.0243x and 1.0165x as fast (the smallest of four ABBA pairs at each workload), inside P153's quality bars at group T = 2, 4 and 8 (NLL gap -0.000091, -0.000091, -0.000031; argmax 3064, 3064, 3066 of 3072; KL 0.000142), TRIPWIRE none. P232's verdict is FLIP_ROWS_8, which licenses a separate PR to make E4B_INT8_HEAD_ROWS=8 qwen3_moe's default.",
+      "value": 1.0165,
+      "unit": "ratio, K / R decode rate (tokens/s) at W8, the smallest of four ABBA pairs (Ka/Ra 1.0165, Kb/Rb 1.0239, Kc/Rc 1.0240, Kd/Rd 1.0235); the smallest g_T over T = 2, 4, 8 (W2 1.0311, W4 1.0243)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 595.91.07, a 575 W power limit read on the box before any install and enforced in every timed block), one rented Vast.ai host (verified-secure, AMD Ryzen 9 7900X, 24 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @f7589a02 (0.57.0, P232's registration with Amendments 1-2, #2085's merge) + grouped-nf4-gemm v0.50.0 @41ef086e; torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; premise on the card exactly as registered (the real kernels, 11 passed; the route's CPU suite, 45 passed); Qwen/Qwen3-30B-A3B @ad44e777, NF4 arena baked on the box; the default serve_paged server (graphs on, 16 x 4096 tokens, buckets 1-16, the split cap at its qwen3_moe default of 16, the dense attention GEMV off, the int8 head on by default in both arms); a warm-up process Rw (integrity-checked, never scored), then eight arms ABBA twice (R = E4B_INT8_HEAD_ROWS unset, K = 8), W2, W4 and W8 at 32 and 160 tokens, 5 timed reps, a 575 W power floor read either side of every timed block; quality = P153's instrument eager at group T = 2, 4 and 8, 24 wikitext windows x 128 positions per T, the pass KV at the server's 4096 tokens; verdict by bench/p232/p232_reduce.py",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p232/RESULTS-p232.md",
+        "bench/p232/PREREG-p232.md",
+        "bench/p232/p232_reduce.py",
+        "bench/p232/receipts/p232-5090-1/verdict_p232.json",
+        "bench/p232/receipts/p232-5090-1/SHA256SUMS",
+        "bench/p229/RESULTS-p229.md"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p232-5090-1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2071 (Amendments 1-2: what the kit could implement exactly; the shakedown's record as the reducer's real fixture, the 575 W floor shown on its real bytes, and the guard read on a real host), before any reading. The premise: P229's GO_ROWS_8 microbench of the head call. Self-pairs 0.9925-1.0033 (band 0.985-1.015). T = 2 and T = 4 read identical quality numbers: every row's log-probs are the same at either group size (bucket stability: rows identical at T = 2, 4 and 8 in both arms). Greedy tokens (reported only): 76 of 112 rows identical to R's; a divergent row diverges at the same step in all four pairs. Predictions: quality, self-pairs and the verdict held; g_T in [1.02, 1.05] missed at T = 8 (1.0165, on the low side); most W2 rows identical at 32 tokens missed (half). The knob stays opt-in until the default PR merges; every other model family keeps its current default."
     }
   ]
 }

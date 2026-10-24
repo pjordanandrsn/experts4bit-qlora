@@ -445,7 +445,10 @@ decode in 0.50.0. On an older package each resolves off, recorded.
     requests, within bf16's output rounding of the same grid. A captured microbench of the head call (lane P229) read
     GO_ROWS_8: K37 runs the head in a median 0.51 of `F.linear`'s time at 2, 4 and 8 rows
     (`e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23`, [`bench/p229/RESULTS-p229.md`](../bench/p229/RESULTS-p229.md)).
-    No served read has run yet, so this is not a served speed or quality claim
+    A served read on Qwen3-30B-A3B's default server (lane P232) read FLIP_ROWS_8: at 2, 4 and 8 requests the knob decodes
+    1.0165-1.0311x as fast (the smallest of four ABBA pairs at each) inside P153's quality bars (NLL gap at most 0.0001,
+    argmax at least 0.997), TRIPWIRE none (`e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24`,
+    [`bench/p232/RESULTS-p232.md`](../bench/p232/RESULTS-p232.md)). It stays opt-in until a separate default PR
     ([`bench/dense-small-m/DESIGN-K2.md`](../bench/dense-small-m/DESIGN-K2.md)). It is refused at startup
     when the head is not on its int8 grid or the kernel package lacks K37, and together with speculative decode
     (`E4B_PAGED_SPEC`), whose gate and draft were read with the head on `F.linear`, until a read covers the pair.

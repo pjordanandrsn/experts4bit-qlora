@@ -1,0 +1,38 @@
+[00:47:28]   host CPUs: 24 visible, quota 23.04, torch threads 12, OMP_NUM_THREADS=None
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 3608.34it/s]
+[00:47:28]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[00:47:28]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[00:47:28]   quantized experts on 48/48 MoE layers (128 experts each)
+[00:47:28]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[00:47:29]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[00:47:42]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v auto; folds set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+[serve_paged] PREFILL_GLUE on (default-allowlisted, model_type 'qwen3_moe'): the decode folds also take prefill rows
+[serve_paged] PREFILL_GRAPH auto: refused, prefill stays eager (device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement))
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 256, "pool_mib": 3312.8}, "graph_status": null, "spec": {"mode": "off"}, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "moe_residual": {"rows": [1, 2, 4, 8, 16], "licensed": 48, "partial": 0, "refused": 0, "probe_errors": []}, "prefill_graph": "auto", "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "attn_int8_projections": 0, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "auto", "E4B_FUSE_T1_GLUE": "auto", "E4B_FUSE_T1_GLUE_R2": "auto", "E4B_FUSE_ROUTER_EPI": "auto"}, "fusion_sources": {"E4B_PAGED_FUSE_QKV": "default-allowlisted", "E4B_FUSE_T1_GLUE": "default-allowlisted", "E4B_FUSE_T1_GLUE_R2": "default-allowlisted", "E4B_FUSE_ROUTER_EPI": "default-allowlisted"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "auto", "prefill": "on", "patched": 193, "failed_probe": 0}, "E4B_FUSE_T1_GLUE_R2": {"mode": "auto", "prefill": "on", "patched": [48, 48], "kernel_gaps": 0}, "E4B_FUSE_ROUTER_EPI": {"mode": "auto", "patched": 48, "failed_probe": 0, "no_kernel_mode": 0, "fp32_upstream": 0}}, "prefill_glue": {"mode": "1", "source": "default-allowlisted"}, "attn_split_cap": {"cap": 16, "source": "default-allowlisted", "plans": {}}, "dense_gemv_bw": {"mode": "0", "modules": 0, "engagement": {"modules": 0, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}}, "int8_head_bw": {"mode": "1", "modules": 1, "shape": [151936, 2048], "int8_bytes": 311164928, "grid": "quantize_rows_int8 (K36); the weight rounded in place to bf16(q * s), P150's I8HEAD", "source": "default-allowlisted", "rows": {"rows_max": 1}, "engagement": {"modules": 1, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}}, "dense_lt_pin": {"env": null, "on": false, "sites": [], "engagement": {}}, "k25_lut": {"env": null, "lut": "prmt", "why": null, "source": "default-allowlisted"}, "k25_plan": {"env": null, "plan": "c1", "why": null, "source": "default-allowlisted", "gu": {"block_n": 64, "kc": 256, "warps": 4, "stages": 2}, "dn": {"block_n": 128, "kc": 128, "warps": 8, "stages": 3}}, "nf4_smallm_bw": {"env": null, "on": false, "max_tokens": 8, "why": "opt-in: E4B_NF4_SMALLM_BW is not 1"}, "attn_int8": {"projections": 0, "engagement": {"modules": 0, "routed_modules_by_rows": {}, "passed_modules_by_rows": {}}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+P115_QGROUP off wikitext group 1 of 12 done at 10 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 2 of 12 done at 14 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 3 of 12 done at 19 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 4 of 12 done at 24 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 5 of 12 done at 28 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 6 of 12 done at 33 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 7 of 12 done at 38 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 8 of 12 done at 42 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 9 of 12 done at 47 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 10 of 12 done at 52 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 11 of 12 done at 57 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 12 of 12 done at 62 s, 21.59 GiB allocated
+P232_QT R T=2 windows={'wikitext': 24} cap=16 head_calls={'routed': {}, 'passed': {'2': 1651, '512': 26}} quality_kv={'passes': 13, 'asked': [656], 'max_tokens_per_seq': [4096], 'blocks_per_seq': [256], 'split_cap': 16, 'plan_clash': [], 'plan_bT': 32} plans={'2': {'calls': 79248, 'plan': 32, 'n_split': 16}} 61.6 s
+P115_QGROUP off wikitext group 1 of 6 done at 11 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 2 of 6 done at 17 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 3 of 6 done at 22 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 4 of 6 done at 28 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 5 of 6 done at 33 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 6 of 6 done at 39 s, 21.59 GiB allocated
+P232_QT R T=4 windows={'wikitext': 24} cap=16 head_calls={'routed': {}, 'passed': {'4': 889, '512': 28}} quality_kv={'passes': 7, 'asked': [656], 'max_tokens_per_seq': [4096], 'blocks_per_seq': [256], 'split_cap': 16, 'plan_clash': [], 'plan_bT': 23} plans={'4': {'calls': 42672, 'plan': 23, 'n_split': 16}} 38.7 s
+P115_QGROUP off wikitext group 1 of 3 done at 14 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 2 of 3 done at 21 s, 21.59 GiB allocated
+P115_QGROUP off wikitext group 3 of 3 done at 28 s, 21.59 GiB allocated
+P232_QT R T=8 windows={'wikitext': 24} cap=16 head_calls={'routed': {}, 'passed': {'8': 508, '512': 32}} quality_kv={'passes': 4, 'asked': [656], 'max_tokens_per_seq': [4096], 'blocks_per_seq': [256], 'split_cap': 16, 'plan_clash': [], 'plan_bT': 11} plans={'8': {'calls': 24384, 'plan': 11, 'n_split': 11}} 27.7 s
+P232_QUALITY R groups=['2', '4', '8'] stability={'2': {'rows_identical': 4, 'rows': 4, 'max_abs_diff': 0.0, 'steps': 2}, '4': {'rows_identical': 8, 'rows': 8, 'max_abs_diff': 0.0, 'steps': 2}, '8': {'rows_identical': 16, 'rows': 16, 'max_abs_diff': 0.0, 'steps': 2}} head={'rows_max': 1}

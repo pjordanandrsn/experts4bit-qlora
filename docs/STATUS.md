@@ -328,8 +328,12 @@ GEMV, which reads half the head's bytes.
 lane P229), grouped-nf4-gemm K37's `linear_i8` runs Qwen3-30B-A3B's 151936 x 2048 int8 head at 2, 4 and 8 rows in a
 median 0.51 of `F.linear`'s time on the grid's bf16 rounding (upper bounds 0.5109, 0.5148 and 0.5085 against 0.70), and
 within a median 1.01-1.03 of the one-row int8 GEMV. The verdict is GO_ROWS_8, so the knob is licensed to its maximum of
-8 rows. No served speed or quality is claimed: a served read with P153's quality bars comes first, and the knob stays
-off by default. `e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23` ([P229](../bench/p229/RESULTS-p229.md)).
+8 rows. `e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23` ([P229](../bench/p229/RESULTS-p229.md)).
+- **Served (lane P232, one RTX 5090 at 575 W):** on Qwen3-30B-A3B's default server, `E4B_INT8_HEAD_ROWS=8` decodes 2, 4
+  and 8 requests **1.0311x, 1.0243x and 1.0165x** as fast as unset (the smallest of four ABBA pairs at each), inside
+  P153's quality bars at every group size (NLL gap at most 0.0001 nats, argmax 0.9974-0.9980 against 0.95), TRIPWIRE
+  none. The verdict is FLIP_ROWS_8, which licenses a separate PR to make 8 qwen3_moe's default; until it merges the knob
+  stays opt-in. `e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24` ([P232](../bench/p232/RESULTS-p232.md)).
 
 **Pinned cuBLASLt GEMMs for o_proj and the router at 2 to 8 rows (`E4B_DENSE_LT_PIN`, opt-in).** In a captured
 microbench of the two dense sites (one RTX 5090, lane P228), the cuBLASLt configuration selected on the card (algo 21,
