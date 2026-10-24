@@ -35,8 +35,8 @@ through the URL an install recorded. The pins are constants in `provenance.py` a
 unconditionally, never behind a flag.
 
 **The release proof: the installed bytes.** Provenance says where an install came from; it does not prove the
-bytes. `release_proof.py` is loggetta's helper `bench/release_proof.py`
-(loggetta#126 at `aa714d41`, sha256 `aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0`), staged byte-identical and pinned in
+bytes. `release_proof.py` is loggetta `bench/release_proof.py` at `f09e5676` (#126's merge),
+sha256 `aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0`, staged byte-identical and pinned in
 `staged.sha256`. For each pin it takes the one published PyPI wheel whose filename carries the installed `WHEEL` Tag
 lines (`wheel_pick` "filename"). When none does, it takes the one wheel with the install's python and abi tags whose
 platform is `linux_<arch>` or `manylinux*`/`musllinux*_<arch>` (`wheel_pick` "arch"); zero or more than one

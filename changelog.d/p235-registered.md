@@ -8,7 +8,7 @@ release.
   0.51.0, vLLM 0.32.0 and 0.30.0). For each distribution it checks the installed version and its provenance: a PyPI
   index install only. Editable, `file://`, other-host and every git install (whatever its URL or commit) are refused.
   It writes `provenance.json` into the receipts.
-- `bench/p235/release_proof.py` (new): loggetta's release proof (loggetta#126), staged byte-identical. It proves each
+- `bench/p235/release_proof.py` (new): loggetta bench/release_proof.py at f09e5676 (#126's merge), staged byte-identical. It proves each
   installed distribution IS the published wheel's bytes (wheel digest, every RECORD file equal on disk, every
   top-level name importing from the proven install). It runs as
   the last step before each build's first arm, in that build's import environment, and writes
