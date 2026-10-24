@@ -13057,6 +13057,7 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-24/p234-5090-1/ (receipt.json, teardown-proof.json)"
       ],
+      "licensed_by": "e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24",
       "notes": "Pre-registered in #2114 (lever B, step B3, re-registered after P231's FUNCTION_FAIL, whose sixteen-request token-identity check ran the switched buckets in its admission ramp). All six predictions held. Reported, not ruled on: B1's tokens differ from B0's by row at W2 to W16 (the switch acts there; W16 on the same rows as P231), and W8 reads 1.22138. The default change for buckets 2 and 4 lands in its own PR citing this read. Lane cost $1.023 (the reading), plus a $0.12 exploratory shakedown before it."
     }
   ]
