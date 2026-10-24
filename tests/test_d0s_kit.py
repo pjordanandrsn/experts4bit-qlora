@@ -52,6 +52,9 @@ def test_the_margins_are_the_registrations_constants_from_d0s_record():
 ROWS, N_TOK, Q_NLL, REF_NLL = 4, 50, 200.0, 180.0
 COST = {"cost": {"W1": {"ttft_s": 0.1, "itl_s": 0.01, "tok_s": 100.0},
                  "W16": {"ttft_s": 0.5, "itl_s": 0.02, "tok_s": 800.0}}, "peak_vram_bytes": 10 ** 9}
+IDS = {"attention_only": "a" * 64, "adapter": "f" * 64}
+PREP = {"fixtures": {fx: {"attention_only": {"adapter_id": IDS["attention_only"], "source_adapter_id": IDS["adapter"]},
+                          "cells": {}} for fx in ("nodq", "dq")}}
 
 
 def _d0(fx="nodq"):
@@ -59,9 +62,17 @@ def _d0(fx="nodq"):
             "improvement": R.d0_record(str(D0), fx)["improvement"]}
 
 
-def _arm(row_nll, argmax=0, cost=None):
+def _served(arm):
+    if arm.startswith("BASE-ATTN"):
+        return {"adapter_id": IDS["attention_only"], "merged_arena": None, "fingerprints": {"experts": {"status": "verified"}},
+                "placement": "vram", "graph_status": {"1": "captured"}}
+    return {"adapter_id": IDS["adapter"], "merged_arena": {"source": R.SOURCES[arm], "adapter_id": IDS["adapter"]},
+            "fingerprints": {"experts": {"status": R.MERGED_VERIFIED}}, "placement": "vram", "graph_status": {"1": "captured"}}
+
+
+def _arm(row_nll, arm="MERGED-Q", argmax=0, cost=None):
     return {"rows": [{"nll": row_nll, "n": N_TOK, "argmax": [argmax] * N_TOK} for _ in range(ROWS)],
-            **json.loads(json.dumps(cost or COST))}
+            **json.loads(json.dumps(cost or COST)), "served": _served(arm), "device": "NVIDIA GeForce RTX 4090"}
 
 
 def _ref():
@@ -69,16 +80,28 @@ def _ref():
                                      for _ in range(ROWS)]}
 
 
-def _cell(fx, x, w=None, prepare=None):
-    arms = {"BASE-ATTN-1": _arm(Q_NLL), "BASE-ATTN-2": _arm(Q_NLL), "MERGED-Q": x, "MERGED-W": w or _arm(REF_NLL)}
-    return R.reduce_fixture(fx, arms, _d0(fx), _ref(), prepare or {"fixtures": {}})["cells"]["MERGED-Q"]
+def _arms(**over):
+    arms = {"BASE-ATTN-1": _arm(Q_NLL, "BASE-ATTN-1"), "BASE-ATTN-2": _arm(Q_NLL, "BASE-ATTN-2"),
+            "MERGED-Q": _arm(REF_NLL, "MERGED-Q"), "MERGED-W": _arm(REF_NLL, "MERGED-W")}
+    arms.update({k.replace("_", "-"): v for k, v in over.items()})
+    return arms
 
 
-def test_full_retention_passes_and_none_fails():
-    c = _cell("nodq", _arm(REF_NLL))
-    assert c["status"] == "PASS" and c["R"] == 1.0 and c["gap"] == 0.0
+def _fixture(fx="nodq", arms=None, ref=None, prepare=None):
+    return R.reduce_fixture(fx, arms or _arms(), _d0(fx), ref or _ref(), PREP if prepare is None else prepare)
+
+
+def _cell(fx, x):
+    return _fixture(fx, _arms(MERGED_Q=x))["cells"]["MERGED-Q"]
+
+
+def test_full_retention_passes_and_none_fails_below_ref():
+    v = _fixture()
+    assert v["status"] == "READ" and [c["status"] for c in v["cells"].values()] == ["PASS", "PASS"]
+    c = v["cells"]["MERGED-Q"]
+    assert c["R"] == 1.0 and c["gap"] == 0.0 and c["gap_side"] is None and c["unexplained_speedup"] == []
     c = _cell("nodq", _arm(Q_NLL))
-    assert c["status"] == "FAIL" and c["R"] == 0.0 and not c["gates"]["retention"] and not c["gates"]["gap"]
+    assert c["status"] == "FAIL" and c["R"] == 0.0 and not c["gates"]["retention"] and c["gap_side"] == R.BELOW_REF
 
 
 @pytest.mark.parametrize("row_nll, passes", [(181.0, True), (181.002, False)])   # R = 19/20 = 0.95 exactly, and less
@@ -88,11 +111,15 @@ def test_the_retention_floor_is_inclusive(row_nll, passes):
 
 
 @pytest.mark.parametrize("fx", ["nodq", "dq"])
-def test_the_gap_margin_is_the_registered_absolute_number(fx):
-    inside = _cell(fx, _arm(REF_NLL + N_TOK * R.MARGINS[fx] * 0.9999))
-    outside = _cell(fx, _arm(REF_NLL + N_TOK * R.MARGINS[fx] * 1.0001))
-    assert inside["gates"]["gap"] and not outside["gates"]["gap"]
-    assert inside["gap"] == pytest.approx(0.9999 * R.MARGINS[fx])
+def test_the_gap_margin_is_two_sided_and_names_the_side(fx):
+    m = R.MARGINS[fx]
+    for k in (0.9999, -0.9999):
+        assert _cell(fx, _arm(REF_NLL + N_TOK * m * k))["gates"]["gap"]
+    low = _cell(fx, _arm(REF_NLL + N_TOK * m * 1.0001))
+    assert low["status"] == "FAIL" and low["gap_side"] == R.BELOW_REF and low["gap"] == pytest.approx(1.0001 * m)
+    high = _cell(fx, _arm(REF_NLL - N_TOK * m * 1.0001))       # R just above 1 + M / 0.4 (this record's 0.4-nat D)
+    assert high["gates"]["retention"] and high["R_ci90"][0] > 1.04       # the CI lower bound does not rescue it
+    assert high["status"] == "FAIL" and high["gap_side"] == R.BEYOND_REF and "artifact to explain" in high["gap_side_text"]
 
 
 def test_the_canary_is_pooled_exact_counts_with_one_point_of_slack():
@@ -105,27 +132,164 @@ def test_the_canary_is_pooled_exact_counts_with_one_point_of_slack():
         assert c["canary_agree"] == agree and c["gates"]["canary"] is passes
 
 
-def test_cost_must_sit_in_the_self_pair_band_and_vram_within_one_percent():
-    def with_(tok_s, vram):
-        cost = json.loads(json.dumps(COST))
-        cost["cost"]["W16"]["tok_s"], cost["peak_vram_bytes"] = tok_s, vram
-        return _cell("nodq", _arm(REF_NLL, cost=cost))["gates"]["cost"]
-    assert with_(800.0 * 0.975, 10 ** 9)                   # 2.5 % off: inside the 3 % floor (BASE-ATTN-2 == -1)
-    assert not with_(800.0 * 0.96, 10 ** 9)                # 4 % off
-    assert with_(800.0, int(1.009e9)) and not with_(800.0, int(1.011e9))
+def _costed(width, metric, factor, vram=10 ** 9, b2=None):
+    cost = json.loads(json.dumps(COST))
+    cost["cost"][width][metric] *= factor
+    cost["peak_vram_bytes"] = vram
+    arms = _arms(MERGED_Q=_arm(REF_NLL, cost=cost))
+    if b2 is not None:
+        c2 = json.loads(json.dumps(COST))
+        c2["cost"][width][metric] *= b2
+        arms["BASE-ATTN-2"] = _arm(Q_NLL, "BASE-ATTN-2", cost=c2)
+    return _fixture(arms=arms)["cells"]["MERGED-Q"]
 
 
-def test_writer_refused_not_read_and_void_are_named():
-    d0, arms = _d0(), {"BASE-ATTN-1": _arm(Q_NLL), "BASE-ATTN-2": _arm(Q_NLL)}
-    prep = {"fixtures": {"nodq": {"cells": {"MERGED-Q": {"status": "WRITER_REFUSED", "why": "self-check"}}}}}
-    v = R.reduce_fixture("nodq", arms, d0, _ref(), prep)
+def test_cost_is_slower_only_within_the_self_pair_band_floored_at_three_percent():
+    assert _costed("W16", "tok_s", 0.975)["gates"]["cost"]               # 2.5 % slower: inside the 3 % floor
+    assert not _costed("W16", "tok_s", 0.96)["gates"]["cost"]            # 4 % slower
+    assert not _costed("W1", "itl_s", 1.04)["gates"]["cost"]             # a larger ITL is slower
+    assert _costed("W16", "tok_s", 0.955, b2=1.02)["gates"]["cost"]     # the self-pair's 2 % widens the band to 5 %
+    fast = _costed("W16", "tok_s", 1.05)                                 # faster passes, the speedup named
+    assert fast["gates"]["cost"] and fast["unexplained_speedup"] == ["W16.tok_s"]
+    fast = _costed("W1", "itl_s", 0.96)
+    assert fast["gates"]["cost"] and fast["unexplained_speedup"] == ["W1.itl_s"]
+    assert _costed("W1", "itl_s", 1.0, vram=int(0.991e9))["gates"]["cost"]
+    assert not _costed("W1", "itl_s", 1.0, vram=int(1.011e9))["gates"]["cost"]
+    assert not _costed("W1", "itl_s", 1.0, vram=int(0.989e9))["gates"]["cost"]   # VRAM within 1 % either way
+
+
+def test_writer_refused_and_not_read_are_named():
+    arms = _arms()
+    del arms["MERGED-W"]
+    prep = json.loads(json.dumps(PREP))
+    prep["fixtures"]["nodq"]["cells"]["MERGED-Q"] = {"status": "WRITER_REFUSED", "why": "self-check"}
+    v = _fixture(arms=arms, prepare=prep)
     assert v["cells"]["MERGED-Q"]["status"] == "WRITER_REFUSED" and v["cells"]["MERGED-W"]["status"] == "NOT_READ"
-    bad = _arm(REF_NLL)
-    bad["rows"][0]["n"] += 1
-    assert R.reduce_fixture("nodq", {**arms, "MERGED-Q": bad}, d0, _ref(), {})["status"] == "VOID"
-    assert R.reduce_fixture("nodq", {"BASE-ATTN-1": arms["BASE-ATTN-1"]}, d0, _ref(), {})["status"] == "NOT_READ"
+    assert _fixture(arms={"BASE-ATTN-1": arms["BASE-ATTN-1"]})["status"] == "NOT_READ"
     with pytest.raises(SystemExit, match="not the registered"):
-        R.reduce_fixture("dq", arms, d0, _ref(), {})       # nodq's improvement under dq's margin
+        R.reduce_fixture("dq", _arms(), _d0("nodq"), _ref(), PREP)          # nodq's improvement under dq's margin
+
+
+# gate 5, completeness: every way a record can be short, each one a VOID (removing any one check fails its case)
+def _trunc_argmax(r):
+    r["rows"][0]["argmax"] = r["rows"][0]["argmax"][:1]
+
+
+def _set_row(key, value):
+    return lambda r: r["rows"][1].__setitem__(key, value)
+
+
+def _drop_cost(width, metric=None):
+    return lambda r: (r["cost"].pop(width) if metric is None else r["cost"][width].pop(metric))
+
+
+INCOMPLETE = {
+    "argmax truncated": _trunc_argmax,
+    "argmax not ints": lambda r: r["rows"][2].__setitem__("argmax", [0.0] * N_TOK),
+    "nll None": _set_row("nll", None),
+    "nll NaN": _set_row("nll", float("nan")),
+    "nll bool": _set_row("nll", True),
+    "n changed": _set_row("n", N_TOK + 1),
+    "a row dropped": lambda r: r["rows"].pop(),
+    "cost empty": lambda r: r.__setitem__("cost", {}),
+    "cost W16 missing": _drop_cost("W16"),
+    "cost W1 tok_s missing": _drop_cost("W1", "tok_s"),
+    "cost zero": lambda r: r["cost"]["W16"].__setitem__("itl_s", 0.0),
+    "peak VRAM missing": lambda r: r.pop("peak_vram_bytes"),
+}
+
+
+@pytest.mark.parametrize("why", sorted(INCOMPLETE))
+@pytest.mark.parametrize("arm", ["BASE-ATTN-1", "BASE-ATTN-2", "MERGED-Q"])
+def test_an_incomplete_record_is_void_never_read(arm, why):
+    arms = _arms()
+    INCOMPLETE[why](arms[arm])
+    v = _fixture(arms=arms)
+    if arm == "MERGED-Q":                                       # the cell is VOID, the rest of the fixture reads
+        assert v["status"] == "READ" and v["cells"]["MERGED-Q"]["status"] == "VOID"
+        assert v["cells"]["MERGED-W"]["status"] == "PASS"
+    else:
+        assert v["status"] == "VOID" and v["why"].startswith(arm) and not v["cells"]
+
+
+def test_the_reviewers_truncated_base_canary_is_void_not_a_lower_floor():
+    arms = _arms()
+    for r in arms["BASE-ATTN-1"]["rows"]:
+        r["argmax"] = r["argmax"][:1]                          # 1 of 50 positions a row: a_B would read 4, not 200
+    assert _fixture(arms=arms)["status"] == "VOID"
+
+
+@pytest.mark.parametrize("key", ["ref_argmax", "q_argmax"])
+def test_a_short_ref_argmax_file_voids_the_fixture(key):
+    ref = _ref()
+    ref["rows"][3][key] = ref["rows"][3][key][:-1]
+    v = _fixture(ref=ref)
+    assert v["status"] == "VOID" and "REF argmax row 3" in v["why"]
+
+
+# gate 5, engagement: an arm served on another path is VOID
+def _served_set(key, value):
+    return lambda r: r["served"].__setitem__(key, value)
+
+
+WRONG_PATH = {
+    ("BASE-ATTN-2", "served a merged arena"): _served_set("merged_arena", {"source": "arena"}),
+    ("BASE-ATTN-1", "not the attention-only adapter"): _served_set("adapter_id", IDS["adapter"]),
+    ("MERGED-Q", "the other writer source"): _served_set("merged_arena", {"source": "checkpoint", "adapter_id": IDS["adapter"]}),
+    ("MERGED-W", "no merged arena"): _served_set("merged_arena", None),
+    ("MERGED-Q", "a block for another adapter"): _served_set("merged_arena", {"source": "arena", "adapter_id": "b" * 64}),
+    ("MERGED-Q", "another served adapter"): _served_set("adapter_id", IDS["attention_only"]),
+    ("MERGED-W", "the expert base not verified (merged)"): _served_set("fingerprints", {"experts": {"status": "verified"}}),
+    ("MERGED-Q", "another placement"): _served_set("placement", "solver"),
+    ("MERGED-Q", "another graph status"): _served_set("graph_status", None),
+    ("MERGED-Q", "no placement recorded"): lambda r: r["served"].pop("placement"),
+    ("MERGED-W", "another device"): lambda r: r.__setitem__("device", "NVIDIA GeForce RTX 5090"),
+    ("BASE-ATTN-2", "another device"): lambda r: r.__setitem__("device", "NVIDIA GeForce RTX 5090"),
+}
+
+
+@pytest.mark.parametrize("arm, why", sorted(WRONG_PATH))
+def test_an_arm_served_on_another_path_is_void(arm, why):
+    arms = _arms()
+    WRONG_PATH[(arm, why)](arms[arm])
+    v = _fixture(arms=arms)
+    if arm.startswith("MERGED"):
+        assert v["status"] == "READ" and v["cells"][arm]["status"] == "VOID"
+        other = "MERGED-W" if arm == "MERGED-Q" else "MERGED-Q"
+        assert v["cells"][other]["status"] == "PASS"
+    else:
+        assert v["status"] == "VOID" and v["why"].startswith(arm)
+
+
+def test_without_the_derived_adapters_ids_nothing_reads():
+    assert _fixture(prepare={"fixtures": {}})["status"] == "VOID"
+
+
+def test_the_cli_reads_a_run_names_the_side_and_voids_an_unreadable_record(tmp_path, capsys):
+    run, refd = tmp_path / "run", tmp_path / "ref"
+    (run / "results").mkdir(parents=True)
+    refd.mkdir()
+    real = {fx: R.d0_record(str(D0), fx) for fx in ("nodq", "dq")}
+    prep = {"fixtures": {fx: PREP["fixtures"]["nodq"] for fx in real}}
+    (run / "prepare.json").write_text(json.dumps(prep))
+    for fx, d0 in real.items():
+        n = [r["REF"][1] for r in d0["rows"]]
+        (refd / f"ref-argmax-{fx}.json").write_text(json.dumps(
+            {"status": "OK", "rows": [{"n": k, "ref_argmax": [0] * k, "q_argmax": [0] * k} for k in n]}))
+        for arm, src in (("BASE-ATTN-1", "Q"), ("BASE-ATTN-2", "Q"), ("MERGED-Q", "REF"), ("MERGED-W", "REF")):
+            nll = [r[src][0] - (0.07 * k if (fx, arm) == ("nodq", "MERGED-Q") else 0) for r, k in zip(d0["rows"], n)]
+            rec = {"rows": [{"nll": v, "n": k, "argmax": [0] * k} for v, k in zip(nll, n)],
+                   **COST, "served": _served(arm), "device": "NVIDIA GeForce RTX 4090"}
+            (run / "results" / f"{fx}-{arm}.json").write_text(json.dumps(rec))
+    (run / "results" / "dq-MERGED-W.json").write_text("{not json")
+    out = tmp_path / "verdict.json"
+    assert R.main(["--run", str(run), "--d0", str(D0), "--ref-argmax", str(refd), "--out", str(out)]) == 0
+    v = json.loads(out.read_text())["fixtures"]
+    assert v["nodq"]["cells"]["MERGED-Q"]["gap_side"] == R.BEYOND_REF          # 0.07 nats a token beyond REF
+    assert v["nodq"]["cells"]["MERGED-W"]["status"] == "PASS" and v["dq"]["cells"]["MERGED-Q"]["status"] == "PASS"
+    assert v["dq"]["cells"]["MERGED-W"]["status"] == "VOID"
+    printed = capsys.readouterr().out
+    assert "BEYOND_REF" in printed and "D0S dq: READ" in printed
 
 
 # ---- the REF tool -----------------------------------------------------------------------------------------------------
@@ -326,7 +490,9 @@ def _drive(tmp_path, **env):
     return r.returncode, r.stdout + r.stderr
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+@pytest.mark.skipif(shutil.which("bash") is None or subprocess.run(["bash", "-c", "command -v python3"],
+                                                                   capture_output=True).returncode != 0,
+                    reason="needs bash with python3 (the driver's nonce)")
 def test_the_driver_refuses_a_reading_without_adapters_and_dry_runs_the_shake(tmp_path):
     rc, out = _drive(tmp_path)
     assert rc == 78 and "D0S_ADAPTERS" in out, out

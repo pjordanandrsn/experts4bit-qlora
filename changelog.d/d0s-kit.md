@@ -14,10 +14,17 @@
 - `bench/d0s/d0s_drive.sh` is the launcher's `--command`. It refuses unless every staged pin equals the tree and, for
   the reading, unless both derived adapters are present and hold no links. It starts the lane under a fresh nonce and
   fetches with `rsync --no-links` (rule 8), never the checkpoint, the arenas or the adapters' weights.
-- `bench/d0s/d0s_reduce.py` (CPU, standard library) applies the registration's rule to the arm records: retention CI,
-  the registered absolute margin, the pooled canary and the cost band. It names WRITER_REFUSED, NOT_READ and VOID.
+- `bench/d0s/d0s_reduce.py` (CPU, standard library) applies the registration's rule to the arm records:
+  - the retention CI and the registered absolute margin, two-sided, with the side named (BEYOND_REF, an artifact to
+    explain, or BELOW_REF);
+  - the pooled canary;
+  - cost slower-only, with any speedup beyond 3 % named;
+  - gate 5 first: an incomplete record, or an arm served on another path (merged block, source, adapter, expert
+    base, placement, graph status, device), is VOID and never read.
+
+  It also names WRITER_REFUSED and NOT_READ.
 - `tests/test_d0s_kit.py` (CPU) covers:
-  - the reducer at each gate's boundary;
+  - the reducer at each gate's boundary, and every gate-5 check by a case that fails without it;
   - the REF walk on a tiny OLMoE-shaped checkpoint (REF equals Q without an expert delta, and differs with one);
   - the reproduction check;
   - the attention-only derivation;
