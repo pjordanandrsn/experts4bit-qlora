@@ -98,6 +98,7 @@ jobs:
           ingested by pjordanandrsn/org-corpus
           the run lock lives at ~/.adertha/rent-live.lock
           NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-00000000-0000-0000-0000-000000000000, 12.0
+          _CudaDeviceProperties(name='NVIDIA GeForce RTX 4090', major=8, minor=9, uuid=00000000-0000-0000-0000-000000000000)
           # Append-only ledger: one JSON object per line
           {"run_id": "canary-1", "external_receipt": {}}
           {"cost_usd": 0.0, "role": "canary", "date_utc": "2026-01-01", "run_id": "canary-2"}

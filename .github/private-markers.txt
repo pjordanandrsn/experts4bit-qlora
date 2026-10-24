@@ -115,6 +115,9 @@ adertha://
 # (STORE-ONLY.sha256), or a public projection of only the fields a reducer reads. Files merged before the rule keep
 # theirs; new lines may not add one.
 #added-only: GPU-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+# The same device id as torch prints it, without the GPU- prefix: torch.cuda.get_device_properties() reads
+# "uuid=xxxxxxxx-xxxx-...". Matched only after "uuid=", so run ids, commit shas, nonces and other hex never trip it.
+#added-only: uuid=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 
 # --- RECEIPT STORE: the private receipt store's ledger and receipt records ----
 # The store's records are private, and none of the patterns above can see them.
