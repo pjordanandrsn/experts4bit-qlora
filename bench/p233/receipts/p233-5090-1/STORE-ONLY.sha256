@@ -1,0 +1,5 @@
+# p233-5090-1: files kept only in the private receipt store, byte-exact. The launcher's teardown proof and instance
+# record name the provider's instance. Receipts are never rewritten, so they are not committed here. sha256, then the
+# file's path within this run's receipt.
+822a374f9499951a7a64f601bad7f3006929ab15225dc5f0cae630896a737087  teardown-proof.json
+daf5fd97205300d91798ab8840239d4d79ccb130f3b246280c9ae914c6d7fd36  instance.json
