@@ -3,7 +3,10 @@
     python release_proof.py DIST==VERSION [DIST==VERSION ...]
 
 For each pin: read PyPI's JSON for exactly that version (``https://pypi.org/pypi/<dist>/<version>/json``), take the one
-published wheel whose tags are the installed dist's ``WHEEL`` ``Tag:`` lines, stream it to disk with a timeout and check
+published wheel whose tags are the installed dist's ``WHEEL`` ``Tag:`` lines (or, when no filename carries them, the one
+whose python and abi tags are the install's and whose platform is ``linux_<arch>`` or ``many``/``musllinux*_<arch>``
+for the install's ``linux_<arch>``: a wheel can be NAMED manylinux while its own ``WHEEL`` says ``linux_<arch>``, as
+vLLM's are; the pick only selects, and ``WHEEL`` is itself a compared RECORD entry), stream it to disk with a timeout and check
 its sha256 against the digest PyPI lists, then compare the wheel's own ``RECORD`` with the install:
 
 (a) every file the wheel records, bar ``RECORD``/``INSTALLER``/``REQUESTED``/``direct_url.json``, is installed, and the
@@ -30,7 +33,7 @@ the first file that differs, so a wheel built locally at the release's version, 
 bytes never reads as the release.
 
 Standalone and stdlib-only (urllib, hashlib, zipfile, importlib.metadata), so it drops into any kit unchanged:
-``prove(dist, version)`` returns ``{"dist", "version", "wheel", "sha256", "files", "record": "RECORD equal",
+``prove(dist, version)`` returns ``{"dist", "version", "wheel", "wheel_pick" ("filename" or "arch"), "sha256", "files", "record": "RECORD equal",
 "record_equal": True, "first_diff": None, "imports": {name: path}, "pycache_prefix", "pycache_fresh"}`` or raises :class:`ReleaseProofError` (its ``first_diff`` names the file when
 there is one). The CLI prints one JSON object per pin and exits 1 with the reason on the first refusal.
 """
@@ -44,6 +47,7 @@ import io
 import itertools
 import json
 import os
+import re
 import sys
 import tempfile
 import urllib.error
@@ -106,6 +110,30 @@ def wheel_tags(filename):
     {py2-none-any, py3-none-any}."""
     py, abi, plat = filename[: -len(".whl")].split("-")[-3:]
     return {"-".join(t) for t in itertools.product(py.split("."), abi.split("."), plat.split("."))}
+
+
+def _split(tag):
+    py, abi, plat = tag.split("-")
+    return py, abi, plat
+
+
+def arch_candidates(urls, tags):
+    """The published wheels the arch fallback may pick for installed ``tags`` whose platforms are all ``linux_<arch>``
+    for one arch: the same python and abi tags, and every platform ``linux_<arch>`` or ``manylinux*_<arch>`` /
+    ``musllinux*_<arch>``. Empty when the install is not ``linux_<arch>``."""
+    parts = [_split(t) for t in tags]
+    plats = {p for _, _, p in parts}
+    if len(plats) != 1 or not next(iter(plats)).startswith("linux_"):
+        return []
+    arch = next(iter(plats))[len("linux_"):]
+    same_arch = re.compile(rf"(linux|(many|musl)linux(1|2010|2014|_\d+_\d+))_{re.escape(arch)}")
+    py_abi = {(py, abi) for py, abi, _ in parts}
+    out = []
+    for u in urls:
+        ft = [_split(t) for t in wheel_tags(u["filename"])]
+        if {(py, abi) for py, abi, _ in ft} == py_abi and all(same_arch.fullmatch(p) for _, _, p in ft):
+            out.append(u)
+    return out
 
 
 def installed_tags(dist):
@@ -226,10 +254,14 @@ def prove(dist_name, version, get=fetch, fetch_to=download, distribution=metadat
     tags = installed_tags(dist)
     if not tags:
         raise ReleaseProofError(f"{dist_name}'s installed WHEEL names no Tag")
-    wheels = [u for u in json.loads(raw)["urls"] if u["packagetype"] == "bdist_wheel" and wheel_tags(u["filename"]) == tags]
+    urls = [u for u in json.loads(raw)["urls"] if u["packagetype"] == "bdist_wheel"]
+    wheels, pick = [u for u in urls if wheel_tags(u["filename"]) == tags], "filename"
+    if not wheels:
+        wheels, pick = arch_candidates(urls, tags), "arch"
     if len(wheels) != 1:
         raise ReleaseProofError(f"{dist_name} {version}: {len(wheels)} published wheels carry the installed tags "
-                                f"{sorted(tags)}, not exactly one")
+                                f"{sorted(tags)}" + (" or match their python, abi and arch" if pick == "arch" else "")
+                                + ", not exactly one")
     w = wheels[0]
     with tempfile.TemporaryDirectory(prefix="release-proof-") as tmp:
         path = os.path.join(tmp, w["filename"])
@@ -251,7 +283,7 @@ def prove(dist_name, version, get=fetch, fetch_to=download, distribution=metadat
     if extra:
         raise ReleaseProofError(f"{dist_name}: {extra[0]} is installed but not in the published wheel", extra[0])
     imports = check_imports(dist_name, dist, published, find_spec)
-    return {"dist": dist_name, "version": version, "wheel": w["filename"], "sha256": w["digests"]["sha256"],
+    return {"dist": dist_name, "version": version, "wheel": w["filename"], "wheel_pick": pick, "sha256": w["digests"]["sha256"],
             "files": len(published), "record": "RECORD equal", "record_equal": True, "first_diff": None, "imports": imports,
             "pycache_prefix": sys.pycache_prefix,
             "pycache_fresh": bool(sys.pycache_prefix) and os.environ.get(FRESH_MARK) == sys.pycache_prefix}

@@ -43,8 +43,8 @@ NEW_FILES = [LANE / f for f in ("p235_run.sh", "p235_reduce.py", "provenance.py"
                                                                          REPO / "changelog.d" / "p235-registered.md"]
 #: loggetta's bench/release_proof.py, staged byte-identical: its source and sha256 (the ONE constant a new helper
 #: version edits, beside its ONE staged.sha256 line)
-RELEASE_PROOF = {"source": "loggetta#125 at 85d300a9",
-                 "sha256": "199d4f2faa49419090ef57e73fc34a86787ad5dcfe67060e92aaaf88a9bf6a63"}
+RELEASE_PROOF = {"source": "loggetta#126 at aa714d41",
+                 "sha256": "aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0"}
 #: the top-level import names of the dists the arms import, read from the published wheels (experts4bit-qlora 0.57.0,
 #: grouped-nf4-gemm 0.50.0 and the released 0.51.0, vllm 0.32.0 and 0.30.0 x86_64; zip central directories) and from
 #: grouped-nf4-gemm's pyproject py-modules + packages at v0.50.0 and main (the same 43 names): a staged file must not
@@ -122,8 +122,10 @@ def test_the_release_proof_is_loggettas_bytes():
     data = (LANE / "release_proof.py").read_bytes()
     assert hashlib.sha256(data).hexdigest() == RELEASE_PROOF["sha256"] == _pins(PIN)["release_proof.py"]
     assert b"\r" not in data
-    for f in ("p235_run.sh", "p235_drive.sh", "PREREG-p235.md", "provenance.py"):
+    for f in ("p235_run.sh", "p235_drive.sh", "provenance.py"):
         assert RELEASE_PROOF["sha256"][:8] not in (LANE / f).read_text(encoding="utf-8"), f
+    source = RELEASE_PROOF["source"].split(" at ")
+    assert f"({source[0]} at `{source[1]}`, sha256 `{RELEASE_PROOF['sha256']}`)" in FLAT    # the PREREG names this one
     rp = _load("p235_release_proof_under_test", LANE / "release_proof.py")      # stdlib only; no network here
     assert rp.main([]) == 2 and rp.main(["experts4bit-qlora"]) == 2
     pins = re.findall(r"release_proof\.py ([^)>]+)\)", RUN)
@@ -696,11 +698,13 @@ def test_the_prereg_states_the_pins_bars_sequencing_and_limits():
               "one RTX 5090 at ≤ $1.05/h, guard 3.0 h, download ≤ $0.02/GB × 80 GB",
               "$3.15 + $1.60 = **$4.75**, inside a **$6** lane ceiling", "`p235-5090-1..-3`", "`p235-5090-r1..-r6`",
               "**No shakedown is registered.**", "**not collected**",
-              "**The release proof: the installed bytes.**", "(`bench/release_proof.py`, loggetta#125), staged byte-identical",
-              "its sha256 is pinned in `staged.sha256`", "`release_proof.jsonl` and `release_proof_vllm_<build>.jsonl`",
+              "**The release proof: the installed bytes.**", "loggetta's helper `bench/release_proof.py` (loggetta#126 at", "staged byte-identical",
+              "staged byte-identical and pinned in `staged.sha256`", "`release_proof.jsonl` and `release_proof_vllm_<build>.jsonl`",
               '"RECORD equal"', "cwd `$W`, `PYTHONPATH=$W/hook`, the arms' python, no `-I`",
               "`PYTHONPYCACHEPREFIX=$W/pycache-<nonce>`", "Every install uses `--no-compile`.",
-              "as staged, the release proof refuses both vLLM builds", "Neither wheel has `.data/` entries.",
+              "so the proof picks by arch (`wheel_pick` \"arch\")", "Neither wheel has `.data/` entries.",
+              "If the helper refuses a build anyway, that build's rows are refused",
+              "vLLM 0.32.0 and 0.30.0 installed from PyPI `--no-deps --no-compile` and proved as the runner runs it",
               "every top-level name the wheel installs imports from the proven install", "`pycache_fresh`",
               'not all `"pycache_fresh": true`, or not one per pin, refuses like the proof itself',
               "`RELEASE_PROOF_FRESH_PYCACHE` is exported on the same line with the same value"):

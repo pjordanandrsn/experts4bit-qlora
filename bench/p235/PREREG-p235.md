@@ -35,9 +35,12 @@ through the URL an install recorded. The pins are constants in `provenance.py` a
 unconditionally, never behind a flag.
 
 **The release proof: the installed bytes.** Provenance says where an install came from; it does not prove the
-bytes. `release_proof.py` is loggetta's helper (`bench/release_proof.py`, loggetta#125), staged byte-identical; its
-sha256 is pinned in `staged.sha256`. For each pin it takes the one published PyPI wheel whose tags are the installed
-`WHEEL` Tag lines, downloads it and checks its digest against PyPI's, then requires every file in the wheel's own
+bytes. `release_proof.py` is loggetta's helper `bench/release_proof.py`
+(loggetta#126 at `aa714d41`, sha256 `aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0`), staged byte-identical and pinned in
+`staged.sha256`. For each pin it takes the one published PyPI wheel whose filename carries the installed `WHEEL` Tag
+lines (`wheel_pick` "filename"). When none does, it takes the one wheel with the install's python and abi tags whose
+platform is `linux_<arch>` or `manylinux*`/`musllinux*_<arch>` (`wheel_pick` "arch"); zero or more than one
+refuses. It downloads it and checks its digest against PyPI's, then requires every file in the wheel's own
 `RECORD` to be on disk with an equal hash, and nothing installed beyond bytecode and entry-point launchers. It also
 checks, through `find_spec` in the calling interpreter, that every top-level name the wheel installs imports from
 the proven install, so nothing earlier on `sys.path` can shadow it. A wheel with `.data/` entries is refused.
@@ -82,12 +85,13 @@ with `--no-compile`.
 - the image, `pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel`.
 
 **Risks:**
-- **Known today: as staged, the release proof refuses both vLLM builds.** The published vLLM 0.32.0 and 0.30.0 x86_64
-  wheels are named `manylinux_2_28_x86_64`, but their own `WHEEL` file says `Tag: cp38-abi3-linux_x86_64`, and pip
-  copies that file into the install. The helper matches a published wheel by its filename's tags, so it finds none.
-  Checked at $0: vLLM 0.32.0 installed `--no-deps` and proved was refused with "0 published wheels carry the installed
-  tags". Neither wheel has `.data/` entries. Until the helper resolves this, both vLLM builds' rows read refused and
-  no ratio is quoted.
+- **vLLM's wheels are proven by arch.** The published vLLM 0.32.0 and 0.30.0 x86_64 wheels are named
+  `manylinux_2_28_x86_64`, but their own `WHEEL` file says `Tag: cp38-abi3-linux_x86_64`, and pip copies that file
+  into the install. No filename carries the installed tags, so the proof picks by arch (`wheel_pick` "arch"). It then
+  proves the bytes by the same RECORD compare; `WHEEL` is itself a compared RECORD entry. Neither wheel has `.data/`
+  entries. Checked at $0: vLLM 0.32.0 and 0.30.0 installed from PyPI `--no-deps --no-compile` and proved as the runner
+  runs it, each rc 0, "RECORD equal", `wheel_pick` "arch" and `pycache_fresh` true (5,443 and 5,097 files). If the
+  helper refuses a build anyway, that build's rows are refused, as for any vLLM failure.
 - vLLM 0.32.0 pins the same torch (2.13.0) as 0.30.0, which P58 installed and ran on this image. Its Python floor
   is 3.11.
 - `p37_vllm.py` has run against vLLM 0.28 to 0.30, not 0.32.0. An API break there reads as that build's failed rows
