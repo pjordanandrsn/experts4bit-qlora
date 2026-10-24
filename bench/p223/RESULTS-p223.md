@@ -27,7 +27,7 @@ and sixteen requests?
 | S0 (bf16 attention) | I0a/D0a 0.9991, I0b/D0b 0.9991 | **0.9991** | I0a/D0a 0.2849, I0b/D0b 0.2852 | **0.2849** |
 | S1 (int8 attention) | I1a/D1a 0.9984, I1b/D1b 0.9960 | **0.9960** | I1a/D1a 0.2572, I1b/D1b 0.2568 | **0.2568** |
 
-At sixteen requests the knobs are nearly free: 321 to 328 tok/s in every arm. At one request they are not: S0 decodes
+At sixteen requests the knobs are nearly free: 320 to 328 tok/s in every arm. At one request they are not: S0 decodes
 124.7 tok/s by default and 35.5 tok/s invariant, and S1 142.4 and 36.6. The W16 self-pairs, reported beside p16, read
 D0b/D0a 0.9961, I0b/I0a 0.9961, D1b/D1a 1.0040 and I1b/I1a 1.0016.
 
