@@ -386,7 +386,8 @@ def hr_clean(monkeypatch):
     fake._bw_engages = lambda n, k, dev: fake.engages
     monkeypatch.setitem(sys.modules, "nf4_grouped", fake)
     for k in ("E4B_NF4_SMALLM_BW", "E4B_NF4_GROUPED_SMALLM"):
-        monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv(k, "")          # registered first, so teardown restores the prior state even when absent
+        monkeypatch.delenv(k)
     yield hr, fake
     hr.DEVICE_GROUPING[0] = False
     hr._NF4_SMALLM_BW_RESOLVED[0] = False
@@ -572,6 +573,8 @@ def _rows_phase(box_text, tmp_path, monkeypatch):
         rc = mod.rows_main(argparse.Namespace(out=str(out)))
     except Exception as e:  # noqa: BLE001 -- any failure of the phase is the finding
         return f"rows: {type(e).__name__}: {str(e)[:200]}"
+    finally:
+        os.environ.pop("E4B_NF4_SMALLM_BW", None)      # an old kit's rows_main sets it and raises with no finally
     rec = json.loads(out.read_text(encoding="utf-8"))
     if rc != 0 or not rec.get("ok"):
         return f"rows: rc {rc}, status {rec.get('status')}, cases {json.dumps(rec.get('cases'))[:300]}"
@@ -595,7 +598,11 @@ def cpu_phases(monkeypatch, tmp_path):
         monkeypatch.setattr(hr, name, val)
     for k in ("E4B_NF4_SMALLM_BW", "E4B_NF4_GROUPED_SMALLM", "GNF4_GEMV_BW", "GNF4_GEMV_BW_PLAN", "GNF4_GEMV_BW_DECODE",
               "GNF4_GEMV_DOTPAD"):
-        monkeypatch.delenv(k, raising=False)
+        # registered first (setenv), then cleared: monkeypatch.delenv(k, raising=False) records nothing for an ABSENT
+        # knob, so a phase that sets one (an old kit's rows_main, which raises with no finally) would leak it into
+        # every later test of the session (e4b#2086's CI: two unrelated tests refused by E4B_NF4_SMALLM_BW=1)
+        monkeypatch.setenv(k, "")
+        monkeypatch.delenv(k)
     return hr, engages, tmp_path, monkeypatch
 
 
@@ -616,6 +623,7 @@ def test_amendment_3_the_kits_that_lost_boxes_fail_on_cpu(cpu_phases, sha):
     got = {"tripwire": _tripwire_phase(_git_show(sha, "bench/p231/p231_run.sh"), hr),
            "rows": _rows_phase(_git_show(sha, "bench/p231/p231_box.py"), tmp_path, monkeypatch)}
     assert got[OLD_KITS[sha]] and GUARD_TEXT in got[OLD_KITS[sha]], got
+    assert "E4B_NF4_SMALLM_BW" not in os.environ, "the old kit's phases leave no knob behind"
     if OLD_KITS[sha] == "rows":
         assert got["tripwire"] is None, "5f7cec01's tripwire was fixed (Amendment 2): its box was lost to the rows premise"
 
