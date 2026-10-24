@@ -9,6 +9,7 @@ gate_up is square (2I = H) so that a transposed delta is shape-legal and must be
 """
 import hashlib
 import importlib
+import inspect
 import json
 import math
 import os
@@ -63,7 +64,7 @@ def _bake(tmp_path, W, **kw):
     return snap, arena
 
 
-def _trained(W, lora_scale=0.0, seed=3):
+def _trained(W, lora_scale=0.0, seed=3, attention=False):
     """Training's tree: each layer's stack quantized as training does, inside ExpertsLoRA, with A and B set (B times
     ``lora_scale``; 0 is the untrained adapter, an exact zero delta)."""
     from torch import nn
@@ -84,6 +85,12 @@ def _trained(W, lora_scale=0.0, seed=3):
                 a.copy_(torch.randn(a.shape, generator=g))
                 b.copy_(torch.randn(b.shape, generator=g) * lora_scale)
         layer.mlp.experts = mod
+        if attention:                                   # a served-shaped attention block (q and o), for the merge test
+            layer.self_attn = nn.Module()
+            for proj in ("q_proj", "o_proj"):
+                lin = nn.Linear(H, H, bias=False).to(torch.bfloat16)
+                lin.weight.data = torch.randn(H, H, generator=g).to(torch.bfloat16)
+                setattr(layer.self_attn, proj, lin)
         layers.append(layer)
     root = nn.Module()
     root.model = nn.Module()
@@ -92,7 +99,7 @@ def _trained(W, lora_scale=0.0, seed=3):
 
 
 def _adapter(tmp_path, model, *, name="ad", fingerprint=None, scale_applied="match", schema="backend-adapter/2",
-             tensors=None, form="fp32", revision=REV):
+             tensors=None, form="fp32", revision=REV, alpha=ALPHA, attention=None):
     """A backend-adapter/2 directory as Loggetta writes one: the expert LoRA tensors, the files' sha256, and the v2
     fields, the expert fingerprint being quant_fingerprint's over the trained stacks."""
     from safetensors.torch import save_file
@@ -105,6 +112,7 @@ def _adapter(tmp_path, model, *, name="ad", fingerprint=None, scale_applied="mat
                 for ab in ("A", "B"):
                     tensors[f"{STACK.format(li)}.{which}_lora_{ab}"] = \
                         getattr(layer.mlp.experts, f"{which}_lora_{ab}").detach().clone().contiguous()
+    tensors = dict(tensors, **(attention or {}))
     d = tmp_path / name
     d.mkdir()
     save_file(tensors, str(d / "adapter.safetensors"), metadata={"format": schema, "backend": "experts4bit"})
@@ -112,15 +120,17 @@ def _adapter(tmp_path, model, *, name="ad", fingerprint=None, scale_applied="mat
                                      "bytes": (d / "adapter.safetensors").stat().st_size}}
     man = {"schema": schema, "backend": "experts4bit", "weights": "adapter.safetensors", "files": files,
            "resolved_model_revision": revision,
-           "setup": {"quant_type": "nf4", "blocksize": 64, "r": R, "alpha": ALPHA, "attn_4bit": False,
-                     "train_experts": True, "train_attention": False},
+           "setup": {"quant_type": "nf4", "blocksize": 64, "r": R, "alpha": alpha, "attn_4bit": False,
+                     "train_experts": True, "train_attention": bool(attention)},
            "tensors": {k: {"shape": list(v.shape), "dtype": str(v.dtype)} for k, v in tensors.items()}}
     if schema == "backend-adapter/2":
         fp = fingerprint or S.quant_fingerprint(model, "experts")
         man.update(expert_absmax={"form": form}, train_fused_qkv=0, attn_quant={"form": "bf16"}, versions={},
-                   lora_scale_applied={"attention": None,
-                                       "experts": ALPHA / R if scale_applied == "match" else scale_applied},
-                   fingerprints={"experts": fp}, run_id="merged-arena-test", created_at="2026-10-23T00:00:00Z")
+                   lora_scale_applied={"attention": alpha / R if attention else None,
+                                       "experts": alpha / R if scale_applied == "match" else scale_applied},
+                   fingerprints={"experts": fp, **({"attention": S.quant_fingerprint(model, "attention")}
+                                                   if attention else {})},
+                   run_id="merged-arena-test", created_at="2026-10-23T00:00:00Z")
         if scale_applied is None:
             man["lora_scale_applied"].pop("experts")
     (d / "adapter_manifest.json").write_text(json.dumps(man), encoding="utf-8")
@@ -604,3 +614,181 @@ def test_refuse_merged_names_the_adapter_and_passes_a_base():
         MA.refuse_merged({"bake_mode": MA.BASE_BAKE_MODE, "merge": {}}, "m.arena")
     with pytest.raises(ValueError, match="bake_mode 'nf4-merged', adapter unrecorded"):
         MA.refuse_merged({"bake_mode": MA.MERGED_BAKE_MODE}, "m.arena")       # the mode alone is enough
+
+
+# ---- the server's rules (bench/d0/ARENA-DESIGN.md, point 4) ---------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def merged(base, tmp_path_factory):
+    """A merged arena of a live expert adapter, its adapter directory and its index."""
+    W, _snap, arena = base
+    tmp = tmp_path_factory.mktemp("merged")
+    model = _trained(W, lora_scale=0.05)
+    ad = _adapter(tmp, model)
+    out = str(tmp / "m.arena")
+    MA.write(arena, ad, out, log=lambda *a: None)
+    return model, ad, out, json.load(open(out + ".index.json"))
+
+
+def _v(ad):
+    from experts4bit_qlora.adapter_dir import verify_adapter_dir
+    return verify_adapter_dir(ad)
+
+
+def test_refusal_13_passes_only_a_merged_arena_served_as_written(merged, base, tmp_path):
+    from experts4bit_qlora import adapter_schema as S
+    W, _snap, arena = base
+    model, ad, _out, idx = merged
+    assert MA.merged_arena_refusals(_v(ad), idx, opt_in=True) == []
+    assert MA.merged_arena_refusals(_v(ad), json.load(open(arena + ".index.json")), opt_in=False) == []   # a base
+
+    def codes_and(why, got):
+        assert [c for c, _ in got] == [13] * len(got) and any(why in r for _, r in got), got
+
+    codes_and("with no adapter", MA.merged_arena_refusals(None, idx, opt_in=True))
+    codes_and("only under the opt-in E4B_PAGED_MERGED_ARENA=1", MA.merged_arena_refusals(_v(ad), idx, opt_in=False))
+    other = _adapter(tmp_path, _trained(W, lora_scale=0.05, seed=11), name="other")
+    got = MA.merged_arena_refusals(_v(other), idx, opt_in=True)
+    codes_and("merged from adapter", got)
+    codes_and("not the ones the arena was merged from", got)
+    rebased = _adapter(tmp_path, model, name="rebased", fingerprint=S.quant_fingerprint(_trained(_weights(seed=9)),
+                                                                                         "experts"))
+    codes_and("is not the base the merge started from", MA.merged_arena_refusals(_v(rebased), idx, opt_in=True))
+    rescaled = _adapter(tmp_path, model, name="rescaled", alpha=2 * ALPHA)   # the same tensors, another alpha/r
+    codes_and("is not the merge's", MA.merged_arena_refusals(_v(rescaled), idx, opt_in=True))
+    codes_and("writer_version 99", MA.merged_arena_refusals(
+        _v(ad), dict(idx, merge=dict(idx["merge"], writer_version=99)), opt_in=True))
+    codes_and("cannot read", MA.merged_arena_refusals(_v(ad), dict(idx, merge=dict(idx["merge"], writer="x")),
+                                                      opt_in=True))
+
+
+def _servable(ad, idx, **kw):
+    from experts4bit_qlora.adapter_dir import servable_refusals
+    return servable_refusals(_v(ad), served_revision=None, requested_revision=None, arena_index=idx, levers={},
+                             check_served_revision=False, **kw)
+
+
+def test_a_live_expert_adapter_on_its_merged_arena_is_never_refusal_1(merged, base):
+    """Refusal 1's exemption is decided before the load, with 13: a live expert adapter reaches 13 or service, and on a
+    base arena it stays refusal 1, as before."""
+    _W, _snap, arena = base
+    _model, ad, _out, idx = merged
+    assert _servable(ad, idx, merged_opt_in=True) == []
+    codes = [c for c, _ in _servable(ad, idx, merged_opt_in=False)]
+    assert codes[0] == 13 and 1 in codes                         # not exempt: both named, 13 first
+    assert [c for c, _ in _servable(ad, json.load(open(arena + ".index.json")), merged_opt_in=True)] == [1]
+
+
+def test_after_the_load_the_served_experts_are_compared_with_the_merged_fingerprint(merged, base, tmp_path):
+    from experts4bit_qlora.adapter_dir import base_match, fingerprint_check
+    _W, _snap, arena = base
+    model, ad, out, idx = merged
+    refusals, report = fingerprint_check(_v(ad), model, out, merge=idx["merge"])
+    assert refusals == [] and report["experts"]["status"] == "verified (merged)"
+    assert report["experts"]["served"] == idx["merge"]["merged_qfp_v1"] != report["experts"]["trained"]
+    assert base_match(_v(ad), fingerprints=report)["experts"].startswith("merged (qfp-v1 ")
+    # the base arena's bytes under the merged index: refused, and no override covers it
+    swapped = str(tmp_path / "swapped.arena")
+    shutil.copy(arena, swapped)
+    shutil.copy(out + ".index.json", swapped + ".index.json")
+    for accept in (frozenset(), frozenset({"experts"})):
+        refusals, report = fingerprint_check(_v(ad), model, swapped, merge=idx["merge"], accept_base_mismatch=accept)
+        assert [c for c, _ in refusals] == [12] and "not the one its index records" in refusals[0][1]
+        assert report["experts"]["status"] == "mismatch (merged)"
+    # without the merge block (refusal 13 never matched it), the merged rows are a measured base mismatch, as before
+    refusals, _report = fingerprint_check(_v(ad), model, out)
+    assert [c for c, _ in refusals] == [12]
+
+
+def test_only_the_arenas_own_merge_block_lets_a_reader_through(merged, monkeypatch):
+    from experts4bit_qlora import loader
+    _model, _ad, out, idx = merged
+    MA.refuse_merged(idx, out, idx["merge"])
+    MA.refuse_merged_path(out, idx["merge"])
+    for bad in (None, dict(idx["merge"], adapter_id="0" * 64), {}):
+        with pytest.raises(ValueError, match="is a merged arena"):
+            MA.refuse_merged(idx, out, bad)
+    with pytest.raises(ValueError, match="is a merged arena"):
+        MA.refuse_merged({k: v for k, v in idx.items() if k != "bake_mode"}, out, idx["merge"])
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    with pytest.raises(Exception) as e:                          # past the guard, the never-read model id fails
+        loader.load_moe_4bit_streaming("org/never-read", "cpu", torch.bfloat16, 8, 16, arena=out,
+                                       merged_arena=idx["merge"])
+    assert "is a merged arena" not in str(e.value)
+
+
+def test_each_part_is_applied_once_attention_merged_at_load_experts_never(base, tmp_path):
+    """The attention LoRA merges at load as for any adapter; the expert tensors are never applied by the server (they
+    are in the merged rows), so merge_attention_lora merges exactly the attention projections and touches no expert."""
+    from experts4bit_qlora.adapter_dir import merge_attention_lora
+    W, _snap, _arena = base
+    model = _trained(W, lora_scale=0.05, attention=True)
+    g = torch.Generator().manual_seed(4)
+    attn = {}
+    for li in range(L):
+        attn[f"model.layers.{li}.self_attn.q_proj.lora_A"] = torch.randn(R, H, generator=g)
+        attn[f"model.layers.{li}.self_attn.q_proj.lora_B"] = torch.randn(H, R, generator=g) * 0.01
+    v = _v(_adapter(tmp_path, model, attention=attn))
+    assert v.expert_tensors and len(v.attention) == L
+    before = {n: p.detach().clone() for n, p in model.named_parameters() if ".mlp." in n}
+    report = merge_attention_lora(model, v)
+    assert report.merged == L
+    assert all(torch.equal(before[n], p) for n, p in model.named_parameters() if ".mlp." in n)
+    import experts4bit_qlora.serve_paged as sp
+    src = inspect.getsource(sp)
+    assert "expert_tensors" not in src and "_lora_B" not in src        # the server never reads them itself
+
+
+def test_the_opt_in_without_an_adapter_is_a_loose_flag(monkeypatch):
+    from experts4bit_qlora.serve_paged import PagedServeConfig
+    with pytest.raises(ValueError, match="E4B_PAGED_MERGED_ARENA are set but E4B_PAGED_ADAPTER is not"):
+        PagedServeConfig(model="m", merged_arena=True).validate()
+    monkeypatch.setenv("E4B_PAGED_MERGED_ARENA", "yes")
+    with pytest.raises(ValueError, match="expected '0' or '1'"):
+        PagedServeConfig.from_env()
+
+
+def _stub_paths(tmp_path, index):
+    arena = tmp_path / "stub.arena"
+    arena.write_bytes(b"")
+    (tmp_path / "stub.arena.index.json").write_text(json.dumps(index))
+    calib = tmp_path / "calib.json"
+    calib.write_text("{}")
+    return str(arena), str(calib)
+
+
+def test_build_engine_refuses_the_opt_in_on_a_base_arena_before_reading_anything(tmp_path):
+    """E4B_PAGED_MERGED_ARENA=1 on a base arena is a loose flag, refused at the index step: no adapter is verified and
+    no weight is read (the model id is never resolved)."""
+    from experts4bit_qlora.serve_paged import PagedServeConfig, build_engine
+    arena, calib = _stub_paths(tmp_path, {"bake_mode": MA.BASE_BAKE_MODE, "rows": []})
+    cfg = PagedServeConfig(model="org/never-read", arena=arena, calib=calib, adapter=str(tmp_path / "no-such-adapter"),
+                           merged_arena=True)
+    with pytest.raises(ValueError, match="E4B_PAGED_MERGED_ARENA=1 but .* is not a merged arena"):
+        build_engine(cfg)
+
+
+def test_build_engine_refuses_a_merged_arena_without_an_adapter_before_reading_anything(tmp_path):
+    from experts4bit_qlora.adapter_dir import AdapterRefused
+    from experts4bit_qlora.serve_paged import PagedServeConfig, build_engine
+    arena, calib = _stub_paths(tmp_path, {"bake_mode": MA.MERGED_BAKE_MODE, "rows": [],
+                                          "merge": {"writer": MA.WRITER, "adapter_id": "ab" * 32}})
+    with pytest.raises(AdapterRefused, match=r"\(13\) a merged arena \(adapter abababababab\) with no adapter"):
+        build_engine(PagedServeConfig(model="org/never-read", arena=arena, calib=calib))
+
+
+def test_build_engine_decides_13_before_the_load_for_every_config_and_hands_the_block_on():
+    """The phase order, read from build_engine itself: the index is read and refusal 13 decided (with and without an
+    adapter) before the load; the loader, the fingerprint check and the hybrid tier are handed the matched block."""
+    import experts4bit_qlora.serve_paged as sp
+    src = inspect.getsource(sp.build_engine)
+    load = src.index("load_moe_4bit_streaming(cfg.model")
+    assert src.index("arena_index = json.load(f)") < src.index("if cfg.adapter:") < load
+    assert src.index("merged_arena_refusals(None, arena_index, opt_in=cfg.merged_arena)") < load
+    assert src.index("check_served_revision=False") < load
+    assert src.index("is not a merged arena") < load
+    assert "merged_arena=merge)" in src[load: load + 300]
+    assert "merge=merge)" in src[src.index("fingerprint_check(adapter"):]
+    assert "layers=ids, merged_arena=merge)" in src
+    assert "merged_opt_in=cfg.merged_arena" in inspect.getsource(sp._adapter_refusals)
