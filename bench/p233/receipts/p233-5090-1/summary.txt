@@ -1,0 +1,30 @@
+KNOBS e4b=2a0a9afcead3bd21f73a06a4824df3f423479e33 gnf4=41ef086e6a3e2be5b158ff1bb38e0de67862a949 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=140 min_ram_gb=60 min_dl_mb_s=40 windows=24 cont=128 shake=0
+CUDA_PROBE ok torch=2.8.0+cu128 cc=12.0 sms=170
+POWER_LIMIT_W 575 (recorded, never ruled)
+DOWNLOAD status=200 bytes=1519386624 seconds=20.01 mb_s=75.9
+GUARD_FIT fit=8926s need=11157s left=11587s
+STARTED 2026-10-24T12:55:14Z
+e4b 0.57.0 @2a0a9afcead3bd21f73a06a4824df3f423479e33
+gnf4 0.50.0 @41ef086e6a3e2be5b158ff1bb38e0de67862a949
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p233_reduce self-test OK (114 cases)
+p233_box self-test OK (69/69 cases)
+p115_quality self-test OK (11/11 cases)
+premise gpu rc=0: 37 passed, 11 warnings in 14.28s
+premise cpu rc=0: 6 passed in 4.62s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+quality A rc=0 P233_QUALITY A experts={'vram': 6144, 'dram': 0, 'nvme': 0} layers={'collapse': 48, 'tiered': 0} head={'rows_max': 8, 'kernel': 'dense_i8.linear_i8 (K37)', 'plan': {'2': [32, 256, 4], '3': [32, 256, 4], '4': [32, 256, 4], '5': [32, 256, 4], '6': [32, 256, 4], '7': [32, 256, 4], '8': [32, 256, 4]}, 'source': 'explicit'} cpu=AMD EPYC 7532 32-Core Processor isa={'avx2': True, 'avx512': False, 'amx': False} threads=64
+
+quality S rc=0 P233_QUALITY S experts={'vram': 3236, 'dram': 1213, 'nvme': 1695} layers={'collapse': 25, 'tiered': 23} head={'rows_max': 8, 'kernel': 'dense_i8.linear_i8 (K37)', 'plan': {'2': [32, 256, 4], '3': [32, 256, 4], '4': [32, 256, 4], '5': [32, 256, 4], '6': [32, 256, 4], '7': [32, 256, 4], '8': [32, 256, 4]}, 'source': 'explicit'} cpu=AMD EPYC 7532 32-Core Processor isa={'avx2': True, 'avx512': False, 'amx': False} threads=64
+
+quality C rc=0 P233_QUALITY C experts={'vram': 3236, 'dram': 0, 'nvme': 2908} layers={'collapse': 25, 'tiered': 23} head={'rows_max': 8, 'kernel': 'dense_i8.linear_i8 (K37)', 'plan': {'2': [32, 256, 4], '3': [32, 256, 4], '4': [32, 256, 4], '5': [32, 256, 4], '6': [32, 256, 4], '7': [32, 256, 4], '8': [32, 256, 4]}, 'source': 'explicit'} cpu=AMD EPYC 7532 32-Core Processor isa={'avx2': True, 'avx512': False, 'amx': False} threads=64
+
+P233_VERDICT SOLVER_SANE ["T=1: SANE", "T=8: SANE", "a doc or lane may propose serving at solver as an opt-in placement, citing this read; never a default, and any speed claim needs a read of its own", "-- after the written look the TRIPWIRE asks for"]
+TRIPWIRE T=1: argmax agreement 0.974284 < 0.98; T=1: KL 0.003925 > max(3 x floor 0.0, 0.002) = 0.002000; T=8: argmax agreement 0.974284 < 0.98; T=8: KL 0.003729 > max(3 x floor 0.0, 0.002) = 0.002000
