@@ -26,6 +26,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # every python this box runs reads and writes bytecode only under a fresh, empty prefix, never an in-tree __pycache__, so
 # no stale .pyc can stand in for a proven source (the release-proof rule's R2); recorded in summary.txt and the record
 export PYTHONPYCACHEPREFIX=$(mktemp -d /tmp/p236-pycache.XXXXXX)
+export RELEASE_PROOF_FRESH_PYCACHE=$PYTHONPYCACHEPREFIX   # release_proof.py records pycache_fresh only under this marker
 # every grouped-nf4-gemm and bitsandbytes knob starts unset: both libraries as they ship
 unset GNF4_GEMV_BW GNF4_GEMV_BW_PLAN GNF4_GEMV_BW_DECODE GNF4_GEMV_DOTPAD GNF4_DECODE_PLAN GNF4_GEMV_SPLITK GNF4_PDL \
       GNF4_PDL_MAX_ROWS TRITON_INTERPRET BNB_CUDA_VERSION

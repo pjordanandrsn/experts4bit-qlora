@@ -219,7 +219,7 @@ def test_the_release_proof_is_the_shared_helper_and_runs_before_any_timing():
     and the bench, and a refusal stops the box; the bench records its output and the reducer requires it."""
     R = _load("p236_reduce")
     got = hashlib.sha256((LANE / "release_proof.py").read_bytes()).hexdigest()
-    assert got == R.RELEASE_PROOF_SHA256 == "341dd130b1cf681a86f3fa1aad2b3e1bf9a2e4e6c22388e0e35b5736fc446713"
+    assert got == R.RELEASE_PROOF_SHA256 == "199d4f2faa49419090ef57e73fc34a86787ad5dcfe67060e92aaaf88a9bf6a63"
     assert R.RELEASE_PROOF_SHA256 in PREREG
     i = RUN.index('python $W/release_proof.py "bitsandbytes==$BNB_VERSION"')
     bench = RUN.index("python $W/p236_bench.py --out")
@@ -244,6 +244,7 @@ def test_bytecode_only_under_a_fresh_prefix_from_the_first_python_call():
     """R2: every python the box runs reads and writes bytecode only under a fresh, empty PYTHONPYCACHEPREFIX, exported
     before the first python call and recorded; the bench records it and the reducer requires it."""
     i = RUN.index("export PYTHONPYCACHEPREFIX=$(mktemp -d /tmp/p236-pycache.XXXXXX)")
+    assert RUN.index("export RELEASE_PROOF_FRESH_PYCACHE=$PYTHONPYCACHEPREFIX") < RUN.index("python $W/release_proof.py"),         "the helper records pycache_fresh only under its marker, set to the same fresh prefix"
     offsets, pos = [], 0
     for ln in RUN.splitlines(keepends=True):                 # the first python CALL (comment lines are not calls)
         if not ln.lstrip().startswith("#") and re.search(r"(^|[ (])python[ -]", ln):

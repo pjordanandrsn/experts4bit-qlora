@@ -63,8 +63,8 @@ GNF4_REPO = "github.com/pjordanandrsn/grouped-nf4-gemm"
 PYPI_HOSTS = ("files.pythonhosted.org", "pypi.org", "pypi.python.org")
 #: each library's registered release: (version, the one git commit accepted, or None when only an index wheel is)
 RELEASES = {"grouped-nf4-gemm": (GNF4_VERSION, GNF4_SHA), "bitsandbytes": (BNB_VERSION, None)}
-#: the shared release-proof helper (loggetta bench/release_proof.py at d3d84173), staged byte-identical
-RELEASE_PROOF_SHA256 = "341dd130b1cf681a86f3fa1aad2b3e1bf9a2e4e6c22388e0e35b5736fc446713"
+#: the shared release-proof helper (loggetta bench/release_proof.py at 85d300a9), staged byte-identical
+RELEASE_PROOF_SHA256 = "199d4f2faa49419090ef57e73fc34a86787ad5dcfe67060e92aaaf88a9bf6a63"
 BNB_ROUTES = ("custom", "dequant")    # bitsandbytes.backends.cuda.ops: _gemm_4bit_kernel_impl / _dequant_linear_fallback
 GEMV_KEYS = ("bw_prmt32", "bw_tree", "bw_splitk", "dotpad", "dotpad_splitk", "scalar", "scalar_splitk")
 HOST_CODES = {13: "free disk", 15: "card, compute capability, SM count or VRAM", 16: "host RAM", 18: "CUDA unusable"}
@@ -117,7 +117,7 @@ def provenance_faults(dists):
     return out
 
 
-def release_proof_faults(proofs):
+def release_proof_faults(proofs, pycache_prefix=None):
     """bitsandbytes, the index install, must carry release_proof.py's verdict: its installed bytes ARE the wheel PyPI
     publishes for the registered version (grouped-nf4-gemm is git at the release commit: provenance_faults pins it)."""
     p = (proofs or {}).get("bitsandbytes") if isinstance(proofs, dict) else None
@@ -126,7 +126,9 @@ def release_proof_faults(proofs):
     ok = (p.get("dist") == "bitsandbytes" and p.get("version") == BNB_VERSION and p.get("record") == "RECORD equal"
           and p.get("record_equal") is True and p.get("first_diff") is None
           and str(p.get("wheel", "")).startswith(f"bitsandbytes-{BNB_VERSION}-") and str(p.get("wheel")).endswith(".whl")
-          and isinstance(p.get("sha256"), str) and len(p["sha256"]) == 64)
+          and isinstance(p.get("sha256"), str) and len(p["sha256"]) == 64
+          and isinstance(p.get("imports"), dict) and "bitsandbytes" in p["imports"]      # R1: imports from the install
+          and p.get("pycache_fresh") is True and p.get("pycache_prefix") == pycache_prefix)   # R2: the bench's prefix
     return [] if ok else [f"bitsandbytes: the release proof does not hold ({p})"]
 
 
@@ -215,7 +217,7 @@ def reduce(rec):
         if rec.get(k_) != want:
             void.append(f"{k_} {rec.get(k_)!r}, registered {want}")
     void += provenance_faults(rec.get("provenance"))
-    void += release_proof_faults(rec.get("release_proof"))
+    void += release_proof_faults(rec.get("release_proof"), rec.get("pycache_prefix"))
     if not rec.get("dry") and not str(rec.get("pycache_prefix") or "").startswith("/tmp/p236-pycache."):
         void.append(f"the read did not run under a fresh PYTHONPYCACHEPREFIX ({rec.get('pycache_prefix')!r})")
     if "5090" not in str(rec.get("device")) or rec.get("cc") != [12, 0] or (rec.get("sm_count") or 0) < 160:
@@ -289,7 +291,9 @@ def fake_record(**over):
            "release_proof": {"bitsandbytes": {"dist": "bitsandbytes", "version": BNB_VERSION, "files": 60,
                                               "wheel": f"bitsandbytes-{BNB_VERSION}-py3-none-manylinux_2_24_x86_64.whl",
                                               "sha256": "0" * 64, "record": "RECORD equal", "record_equal": True,
-                                              "first_diff": None}},
+                                              "first_diff": None, "pycache_prefix": "/tmp/p236-pycache.Ab12Cd",
+                                              "pycache_fresh": True, "imports": {
+                                                  "bitsandbytes": "/site-packages/bitsandbytes/__init__.py"}}},
            "torch": TORCH_VERSION, "device": "NVIDIA GeForce RTX 5090", "cc": [12, 0], "sm_count": 170, "reps": REPS,
            "iters": ITERS, "cells": cells}
     rec.update(over)
@@ -320,6 +324,12 @@ def self_test():
         ("no provenance", v(fake_record(provenance=None)) == "VOID"),
         ("no release proof", v(fake_record(release_proof=None)) == "VOID"),
         ("no pycache prefix", v(fake_record(pycache_prefix=None)) == "VOID"),
+        ("a proof not under a fresh pycache", v(fake_record(release_proof={"bitsandbytes": {
+            **good["release_proof"]["bitsandbytes"], "pycache_fresh": False}})) == "VOID"),
+        ("a proof under another prefix than the bench's", v(fake_record(release_proof={"bitsandbytes": {
+            **good["release_proof"]["bitsandbytes"], "pycache_prefix": "/tmp/p236-pycache.Zz99Yy"}})) == "VOID"),
+        ("a proof without import origins", v(fake_record(release_proof={"bitsandbytes": {
+            **good["release_proof"]["bitsandbytes"], "imports": {}}})) == "VOID"),
         ("another pycache prefix", v(fake_record(pycache_prefix="/root/p236/__pycache__")) == "VOID"),
         ("a refused release proof", v(fake_record(release_proof={"bitsandbytes": {
             **good["release_proof"]["bitsandbytes"], "record_equal": False, "first_diff": "bitsandbytes/x.py"}})) == "VOID"),
