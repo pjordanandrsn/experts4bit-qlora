@@ -26,7 +26,10 @@ HP3_PY = r"""  *"hp3_reduce.py g1"*) out=$(echo "$*" | sed -n 's/.*--out \([^ ]*
 
 
 def drive(tmp_path, **env):
-    """test_hp1_driver's harness with HP3's interpreters, the build flag, a per-arm HP3_VENV log and the HP3 reducer stubs."""
+    """test_hp1_driver's harness with HP3's interpreters, the build flag, a per-arm HP3_VENV log and the HP3 reducer stubs. The
+    shakedown token runs under a registered shakedown id unless a test names another (the runner refuses any other id)."""
+    if env.get("FAMILY_FAM") == "qwen3hp3shake":
+        env.setdefault("TC1_RUN_ID", "hp3-shake-1")
     fakepy, harness = D.FAKEPY, D.HARNESS
     try:
         D.FAKEPY = fakepy.replace('  *"hp2_reduce.py verdict"*)', HP3_PY + '  *"hp2_reduce.py verdict"*)')
