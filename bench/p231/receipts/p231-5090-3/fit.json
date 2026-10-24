@@ -1,0 +1,127 @@
+{
+ "mode": "fit",
+ "status": "ok",
+ "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+ "max_seqs": 16,
+ "max_tokens_per_seq": 768,
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16
+ ],
+ "graphs": true,
+ "arm": "B0",
+ "tag": "",
+ "e4b_sha": "fa40c752e5cfaf7250ef5c106daba7b9bebfb025",
+ "gnf4_sha": "41ef086e6a3e2be5b158ff1bb38e0de67862a949",
+ "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61",
+ "knob": null,
+ "gnf4_knobs": {
+  "GNF4_GEMV_BW": null,
+  "GNF4_GEMV_BW_PLAN": null,
+  "GNF4_GEMV_BW_DECODE": null,
+  "GNF4_GEMV_DOTPAD": null
+ },
+ "torch": "2.8.0+cu128",
+ "load_s": 67.08,
+ "placement": "all-vram",
+ "graph_status": {
+  "1": "graph",
+  "2": "graph",
+  "4": "graph",
+  "8": "graph",
+  "16": "graph"
+ },
+ "grouping": {
+  "device_grouping": true,
+  "force_singleton_groups": false
+ },
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ],
+ "sm_count": 170,
+ "w16_wall_s": 11.7922,
+ "mem": {
+  "max_memory_allocated": 29972738560,
+  "memory_allocated": 29634264576,
+  "memory_reserved": 30379343872,
+  "free": 2541420544,
+  "total": 33670758400
+ },
+ "by_bucket": {
+  "1": {
+   "route": {
+    "nf4_singleton|le256": 96
+   },
+   "dispatch": {
+    "dotpad": 0,
+    "dotpad_splitk": 0,
+    "scalar": 0,
+    "scalar_splitk": 0,
+    "bw_tree": 0,
+    "bw_prmt32": 192,
+    "bw_splitk": 96
+   }
+  },
+  "2": {
+   "route": {
+    "nf4_k25|le256": 96
+   },
+   "dispatch": {
+    "dotpad": 0,
+    "dotpad_splitk": 0,
+    "scalar": 0,
+    "scalar_splitk": 0,
+    "bw_tree": 0,
+    "bw_prmt32": 0,
+    "bw_splitk": 0
+   }
+  },
+  "4": {
+   "route": {
+    "nf4_k25|le256": 96
+   },
+   "dispatch": {
+    "dotpad": 0,
+    "dotpad_splitk": 0,
+    "scalar": 0,
+    "scalar_splitk": 0,
+    "bw_tree": 0,
+    "bw_prmt32": 0,
+    "bw_splitk": 0
+   }
+  },
+  "8": {
+   "route": {
+    "nf4_k25|le256": 96
+   },
+   "dispatch": {
+    "dotpad": 0,
+    "dotpad_splitk": 0,
+    "scalar": 0,
+    "scalar_splitk": 0,
+    "bw_tree": 0,
+    "bw_prmt32": 0,
+    "bw_splitk": 0
+   }
+  },
+  "16": {
+   "route": {
+    "nf4_k25|le256": 96
+   },
+   "dispatch": {
+    "dotpad": 0,
+    "dotpad_splitk": 0,
+    "scalar": 0,
+    "scalar_splitk": 0,
+    "bw_tree": 0,
+    "bw_prmt32": 0,
+    "bw_splitk": 0
+   }
+  }
+ }
+}
