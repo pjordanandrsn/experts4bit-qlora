@@ -94,14 +94,14 @@ GATE = _cut(r"^POS79_E4B_SHA=.*?\n") + _cut(r"^POS79_GNF4_SHA=.*?\n") + _cut(r"^
 
 
 def _gate(tmp: Path, families="qwen3pos79", e4b=STAND_IN, gnf4="30adb1bfa76f95f9ce4a4c29734b8f36de907eca", uns="2026.10.8",
-          zoo="2026.10.8", staged=True, pin=STAND_IN):
+          zoo="2026.10.8", staged=True, pin=STAND_IN, extra=""):
     w = tmp / "w"
     w.mkdir(exist_ok=True)
     if staged:
         (w / "release_proof.py").write_text("x")
     gate = GATE.replace('POS79_E4B_SHA=""', f"POS79_E4B_SHA={pin}", 1)
     script = ("say(){ echo \"SAY $*\"; }\nfinish(){ echo \"FINISH $1\"; exit $1; }\n" + f"W={w}\nFAMILIES='{families}'\nE4B_SHA={e4b}\n"
-              f"GNF4_SHA={gnf4}\nTC1_UNSLOTH_VERSION={uns}\nTC1_UNSLOTH_ZOO_VERSION={zoo}\ncd {w}\n" + gate + "echo PASSED\n")
+              f"GNF4_SHA={gnf4}\nTC1_UNSLOTH_VERSION={uns}\nTC1_UNSLOTH_ZOO_VERSION={zoo}\n{extra}\ncd {w}\n" + gate + "echo PASSED\n")
     p = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
     summary = (w / "summary.txt").read_text() if (w / "summary.txt").exists() else ""
     return p, summary
@@ -111,6 +111,7 @@ def test_the_gate_passes_at_the_kits_pins(tmp_path):
     p, summary = _gate(tmp_path)
     assert p.returncode == 0 and "PASSED" in p.stdout, p.stdout + p.stderr
     assert f"POS79_PINS e4b {STAND_IN} gnf4 30adb1bfa76f95f9ce4a4c29734b8f36de907eca unsloth 2026.10.8 unsloth_zoo 2026.10.8 release_proof " in summary
+    assert "POS79_ARM_ENV e4b=[] extra=[]" in summary.splitlines()
 
 
 @pytest.mark.parametrize("kw, why", [
@@ -121,6 +122,8 @@ def test_the_gate_passes_at_the_kits_pins(tmp_path):
     ({"families": "qwen3pos79 qwen3pos69"}, "runs alone"),
     ({"staged": False}, "release_proof.py is not staged"),
     ({"pin": "", "e4b": ""}, "unfilled"),
+    ({"extra": "TC1_E4B_ENV='NF4_QLORA_COMPACT_DELTA=1'"}, "TC1_E4B_ENV is set"),
+    ({"extra": "TC1_ARM_EXTRA_ENV='E4B_CHUNKED_LM_LOSS=256'"}, "TC1_ARM_EXTRA_ENV is set"),
 ])
 def test_the_gate_refuses_any_other_pin_before_staging(tmp_path, kw, why):
     p, summary = _gate(tmp_path, **kw)
@@ -143,6 +146,59 @@ def test_the_family_is_amendment_69s_four_arms_in_abba_order(tmp_path):
     assert all("--profile-steps 3 --profile-warm 3" in ln and "--adapter-dtype fp32 --lora-init matched:3407" in ln for ln in lines)
     assert all("--unsloth-moe-backend grouped_mm" in ln for ln in lines if "ckpt_unsloth" in ln)
     assert "FREE qwen3pos79" in p.stdout
+    assert "TC1_ARM_EXTRA_ENV" not in FAMILY and "TC1_E4B_ENV" not in FAMILY      # the family hands its arms no extra environment
+
+
+KNOB_PREFIXES = ("E4B_", "NF4_QLORA_", "GNF4_")
+
+
+def _drive_pass_names():
+    """Every variable the drive starts the box with: its PASS line's names and its forwarded knob list."""
+    line = re.search(r'^PASS="(.*)"$', DRIVE, re.MULTILINE).group(1)
+    names = set(re.findall(r"([A-Z][A-Z0-9_]*)=", line))
+    fwd = re.search(r"^for v in (TC1_FAMILIES .*?); do", DRIVE, re.MULTILINE | re.DOTALL).group(1)   # the knob forward list
+    return names | set(re.findall(r"[A-Z][A-Z0-9_]*", fwd))
+
+
+def test_every_harness_variable_with_a_knob_prefix_is_exempt():
+    """The exempt names are derived from what the harness actually exports, so a new harness variable cannot silently void every row:
+    each name the drive starts the box with, or the box script exports, that carries a knob prefix must be in POS79_HARNESS_ENV."""
+    names = _drive_pass_names() | set(re.findall(r"^export ((?:[A-Z][A-Z0-9_]*=\S* ?)+)", RUN, re.MULTILINE) and
+                                      re.findall(r"^export ([A-Z][A-Z0-9_]*)", RUN, re.MULTILINE))
+    names |= {"E4B_VENV"}                                    # arm_once's own call-prefix selector (E4B_VENV=t212 arm ...)
+    harness = sorted(n for n in names if n.startswith(KNOB_PREFIXES))
+    assert harness and set(harness) <= set(RED.POS79_HARNESS_ENV), (harness, RED.POS79_HARNESS_ENV)
+    assert {"E4B_SHA", "GNF4_SHA", "GNF4_SHA_B"} <= set(harness)
+
+
+def test_the_box_records_from_the_drives_real_environment_pass_the_reducers_box_facts(tmp_path, monkeypatch):
+    """Not a hand-written fixture: the gate and the proof stage, cut from tc1_run.sh, run under the environment the drive's PASS line
+    starts the box with (every name set), and the summary they write goes through pos79_box."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith(KNOB_PREFIXES) and not k.startswith("TC1_")}
+    for n in _drive_pass_names():
+        env.setdefault(n, "1")
+    env.update(E4B_SHA=STAND_IN, GNF4_SHA="30adb1bfa76f95f9ce4a4c29734b8f36de907eca", GNF4_SHA_B="cd" * 20,
+               TC1_UNSLOTH_VERSION="2026.10.8", TC1_UNSLOTH_ZOO_VERSION="2026.10.8", TC1_FAMILIES="qwen3pos79")
+    for n in ("TC1_E4B_ENV", "TC1_ARM_EXTRA_ENV"):
+        env.pop(n, None)                                     # forwarded only when set; the launch template sets neither
+    w = tmp_path / "w"
+    (w / "logs").mkdir(parents=True)
+    (w / "release_proof.py").write_bytes((TC1 / "release_proof.py").read_bytes())      # the staged helper itself: its sha goes on the pins line
+    py = tmp_path / "py"
+    rec = ('{"dist": "%s", "version": "2026.10.8", "wheel": "%s-2026.10.8-py3-none-any.whl", "record": "RECORD equal", '
+           '"record_equal": true, "first_diff": null, "imports": {"%s": "/v"}, "pycache_prefix": "%s", "pycache_fresh": true}\\n')
+    py.write_text("#!/usr/bin/env bash\nfor d in unsloth unsloth_zoo; do\n  printf '" + rec + "' \"$d\" \"$d\" \"$d\" \"$PYTHONPYCACHEPREFIX\"\ndone\n")
+    py.chmod(0o755)
+    gate = GATE.replace('POS79_E4B_SHA=""', f"POS79_E4B_SHA={STAND_IN}", 1)
+    script = "\n".join(("say(){ :; }", "finish(){ echo FINISH $1; exit $1; }", f"W={w}", "FAMILIES=qwen3pos79", f"PY_UNS={py}", "UNS_OK=1",
+                        "T212_OK=1", f"cd {w}")) + "\n" + gate + PROOF + "pos79_release_proof || exit 9\n"
+    p = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
+    assert p.returncode == 0, p.stdout + p.stderr
+    (w / "versions.txt").write_text(f"e4b(t212) 0.58.0 @{STAND_IN}\ngnf4(t212) 0.51.0 @30adb1bfa76f95f9ce4a4c29734b8f36de907eca\n")
+    (w / "box.json").write_text(json.dumps({"cpu": "AMD EPYC 7713 64-Core Processor"}))
+    monkeypatch.setattr(RED, "POS79_E4B_SHA", STAND_IN)
+    fx, bad = RED.pos79_box(str(w))
+    assert bad == [] and fx["prefix"].startswith(RED.POS79_PYCACHE_PREFIX), (bad, (w / "summary.txt").read_text())
 
 
 PROOF = _cut(r"^pos79_release_proof\(\)\{.*?POS79_KNOB_ENV .*?\| tee -a summary\.txt; \}\n")

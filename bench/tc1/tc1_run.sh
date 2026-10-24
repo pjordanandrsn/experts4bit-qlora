@@ -225,8 +225,13 @@ case " $FAMILIES " in *" qwen3pos79 "*)
   [ "${TC1_UNSLOTH_VERSION:-}" = "$POS79_UNSLOTH" ] || why="${why:+$why; }TC1_UNSLOTH_VERSION ${TC1_UNSLOTH_VERSION:-unset} is not $POS79_UNSLOTH"
   [ "${TC1_UNSLOTH_ZOO_VERSION:-}" = "$POS79_UNSLOTH_ZOO" ] || why="${why:+$why; }TC1_UNSLOTH_ZOO_VERSION ${TC1_UNSLOTH_ZOO_VERSION:-unset} is not $POS79_UNSLOTH_ZOO"
   [ -s "$W/release_proof.py" ] || why="${why:+$why; }release_proof.py is not staged"
+  # the two ways arm_once hands an arm extra environment (TC1_E4B_ENV to every e4b arm, TC1_ARM_EXTRA_ENV to one arm): amendment 79 reads
+  # every default unset, so neither may carry anything on this box
+  [ -z "${TC1_E4B_ENV:-}" ] || why="${why:+$why; }TC1_E4B_ENV is set ($TC1_E4B_ENV): amendment 79 hands its arms no extra environment"
+  [ -z "${TC1_ARM_EXTRA_ENV:-}" ] || why="${why:+$why; }TC1_ARM_EXTRA_ENV is set ($TC1_ARM_EXTRA_ENV): amendment 79 hands its arms no extra environment"
   if [ -n "$why" ]; then say "BOX REFUSED (amendment 79 pins): $why"; echo "BOX_REFUSED pos79_pins: $why" >> summary.txt; finish 78; fi
-  echo "POS79_PINS e4b $E4B_SHA gnf4 $GNF4_SHA unsloth $POS79_UNSLOTH unsloth_zoo $POS79_UNSLOTH_ZOO release_proof $(sha256sum "$W/release_proof.py" | cut -c1-64)" | tee -a summary.txt;;
+  echo "POS79_PINS e4b $E4B_SHA gnf4 $GNF4_SHA unsloth $POS79_UNSLOTH unsloth_zoo $POS79_UNSLOTH_ZOO release_proof $(sha256sum "$W/release_proof.py" | cut -c1-64)" | tee -a summary.txt
+  echo "POS79_ARM_ENV e4b=[${TC1_E4B_ENV:-}] extra=[${TC1_ARM_EXTRA_ENV:-}]" | tee -a summary.txt;;
 esac
 # TC1 amendment 78 -- the 24 GiB fit reading: the card's memory.total must be a 24 GiB card's, else a host refusal (rc 18) before any
 # staging. The GPU name alone admits a 48 GB "RTX 4090"; the screen bands the listing's gpu_ram, and this reads the card itself.

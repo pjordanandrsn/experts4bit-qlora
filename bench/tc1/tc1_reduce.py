@@ -3175,6 +3175,10 @@ def pos79_why(tag, r):
     if gc != POS79_GNF4_SHA:
         bad.append(f"grouped-nf4-gemm commit {gc!r} != {POS79_GNF4_SHA}, the kit's pin")
     fw = r.get("framework")
+    if fw == "e4b":                                   # a lever that refused at run time changes the arm though no knob is set
+        cl = r.get("chunked_lm_loss")
+        if not isinstance(cl, dict) or int(cl.get("runtime_refusals") or 0) != 0:
+            bad.append(f"the chunked LM loss refused at run time, or recorded nothing (record {cl!r})")
     want = {"e4b": ("fused_attn4_m_fd", "fused_attn4_m_fd_d2"), "unsloth": ("ckpt_unsloth_m_fv", "ckpt_unsloth_m_fv_d2")}.get(fw, ())
     if tag not in want:
         bad.append(f"amendment 79 registers no {fw} arm {tag!r}")
@@ -3207,6 +3211,9 @@ def pos79_box(d):
         bad.append(f"summary.txt carries {len(ok)} RELEASE_PROOF OK lines, not one with a fresh {POS79_PYCACHE_PREFIX}* prefix")
     else:
         fx["prefix"] = m.group(1)
+    ae = [ln for ln in lines if ln.startswith("POS79_ARM_ENV ")]
+    if ae != ["POS79_ARM_ENV e4b=[] extra=[]"]:
+        bad.append(f"the arms' extra environment is not recorded empty (TC1_E4B_ENV / TC1_ARM_EXTRA_ENV): {ae}")
     kl = [ln for ln in lines if ln.startswith("POS79_KNOB_ENV")]
     if len(kl) != 1:
         bad.append(f"summary.txt carries {len(kl)} POS79_KNOB_ENV lines, not one: the arms' knob environment is unread")
@@ -3251,6 +3258,17 @@ def pos79_box(d):
     return fx, bad
 
 
+def pos79_resolved(r):
+    """What 0.58.0's e4b defaults resolved to on one row, reported beside the quote, never ruled: the double-quantized absmax, the
+    checkpoint (layers, funcs), grouped-nf4-gemm's bucket mode and compact bucketed delta, and the chunked-loss and combine-chunk features."""
+    r = r or {}
+    return {"absmax_dq": r.get("absmax_dq"), "ckpt": (r.get("ckpt_offload_layers"), r.get("ckpt_offload_funcs")),
+            "pad_buckets_mode": (r.get("lean_ab") or {}).get("gnf4_pad_buckets_mode"),
+            "compact_buckets": (r.get("compact_buckets") or {}).get("gnf4_has_compact_buckets"),
+            "chunked_lm_loss": (r.get("chunked_lm_loss") or {}).get("e4b_has_chunked_lm_loss"),
+            "combine_chunk": (r.get("combine_chunk") or {}).get("e4b_has_combine_chunk")}
+
+
 def _pos79_draws(R, fw, tag):
     rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
     return [(rows.get(k) or {}).get("r") or {} for k in ((fw, tag), (fw, tag + "_d2"))]
@@ -3287,6 +3305,8 @@ def score_pos79(F, d, fam=POS79_FAM):
          "e4b_s": e["s"], "unsloth_s": u["s"]}
     ev.append(f"Unsloth spends {q['device']:.3f}x e4b's GPU time per step (device ms {u['dev']:.1f} / {e['dev']:.1f}); "
               f"wall-clock {q['wall']:.3f}x (s/step {u['s']:.3f} / {e['s']:.3f}) on {q['cpu']}")
+    q["resolved"] = [pos79_resolved(r) for r in _pos79_draws(R, "e4b", "fused_attn4_m_fd")]
+    ev += [f"e4b draw {i + 1}: 0.58.0's defaults resolved to {x} (reported, never ruled)" for i, x in enumerate(q["resolved"])]
     return "QUOTED", ev, q
 
 
@@ -12641,7 +12661,8 @@ def selftest():
             out[(fw, tag)] = r
         return {POS79_FAM: reduce_family(POS79_FAM, out, {}, 20)}
 
-    def box79(name, pins=True, proof=True, fresh=True, jprefix=None, versions=True, patch=None, knobs="E4B_SHA GNF4_SHA", spfx=None):
+    def box79(name, pins=True, proof=True, fresh=True, jprefix=None, versions=True, patch=None, knobs="E4B_SHA GNF4_SHA", spfx=None,
+              armenv="e4b=[] extra=[]"):
         bd = os.path.join(d, name)
         os.makedirs(bd, exist_ok=True)
         sm = []
@@ -12651,6 +12672,8 @@ def selftest():
         sm.append(f"RELEASE_PROOF OK unsloth=={POS79_PINS['unsloth']} unsloth_zoo=={POS79_PINS['unsloth_zoo']} pycache_prefix {spfx or pfx}")
         if knobs is not None:
             sm.append(f"POS79_KNOB_ENV {knobs} ")
+        if armenv is not None:
+            sm.append(f"POS79_ARM_ENV {armenv}")
         open(os.path.join(bd, "summary.txt"), "w").write("\n".join(sm) + "\n")
         if proof:
             open(os.path.join(bd, "release_proof_unsloth.json"), "w").write("".join(json.dumps(
@@ -12672,6 +12695,8 @@ def selftest():
         g79["POS79_E4B_SHA"] = stand_in
         v, ev, q = score_pos79(F79, box79("p79-ok"))
         assert v == "QUOTED" and abs(q["device"] - 4100.0 / 1800.0) < 1e-9 and q["cpu"].startswith("AMD EPYC"), (v, ev)
+        assert len(q["resolved"]) == 2 and all("absmax_dq" in x and "ckpt" in x for x in q["resolved"]), q["resolved"]
+        assert sum("0.58.0's defaults resolved to" in x for x in ev) == 2, ev
         assert "Amendment 79 rule: QUOTED" in render(F79, os.path.join(d, "p79-ok"))
         for name, kw, needle in (("p79-nopins", {"pins": False}, "POS79_PINS"), ("p79-noproof", {"proof": False}, "0 proofs"),
                                  ("p79-stale", {"fresh": False}, "pycache_fresh not true"),
@@ -12681,14 +12706,19 @@ def selftest():
                                  ("p79-whl", {"patch": {"unsloth": {"wheel": "unsloth-2026.10.7-py3-none-any.whl"}}}, "wheel 'unsloth-2026.10.7"),
                                  ("p79-knob", {"knobs": "E4B_SHA GNF4_SHA NF4_QLORA_COMPACT_DELTA"}, "knobs set in the arms' environment"),
                                  ("p79-noknob", {"knobs": None}, "0 POS79_KNOB_ENV lines"),
-                                 ("p79-spfx", {"spfx": "/var/tmp/x", "jprefix": "/var/tmp/x"}, "not one with a fresh")):
+                                 ("p79-spfx", {"spfx": "/var/tmp/x", "jprefix": "/var/tmp/x"}, "not one with a fresh"),
+                                 ("p79-e4benv", {"armenv": "e4b=[NF4_QLORA_COMPACT_DELTA=1] extra=[]"}, "extra environment is not recorded empty"),
+                                 ("p79-xenv", {"armenv": "e4b=[] extra=[E4B_CHUNKED_LM_LOSS=256]"}, "extra environment is not recorded empty"),
+                                 ("p79-noaenv", {"armenv": None}, "extra environment is not recorded empty")):
             v, ev, _ = score_pos79(F79, box79(name, **kw))
             assert v == "NOT_READ" and any(needle in x for x in ev), (name, v, ev)
         old = set79(rec={"ckpt_unsloth_m_fv": {"env": lambda r: dict(r["env"], unsloth="2026.9.14")}})
         assert old[POS79_FAM]["verdicts"][("unsloth", "ckpt_unsloth_m_fv")] == "VOID"
         for tag, rec, needle in (("fused_attn4_m_fd", {"env": lambda r: dict(r["env"], torch="2.8.0+cu128")}, "not 2.12"),
                                  ("fused_attn4_m_fd", {"env": lambda r: dict(r["env"], gnf4_code={"commit": "ef" * 20})}, "grouped-nf4-gemm commit"),
-                                 ("ckpt_unsloth_m_fv_d2", {"profile": None}, "no profile")):
+                                 ("ckpt_unsloth_m_fv_d2", {"profile": None}, "no profile"),
+                                 ("fused_attn4_m_fd_d2", {"chunked_lm_loss": lambda r: dict(r["chunked_lm_loss"], runtime_refusals=1)}, "refused at run time"),
+                                 ("fused_attn4_m_fd", {"chunked_lm_loss": None}, "recorded nothing")):
             row = [x for x in set79(rec={tag: rec})[POS79_FAM]["rows"] if x["tag"] == tag][0]
             assert row["verdict"] == "VOID" and needle in row["why"], (tag, needle, row["verdict"], row["why"])
         assert pos79_why("fused_attn4_m_pd", (F79[POS79_FAM]["rows"][-1].get("r") or {})).count("registers no") == 1   # an off-registration tag

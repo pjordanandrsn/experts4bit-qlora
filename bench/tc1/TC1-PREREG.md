@@ -3727,8 +3727,10 @@ template and this text carry one value each, and `tests/test_tc1_pos79.py` holds
   `versions.txt` and on every receipt, never pinned by us and never ruled.
 
 The box refuses (rc 78, before any staging) when `E4B_SHA`, `GNF4_SHA`, `TC1_UNSLOTH_VERSION` or `TC1_UNSLOTH_ZOO_VERSION` is not the
-kit's, when the kit's e4b commit is unfilled, when another token shares the box, or when the release proof is not staged. It records
-the pins and the helper's sha256 as a `POS79_PINS` line.
+kit's, when the kit's e4b commit is unfilled, when another token shares the box, or when the release proof is not staged. It also
+refuses when either of the harness's two ways of handing an arm extra environment carries anything (`TC1_E4B_ENV`, every e4b arm;
+`TC1_ARM_EXTRA_ENV`, one arm). It records the pins and the helper's sha256 as a `POS79_PINS` line, and both of those as a
+`POS79_ARM_ENV` line.
 
 **The release proof.** `bench/tc1/release_proof.py` (sha256 `aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0`) is
 byte-identical to loggetta's `bench/release_proof.py` at loggetta#126's merge. It is staged with the kit.
@@ -3748,6 +3750,7 @@ environment, so the box's environment is theirs. `tc1_arm.py` is unchanged: benc
 **Validity** (`pos79_why`, per row):
 - torch 2.12;
 - the kit's pins as the arm recorded them (the four versions, and grouped-nf4-gemm's installed commit);
+- on e4b, a chunked-LM-loss record with no run-time refusal: a lever that refused at run time changes the arm though no knob is set;
 - the registered tags;
 - a profile with CPU ops on every arm.
 
@@ -3756,6 +3759,7 @@ A row off any of these is VOID.
 **The box facts** (`pos79_box`, each fail-closed):
 - the `POS79_PINS` line at the kit's pins and the helper's sha256;
 - one `RELEASE_PROOF OK` line, and its fresh `/tmp/tc1-pycache-*` prefix;
+- one `POS79_ARM_ENV` line reading `e4b=[] extra=[]`;
 - one `POS79_KNOB_ENV` line, with no e4b or grouped-nf4-gemm knob in it bar the harness's own `E4B_SHA`, `E4B_VENV`, `GNF4_SHA` and
   `GNF4_SHA_B`. Every default is therefore unset. Amendment 69 asserted the values 0.49.0's defaults resolved to; this amendment reads
   0.58.0's defaults as 0.58.0 resolves them, so those values are not carried over;
@@ -3773,7 +3777,9 @@ A row off any of these is VOID.
 5. otherwise **QUOTED**, amendment 69's quote. The device ratio comes first, the wall ratio second, named with the host:
    "Unsloth spends D x e4b's GPU time per step (device ms per profiled step, medians of two draws); wall-clock W x on <host CPU>".
 
-**Reported, never a bar.** CPU ops per profiled step, busy_t, peak GB, J/step, the per-draw values, and amendment 69's readings beside
+**Reported, never a bar.** What 0.58.0's e4b defaults resolved to on each e4b draw (`pos79_resolved`: the double-quantized absmax,
+the checkpoint's layers and functions, grouped-nf4-gemm's bucket mode and compact bucketed delta, the chunked-loss and combine-chunk
+features), beside the quote. CPU ops per profiled step, busy_t, peak GB, J/step, the per-draw values, and amendment 69's readings beside
 this one (1.92x device, 2.80x wall on an EPYC 7713). The two readings come from two releases on two hosts, so the difference between them
 is not read as either framework's change.
 
