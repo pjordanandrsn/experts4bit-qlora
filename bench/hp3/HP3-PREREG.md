@@ -4,7 +4,8 @@
 5 was added on the harness PR, also before any data. Nothing launches without the maintainer's exec ACK with the kit hash, from
 main. **Amendment 2 (2026-10-24, before any reading box):** the spare shakedown triggered the registered (R) fallback,
 and HP3 reads e4b vs Unsloth 2026.9.14 on torch 2.8.0+cu128; axolotl waits for an amendment. **Amendment 3 (2026-10-24, before any reading box):** the
-(R) shakedown `hp3r-shake-1` read `HP3 SHAKEDOWN_OK`, and the read launches from Amendment 3's merge.
+(R) shakedown `hp3r-shake-1` read `HP3 SHAKEDOWN_OK`, and the read launches from Amendment 3's merge. **Amendment 4 (2026-10-24,
+before any reading box):** the read's guard is 6.0 h (the launcher's cap), and the read launches from Amendment 4's merge.
 
 **Scope label, in every verdict line:** *parity of the exported adapters under one evaluator on byte-identical bases*. HP3 says
 nothing about any framework's own in-loop loss.
@@ -435,7 +436,8 @@ PARITY-only test and strengthens the case. This amendment merges before the read
    - the build is torch 2.8.0+cu128 with Unsloth's own bitsandbytes, so no HP3 (R) number is compared with an HP2 or HPN number.
 5. **The read box.** One RTX 5090 under the registered host rule (driver ≥580, RAM ≥98 GB, disk ≥220 GB), at all 48 layers.
    - The phases are ~4.8 h: A ~0.6 (one venv + e4b + the fetch), B ~0.7, C ~2.6 for ≤10 runs, and D ~0.9.
-   - The guard is 6.5 h, and the worst case is 6.5 h × $0.85 + 100 GB × $0.011 = **$6.63**.
+   - The guard is 6.5 h, and the worst case is 6.5 h × $0.85 + 100 GB × $0.011 = **$6.63** *(superseded by Amendment 4: guard
+     6.0 h, $6.20)*.
    - Ids: `hp3r-5090-1`, with `hp3r-5090-2` as the one pre-create spare. A refusal at create uses no id.
    - It launches only after the (R) shakedown in item 7 reads `HP3 SHAKEDOWN_OK`.
    - At most one reading box starts.
@@ -509,7 +511,25 @@ amendment that cites the shakedown's committed record. This is that amendment. N
    - the read: one started box, $6.63;
    - a created read box that does not start: at most $0.54, once (Amendment 2 item 6).
    - So $0.527 + $6.63 + $0.54 = **$7.70**, under $15. It is below Amendment 2's $9.20, because the (R) shakedown's spare was not
-     used.
+     used. *(Superseded by Amendment 4: $7.27.)*
+
+## Amendment 4 (2026-10-24, before any reading box): the read's guard is 6.0 h
+
+1. **Why.** Amendment 3's merge was checked at $0 before any read box. The launcher's `--validate` refused one value: the
+   registered 6.5 h guard exceeds its `teardown.max_wallclock_h` of 6.0 h. Every other check passed, including the cited
+   registration being on main. The maintainer ruled (2026-10-24 11:27Z) that the registration changes, not the launcher's policy
+   for one lane.
+2. **The change.** The read's guard is **6.0 h**. Nothing else changes: the box, the ids, the phases and every rule.
+   - **Margin.** The phases are estimated at about 4.8 h (A 0.6, B 0.7, C 2.6, D 0.9), so 6.0 h leaves about 25%.
+   - **A slow host costs power, never the read.** Amendment 1 part 7's seed plan is decided by timing alone. It reads 5, 4 or 3
+     seeds from the time left after seed 3410, so a tighter guard can read fewer seeds on a slow host. It never voids a read, and
+     fewer than 3 seeds is the registered host-limited NOT_READ.
+3. **Cost.** The read's worst case is 6.0 h × $0.85 + 100 GB × $0.011 = **$6.20** (was $6.63). The lane worst case is
+   $0.527 spent + $6.20 + $0.54 (a created read box that does not start; Amendment 2 item 6) = **$7.27**, under $15.
+4. **The read launches from THIS amendment's merge.** The rest of Amendment 3 item 4 stands: a $0 dry run from that merge, then
+   the maintainer's explicit approval comment on this PR.
+   - The approval names the full merge sha and the read kit's hashes.
+   - Amendment 3 item 3's diff condition now reads from `db5387eb` to this merge.
 
 ## Harness
 
