@@ -135,7 +135,7 @@ The offload row uses a different training setup.
     sm_120 at 170 SMs. Anything else resolves off and names why in `nf4_smallm_bw["source"]`. Calls of 5 to 8 tokens
     stay opt-in.
 - **The release-day head-to-heads**, each re-read at the released pins with every pinned release proven by its bytes, in
-  [`docs/REPRODUCE.md`](docs/REPRODUCE.md)'s new table:
+  [`docs/REPRODUCE.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/REPRODUCE.md)'s new table:
   - **Serving:** vLLM 0.32.0 is ahead of e4b's int4 serving, 1.038 at one request and 1.203 at sixteen, on one RTX 5090.
   - **Decode GEMV:** bitsandbytes 0.50.2 is faster than grouped-nf4-gemm's decode GEMV at all 30 op-level cells, timed
     eager with Python dispatch.
