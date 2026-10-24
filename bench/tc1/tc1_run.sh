@@ -205,6 +205,16 @@ case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*)
     echo "BOX_REFUSED gpu_mem=${GPU_MIB:-unread}MiB class=$GPU_CLASS band=${MEMBAND:-none}" >> summary.txt; finish 18; fi;;
 esac
 # HP3 Amendment 1 part 8 end
+# TC1 amendment 78 -- the 24 GiB fit reading: the card's memory.total must be a 24 GiB card's, else a host refusal (rc 18) before any
+# staging. The GPU name alone admits a 48 GB "RTX 4090"; the screen bands the listing's gpu_ram, and this reads the card itself.
+POS78_MIB_MIN=23500; POS78_MIB_MAX=24600
+case " $FAMILIES " in *" qwen3pos78fit "*)
+  GPU_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -dc 0-9)
+  echo "GPU_MEMORY_TOTAL ${GPU_MIB:-unreadable} MiB (a 24 GiB card: $POS78_MIB_MIN-$POS78_MIB_MAX; amendment 78)" | tee -a summary.txt
+  { [ -n "$GPU_MIB" ] && [ "$GPU_MIB" -ge "$POS78_MIB_MIN" ] && [ "$GPU_MIB" -le "$POS78_MIB_MAX" ]; } \
+    || { say "BOX REFUSED: memory.total ${GPU_MIB:-unreadable} MiB is not a 24 GiB card's ($POS78_MIB_MIN-$POS78_MIB_MAX; host floor)"
+         echo "BOX_REFUSED gpu_memory_total=${GPU_MIB:-unreadable} band=$POS78_MIB_MIN-$POS78_MIB_MAX (amendment 78)" >> summary.txt; finish 18; };;
+esac
 # K: the class label the arm records (TC1_BOX_CLASS): "RTX <n>" for a numeric class, the class string itself otherwise (H100 NVL / SXM / PCIE pass the substring check above)
 case "$GPU_CLASS" in [0-9]*) BOX_CLASS="RTX $GPU_CLASS";; *) BOX_CLASS="$GPU_CLASS";; esac
 # F [F19]: every arm runs with OMP_NUM_THREADS = the box's PHYSICAL core count (recorded in the receipt's arm_facts)
@@ -2001,6 +2011,62 @@ tc1_pos76_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   fi
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+POS78_GNF4=efdda943d5a310343ed7fef2e23d1cbf2df27e51   # TC1 amendment 78: grouped-nf4-gemm#587's merge (#584 and #585, the corrected test)
+POS78_TOKENS_SHA=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac   # tc1-5090-155's tokens (train + 8 held-out rows)
+POS78_TRAIN_SHA=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7    # ... and their train-only sha
+# tc1_pos78_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 78 (2026-10-24): the field recipe on a 24 GiB RTX 4090. One arm, pb1cl256
+# (NF4_QLORA_COMPACT_DELTA=1 NF4_QLORA_PAD_BUCKETS=1 E4B_CHUNKED_LM_LOSS=256, e4b's matched arm, 60 steps, TC1_STEP_MEM=1, --mem-census 1),
+# at grouped-nf4-gemm POS78_GNF4. Before it, each refusing at cents: the card band (above, rc 18); the PRE-CHECK, that commit's
+# kernel/test_compact_delta.py and test_compact_buckets.py on this GPU, cloned OUTSIDE $W (the drive fetches $W, and a source checkout --
+# its .git, its own release SUMS -- is not evidence) and removed after; a probe that the INSTALLED nf4_qlora reads NF4_QLORA_PAD_BUCKETS=1
+# as bucketed; and the tokens equal to tc1-5090-155's.
+tc1_pos78_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_fd_pb1cl256:fused" TAG=fused_attn4_m_fd_pb1cl256
+  say "===== 24 GiB FIT family $FAM ($MID @ $REV; pb1cl256 on a 24 GiB RTX 4090, 60 steps; amendment 78)"
+  local why="" PC="${POS78_PRECHECK_DIR:-$(dirname "$W")/gnf4-pos78}" pb prc
+  [ "$STEPS" = 60 ] && [ "$EVAL_EVERY" = 20 ] && [ "$EVAL_N" = 8 ] || why="amendment 78 needs amendment 73's window: TC1_STEPS=60, TC1_EVAL_EVERY=20, TC1_EVAL_N=8 (got $STEPS, $EVAL_EVERY, $EVAL_N)"
+  [ "$GNF4_SHA" = "$POS78_GNF4" ] || why="${why:+$why; }amendment 78 pins grouped-nf4-gemm $POS78_GNF4 (got GNF4_SHA $GNF4_SHA)"
+  [ "$T212_OK" = 1 ] || why="${why:+$why; }venv-unsloth's e4b (t212) is unavailable: $T212_REASON"
+  if [ -z "$why" ]; then
+    rm -rf "$PC" "$PC-site"
+    $PY_UNS -m pip freeze --all > logs/precheck_freeze_before.txt 2> logs/precheck_freeze.err
+    { perl -e 'alarm 600; exec @ARGV' git clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git "$PC" && git -C "$PC" checkout -q "$GNF4_SHA" \
+      && $PY_UNS -m pip install -q --no-input --target "$PC-site" pytest; } > logs/precheck_setup.log 2>&1 || why="the pre-check could not set up grouped-nf4-gemm $GNF4_SHA (logs/precheck_setup.log)"
+    if [ -z "$why" ]; then
+      (cd "$PC/kernel" && PYTHONPATH="$PC-site" perl -e 'alarm 900; exec @ARGV' $PY_UNS -m pytest -q -rs -p no:cacheprovider test_compact_delta.py test_compact_buckets.py) \
+        > logs/precheck_compact_delta.log 2>&1; prc=$?
+      if [ $prc -ne 0 ]; then why="pre-check FAILED: grouped-nf4-gemm $GNF4_SHA kernel/test_compact_delta.py + test_compact_buckets.py rc=$prc on this GPU (logs/precheck_compact_delta.log)"
+      elif grep -qE '^SKIPPED \[[0-9]+\] .*(is a CUDA allocator statistic|device memory is a CUDA statistic)' logs/precheck_compact_delta.log; then
+        why="pre-check incomplete: a CUDA case skipped on this GPU (logs/precheck_compact_delta.log)"; fi
+    fi
+    $PY_UNS -m pip freeze --all > logs/precheck_freeze_after.txt 2>> logs/precheck_freeze.err
+    [ -s logs/precheck_freeze_before.txt ] && cmp -s logs/precheck_freeze_before.txt logs/precheck_freeze_after.txt \
+      || why="${why:+$why; }the pre-check changed venv-unsloth's package set, or it could not be read (logs/precheck_freeze_before.txt, _after.txt)"
+    rm -rf "$PC" "$PC-site"
+    echo "PRECHECK $FAM ${why:-OK} $(tail -1 logs/precheck_compact_delta.log 2>/dev/null)" | tee -a summary.txt
+  fi
+  if [ -z "$why" ]; then                             # the INSTALLED nf4_qlora (venv-unsloth, cwd $W, no PYTHONPATH), with the arm's variable
+    pb=$(cd "$W" && NF4_QLORA_PAD_BUCKETS=1 $PY_UNS -c "import nf4_qlora as q; print(q._pad_buckets_mode(), q._lean_delta_enabled(), q._compact_buckets_enabled(), q._pad_buckets_enabled(1))" 2>&1 | tail -1)
+    echo "PADBUCKETS_PROBE $FAM ${pb:-unreadable} (want: 1 True True True)" | tee -a summary.txt
+    [ "$pb" = "1 True True True" ] || why="the pad-buckets probe read ${pb:-unreadable}, not 1 True True True"
+  fi
+  if [ -n "$why" ]; then
+    stubw $FAM e4b $TAG fused not_run "$why"
+    echo "$(echo $FAM | tr a-z A-Z) REFUSED $why" | tee -a summary.txt; return 0
+  fi
+  local TOK TS TR; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  TR=$(train_sha $TOK)
+  if [ "$TS" != "$POS78_TOKENS_SHA" ] || [ "$TR" != "$POS78_TRAIN_SHA" ]; then
+    why="the tokens sha $TS / train $TR differ from tc1-5090-155's $POS78_TOKENS_SHA / $POS78_TRAIN_SHA"
+    stubw $FAM e4b $TAG fused not_run "$why"; echo "$(echo $FAM | tr a-z A-Z) REFUSED $why" | tee -a summary.txt
+    free_family $FAM ${MID//\//--}; return 0
+  fi
+  echo "TOKENS MATCH tc1-5090-155 (sha and train-only sha)" | tee -a summary.txt
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED" CEN="--mem-census 1 --profile-steps 0"
+  can_run 600 $FAM/e4b/m_fd_pb1cl256 && TC1_ARM_EXTRA_ENV="NF4_QLORA_COMPACT_DELTA=1 NF4_QLORA_PAD_BUCKETS=1 E4B_CHUNKED_LM_LOSS=256 TC1_STEP_MEM=1" \
+    E4B_VENV=t212 arm $FAM e4b $TAG fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_pos68_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 68 (2026-10-08): amendment 67's packed-row position profiled -- e4b's
 # matched arm at its defaults (pd) and Unsloth's matched arm (pv), two draws each in ABBA order (pd pv pv pd), venv-unsloth, every arm profiled
 # (device time, CPU ops per step) with --phase-peaks 1.
@@ -3332,6 +3398,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3pos74pd) tc1_pos74_family qwen3pos74pd Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 74: amendment 73's census at today's pins, one grouped-nf4-gemm switch per arm
   qwen3pos75cl) tc1_pos75_family qwen3pos75cl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 75: the 4090-fit read, the compact delta and the chunked LM loss
   qwen3pos76co) tc1_pos76_family qwen3pos76co Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 76: cd1cl1 at grouped-nf4-gemm before vs after #584's reordered compact backward
+  qwen3pos78fit) tc1_pos78_family qwen3pos78fit Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 78: pb1cl256 on a 24 GiB RTX 4090, 60 steps
   qwen3sladder) tc1_sladder_family qwen3sladder Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 70: the single-block ladder 0 vs 1, field recipe
   qwen3slauto) tc1_slauto_family qwen3slauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 71: the single-block ladder 0 vs auto, field recipe
   qwen3fqkv) tc1_fqkv_family qwen3fqkv Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # P129 Amendment 2: the fused q/k/v training projection 0 vs 1, field recipe

@@ -749,6 +749,40 @@ def is_oom(e):
     return isinstance(e, torch.cuda.OutOfMemoryError) or "out of memory" in str(e).lower()
 
 
+# TC1 amendment 78: an OOM row reads NOT_FIT only when it proves its arm ran as registered, so an e4b OOM row carries the knobs as the
+# process saw them and grouped-nf4-gemm's and the chunked loss's counters up to the OOM, read the way the trained row reads them.
+OOM_PATH_ENV = ("NF4_QLORA_PAD_BUCKETS", "NF4_QLORA_PAD_BUCKETS_LADDER", "NF4_QLORA_COMPACT_DELTA", "NF4_QLORA_COMPACT_BUCKETS",
+                "E4B_CHUNKED_LM_LOSS")
+
+
+def oom_path_record():
+    try:
+        import nf4_qlora as nq
+    except Exception:
+        nq = None
+
+    def call(name):
+        f = getattr(nq, name, None)
+        try:
+            return f() if callable(f) else None
+        except Exception:
+            return None
+    cmp_ = call("_compact_delta_enabled")
+    cb = getattr(nq, "COMPACT_BUCKETS_STATS", None)
+    rec = {"env": {k: os.environ.get(k) for k in OOM_PATH_ENV}, "gnf4_imported": nq is not None,
+           "lora_path_calls": {k: int(v) for k, v in (getattr(nq, "LORA_PATH_STATS", None) or {}).items()},
+           "gnf4_pad_buckets_mode": call("_pad_buckets_mode"), "gnf4_pad_ladder": call("_pad_ladder_enabled"),
+           "gnf4_compact_delta": ("1" if cmp_ else "0") if cmp_ is not None else None,
+           "gnf4_has_compact_buckets": cb is not None, "compact_bucket_calls": int((cb or {}).get("calls", 0))}
+    try:
+        from experts4bit_qlora.engines import chunked_lm_loss as clm
+        cst = dict(getattr(clm, "CHUNKED_LM_LOSS_STATS", None) or {})
+        rec["chunked_lm_loss"] = {k: int(cst.get(k, 0)) for k in ("patched", "chunked_calls", "small_calls", "stock_calls", "runtime_refusals")}
+    except Exception:
+        rec["chunked_lm_loss"] = None
+    return rec
+
+
 # ----------------------------------------------------------------------------- #548: where the time before step 1 goes
 PROC_T0 = time.perf_counter()          # after the imports: the interpreter's own import cost precedes this mark
 _FIRST_ARM = [True]                    # a real lane runs one arm per process; the selftest runs many in one
@@ -4349,6 +4383,8 @@ def run_arm(a, load_fn, sampler=True):
             arm_facts["threads"]["nr_throttled_end"] = thread_facts()["nr_throttled"]
             if step_mem is not None:
                 lever_fields["step_mem"] = step_mem
+            if a.framework == "e4b":
+                lever_fields["oom_path"] = oom_path_record()     # TC1 amendment 78: the knobs and path counters up to the OOM
             stub(a, "oom", f"OOM at step {steps_done + 1}: {str(e)[:700]}",
                  dict(common_stub(), phase="train", steps_done=steps_done, losses=losses, step_ms=step_ms, microbatch_ms=microbatch_ms, peak_vram_gb=peak_gb(),
                       microbatch_padded_len=mb_padded_len, env=env, arm_facts=arm_facts, **lever_fields), code=5)
@@ -6073,6 +6109,11 @@ def selftest(a):
     assert ro["status"] == "oom" and "reserved by PyTorch but unallocated" in ro["reason"] and len(ro["reason"]) > 300, ro["reason"][:80]
     assert ro["env"]["framework"] == "e4b" and "pytorch_cuda_alloc_conf" in ro["env"] and ro["arm_facts"]["torch_num_threads"] >= 1, sorted(ro)
     assert len(ro["microbatch_padded_len"]) == ro["steps_done"] == len(ro["step_mem"]) == 2, (ro["steps_done"], ro.get("step_mem"))
+    op = ro["oom_path"]                           # TC1 amendment 78: an e4b OOM row carries its knobs and path counters (a trained row does not)
+    assert op["env"] == {k: os.environ.get(k) for k in OOM_PATH_ENV} and "oom_path" not in fu, op
+    assert set(op) == {"env", "gnf4_imported", "lora_path_calls", "gnf4_pad_buckets_mode", "gnf4_pad_ladder", "gnf4_compact_delta",
+                       "gnf4_has_compact_buckets", "compact_bucket_calls", "chunked_lm_loss"}, sorted(op)
+    assert all(isinstance(v, int) for v in op["lora_path_calls"].values()) and isinstance(op["compact_bucket_calls"], int), op
 
     # ---- assertions on the receipts
     R = {os.path.basename(p)[:-5]: json.load(open(p)) for p in glob.glob(os.path.join(d, "tiny*_*.json"))}
