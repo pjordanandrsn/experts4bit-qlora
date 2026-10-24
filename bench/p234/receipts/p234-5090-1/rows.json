@@ -1,0 +1,479 @@
+{
+ "mode": "rows",
+ "shapes": [
+  28672,
+  4096,
+  4096,
+  14336
+ ],
+ "topk": 2,
+ "routings": {
+  "distinct": [
+   [
+    0,
+    1
+   ],
+   [
+    2,
+    3
+   ],
+   [
+    4,
+    5
+   ],
+   [
+    6,
+    7
+   ]
+  ],
+  "shared": [
+   [
+    0,
+    1
+   ],
+   [
+    1,
+    2
+   ],
+   [
+    2,
+    3
+   ],
+   [
+    3,
+    0
+   ]
+  ],
+  "one_pair": [
+   [
+    5,
+    6
+   ],
+   [
+    5,
+    6
+   ],
+   [
+    5,
+    6
+   ],
+   [
+    5,
+    6
+   ]
+  ],
+  "seed2311": [
+   [
+    6,
+    4
+   ],
+   [
+    5,
+    6
+   ],
+   [
+    7,
+    3
+   ],
+   [
+    1,
+    6
+   ]
+  ],
+  "seed2312": [
+   [
+    4,
+    6
+   ],
+   [
+    2,
+    0
+   ],
+   [
+    5,
+    1
+   ],
+   [
+    0,
+    5
+   ]
+  ],
+  "seed2313": [
+   [
+    1,
+    3
+   ],
+   [
+    5,
+    0
+   ],
+   [
+    1,
+    6
+   ],
+   [
+    7,
+    4
+   ]
+  ]
+ },
+ "cases": {
+  "distinct": {
+   "mismatches": [],
+   "n_mismatch": 0,
+   "per_t": {
+    "1": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 8,
+      "bw_splitk": 4
+     },
+     "routes": {
+      "nf4_singleton": 4
+     },
+     "bw_launches": 12
+    },
+    "2": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 4,
+      "bw_splitk": 2
+     },
+     "routes": {
+      "nf4_singleton": 2
+     },
+     "bw_launches": 6
+    },
+    "4": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 2,
+      "bw_splitk": 1
+     },
+     "routes": {
+      "nf4_singleton": 1
+     },
+     "bw_launches": 3
+    }
+   },
+   "bw_launches": [
+    12,
+    6,
+    3
+   ]
+  },
+  "shared": {
+   "mismatches": [],
+   "n_mismatch": 0,
+   "per_t": {
+    "1": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 8,
+      "bw_splitk": 4
+     },
+     "routes": {
+      "nf4_singleton": 4
+     },
+     "bw_launches": 12
+    },
+    "2": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 4,
+      "bw_splitk": 2
+     },
+     "routes": {
+      "nf4_singleton": 2
+     },
+     "bw_launches": 6
+    },
+    "4": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 2,
+      "bw_splitk": 1
+     },
+     "routes": {
+      "nf4_singleton": 1
+     },
+     "bw_launches": 3
+    }
+   },
+   "bw_launches": [
+    12,
+    6,
+    3
+   ]
+  },
+  "one_pair": {
+   "mismatches": [],
+   "n_mismatch": 0,
+   "per_t": {
+    "1": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 8,
+      "bw_splitk": 4
+     },
+     "routes": {
+      "nf4_singleton": 4
+     },
+     "bw_launches": 12
+    },
+    "2": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 4,
+      "bw_splitk": 2
+     },
+     "routes": {
+      "nf4_singleton": 2
+     },
+     "bw_launches": 6
+    },
+    "4": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 2,
+      "bw_splitk": 1
+     },
+     "routes": {
+      "nf4_singleton": 1
+     },
+     "bw_launches": 3
+    }
+   },
+   "bw_launches": [
+    12,
+    6,
+    3
+   ]
+  },
+  "seed2311": {
+   "mismatches": [],
+   "n_mismatch": 0,
+   "per_t": {
+    "1": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 8,
+      "bw_splitk": 4
+     },
+     "routes": {
+      "nf4_singleton": 4
+     },
+     "bw_launches": 12
+    },
+    "2": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 4,
+      "bw_splitk": 2
+     },
+     "routes": {
+      "nf4_singleton": 2
+     },
+     "bw_launches": 6
+    },
+    "4": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 2,
+      "bw_splitk": 1
+     },
+     "routes": {
+      "nf4_singleton": 1
+     },
+     "bw_launches": 3
+    }
+   },
+   "bw_launches": [
+    12,
+    6,
+    3
+   ]
+  },
+  "seed2312": {
+   "mismatches": [],
+   "n_mismatch": 0,
+   "per_t": {
+    "1": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 8,
+      "bw_splitk": 4
+     },
+     "routes": {
+      "nf4_singleton": 4
+     },
+     "bw_launches": 12
+    },
+    "2": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 4,
+      "bw_splitk": 2
+     },
+     "routes": {
+      "nf4_singleton": 2
+     },
+     "bw_launches": 6
+    },
+    "4": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 2,
+      "bw_splitk": 1
+     },
+     "routes": {
+      "nf4_singleton": 1
+     },
+     "bw_launches": 3
+    }
+   },
+   "bw_launches": [
+    12,
+    6,
+    3
+   ]
+  },
+  "seed2313": {
+   "mismatches": [],
+   "n_mismatch": 0,
+   "per_t": {
+    "1": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 8,
+      "bw_splitk": 4
+     },
+     "routes": {
+      "nf4_singleton": 4
+     },
+     "bw_launches": 12
+    },
+    "2": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 4,
+      "bw_splitk": 2
+     },
+     "routes": {
+      "nf4_singleton": 2
+     },
+     "bw_launches": 6
+    },
+    "4": {
+     "dispatch": {
+      "dotpad": 0,
+      "dotpad_splitk": 0,
+      "scalar": 0,
+      "scalar_splitk": 0,
+      "bw_tree": 0,
+      "bw_prmt32": 2,
+      "bw_splitk": 1
+     },
+     "routes": {
+      "nf4_singleton": 1
+     },
+     "bw_launches": 3
+    }
+   },
+   "bw_launches": [
+    12,
+    6,
+    3
+   ]
+  }
+ },
+ "e4b_sha": "47bf1ed2fcc11842aea93b8e6a1ec7fd5bfe2c00",
+ "gnf4_sha": "41ef086e6a3e2be5b158ff1bb38e0de67862a949",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "status": "ok",
+ "resolve": {
+  "env": "1",
+  "on": true,
+  "max_tokens": 8,
+  "why": null,
+  "shapes": [
+   [
+    4096,
+    14336
+   ],
+   [
+    28672,
+    4096
+   ]
+  ]
+ },
+ "ok": true
+}

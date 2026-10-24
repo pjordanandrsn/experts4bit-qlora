@@ -1,0 +1,45 @@
+KNOBS e4b=47bf1ed2fcc11842aea93b8e6a1ec7fd5bfe2c00 gnf4=41ef086e6a3e2be5b158ff1bb38e0de67862a949 model=mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 server=E4B_PAGED_MAX_SEQS=16 E4B_PAGED_MAX_TOKENS_PER_SEQ=768 gpu_class=5090 min_disk_gb=220 min_ram_gb=60 min_dl_mb_s=40 short=32 long=160 reps=3 windows=24 cont=128 group=4
+CUDA_PROBE ok torch=2.8.0+cu128 cc=12.0 sms=170
+DOWNLOAD status=200 bytes=2342518784 seconds=20.01 mb_s=117.1
+GUARD_FIT fit=13200s need=16500s left=17077s
+STARTED 2026-10-24T14:19:40Z
+e4b 0.57.0 @47bf1ed2fcc11842aea93b8e6a1ec7fd5bfe2c00
+gnf4 0.50.0 @41ef086e6a3e2be5b158ff1bb38e0de67862a949
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p234_reduce self-test OK (91 cases)
+p109_box self-test OK (5/5 cases)
+p234_box self-test OK (35/35 cases)
+p115_quality self-test OK (11/11 cases)
+premise served route rc=0: 7 passed in 5.57s
+P234_PREMISE served ok
+premise kernel rc=0: 20 passed, 20 warnings in 6.07s
+P234_PREMISE kernel ok
+P234_ROWS ok cases=6 mismatches=0 bw_launches=[[12, 6, 3], [12, 6, 3], [12, 6, 3], [12, 6, 3], [12, 6, 3], [12, 6, 3]]
+premise ok
+FETCH mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 /root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=9689e662d473cbd1e114ddf251817490aeaef5bdd788ec2e034d0937bd10dbbb
+fit rc=0 P234_FIT {"status": "ok", "max_seqs": 16, "buckets": [1, 2, 4, 8, 16], "graphs": true, "w16_wall_s": 11.5413, "error": null}
+
+arm B0a rc=0 P234_ARM {"arm": "B0", "tag": "B0a", "load_s": 22.85, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "by_bucket_routes": {"1": {"nf4_singleton|le256": 96}, "2": {"nf4_k25|le256": 96}, "4": {"nf4_k25|le256": 96}, "8": {"nf4_k25|le256": 96}, "16": {"nf4_k25|le256": 96}}, "W1": 125.91, "W2": 73.32, "W4": 107.36, "W8": 176.03, "W16": 320.02}
+
+arm B1a rc=0 P234_ARM {"arm": "B1", "tag": "B1a", "load_s": 23.34, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "by_bucket_routes": {"1": {"nf4_singleton|le256": 96}, "2": {"nf4_singleton|le256": 96}, "4": {"nf4_singleton|le256": 96}, "8": {"nf4_singleton|le256": 96}, "16": {"nf4_k25|le256": 96}}, "W1": 124.88, "W2": 155.77, "W4": 189.47, "W8": 215.0, "W16": 320.24}
+
+arm B1b rc=0 P234_ARM {"arm": "B1", "tag": "B1b", "load_s": 22.76, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "by_bucket_routes": {"1": {"nf4_singleton|le256": 96}, "2": {"nf4_singleton|le256": 96}, "4": {"nf4_singleton|le256": 96}, "8": {"nf4_singleton|le256": 96}, "16": {"nf4_k25|le256": 96}}, "W1": 124.73, "W2": 155.63, "W4": 189.27, "W8": 214.8, "W16": 319.92}
+
+arm B0b rc=0 P234_ARM {"arm": "B0", "tag": "B0b", "load_s": 22.94, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "by_bucket_routes": {"1": {"nf4_singleton|le256": 96}, "2": {"nf4_k25|le256": 96}, "4": {"nf4_k25|le256": 96}, "8": {"nf4_k25|le256": 96}, "16": {"nf4_k25|le256": 96}}, "W1": 124.69, "W2": 73.1, "W4": 107.24, "W8": 175.74, "W16": 319.88}
+
+quality off rc=0 P234_QUALITY B0 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 0, 'bw_splitk': 0} routes={'nf4_mtile_captured|gt256': 7936, 'nf4_k25|le256': 251968} load 19s mem 27.85 GB 408.0 s
+
+quality on rc=0 P234_QUALITY B1 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 97536, 'bw_splitk': 48768} routes={'nf4_singleton|le256': 48768, 'nf4_mtile_captured|gt256': 1536} load 18s mem 27.85 GB 65.9 s
+
+P234_VERDICT LICENSED ["tokens as registered; quality within P110's bars at group 4; g2 2.12452, g4 1.76481; inert W1 0.99182; W16 regression 1.00013; W8 1.22138 (reported)"]
+  g: {"W1": 0.99182, "W2": 2.12452, "W4": 1.76481, "W8": 1.22138, "W16": 1.00013}
+  pair_ratios: {"W1": [0.99182, 1.00032], "W2": [2.12452, 2.129], "W4": [1.76481, 1.76492], "W8": [1.22138, 1.22226], "W16": [1.00069, 1.00013]}
+  self_pairs: {"B0b/B0a W1": 0.99031, "B0b/B0a W2": 0.997, "B0b/B0a W4": 0.99888, "B0b/B0a W8": 0.99835, "B0b/B0a W16": 0.99956, "B1b/B1a W1": 0.9988, "B1b/B1a W2": 0.9991, "B1b/B1a W4": 0.99894, "B1b/B1a W8": 0.99907, "B1b/B1a W16": 0.999}
+  decode_tok_s: {"B0a": {"W1": 125.91, "W2": 73.32, "W4": 107.36, "W8": 176.03, "W16": 320.02}, "B1a": {"W1": 124.88, "W2": 155.77, "W4": 189.47, "W8": 215.0, "W16": 320.24}, "B1b": {"W1": 124.73, "W2": 155.63, "W4": 189.27, "W8": 214.8, "W16": 319.92}, "B0b": {"W1": 124.69, "W2": 73.1, "W4": 107.24, "W8": 175.74, "W16": 319.88}}
