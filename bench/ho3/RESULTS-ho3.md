@@ -83,6 +83,11 @@ The RTX 4090 cohort's second box is therefore not measured. HO2's RTX 4090 rows 
 
 ## Attempts and cost
 
+From the private receipt store: each attempt's launcher receipt (`receipt.json`, its `cost_usd.actual` and
+`runtime_seconds`). Those receipts are store-only, because they name the rented host, so a reader of this tree cannot
+re-derive this table; the four boxes that never started have no other record here. Each started box's README repeats
+its USD.
+
 | box | outcome | started | USD | launcher wall time |
 |---|---|---|---|---|
 | `ho3-5090-1` | refused at create: the pinned offer was gone | no | 0 | 35 s |
