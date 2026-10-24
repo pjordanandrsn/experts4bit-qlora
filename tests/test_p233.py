@@ -446,6 +446,9 @@ def _stub_world(monkeypatch, q, tmp_path, phase_record):
     gate = types.ModuleType("p115_box")
     gate.arm_env_ok = lambda arm, env, prove: (True, "")          # main's own env gate (not an argument)
     monkeypatch.setitem(sys.modules, "p115_box", gate)
+    plan = types.ModuleType("fp8_paged_attn")                     # grouped-nf4-gemm's split plan (reported beside T)
+    plan.decode_split_plan = lambda *a, **kw: 11
+    monkeypatch.setitem(sys.modules, "fp8_paged_attn", plan)
 
     class Toy(torch.nn.Module):
         def __init__(self):
