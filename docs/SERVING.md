@@ -395,6 +395,18 @@ MXFP4 expert store, on a placement that is not all-resident, and at any expert s
 engage on the device. Reported in `nf4_smallm_bw`; which token counts it routed is
 `prefill_routes.seen.moe_nf4_smallm_bw`.
 
+**A fixed attention split count (`E4B_ATTN_SPLIT_FIXED=S`, `1` to `32`; opt-in, not yet read).** By default the paged
+FP8 attention decode picks its split count from the batch's row count, so a sequence's attention is reduced in a
+different grouping at each graph bucket, and its tokens can depend on what else is decoding (lane P223,
+[`bench/p223/RESULTS-p223.md`](../bench/p223/RESULTS-p223.md)). With this knob every decode call runs S splits and
+passes every other per-call choice of the kernel explicitly (compute mode, fused combine, warps, K tile, stages), so a
+call differs across buckets only in its row count. The kernel's split boundaries depend only on a sequence's own length
+and S, and its fused combine reduces the splits in a fixed order. P223 read `E4B_ATTN_SPLIT_CAP=1` with
+`E4B_PAGED_BUCKETS=2,4,8,16` schedule-invariant at about 3.5× the one-request decode time; a fixed S above 1 is the same
+equal-split property at more of a lone sequence's parallelism. No speed or invariance is claimed until a read. It
+replaces any split cap, a per-family default included, and is refused beside an explicit `E4B_ATTN_SPLIT_CAP`; never
+on speculative verify. Reported in `attn_split_fixed`, per captured bucket.
+
 **Pinned dense GEMMs at 2 to 8 rows (`E4B_DENSE_LT_PIN=o_proj[,router]`; opt-in; selection read, table not yet filled).** At 2 to 8 rows,
 cuBLAS's own kernel choice for some dense projections is slower than at one row. This knob routes the named projections'
 2..8-row calls through one cuBLASLt algorithm pinned per (cuBLASLt version, compute capability, SM count, shape, rows),

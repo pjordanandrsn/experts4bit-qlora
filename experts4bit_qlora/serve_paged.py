@@ -287,6 +287,12 @@ ATTN_SPLIT_CAP_ENV = "E4B_ATTN_SPLIT_CAP"
 ATTN_SPLIT_CAP_DEFAULT_FAMILIES: dict = {
     "qwen3_moe": 16,      # e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19 (bench/p143/RESULTS-p143.md)
 }
+#: P223's follow-up (opt-in; no read licenses it): a FIXED split count S for the paged FP8 attention decode at every row
+#: count, with every other per-call choice of the kernel wrapper pinned (engines/fp8_paged_kv.SPLIT_FIXED_PINS). P223
+#: read the decode schedule-invariant under E4B_ATTN_SPLIT_CAP=1 (one split at every bucket) and E4B_PAGED_BUCKETS=2,4,8,16,
+#: at about 3.5x the one-request decode time; a fixed S is the same equal-split-count property at a lone row's
+#: parallelism. Unset or 0 is off (today's plan, or the cap); 1..32 fixes S. Refused beside an explicit E4B_ATTN_SPLIT_CAP.
+ATTN_SPLIT_FIXED_ENV = "E4B_ATTN_SPLIT_FIXED"
 #: P151 (grouped-nf4-gemm K35): route the attention projections' single-row decode GEMVs through dense_gemv's
 #: gemv_bf16_bw (engines/dense_gemv_bw.py). 0 (the default) or 1; nothing chooses it by family until a read licenses it.
 DENSE_GEMV_BW_ENV = "E4B_DENSE_GEMV_BW"
@@ -619,10 +625,28 @@ def resolve_attn_split_cap(value: str, model_type) -> tuple:
 
 def apply_attn_split_cap(kv, cfg, model_type) -> tuple:
     """``(cap, source)``, resolved from ``cfg.attn_split_cap`` for ``model_type`` and set on ``kv.split_cap``: the one
-    place :func:`build_engine` turns the knob (or its per-family default) into what the KV hands the kernel."""
+    place :func:`build_engine` turns the knob (or its per-family default) into what the KV hands the kernel. Under
+    ``E4B_ATTN_SPLIT_FIXED`` the fixed split replaces any cap, a per-family default included (an explicit cap beside it
+    is refused by the config), so the cap is ``(None, "superseded: E4B_ATTN_SPLIT_FIXED")``."""
+    fixed = getattr(cfg, "attn_split_fixed", None)
+    kv.split_fixed = fixed
+    if fixed:
+        kv.split_cap = None
+        return None, f"superseded: {ATTN_SPLIT_FIXED_ENV}"
     cap, source = resolve_attn_split_cap(getattr(cfg, "attn_split_cap", FUSION_UNSET), model_type)
     kv.split_cap = cap
     return cap, source
+
+
+def _attn_split_fixed_env(value: str):
+    """``E4B_ATTN_SPLIT_FIXED`` as the server reads it: unset, empty or ``0`` is off (None); ``1..32`` is the fixed split
+    count S. Anything else is refused."""
+    v = (value or "").strip()
+    if not v or (v.isdigit() and int(v) == 0):
+        return None
+    if v.isdigit() and int(v) <= 32:
+        return int(v)
+    raise ValueError(f"{ATTN_SPLIT_FIXED_ENV}={value!r}: expected 0 (off) or a fixed split count 1..32")
 
 
 def _int8_head_bw_env(value: str) -> str:
@@ -787,6 +811,7 @@ class PagedServeConfig:
     fuse_qkv: bool = False               # E4B_PAGED_FUSE_QKV not 0 (fuse_qkv applies the env-gated folds itself)
     prefill_glue: str = FUSION_UNSET     # E4B_FUSE_PREFILL_GLUE: 0 | 1, or "default" when unset (per family, P130)
     attn_split_cap: str = FUSION_UNSET   # E4B_ATTN_SPLIT_CAP: 0 | 1..32, or "default" when unset (per family, P143)
+    attn_split_fixed: int | None = None  # E4B_ATTN_SPLIT_FIXED: None (off) or a fixed split count 1..32 (opt-in)
     dense_gemv_bw: str = "0"             # E4B_DENSE_GEMV_BW: 0 | 1 (P151; grouped-nf4-gemm K35's gemv_bf16_bw)
     int8_head_bw: str = FUSION_UNSET     # E4B_INT8_HEAD_BW: 0 | 1, or "default" when unset (per family and head shape, P153)
     int8_head_rows: int = 1              # E4B_INT8_HEAD_ROWS: 1 (today) | 2..8, the int8 head's rows on K37 (K2b)
@@ -852,6 +877,7 @@ class PagedServeConfig:
             fusion_modes=modes,
             prefill_glue=_prefill_glue_env(env(PREFILL_GLUE_ENV, "")),
             attn_split_cap=_attn_split_cap_env(env(ATTN_SPLIT_CAP_ENV, "")),
+            attn_split_fixed=_attn_split_fixed_env(env(ATTN_SPLIT_FIXED_ENV, "")),
             dense_gemv_bw=env(DENSE_GEMV_BW_ENV, "0").strip() or "0",
             int8_head_bw=_int8_head_bw_env(env(INT8_HEAD_BW_ENV, "")),
             int8_head_rows=_int8_head_rows_env(env(INT8_HEAD_ROWS_ENV, "")),
@@ -901,6 +927,9 @@ class PagedServeConfig:
             self.buckets = default_buckets(self.max_seqs)
         if not self.buckets or min(self.buckets) < 1:
             raise ValueError(f"E4B_PAGED_BUCKETS must be positive ints, got {self.buckets}")
+        if self.attn_split_fixed and self.attn_split_cap != FUSION_UNSET:
+            raise ValueError(f"{ATTN_SPLIT_FIXED_ENV}={self.attn_split_fixed} and {ATTN_SPLIT_CAP_ENV}="
+                             f"{self.attn_split_cap} both set the attention decode's split count: unset one of them")
         usable = usable_buckets(self.max_seqs, self.buckets)
         if tuple(self.buckets) != usable:
             # a bucket above max_seqs never runs; it costs a graph and scratch slots, and on a hybrid model served for
@@ -2071,6 +2100,9 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # grouped-nf4-gemm's own decode_split_plan): the engagement record a served read checks
     info["attn_split_cap"] = {"cap": split_cap, "source": split_cap_source,
                               "plans": {str(b_): dict(r_) for b_, r_ in sorted(kv.split_plans.items())}}
+    # P223's follow-up: the fixed split count, and per captured bucket the split handed over and every pinned choice
+    info["attn_split_fixed"] = {"n_split": kv.split_fixed,
+                                "plans": {str(b_): dict(r_) for b_, r_ in sorted(kv.split_fixed_plans.items())}}
     # P151: what the knob swapped, and per row count which modules routed through the kernel or passed to F.linear
     # during the build's captures and warm-ups: the engagement record a served read checks
     info["dense_gemv_bw"] = {**dense_gemv, "engagement": dense_gemv_engagement(model)}
