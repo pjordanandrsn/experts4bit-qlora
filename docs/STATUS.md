@@ -451,7 +451,7 @@ disagreement smaller in every window than the all-vram server's own chunked-pref
 an opt-in placement, never a default, and no speed is read (decode at `solver` is eager).
 `e4b.serve.p233.solver-placement-quality.qwen3.5090.2026-10-24` ([P233](../bench/p233/RESULTS-p233.md)).
 
-**The per-row expert GEMV at 2-8 decode tokens (`E4B_NF4_SMALLM_BW=1`, opt-in).** In a captured microbench of the expert
+**The per-row expert GEMV at 2-8 decode tokens (`E4B_NF4_SMALLM_BW`: the default on Mixtral at 2-4 tokens; `1` on any family at 2-8).** In a captured microbench of the expert
 call (one RTX 5090, lane P227), the per-row route runs Mixtral-8x7B's experts in a median 0.36 and 0.46 of K25's time
 at two and four tokens (upper bounds 0.3601 and 0.4655, PASS against 0.70), and Qwen3-30B-A3B's in a median 0.74 and
 0.90 (upper bounds 0.7478 and 0.9047, MISS).
@@ -462,8 +462,9 @@ at two and four tokens (upper bounds 0.3601 and 0.4655, PASS against 0.70), and 
 the switch decodes two requests 2.12452× and four requests 1.76481× as fast as unset (73.2 → 155.7 and 107.3 → 189.4
 tok/s). One request is unchanged, with identical tokens; sixteen requests decode at the same speed (1.00013), with
 tokens that differ in some rows (reported). Quality at group 4 is
-within P110's bars on both texts. LICENSED for buckets 2 and 4: the default change lands in its own PR, and 5 to 8
-tokens stay opt-in. P231's earlier read of the same question was FUNCTION_FAIL, on its sixteen-request token-identity
+within P110's bars on both texts. LICENSED for buckets 2 and 4, and the default there (see the defaults table):
+unset, Mixtral's NF4 store sends calls of 2 to 4 tokens through the per-row GEMV on the RTX 5090 only (sm_120 at 170
+SMs, the part read), so served tokens at two and four requests change there; `E4B_NF4_SMALLM_BW=0` is the way back. Calls of 5 to 8 tokens stay opt-in (`=1`). P231's earlier read of the same question was FUNCTION_FAIL, on its sixteen-request token-identity
 check, whose admission ramp runs the switched buckets.
 
 **The tile table over 4 programs.** `E4B_INT4_TILE_PROGRAMS=4` splits the one-launch cumsum tile table over 4 programs
@@ -546,6 +547,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | K25's codebook decode by grouped-nf4-gemm K39's byte permute (`lut="prmt"`; `qwen3_moe` only; bit-identical to the select tree, every token identical on one schedule; needs grouped-nf4-gemm 0.50.0 or later and an NVIDIA device, else it resolves to the tree, recorded in `info["k25_lut"]`; sixteen requests 1.0925× as fast (the smallest of four ABBA pairs), one request unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs) at the `today` plan; other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) take it by family with no speed claimed; other families stay on the tree) | `serve_paged` | `E4B_K25_LUT=tree` | `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` |
 | K25's tile plan `c1` under K39's decode (from 0.56.1; `qwen3_moe` only, where K25's decode resolved to `prmt`, else `today`, recorded in `info["k25_plan"]["source"]`; bit-identical to `today`'s plan, every token identical on one schedule; sixteen requests 1.4654× as fast (the smallest of four ABBA pairs), one request unchanged (0.9966), measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints take it by family with no speed claimed; other families stay on `today`) | `serve_paged` | `E4B_K25_PLAN=today` | `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20` |
 | B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE; its router epilogue, the only fold that engages, on Qwen3.5/3.6-MoE; its three glue folds on Mixtral | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18` |
+| Mixtral's NF4 expert calls of 2 to 4 decode tokens (buckets 2 and 4) through K33's per-row bandwidth GEMV (`mixtral` only, on the RTX 5090 only (sm_120 at 170 SMs; any other part resolves off, named), on the all-resident collapse; two requests 2.12452× and four 1.76481× as fast, served tokens at two and four requests change, quality within P110's bars at group 4; 5 to 8 tokens stay opt-in with `E4B_NF4_SMALLM_BW=1`; wherever an explicit `1` would refuse, it resolves off, recorded in `nf4_smallm_bw["source"]`) | `serve_paged` | `E4B_NF4_SMALLM_BW=0` | `e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24` |
 
 ---
 
