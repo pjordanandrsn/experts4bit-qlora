@@ -125,14 +125,22 @@ The offload row uses a different training setup.
 ## New in 0.58.1
 
 - **Mixtral-8x7B's NF4 decode at 2 to 4 requests takes K33's per-row GEMV by default on the RTX 5090.**
-  - With `E4B_NF4_SMALLM_BW` unset, Mixtral's NF4 expert calls of 2 to 4 tokens run grouped-nf4-gemm K33's bandwidth GEMV.
-  - Two requests decode 2.12452x and four 1.76481x as fast, inside P110's quality bars at group 4 (`e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24`).
-  - **Outputs change by default** at two and four requests there. One request is unchanged, and `E4B_NF4_SMALLM_BW=0` restores the previous output.
-  - The default covers only what P234 read: `mixtral`, Mixtral-8x7B's two expert shapes with 8-expert top-2 routing, on sm_120 at 170 SMs. Anything else resolves off and names why in `nf4_smallm_bw["source"]`. Calls of 5 to 8 tokens stay opt-in.
-- **The release-day head-to-heads**, each re-read at the released pins with every pinned release proven by its bytes, in [`docs/REPRODUCE.md`](docs/REPRODUCE.md)'s new table:
+  - With `E4B_NF4_SMALLM_BW` unset, Mixtral's NF4 expert calls of 2 to 4 tokens run grouped-nf4-gemm K33's bandwidth
+    GEMV.
+  - Two requests decode 2.12452x and four 1.76481x as fast, inside P110's quality bars at group 4
+    (`e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24`).
+  - **Outputs change by default** at two and four requests there. One request is unchanged, and `E4B_NF4_SMALLM_BW=0`
+    restores the previous output.
+  - The default covers only what P234 read: `mixtral`, Mixtral-8x7B's two expert shapes with 8-expert top-2 routing, on
+    sm_120 at 170 SMs. Anything else resolves off and names why in `nf4_smallm_bw["source"]`. Calls of 5 to 8 tokens
+    stay opt-in.
+- **The release-day head-to-heads**, each re-read at the released pins with every pinned release proven by its bytes, in
+  [`docs/REPRODUCE.md`](docs/REPRODUCE.md)'s new table:
   - **Serving:** vLLM 0.32.0 is ahead of e4b's int4 serving, 1.038 at one request and 1.203 at sixteen, on one RTX 5090.
-  - **Decode GEMV:** bitsandbytes 0.50.2 is faster than grouped-nf4-gemm's decode GEMV at all 30 op-level cells, timed eager with Python dispatch.
-  - **Training:** the comparison against Unsloth 2026.10.8 is NOT_READ. Both Unsloth draws failed TC1's engagement check.
+  - **Decode GEMV:** bitsandbytes 0.50.2 is faster than grouped-nf4-gemm's decode GEMV at all 30 op-level cells, timed
+    eager with Python dispatch.
+  - **Training:** the comparison against Unsloth 2026.10.8 is NOT_READ. Both Unsloth draws failed TC1's engagement
+    check.
   - **Memory planning:** loggetta's planner covers 18 of 21 measured training rows.
   - Losses stand beside wins, and unread rows say so.
 

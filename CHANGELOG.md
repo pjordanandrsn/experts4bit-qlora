@@ -8,14 +8,26 @@ Changes merged since the last release are one file each in [`changelog.d/`](chan
 
 A patch release with one serving default, plus the release-day head-to-heads.
 
-- **The default.** On Mixtral-8x7B's NF4 store on the RTX 5090, decode calls of 2 to 4 tokens now run grouped-nf4-gemm K33's per-row GEMV (`E4B_NF4_SMALLM_BW` unset). P234 read two requests 2.12452x and four 1.76481x as fast, with quality inside P110's bars at group 4 (`e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24`).
-- **Outputs change by default** at two and four requests there. One request is unchanged, and `E4B_NF4_SMALLM_BW=0` restores the previous output.
-- **The scope is the read's.** The default applies only on `mixtral`, at Mixtral-8x7B's two expert shapes with 8-expert top-2 routing, on sm_120 at 170 SMs. Any other family, shape, routing or part resolves off and names why. Checkpoints with the same shapes and routing inherit it unread. Calls of 5 to 8 tokens stay opt-in.
+- **The default.** On Mixtral-8x7B's NF4 store on the RTX 5090, decode calls of 2 to 4 tokens now run grouped-nf4-gemm
+  K33's per-row GEMV (`E4B_NF4_SMALLM_BW` unset). P234 read two requests 2.12452x and four 1.76481x as fast, with
+  quality inside P110's bars at group 4 (`e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24`).
+- **Outputs change by default** at two and four requests there. One request is unchanged, and `E4B_NF4_SMALLM_BW=0`
+  restores the previous output.
+- **The scope is the read's.** The default applies only on `mixtral`, at Mixtral-8x7B's two expert shapes with 8-expert
+  top-2 routing, on sm_120 at 170 SMs. Any other family, shape, routing or part resolves off and names why. Checkpoints
+  with the same shapes and routing inherit it unread. Calls of 5 to 8 tokens stay opt-in.
 
-The rest is records. Each piece was re-read at the released pins against a competitor's latest release, and every pinned release was proven by its bytes. The results are in `docs/REPRODUCE.md`'s new head-to-head table, losses beside wins:
-- **Serving vs vLLM:** vLLM 0.32.0 is ahead of e4b's int4 serving at 1.038 (one request) and 1.203 (sixteen) on one RTX 5090 (`e4b.serve.h2h.vllm-0.32.0.p235.qwen3.b1.5090.2026-10-24`, `.b16`). P58's earlier reading on another box was 1.087 / 1.396. The difference is not read as an e4b gain.
-- **Decode GEMV vs bitsandbytes:** bitsandbytes 0.50.2's `matmul_4bit` is faster than grouped-nf4-gemm 0.51.0's decode GEMV at all 30 op-level cells, timed eager with each library's Python dispatch (ratio 0.30 to 0.92; `e4b.kernel.p236.nf4-gemv-vs-bnb.moe-experts.5090.2026-10-24`). That is not the served path, which runs under captured graphs.
-- **Training vs Unsloth:** the head-to-head against Unsloth 2026.10.8 is NOT_READ. Both Unsloth draws failed TC1's standing engagement check, so no ratio is quoted.
+The rest is records. Each piece was re-read at the released pins against a competitor's latest release, and every pinned
+release was proven by its bytes. The results are in `docs/REPRODUCE.md`'s new head-to-head table, losses beside wins:
+- **Serving vs vLLM:** vLLM 0.32.0 is ahead of e4b's int4 serving at 1.038 (one request) and 1.203 (sixteen) on one RTX
+  5090 (`e4b.serve.h2h.vllm-0.32.0.p235.qwen3.b1.5090.2026-10-24`, `.b16`). P58's earlier reading on another box was
+  1.087 / 1.396. The difference is not read as an e4b gain.
+- **Decode GEMV vs bitsandbytes:** bitsandbytes 0.50.2's `matmul_4bit` is faster than grouped-nf4-gemm 0.51.0's decode
+  GEMV at all 30 op-level cells, timed eager with each library's Python dispatch (ratio 0.30 to 0.92;
+  `e4b.kernel.p236.nf4-gemv-vs-bnb.moe-experts.5090.2026-10-24`). That is not the served path, which runs under captured
+  graphs.
+- **Training vs Unsloth:** the head-to-head against Unsloth 2026.10.8 is NOT_READ. Both Unsloth draws failed TC1's
+  standing engagement check, so no ratio is quoted.
 - **loggetta's memory planner:** it covers 18 of 21 measured held-out training rows.
 - **Not read at 0.58.1:** held-out parity (HP3). Three other rows were not registered today.
 
