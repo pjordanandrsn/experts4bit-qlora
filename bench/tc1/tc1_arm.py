@@ -2927,15 +2927,16 @@ def _probe_e4b_stack(inner, slot, pk, am, shp, offload=None):
     with) on expert 0, to bf16; the control re-dequantises a 1-row COPY of the packed storage with one byte flipped.
 
     Under expert offload (`offload`, the handle) the base holds 0-element placeholders between forwards, so the packed storage
-    and absmax are the handle's HOME copies (the bytes every forward stages), moved to the handle's device and dequantised
-    there, as the staged forward does. (Offload refuses a double-quantized absmax, so the two never meet.)"""
+    and absmax are the handle's HOME copies (the bytes every forward stages); expert 0's rows alone are moved to the handle's
+    device and dequantised there, as the staged forward does, rather than the whole layer (about 1.2 GB at Qwen3-235B-A22B).
+    (Offload refuses a double-quantized absmax, so the two never meet.)"""
     dq = "_e4b_absmax_dq" in getattr(inner, "__dict__", {})     # ABSMAX-DQ: the absmax is stored double-quantized
     if offload is not None:
         if dq:
             raise RuntimeError(f"{slot}: an offloaded stack carries a double-quantized absmax, which offload refuses")
-        dev = offload.device
-        packed, absmax = offload.home[pk].to(dev), offload.home[am].to(dev)
-        source = f"{pk}[0] (offload home, staged to {dev})"
+        dev = offload.device                    # expert 0 only: _dequantize_expert indexes both by expert on dim 0
+        packed, absmax = offload.home[pk][0:1].to(dev), offload.home[am][0:1].to(dev)
+        source = f"{pk}[0] (offload home, expert 0 staged to {dev})"
     else:
         if dq:                                          # ... so it is read the way the library's per-expert loop reads it
             from experts4bit_qlora.absmax_dq import expert_absmax_rows

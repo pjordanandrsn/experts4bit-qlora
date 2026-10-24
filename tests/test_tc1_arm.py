@@ -1639,7 +1639,7 @@ def test_frozen_base_probe_reads_an_offloaded_stack_from_its_home():
     for k in ("gate_up", "down"):
         r, o = resident["slots"][k], off["slots"][k]
         assert o["sha"] == r["sha"] and o["regime"] == r["regime"] == "nf4/64" and o["n_bytes"] == r["n_bytes"] > 0, (k, r, o)
-        assert o["control_detects_flip"] is True and "offload home" in o["source"], o
+        assert o["control_detects_flip"] is True and "offload home, expert 0" in o["source"], o
     assert base.gate_up_proj.numel() == 0                                               # the probe staged nothing into the module
 
 
