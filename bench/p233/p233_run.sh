@@ -2,7 +2,7 @@
 # Lane P233, BOX side (bench/p233/PREREG-p233.md, MAP 2): does serving at E4B_PAGED_PLACEMENT=solver, with Qwen3-30B-A3B's
 # experts split across VRAM, host DRAM and NVMe, keep teacher-forced quality against the same server at all-vram? On ONE
 # RTX 5090, grouped-nf4-gemm v0.50.0, every arm eager (E4B_PAGED_GRAPHS=0) with the head knobs named (E4B_INT8_HEAD_BW=1,
-# E4B_INT8_HEAD_ROWS=8; Amendment 1):
+# E4B_INT8_HEAD_ROWS=8; Amendment 1) and the NVMe tier's pinned rows at E (E4B_PAGED_HOT_ROWS=128; Amendment 3):
 #   quality  three processes, Phase B's instrument (p115_quality.measure_phase, unmodified) at group T = 1 and 8 in turn
 #            (24 wikitext windows x 128 positions after a 512-token prompt, the pass KV at the server's 4096 tokens):
 #            A (all-vram) scores R and its floor arms and saves its log-probs; S (solver at 8.0 / 3.0 GiB, all three
@@ -50,7 +50,8 @@ SHAKE_FLAG=""; [ "$SHAKE" = 1 ] && SHAKE_FLAG="--shakedown"
 [ -z "${P233_GPU_CLASS:-}${P233_MIN_DISK_GB:-}${P233_MIN_RAM_GB:-}${P233_MIN_DL_MB_S:-}${P233_REHEARSAL:-}${P233_CONT:-}${P233_WINDOWS:-}" ] || { say 'reading knobs are frozen'; finish 78; }
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever, engine knob and kernel knob starts unset: the shipped server is the subject (the arms set the
-# placement and its budgets; every arm sets E4B_PAGED_GRAPHS=0, E4B_INT8_HEAD_BW=1 and E4B_INT8_HEAD_ROWS=8; the split
+# placement and its budgets; every arm sets E4B_PAGED_GRAPHS=0, E4B_INT8_HEAD_BW=1, E4B_INT8_HEAD_ROWS=8 and
+# E4B_PAGED_HOT_ROWS=128 (Amendment 3); the split
 # cap and the fusions stay at their qwen3_moe defaults, the dense attention GEMV off)
 unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_SERVE_ATTN_INT4 E4B_FUSE_T1_GLUE E4B_FUSE_T1_GLUE_R2 \
       E4B_FUSE_ROUTER_EPI E4B_INT4_KEEP_NF4 E4B_INT4_GROUPED_SMALLM E4B_INT4_LEAN_GLUE E4B_INT4_DECODE_A16 E4B_ROUTER_EPI_CAST \
@@ -216,6 +217,10 @@ except ValueError as e:
 # the arms' placement knobs as the config reads them
 f = sp.PagedServeConfig.__dataclass_fields__
 assert (f["placement"].default, f["vram_gb"].default, f["dram_gb"].default) == ("all-vram", 1.2, 6.0)
+# the NVMe tier's pinned rows (Amendment 3): the config reads E4B_PAGED_HOT_ROWS (default 64, below the floor at a
+# 512-token chunk) and build_engine hands it to the tier, so every arm's named 128 is the rows the tier holds
+assert f["hot_rows"].default == 64 and 'hot_rows=int(env("E4B_PAGED_HOT_ROWS", "64"))' in inspect.getsource(sp.PagedServeConfig.from_env)
+assert "enable_hybrid_tier(model, cfg.arena, man, hot_rows=cfg.hot_rows," in inspect.getsource(sp.build_engine)
 # build_engine: the solver, then all-vram's override, then the tier (collapse on, no diet), then the head's two steps
 src = inspect.getsource(sp.build_engine)
 at = [src.index(s) for s in ("man = solve_placement(", 'if cfg.placement == "all-vram":', "enable_hybrid_tier(model, cfg.arena, man,",
@@ -287,7 +292,7 @@ K8_MODEL="$SNAP" K8_WORK="$W/work" perl -e "alarm $(step_alarm 5400); exec @ARGV
 grep -a "BAKE" logs/bake.log | tail -1 | tee -a summary.txt
 # ---- the three phases: A, then S, then C, each a fresh process on the shipped server built eager, at group T = 1 and 8
 # in turn; A writes its log-probs per T to work/ref/T<T> (they stay on the box), S and C score against them
-ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_MAX_SEQS=16 E4B_PAGED_GRAPHS=0 E4B_INT8_HEAD_BW=1 E4B_INT8_HEAD_ROWS=8"
+ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_MAX_SEQS=16 E4B_PAGED_GRAPHS=0 E4B_INT8_HEAD_BW=1 E4B_INT8_HEAD_ROWS=8 E4B_PAGED_HOT_ROWS=128"
 mkdir -p $W/work/ref
 for PH in A S C; do
   case "$PH" in

@@ -5,7 +5,8 @@ P232's head knobs, the quality read at group T = 1 and 8 in place of 2, 4 and 8,
 
 The engine is the shipped server (``PagedServeConfig.from_env()`` + ``build_engine(cfg)``) at grouped-nf4-gemm v0.50.0,
 ``qwen3_moe`` defaults throughout, built EAGER. Every arm sets ``E4B_PAGED_GRAPHS=0``, ``E4B_INT8_HEAD_BW=1`` and
-``E4B_INT8_HEAD_ROWS=8`` (Amendment 1: the head knobs named, never an unset default); the split cap, the fusions and every
+``E4B_INT8_HEAD_ROWS=8`` (Amendment 1: the head knobs named, never an unset default) and ``E4B_PAGED_HOT_ROWS=128``
+(Amendment 3: the NVMe tier's pinned rows at E, the contract's floor at any prefill); the split cap, the fusions and every
 other knob stay unset (their e4b default at the launch commit). The arms differ ONLY in where the experts sit:
   A  ``E4B_PAGED_PLACEMENT=all-vram`` (the budgets unset: unused there), the reference;
   S  ``solver`` at ``E4B_PAGED_VRAM_GB=8.0`` / ``E4B_PAGED_DRAM_GB=3.0``: all three tiers, the ruling arm;
@@ -48,13 +49,14 @@ ARMS = ("A", "S", "C")
 PLACEMENT_KNOB, VRAM_KNOB, DRAM_KNOB = "E4B_PAGED_PLACEMENT", "E4B_PAGED_VRAM_GB", "E4B_PAGED_DRAM_GB"
 GRAPHS_KNOB = "E4B_PAGED_GRAPHS"
 HEAD_KNOB, ROWS_KNOB = "E4B_INT8_HEAD_BW", "E4B_INT8_HEAD_ROWS"
+HOT_ROWS_KNOB = "E4B_PAGED_HOT_ROWS"
 #: per arm, the value each placement knob must carry (None: unset), the strings the PREREG registers
 ARM_VALUE = {"A": {PLACEMENT_KNOB: "all-vram", VRAM_KNOB: None, DRAM_KNOB: None},
              "S": {PLACEMENT_KNOB: "solver", VRAM_KNOB: "8.0", DRAM_KNOB: "3.0"},
              "C": {PLACEMENT_KNOB: "solver", VRAM_KNOB: "8.0", DRAM_KNOB: "0"}}
 BUDGET_GB = {"S": (8.0, 3.0), "C": (8.0, 0.0)}
-#: every arm: eager, and the head knobs named (Amendment 1)
-EVERY_ARM = {GRAPHS_KNOB: "0", HEAD_KNOB: "1", ROWS_KNOB: "8"}
+#: every arm: eager, the head knobs named (Amendment 1), and the NVMe tier's pinned rows at E = 128 (Amendment 3)
+EVERY_ARM = {GRAPHS_KNOB: "0", HEAD_KNOB: "1", ROWS_KNOB: "8", HOT_ROWS_KNOB: "128"}
 CAP_KNOB = "E4B_ATTN_SPLIT_CAP"           # unset in every arm: the cap at its qwen3_moe default
 DENSE_KNOB = "E4B_DENSE_GEMV_BW"         # unset: the dense attention GEMV off
 SPEC_KNOB = "E4B_PAGED_SPEC"              # unset: plain decode
@@ -80,7 +82,7 @@ TELEMETRY = ("power.limit", "clocks.max.sm", "temperature.gpu", "clocks.sm", "po
 
 
 def arm_env_ok(arm: str, env):
-    """``(ok, why)``: the placement knobs carry the arm's values (unset where None), every arm's three knobs theirs, and
+    """``(ok, why)``: the placement knobs carry the arm's values (unset where None), every arm's four knobs theirs, and
     every :data:`DEFAULT_KNOBS` knob is unset."""
     if arm not in ARMS:
         return False, f"unknown arm {arm!r}"
@@ -723,6 +725,11 @@ def self_test() -> int:
           ("the head off is refused", not arm_env_ok("A", {**A, HEAD_KNOB: "0"})[0]),
           ("the rows unset is refused (Amendment 1)", not arm_env_ok("C", {k: v for k, v in C.items() if k != ROWS_KNOB})[0]),
           ("the rows at 4 is refused", not arm_env_ok("S", {**S, ROWS_KNOB: "4"})[0]),
+          ("the NVMe tier's rows unset is refused (Amendment 3)",
+           not arm_env_ok("S", {k: v for k, v in S.items() if k != HOT_ROWS_KNOB})[0]),
+          ("the NVMe tier's rows at the serve default 64 is refused", not arm_env_ok("C", {**C, HOT_ROWS_KNOB: "64"})[0]),
+          ("the NVMe tier's rows unset on A is refused too (the arms differ only in placement)",
+           not arm_env_ok("A", {k: v for k, v in A.items() if k != HOT_ROWS_KNOB})[0]),
           ("the split cap set is refused (its default is every arm's)", not arm_env_ok("S", {**S, CAP_KNOB: "16"})[0]),
           ("a fixed split set is refused", not arm_env_ok("A", {**A, "E4B_ATTN_SPLIT_FIXED": "8"})[0]),
           ("a fusion knob set is refused", not arm_env_ok("S", {**S, "E4B_FUSE_T1_GLUE": "auto"})[0]),

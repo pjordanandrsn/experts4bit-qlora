@@ -155,7 +155,8 @@ def test_the_registered_constants_and_the_prereg_agree():
     assert R.GNF4_SHA == "41ef086e6a3e2be5b158ff1bb38e0de67862a949" and R.TORCH == "2.8.0+cu128"
     assert (R.MODEL, R.REV) == ("Qwen/Qwen3-30B-A3B", "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39")
     assert (R.HEAD_MODE, R.HEAD_SOURCE, R.ROWS_MAX, R.ROWS_SOURCE) == ("1", "explicit", 8, "explicit")
-    assert R.KNOBS == {"E4B_PAGED_GRAPHS": "0", "E4B_INT8_HEAD_BW": "1", "E4B_INT8_HEAD_ROWS": "8"}
+    assert R.KNOBS == {"E4B_PAGED_GRAPHS": "0", "E4B_INT8_HEAD_BW": "1", "E4B_INT8_HEAD_ROWS": "8",
+                       "E4B_PAGED_HOT_ROWS": "128"} and R.HOT_ROWS == 128
     assert set(R.VERDICTS_READ) == {"SOLVER_SANE", "SOLVER_NOT_SANE"}
     for s in ("`E4B_PAGED_GRAPHS=0` in every arm", "| **A** | `all-vram` | (unused)", "| **S** | `solver` | `8.0` / `3.0`",
               "| **C** | `solver` | `8.0` / `0`", "**the ruling arm**", "**reported only**",
@@ -169,7 +170,8 @@ def test_the_registered_constants_and_the_prereg_agree():
               "**`E4B_INT8_HEAD_BW=1`** and **`E4B_INT8_HEAD_ROWS=8`**", "`levers.int8_head_bw`",
               "`p233-5090-1` to `-3` for readings, plus `p233-5090-r1` to `-r6`", "`p233-shake-1` to `-3`",
               "(`tests/test_hybrid_cold_dest.py`, `tests/test_serve_hybrid_compose.py`), at counts the kit names, or rc 25",
-              "**No power floor:**"):
+              "**No power floor:**", "sets **`E4B_PAGED_HOT_ROWS=128`** (E)",
+              "the read speaks for **solver placement with `E4B_PAGED_HOT_ROWS=128`**"):
         assert s in FLAT, s
 
 
@@ -187,7 +189,7 @@ def test_the_runner_refuses_before_the_install_and_reads_only_a_rule_verdict():
     # no power floor: the limit is recorded and never refused on (there is no rc 17 and no floor constant)
     assert "finish 17" not in RUN and "MIN_POWER_W" not in RUN and "POWER_LIMIT_W ${PL:-unreadable} (recorded, never ruled)" in RUN
     unset = RUN.split("\nunset ", 1)[1].split("\n: > summary.txt")[0]
-    for knob in ("E4B_INT8_HEAD_ROWS", "E4B_INT8_HEAD_BW", "E4B_PAGED_SPEC", "E4B_ATTN_SPLIT_CAP", "E4B_DENSE_GEMV_BW",
+    for knob in ("E4B_INT8_HEAD_ROWS", "E4B_INT8_HEAD_BW", "E4B_PAGED_HOT_ROWS", "E4B_PAGED_SPEC", "E4B_ATTN_SPLIT_CAP", "E4B_DENSE_GEMV_BW",
                  "TRITON_INTERPRET", "E4B_PAGED_GRAPHS", "E4B_PAGED_PLACEMENT", "E4B_PAGED_VRAM_GB", "E4B_PAGED_DRAM_GB",
                  "E4B_ATTN_SPLIT_FIXED", "E4B_FUSE_PREFILL_GLUE", "E4B_NF4_SMALLM_BW"):
         assert re.search(rf"\s{knob}(\s|\\|$)", unset), knob
@@ -200,12 +202,17 @@ def test_the_runner_refuses_before_the_install_and_reads_only_a_rule_verdict():
     at = [RUN.index(x) for x in order]
     assert at == sorted(at), dict(zip(order, at))
     # the arms, as registered: every arm eager with the head knobs named; the placements and their budgets
-    assert ("E4B_PAGED_MAX_SEQS=16 E4B_PAGED_GRAPHS=0 E4B_INT8_HEAD_BW=1 E4B_INT8_HEAD_ROWS=8\"" in RUN)
+    assert ("E4B_PAGED_MAX_SEQS=16 E4B_PAGED_GRAPHS=0 E4B_INT8_HEAD_BW=1 E4B_INT8_HEAD_ROWS=8 E4B_PAGED_HOT_ROWS=128\""
+            in RUN)
     assert 'A) PLACE="E4B_PAGED_PLACEMENT=all-vram"; NEED=$NEED_A' in RUN
     assert 'S) PLACE="E4B_PAGED_PLACEMENT=solver E4B_PAGED_VRAM_GB=8.0 E4B_PAGED_DRAM_GB=3.0"; NEED=$NEED_S' in RUN
     assert 'C) PLACE="E4B_PAGED_PLACEMENT=solver E4B_PAGED_VRAM_GB=8.0 E4B_PAGED_DRAM_GB=0"; NEED=$NEED_C' in RUN
     code = "\n".join(ln for ln in RUN.splitlines() if not ln.lstrip().startswith("#"))
     assert code.count("E4B_INT8_HEAD_ROWS=8") == 1 and code.count("E4B_PAGED_GRAPHS=0") == 1, "named once, for every arm"
+    assert code.count("E4B_PAGED_HOT_ROWS=128") == 1, "the tier's rows named once, for every arm (Amendment 3)"
+    # the tripwire ties the knob to the tier: the config reads it, build_engine hands it on
+    assert 'hot_rows=int(env("E4B_PAGED_HOT_ROWS", "64"))' in RUN
+    assert "enable_hybrid_tier(model, cfg.arena, man, hot_rows=cfg.hot_rows," in RUN
     assert "E4B_ATTN_SPLIT_CAP=" not in RUN and "E4B_DENSE_GEMV_BW=" not in RUN
     assert "--ref-dir $W/work/ref" in RUN and '"fastapi>=0.110"' in RUN
     assert "  1/SHAKEDOWN) finish 0;;" in RUN and "  0/SOLVER_SANE|0/SOLVER_NOT_SANE) finish 0;;" in RUN
@@ -531,7 +538,8 @@ def _stub_world(monkeypatch, q, tmp_path, phase_record):
         monkeypatch.delenv(k, raising=False)
     for k, v in {"E4B_PAGED_MODEL": R.MODEL, "E4B_PAGED_REVISION": R.REV, "E4B_PAGED_ARENA": str(arena),
                  "E4B_PAGED_CALIB": str(tmp_path / "calib.json"), "E4B_PAGED_MAX_SEQS": "16", "E4B_PAGED_GRAPHS": "0",
-                 "E4B_INT8_HEAD_BW": "1", "E4B_INT8_HEAD_ROWS": "8", "E4B_PAGED_PLACEMENT": "all-vram",
+                 "E4B_INT8_HEAD_BW": "1", "E4B_INT8_HEAD_ROWS": "8", "E4B_PAGED_HOT_ROWS": "128",
+                 "E4B_PAGED_PLACEMENT": "all-vram",
                  "E4B_PAGED_DEVICE": "cpu"}.items():
         monkeypatch.setenv(k, v)
     return seen, model
@@ -700,13 +708,15 @@ def test_the_int8_head_resolves_on_at_the_solver_placement(monkeypatch, k37):
     for k in ("E4B_PAGED_SPEC", "E4B_PAGED_SPEC_K", "E4B_PAGED_SPEC_HEAD", "E4B_PAGED_BUCKETS"):
         monkeypatch.delenv(k, raising=False)
     env = {"E4B_PAGED_PLACEMENT": "solver", "E4B_PAGED_VRAM_GB": "8.0", "E4B_PAGED_DRAM_GB": "3.0",
-           "E4B_PAGED_GRAPHS": "0", "E4B_INT8_HEAD_BW": "1", "E4B_INT8_HEAD_ROWS": "8", "E4B_PAGED_MAX_SEQS": "16"}
+           "E4B_PAGED_GRAPHS": "0", "E4B_INT8_HEAD_BW": "1", "E4B_INT8_HEAD_ROWS": "8", "E4B_PAGED_MAX_SEQS": "16",
+           "E4B_PAGED_HOT_ROWS": "128"}
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     assert box.arm_env_ok("S", {**env})[0]
     cfg = sp.PagedServeConfig.from_env()
     assert (cfg.placement, cfg.vram_gb, cfg.dram_gb, cfg.graphs) == ("solver", 8.0, 3.0, False)
     assert (cfg.int8_head_bw, cfg.int8_head_rows) == ("1", 8)
+    assert cfg.hot_rows == 128, "the arm's named rows are the config's (Amendment 3)"
     st = _tiered_state()
     model = _toy(st)
     pl = box.placement_record([st], cfg.placement, cfg.vram_gb, cfg.dram_gb, 10)
@@ -823,9 +833,11 @@ BOX_MUTANTS = [
     ('"S": {PLACEMENT_KNOB: "solver", VRAM_KNOB: "8.0", DRAM_KNOB: "3.0"}', '"S": {PLACEMENT_KNOB: "solver", VRAM_KNOB: "8.0", DRAM_KNOB: "2.0"}'),
     ('"C": {PLACEMENT_KNOB: "solver", VRAM_KNOB: "8.0", DRAM_KNOB: "0"}', '"C": {PLACEMENT_KNOB: "solver", VRAM_KNOB: "8.0", DRAM_KNOB: "3.0"}'),
     ('ARM_VALUE = {"A": {PLACEMENT_KNOB: "all-vram", VRAM_KNOB: None, DRAM_KNOB: None},', 'ARM_VALUE = {"A": {PLACEMENT_KNOB: "all-vram"},'),
-    # every arm's knobs (Amendment 1), and the defaults left unset
-    ('EVERY_ARM = {GRAPHS_KNOB: "0", HEAD_KNOB: "1", ROWS_KNOB: "8"}', 'EVERY_ARM = {GRAPHS_KNOB: "0", HEAD_KNOB: "1", ROWS_KNOB: "4"}'),
-    ('EVERY_ARM = {GRAPHS_KNOB: "0", HEAD_KNOB: "1", ROWS_KNOB: "8"}', 'EVERY_ARM = {GRAPHS_KNOB: "0", ROWS_KNOB: "8"}'),
+    # every arm's knobs (Amendments 1 and 3), and the defaults left unset
+    ('ROWS_KNOB: "8", HOT_ROWS_KNOB: "128"}', 'ROWS_KNOB: "4", HOT_ROWS_KNOB: "128"}'),
+    ('EVERY_ARM = {GRAPHS_KNOB: "0", HEAD_KNOB: "1", ROWS_KNOB: "8",', 'EVERY_ARM = {GRAPHS_KNOB: "0", ROWS_KNOB: "8",'),
+    ('ROWS_KNOB: "8", HOT_ROWS_KNOB: "128"}', 'ROWS_KNOB: "8"}'),
+    ('ROWS_KNOB: "8", HOT_ROWS_KNOB: "128"}', 'ROWS_KNOB: "8", HOT_ROWS_KNOB: "64"}'),
     ("DEFAULT_KNOBS = (CAP_KNOB, ", "DEFAULT_KNOBS = ("),
     # measure_phase's keywords: an extra one, another floor chunk, another phase, the references not per T
     ('"ref_dir": os.path.join(ref_dir, f"T{T}"), "counters": counters, "fwd": fwd}',
