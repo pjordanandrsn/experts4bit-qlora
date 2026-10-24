@@ -46,8 +46,9 @@ NEW_FILES = [LANE / f for f in ("p235_run.sh", "p235_reduce.py", "provenance.py"
 RELEASE_PROOF = {"source": "loggetta#125 at 85d300a9",
                  "sha256": "199d4f2faa49419090ef57e73fc34a86787ad5dcfe67060e92aaaf88a9bf6a63"}
 #: the top-level import names of the dists the arms import, read from the published wheels (experts4bit-qlora 0.57.0,
-#: grouped-nf4-gemm 0.50.0, vllm 0.32.0 and 0.30.0 x86_64; zip central directories) and from grouped-nf4-gemm's
-#: pyproject py-modules + packages at v0.50.0 and main (the same 43 names): a staged file must not shadow one
+#: grouped-nf4-gemm 0.50.0 and the released 0.51.0, vllm 0.32.0 and 0.30.0 x86_64; zip central directories) and from
+#: grouped-nf4-gemm's pyproject py-modules + packages at v0.50.0 and main (the same 43 names): a staged file must not
+#: shadow one
 TOP_LEVEL = {
     "experts4bit-qlora": {"experts4bit_qlora"},
     "grouped-nf4-gemm": {"_triton_shim", "arena_experts", "arena_moe_patch", "cold_cpu_view", "cold_deadline",
