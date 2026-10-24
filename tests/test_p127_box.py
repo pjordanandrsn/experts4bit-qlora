@@ -367,6 +367,18 @@ def test_the_pinned_b_audit_range_is_fully_registered():
     assert listed and not [c for c in listed if c not in ok], [c for c in listed if c not in ok]
 
 
+def _expect_outcome(call, outcome):
+    """``call()`` must end in exactly ``outcome`` (pytest.fail.Exception or pytest.skip.Exception). pytest.raises(outcome)
+    lets the other outcome escape, so a CI branch that regressed to a skip would be reported SKIPPED and pass CI."""
+    try:
+        call()
+    except (pytest.fail.Exception, pytest.skip.Exception) as e:
+        if not isinstance(e, outcome):
+            pytest.fail(f"expected {outcome.__name__}, got {type(e).__name__}: {e}")
+        return
+    pytest.fail(f"expected {outcome.__name__}, but the call returned")
+
+
 @pytest.mark.parametrize("ci,outcome", [("1", pytest.fail.Exception), ("", pytest.skip.Exception)],
                          ids=["ci-fails", "local-skips"])
 def test_missing_history_fails_under_ci_and_skips_locally(monkeypatch, ci, outcome):
@@ -374,5 +386,4 @@ def test_missing_history_fails_under_ci_and_skips_locally(monkeypatch, ci, outco
         monkeypatch.setenv("CI", ci)
     else:
         monkeypatch.delenv("CI", raising=False)
-    with pytest.raises(outcome):
-        _history_missing("the commits are not in this checkout")
+    _expect_outcome(lambda: _history_missing("the commits are not in this checkout"), outcome)

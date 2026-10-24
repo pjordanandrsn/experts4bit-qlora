@@ -428,6 +428,18 @@ def test_the_run_ids_are_registered_in_both_scripts():
     assert "`p156-5090-1` to `-3`" in PREREG
 
 
+def _expect_outcome(call, outcome):
+    """``call()`` must end in exactly ``outcome`` (pytest.fail.Exception or pytest.skip.Exception). pytest.raises(outcome)
+    lets the other outcome escape, so a CI branch that regressed to a skip would be reported SKIPPED and pass CI."""
+    try:
+        call()
+    except (pytest.fail.Exception, pytest.skip.Exception) as e:
+        if not isinstance(e, outcome):
+            pytest.fail(f"expected {outcome.__name__}, got {type(e).__name__}: {e}")
+        return
+    pytest.fail(f"expected {outcome.__name__}, but the call returned")
+
+
 @pytest.mark.parametrize("ci,outcome", [("1", pytest.fail.Exception), ("", pytest.skip.Exception)],
                          ids=["ci-fails", "local-skips"])
 def test_a_missing_lane_commit_fails_under_ci_and_skips_locally(monkeypatch, ci, outcome):
@@ -438,5 +450,4 @@ def test_a_missing_lane_commit_fails_under_ci_and_skips_locally(monkeypatch, ci,
         monkeypatch.setenv("CI", ci)
     else:
         monkeypatch.delenv("CI", raising=False)
-    with pytest.raises(outcome):
-        _lib_at_lane()
+    _expect_outcome(lambda: _lib_at_lane(), outcome)
