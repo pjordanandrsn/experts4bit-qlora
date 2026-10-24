@@ -9,8 +9,9 @@ P236 (`bench/p236/RESULTS-p236.md`) timed grouped-nf4-gemm 0.51.0's K33 decode G
 - **Graded:**
   - Q1 held. bitsandbytes took `dequant` at Mixtral down and OLMoE gate_up at M = 16, and `custom` everywhere else.
   - Q2 (gnf4 faster at M = 1) was wrong.
-  - Q3 (the ratio falls with M; bitsandbytes faster at M = 16 on Mixtral) was wrong as written: bitsandbytes is faster at
-    every M.
+  - Q3 was wrong as written. Its M = 16 clause held (bitsandbytes is faster on both Mixtral projections there), but the
+    ratio does not fall with M: only Mixtral's gate_up falls, and not at every step; the others are near flat, and
+    bitsandbytes is faster at every M.
   - Q4 held in part: 16 self-pair bands fall outside [0.95, 1.05], 3 of them on Mixtral.
 - **Scope:** eager calls between CUDA events, each including its library's Python dispatch. This is not the served,
   graph-captured decode path, and not K33's device time. No default moves.
