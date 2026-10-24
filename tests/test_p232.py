@@ -7,12 +7,14 @@ arms; the three quality phases), the guard fit and its slack, the drive's pod-la
 fetch imports no link), the self-tests run as the box runs them (one directory), P153's pieces carried verbatim, and the
 reducer and box mutants the self-tests must kill.
 
-NO REAL FIXTURE YET: no P232 box has run, so the reducer is held to its synthetic self-test (every rung, the TRIPWIRE and
-its zero-floor case) and its mutants only; the shakedown's record becomes its real fixture by an amendment before the
-reading (P229's Amendment 1 form)."""
+The real fixture (Amendment 2): p232-shake-1's twelve reducer inputs, sha256-pinned, reduce to SHAKEDOWN with every
+integrity check passed; departures from them each VOID; made reading-shaped (shakedown off, the registered rep count)
+they VOID on the 575 W floor alone, since that host's board was capped at 500 W, and a reducer without the power check
+reads a verdict from them."""
 import ast
 import hashlib
 import importlib.util
+import json
 import os
 import pathlib
 import re
@@ -315,10 +317,105 @@ def test_p153s_pieces_are_carried_verbatim():
     assert set(mine) == set(red) and mine == theirs
 
 
-def test_the_reducer_has_no_real_fixture_yet():
-    """Until the shakedown's amendment, the reducer is read on synthetic records only, and says so."""
-    assert not (LANE / "fixtures").exists()
-    assert "NO REAL FIXTURE YET" in (LANE / "p232_reduce.py").read_text(encoding="utf-8")
+# ---- the real record first: p232-shake-1 (an RTX 5090 on a 500 W board, explore tier), sha256-pinned
+FIXTURE = LANE / "fixtures" / "p232-shake-1"
+FIXTURE_SHA256 = {
+    "arm_Ka.json": "d7bee34c3e32d77004af08c8eaecf0058d1a911ada160090cbe93d233b3af20f",
+    "arm_Kb.json": "05b5ed7c5743d2072ed062e7caae4eb3878dd078ba9d7dff39de5470b2f6120b",
+    "arm_Kc.json": "016cdb8722b0868824c1eb6dd915d70ae037f80c49be613292546d3677521318",
+    "arm_Kd.json": "84e5736f1b4ed0bd29bdb014db5720227ff09c46fc8c88fad73c0bae3f47339f",
+    "arm_Ra.json": "b51705c486e6da96dfe874fe9d6631dc0dd7b0c7528b085a19395620c10ede2d",
+    "arm_Rb.json": "d6739327dce12881f33de5587c979a754e4418d87f77fa1d598218b653da34a2",
+    "arm_Rc.json": "4f72998a835763a313c427ad8304575e626d1d4bc4e7612b42b080f06dd2f5bd",
+    "arm_Rd.json": "a40cfe6975515ab4c366a131195d76f8729d9b8882fcf38e61896d48eea788b3",
+    "arm_Rw.json": "a3c89a55ea4b4029da4578fb5029e735ae00b0903d0de6eda0d1286d470107a0",
+    "quality_B16.json": "5cbe7786a14205b87a974d44f6c4c6dcb715ce1d31a81fe875772fb4ed99ce57",
+    "quality_K.json": "dfdbdbed101b4a36d164069af6497a2eb70952d8c249295cefd9a5c205925175",
+    "quality_R.json": "53c7a1d72cf07448ae6a53a889c3bbeece3f438be4df98428e7b0d18c961317d",
+}
+FIXTURE_E4B = "65a33362608169e1df61fa56f879baef263fd0ba"     # the controller HEAD that staged p232-shake-1's kit
+
+
+def _real():
+    """(arms, quality) as the reducer's main() loads them, each file checked against its pin first."""
+    assert sorted(p.name for p in FIXTURE.iterdir()) == sorted(FIXTURE_SHA256)
+    recs = {}
+    for name, want in FIXTURE_SHA256.items():
+        raw = (FIXTURE / name).read_bytes()
+        assert hashlib.sha256(raw).hexdigest() == want, f"the pinned shakedown record {name} changed"
+        recs[name] = json.loads(raw)
+    return ({t: recs[f"arm_{t}.json"] for t in R.TAGS + (R.WARMUP,)},
+            {a: recs[f"quality_{a}.json"] for a in R.QUALITY_ARMS})
+
+
+def _reading_shaped(arms, quality, *, power_w=None):
+    """The narrowest change that makes the shakedown's records a reading's: shakedown off on every record and the
+    registered rep count on every arm. With power_w, every timed block's power.limit is also set to it."""
+    for r in list(arms.values()) + list(quality.values()):
+        r["shakedown"] = False
+    for r in arms.values():
+        r["reps"] = R.REPS
+        if power_w is not None:
+            for w in r["workloads"].values():
+                for t in w["telemetry"].values():
+                    for side in ("before", "after"):
+                        t[side]["power.limit"] = power_w
+    return arms, quality
+
+
+def test_the_real_shakedown_record_reduces_to_shakedown_with_every_check_passed():
+    arms, quality = _real()
+    assert all(r["shakedown"] is True and r["reps"] == R.SHAKE_REPS for r in arms.values())
+    assert all(r["shakedown"] is True for r in quality.values())
+    v = R.reduce(arms, quality, FIXTURE_E4B)
+    assert v["verdict"] == "SHAKEDOWN" and v["would_read"] == "FLIP_ROWS_8", v["reasons"][:4]
+    assert v["reasons"][0] == "a shakedown record is never a reading" and v["tripwire"] == []
+    assert [v["per_T"][str(T)]["result"] for T in R.GROUPS] == ["PASS", "PASS", "PASS"]
+    assert R.reduce(arms, quality, "0" * 40)["verdict"] == "VOID"          # the e4b pin is read on the real bytes
+
+
+def test_the_real_record_made_a_reading_voids_on_the_575_w_floor_alone():
+    """p232-shake-1 ran on a board capped at 500 W, which a shakedown may (its power is not ruled). Made reading-shaped,
+    every timed block of every arm fails the floor, and nothing else does: 9 arms x 3 workloads x 2 lengths x 2 sides."""
+    arms, quality = _reading_shaped(*_real())
+    v = R.reduce(arms, quality, FIXTURE_E4B)
+    assert v["verdict"] == "VOID" and v["tripwire"] == ["unread"]
+    assert len(v["reasons"]) == len(R.TAGS + (R.WARMUP,)) * len(R.WORKLOADS) * 2 * 2, v["reasons"][:3]
+    assert all(re.fullmatch(r"\w+ W\d at \d+ tokens: power\.limit 500\.0 W (before|after) the block, the floor 575 W", x)
+               for x in v["reasons"]), [x for x in v["reasons"] if "500.0 W" not in x][:3]
+    # the same bytes with the recorded cap at the floor read a verdict: the 500 W reading is the only fault
+    lifted = R.reduce(*_reading_shaped(*_real(), power_w=575.0), FIXTURE_E4B)
+    assert lifted["verdict"] == "FLIP_ROWS_8", lifted["reasons"][:3]
+
+
+def test_a_reducer_without_the_power_check_reads_a_verdict_from_the_500_w_record(tmp_path):
+    """The old rule as a mutant: drop the reading's power_faults call and the capped record reads FLIP_ROWS_8."""
+    src = (LANE / "p232_reduce.py").read_text(encoding="utf-8")
+    old = "        if not shake:\n            void += power_faults(t, r)\n"
+    assert src.count(old) == 1
+    (tmp_path / "p232_reduce.py").write_bytes(src.replace(old, "").encode("utf-8"))
+    mut = _load("p232_reduce_no_power", tmp_path / "p232_reduce.py")
+    assert mut.reduce(*_reading_shaped(*_real()), FIXTURE_E4B)["verdict"] == "FLIP_ROWS_8"
+    assert R.reduce(*_reading_shaped(*_real()), FIXTURE_E4B)["verdict"] == "VOID"
+
+
+DEPARTURES = [
+    (lambda a, q: q["K"]["phases"]["4"]["per_window"]["wikitext"]["ON"].pop(), "23 ON windows at T=4"),
+    (lambda a, q: q["K"]["phases"]["2"]["per_window"]["wikitext"]["ON"][3].update(argmax_agree=0.99),
+     "an agreement that is not k/128"),
+    (lambda a, q: q["K"]["phases"]["8"]["per_window"]["wikitext"]["ON"][5].pop("kl"), "a window without its KL"),
+    (lambda a, q: a["Kc"].update(shakedown=False), "one record not a shakedown"),
+    (lambda a, q: a["Kb"]["int8_head_bw"].update(mode="0"), "a K arm with the int8 head off"),
+    (lambda a, q: a["Rd"].update(reps=R.REPS), "an arm at the reading's rep count"),
+]
+
+
+@pytest.mark.parametrize("depart, what", DEPARTURES, ids=[d[1] for d in DEPARTURES])
+def test_each_departure_from_the_real_record_voids_it(depart, what):
+    arms, quality = _real()
+    depart(arms, quality)
+    v = R.reduce(arms, quality, FIXTURE_E4B)
+    assert v["verdict"] == "VOID" and v["tripwire"] == ["unread"], (what, v["reasons"][:2])
 
 
 def test_the_new_files_are_lf_only_and_the_shell_scripts_parse():
