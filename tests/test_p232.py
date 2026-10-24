@@ -41,6 +41,8 @@ SOURCES = {"p232_run.sh": LANE / "p232_run.sh", "p232_box.py": LANE / "p232_box.
 RUN = (LANE / "p232_run.sh").read_text(encoding="utf-8")
 DRIVE = (LANE / "p232_drive.sh").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p232.md").read_text(encoding="utf-8")
+#: the e4b commit P232 read at (p232-5090-1: the Amendment 2 merge)
+READ_AT = "f7589a02"
 FLAT = " ".join(PREREG.split())     # the PREREG's wrapped lines joined: a phrase reads across a line break
 NEW_FILES = [LANE / f for f in ("p232_run.sh", "p232_box.py", "p232_reduce.py", "p232_drive.sh", "staged-p232.sha256")] + [
     REPO / "tests" / "test_p232.py", REPO / "changelog.d" / "p232-kit.md"]
@@ -69,6 +71,26 @@ def _load(name, path):
 R = _load("p232_reduce_under_test", LANE / "p232_reduce.py")
 
 
+#: the one pinned file outside the lane that moved on after the reading (E4B_INT8_HEAD_ROWS took its per-family default,
+#: lane P232): it is held to its bytes at READ_AT, the immutable commit the reading ran at; every other pinned file is
+#: held to the current tree, so a later edit to any of them is still caught
+COMMIT_BOUND = REPO / "tests" / "test_int8_head_bw.py"
+
+
+def _bytes_at(path, read_at):
+    """``path``'s bytes at the e4b commit ``read_at`` (``git cat-file``). Missing history, a shallow clone or an absent
+    object FAILS under CI (``CI`` set: CI checks out full history, so the check must run there) and skips, with the
+    reason named, outside it."""
+    rel = path.relative_to(REPO).as_posix()
+    out = subprocess.run(["git", "cat-file", "blob", f"{read_at}:{rel}"], cwd=REPO, capture_output=True)
+    if out.returncode != 0:
+        why = f"{rel} at {read_at} is not readable here: {out.stderr.decode(errors='replace').strip()[:160]}"
+        if os.environ.get("CI"):
+            pytest.fail(f"{why} (CI must hold the full history and the reading commit)")
+        pytest.skip(why)
+    return out.stdout
+
+
 def _run(script, *args, cwd=None):
     return subprocess.run([sys.executable, str(script), *args], capture_output=True, text=True, timeout=180, cwd=cwd)
 
@@ -77,7 +99,19 @@ def test_every_staged_file_is_pinned_and_matches():
     pins = _pins(LANE / "staged-p232.sha256")
     assert list(pins) == list(SOURCES)
     for name, path in SOURCES.items():
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == pins[name], name
+        raw = _bytes_at(path, READ_AT) if path == COMMIT_BOUND else path.read_bytes()
+        assert hashlib.sha256(raw).hexdigest() == pins[name], name
+    assert sum(1 for p in SOURCES.values() if p == COMMIT_BOUND) == 1     # the commit-bound file is one named pin
+
+
+def test_a_missing_reading_commit_fails_under_ci_and_skips_outside(monkeypatch):
+    """The commit-bound check never passes silently: an absent object fails under CI=true and skips outside CI."""
+    monkeypatch.setenv("CI", "true")
+    with pytest.raises(pytest.fail.Exception, match="CI must hold the full history"):
+        _bytes_at(COMMIT_BOUND, "0" * 40)
+    monkeypatch.delenv("CI", raising=False)
+    with pytest.raises(pytest.skip.Exception, match="not readable here"):
+        _bytes_at(COMMIT_BOUND, "0" * 40)
 
 
 def test_the_shared_pieces_are_at_p153s_and_p229s_pins():
@@ -267,10 +301,6 @@ def _dry_env(tmp_path, run_id, **extra):
             "E4B_RENT_RUN_ID": run_id, "E4B_RENT_DEADLINE_EPOCH": "4102444800", "E4B_RENT_INSTANCE_ID": "0", **extra}
 
 
-def _clean_checkout():
-    return subprocess.run(["git", "-C", str(REPO), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
-
-
 def _drive(tmp_path, run_id, **extra):
     if sys.platform == "win32" or shutil.which("bash") is None:
         pytest.skip("the driver needs a POSIX bash")
@@ -289,11 +319,47 @@ def test_the_driver_refuses_an_e4b_sha_override(tmp_path):
     assert out.returncode == 78 and "E4B_SHA override" in out.stdout + out.stderr
 
 
+def _add_worktree(wt, read_at):
+    """A detached git worktree at ``read_at`` in ``wt``. A missing commit or history FAILS under CI and skips, with the
+    reason named, outside it (the commit-bound check's rule)."""
+    add = subprocess.run(["git", "-C", str(REPO), "worktree", "add", "--detach", str(wt), read_at],
+                         capture_output=True, text=True)
+    if add.returncode != 0:
+        why = f"no worktree at {read_at}: {add.stderr.strip()[:160]}"
+        if os.environ.get("CI"):
+            pytest.fail(f"{why} (CI must hold the full history and the reading commit)")
+        pytest.skip(why)
+    return wt
+
+
+def test_a_missing_reading_commit_fails_the_worktree_under_ci_and_skips_outside(tmp_path, monkeypatch):
+    monkeypatch.setenv("CI", "true")
+    with pytest.raises(pytest.fail.Exception, match="CI must hold the full history"):
+        _add_worktree(tmp_path / "a", "0" * 40)
+    monkeypatch.delenv("CI", raising=False)
+    with pytest.raises(pytest.skip.Exception, match="no worktree at"):
+        _add_worktree(tmp_path / "b", "0" * 40)
+
+
+@pytest.fixture
+def reading_tree(tmp_path):
+    """A detached git worktree at READ_AT, the commit P232 read at: clean by construction, so the driver there stages
+    exactly what the reading staged (a later repo file, tests/test_int8_head_bw.py among them, can never make it refuse).
+    The worktree is removed after the test."""
+    wt = _add_worktree(tmp_path / "at-read", READ_AT)
+    try:
+        yield wt
+    finally:
+        subprocess.run(["git", "-C", str(REPO), "worktree", "remove", "--force", str(wt)], capture_output=True)
+
+
 @pytest.mark.parametrize("run_id", ["p232-5090-1", "p232-5090-3", "p232-shake-1"])
-def test_the_drivers_dry_run_names_the_launch(tmp_path, run_id):
-    if not _clean_checkout():
-        pytest.skip("the driver refuses a dirty tree (it derives the launch commit from HEAD)")
-    out = _drive(tmp_path, run_id)
+def test_the_drivers_dry_run_names_the_launch(tmp_path, reading_tree, run_id):
+    """The driver at its launch commit still dry-runs: that commit's p232_drive.sh, run in its own clean worktree."""
+    if sys.platform == "win32" or shutil.which("bash") is None:
+        pytest.skip("the driver needs a POSIX bash")
+    out = subprocess.run(["bash", str(reading_tree / "bench" / "p232" / "p232_drive.sh")], capture_output=True, text=True,
+                         env=_dry_env(tmp_path, run_id), timeout=120)
     assert out.returncode == 0, out.stdout + out.stderr
     assert f"DRYRUN stage {len(SOURCES) + 1} files -> root@h:/root/p232" in out.stdout and "bash p232_run.sh" in out.stdout
     assert f"fetch -> {tmp_path}/p232" in out.stdout

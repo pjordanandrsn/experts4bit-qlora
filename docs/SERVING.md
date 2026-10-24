@@ -429,13 +429,13 @@ The table is filled by a separate code PR, and no served read has run, so this i
 - **Reported** in `dense_lt_pin`, with calls counted by site, row count and prefill or decode. Design:
   [`bench/dense-small-m/DESIGN.md`](../bench/dense-small-m/DESIGN.md).
 
-**Qwen3 decode defaults by family (lanes P143, P153, P158).** Three settings resolve per family at startup, before any
-weight loads. Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
+**Qwen3 decode defaults by family (lanes P143, P153, P158, P161, P232).** These settings resolve per family at startup.
+Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
 old behaviour until a read of its own. Other `qwen3_moe` checkpoints, Qwen3-235B-A22B among them, take the split cap
 and the K25 decode by family without a read of their own. `/health`'s `levers` block reports each resolution and its
-source (`default-allowlisted`, `default-off` with the reason where one applies, or `explicit`). Two of them need a
-newer grouped-nf4-gemm than `[fast]` requires (0.43.0): the int8 head's GEMV ships in 0.48.0 and K25's byte-permute
-decode in 0.50.0. On an older package each resolves off, recorded.
+source (`default-allowlisted`, `default-off` with the reason where one applies, or `explicit`). Some need a newer
+grouped-nf4-gemm than `[fast]` requires (0.43.0): the int8 head's GEMV ships in 0.48.0, its multi-row kernel in 0.49.0,
+K25's byte-permute decode in 0.50.0 and K25's `c1` plan in 0.56.1. On an older package each resolves off, recorded.
 - **Attention split cap (`E4B_ATTN_SPLIT_CAP`, 16 on `qwen3_moe`).** It caps the paged FP8 attention decode at 16
   splits, so buckets 1, 2 and 4 use 16 instead of 32 / 32 / 23 at 4,096-token slots. It is bitwise-identical to the plan
   at contexts up to 1,024 tokens. One request decodes 1.0442× as fast (the smallest of four ABBA pairs) and sixteen are
@@ -450,21 +450,24 @@ decode in 0.50.0. On an older package each resolves off, recorded.
   off. Unset, a head the swap refuses (tied, biased, int4, not bf16) or a kernel package without the int8 GEMV resolves
   it off, recorded, never a crash; an explicit `1` refuses them at startup. `0` restores the bf16 head. Reported in
   `levers.int8_head_bw`.
-  - **Opt-in: the int8 head at 2 to 8 rows (`E4B_INT8_HEAD_ROWS`, `1` to `8`; unset is `1`).** Without it, a call of
-    2 to 8 rows runs `F.linear` on the bf16 rounding of the grid, which reads twice the int8 bytes. With it, those
-    calls run grouped-nf4-gemm's int8 multi-row kernel (`dense_i8.linear_i8`, K37, 0.49.0 or later) over the same
-    codes and scales; one row keeps the int8 GEMV, and more rows keep `F.linear`. **Outputs change** at 2 to 8
-    requests, within bf16's output rounding of the same grid. A captured microbench of the head call (lane P229) read
-    GO_ROWS_8: K37 runs the head in a median 0.51 of `F.linear`'s time at 2, 4 and 8 rows
+  - **The int8 head at 2 to 8 rows (`E4B_INT8_HEAD_ROWS`, 8 on `qwen3_moe` at the 151,936 × 2,048 head; `1` to
+    `8`).** At `1`, a call of 2 to 8 rows runs `F.linear` on the bf16 rounding of the grid, which reads twice the int8
+    bytes. Above it, those calls run grouped-nf4-gemm's int8 multi-row kernel (`dense_i8.linear_i8`, K37, 0.49.0 or
+    later) over the same codes and scales; one row keeps the int8 GEMV, and more rows keep `F.linear`. **Outputs
+    change** at 2 to 8 requests: K37 and `F.linear` round differently within bf16's output rounding of the same grid,
+    so greedy text can differ (76 of 112 greedy rows matched in the served read). A captured microbench of the head
+    call (lane P229) read GO_ROWS_8: K37 runs the head in a median 0.51 of `F.linear`'s time at 2, 4 and 8 rows
     (`e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23`, [`bench/p229/RESULTS-p229.md`](../bench/p229/RESULTS-p229.md)).
-    A served read on Qwen3-30B-A3B's default server (lane P232) read FLIP_ROWS_8: at 2, 4 and 8 requests the knob decodes
-    1.0165-1.0311x as fast (the smallest of four ABBA pairs at each) inside P153's quality bars (NLL gap at most 0.0001,
-    argmax at least 0.997), TRIPWIRE none (`e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24`,
-    [`bench/p232/RESULTS-p232.md`](../bench/p232/RESULTS-p232.md)). It stays opt-in until a separate default PR
-    ([`bench/dense-small-m/DESIGN-K2.md`](../bench/dense-small-m/DESIGN-K2.md)). It is refused at startup
-    when the head is not on its int8 grid or the kernel package lacks K37, and together with speculative decode
-    (`E4B_PAGED_SPEC`), whose gate and draft were read with the head on `F.linear`, until a read covers the pair.
-    Unset imports nothing. Reported in `levers.int8_head_bw.rows`; which kernel each row count took is
+    A served read on Qwen3-30B-A3B's default server (lane P232) read FLIP_ROWS_8, TRIPWIRE none: 2, 4 and 8 requests
+    decode 1.0311×, 1.0243× and 1.0165× as fast as at `1` (the smallest of four ABBA pairs at each), inside P153's
+    quality bars at every group size (NLL gap at most 0.0001 nats, argmax 3,064 to 3,066 of 3,072)
+    (`e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24`, [`bench/p232/RESULTS-p232.md`](../bench/p232/RESULTS-p232.md);
+    design: [`bench/dense-small-m/DESIGN-K2.md`](../bench/dense-small-m/DESIGN-K2.md)). Same-shape checkpoints inherit
+    the default unread; other head shapes and every other family stay at `1`. Unset, it also resolves to `1`,
+    recorded, never a crash, when the head is not on its int8 grid, when the kernel package lacks K37, and with
+    speculative decode (`E4B_PAGED_SPEC`), whose gate and draft were read with the head on `F.linear`. An explicit `2`
+    to `8` is refused at startup in each of those cases (with speculative decode, until a read covers the pair). `1`
+    opts out. Reported in `levers.int8_head_bw.rows` (`rows_max` and `source`); which kernel each row count took is
     `levers.int8_head_bw.engagement`.
 - **K25's codebook decode (`E4B_K25_LUT`, `prmt` on `qwen3_moe`).** The batched-decode expert GEMM (K25) decodes NF4
   codes through byte-permute table lookups (grouped-nf4-gemm K39, from 0.50.0) instead of the select tree. It is
