@@ -1,0 +1,8 @@
+.....................................                                    [100%]
+=============================== warnings summary ===============================
+tests/test_hybrid_cold_dest.py: 11 warnings
+  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/hybrid.py:1275: DeprecationWarning: enable_hot_residency is superseded by enable_pipelined_residency (same capability; K is config); kept through 0.6 to reproduce the v0 receipts; removal in 0.7
+    n = enable_hot_residency(model, hot_sets, device=device,
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+37 passed, 11 warnings in 14.28s

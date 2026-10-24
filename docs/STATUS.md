@@ -443,6 +443,14 @@ small: 1.0198× at one request (the smaller of two ABBA pairs), SLOWER against i
 projects only the final prompt position through the LM head (#1337).
 `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`.
 
+**Serving past VRAM: `E4B_PAGED_PLACEMENT=solver` keeps quality inside P153's bars (opt-in, quality only).** On
+Qwen3-30B-A3B at 8.0 GiB VRAM / 3.0 GiB DRAM (one RTX 5090, lane P233), teacher-forced quality against the same server
+at `all-vram` reads SOLVER_SANE at group 1 and 8: NLL gap +0.0021 and -0.00005 nats, argmax agreement 0.974, KL 0.0039
+and 0.0037. The TRIPWIRE fired, since the agreement is below its 0.98 look-bar. The read's written look finds the
+disagreement smaller in every window than the all-vram server's own chunked-prefill floor and unbiased in NLL. It is
+an opt-in placement, never a default, and no speed is read (decode at `solver` is eager).
+`e4b.serve.p233.solver-placement-quality.qwen3.5090.2026-10-24` ([P233](../bench/p233/RESULTS-p233.md)).
+
 **The per-row expert GEMV at 2-8 decode tokens (`E4B_NF4_SMALLM_BW=1`, opt-in).** In a captured microbench of the expert
 call (one RTX 5090, lane P227), the per-row route runs Mixtral-8x7B's experts in a median 0.36 and 0.46 of K25's time
 at two and four tokens (upper bounds 0.3601 and 0.4655, PASS against 0.70), and Qwen3-30B-A3B's in a median 0.74 and

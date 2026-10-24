@@ -1,0 +1,12 @@
+{
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "floor_mb_s": 40,
+ "status": 200,
+ "bytes": 1519386624,
+ "seconds": 20.01,
+ "mb_s": 75.9,
+ "shard": "model-00001-of-00016.safetensors",
+ "error": null,
+ "when": "2026-10-24T12:54:53Z"
+}

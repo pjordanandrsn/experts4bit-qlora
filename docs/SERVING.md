@@ -295,6 +295,17 @@ Qwen3-30B-A3B (128 experts, top-8) at the default chunk of 512, the floor is the
 `E4B_PAGED_HOT_ROWS=128` always meets it. At `all-vram` there is no floor. The default stays 64: raising it pins more
 host RAM, which is the operator's choice.
 
+**Quality at `E4B_PAGED_PLACEMENT=solver` (lane P233; opt-in only, never a default).** On Qwen3-30B-A3B at 8.0 GiB VRAM
+/ 3.0 GiB DRAM with `E4B_PAGED_HOT_ROWS=128` (23 of 48 MoE layers on the tiered forward), teacher-forced quality against
+the same server at `all-vram` reads SOLVER_SANE at group 1 and 8 inside P153's bars (NLL gap +0.0021 and -0.00005 nats,
+argmax agreement 0.974 at both, KL 0.0039 and 0.0037), with the TRIPWIRE fired: the agreement is below its 0.98
+look-bar and the KL above 0.002. The read's written look finds the disagreement smaller in every window than the
+all-vram server's own chunked-prefill floor (KL 0.0100, agreement 0.964), unbiased in NLL, and matched in size at
+group 8 by a placement with no DRAM tier. A deployment may run `solver` as an opt-in placement citing this read, with
+the agreement below 0.98 stated. One host CPU (AVX2) and one split were read, and no speed was read
+(`e4b.serve.p233.solver-placement-quality.qwen3.5090.2026-10-24`,
+[`bench/p233/RESULTS-p233.md`](../bench/p233/RESULTS-p233.md)).
+
 **Slots: `E4B_PAGED_MAX_SEQS=auto` by default (lane SC2e, #846; `16` restores the old default).** When the engine
 builds, before any weight is read, `auto` takes the widest width lane SC2e read that the serve estimate fits in the
 device's free memory (`serve_recipe.choose_max_seqs`):
