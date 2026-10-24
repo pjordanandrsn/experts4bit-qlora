@@ -69,8 +69,16 @@ streams.
   then 28 to 49 for the others. The server admits the sixteen requests as their prefills complete, so the first decode
   steps run with fewer than sixteen active rows, in buckets 2 to 8, where B1 routes K33 singleton groups and B0 runs
   K25. The two are different arithmetic within the kernels' tolerance, so the streams can part there and then drift.
-  The arm records count graph replays per bucket across all workloads together, so they can neither confirm nor refute
-  this for W16 alone. A per-step trace of W16's buckets would settle it.
+  - The ramp itself is in this read's records. In every W16 pass of all four arms, at both lengths, the rows' first
+    tokens arrive one at a time, 0.61 to 0.66 s apart: row 0 at 0.61 s, row 15 at 10.2 to 10.3 s (`ttfts` in each
+    arm record).
+  - P223's census of the same workload, on the same server shape (`decode_calls` in its arm records, at an earlier
+    commit), counts exactly two decode calls per pass at each live-row count from 1 to 15, beside the full-batch
+    steps. That is one decode step between successive admissions, plus the matching ramp down. Under that schedule,
+    row 3's step 5 runs at about 8 or 9 live rows, at the edge of the switched buckets.
+  - What stays untested is that the divergence begins in those steps. The arm records count graph replays per bucket
+    across all workloads together, so they cannot place W16's steps by bucket. A per-step trace of W16's buckets would
+    settle it.
 
 Either way, the registration assumed W16 never reaches the buckets the switch acts on, and in the served schedule it
 does (or something else moved its tokens). That premise, not the switch's arithmetic, is what the read found.
