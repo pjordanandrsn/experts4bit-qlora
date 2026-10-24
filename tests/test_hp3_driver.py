@@ -478,3 +478,23 @@ def test_the_r_shakedown_token_is_wired_like_the_r_token():
     assert "qwen3hp3rshake) tc1_hp3_family qwen3hp3rshake Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1800 1800 1800 1 r;;" in run
     drv = (D.REPO / "bench" / "tc1" / "tc1_drive.sh").read_text()
     assert '*" qwen3hp3rshake "*) STAGE="$STAGE' in drv
+
+
+def _gate(families):
+    """tc1_run.sh's own token-gate lines for the (R) tokens, run alone under FAMILIES: (SKIP_UNS_CU130, NEED_AXOLOTL)."""
+    import subprocess
+    src = (D.REPO / "bench" / "tc1" / "tc1_run.sh").read_text().splitlines()
+    gate = [ln for ln in src if ln.startswith("SKIP_UNS_CU130=0; case")]
+    assert len(gate) == 1, gate
+    p = subprocess.run(["bash", "-c", f'NEED_AXOLOTL=1; FAMILIES="{families}"\n{gate[0]}\necho "$SKIP_UNS_CU130 $NEED_AXOLOTL"'],
+                       capture_output=True, text=True, timeout=30)
+    assert p.returncode == 0, p.stderr
+    return tuple(p.stdout.split())
+
+
+def test_the_r_tokens_skip_the_cu130_unsloth_venv_and_axolotl_and_no_other_token_does():
+    """Amendment 2: (R) builds no cu130 Unsloth venv and no axolotl venv (the reviewer, 2026-10-24: SKIP_UNS_CU130=1 -> 0 survived)."""
+    for fam in ("qwen3hp3r", "qwen3hp3rshake"):
+        assert _gate(fam) == ("1", "0"), fam
+    for fam in ("qwen3hp3", "qwen3hp3shake", "qwen3hp2", "qwen3hbd", "qwen3"):
+        assert _gate(fam) == ("0", "1"), fam

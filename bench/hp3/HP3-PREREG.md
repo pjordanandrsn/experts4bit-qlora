@@ -438,8 +438,15 @@ PARITY-only test and strengthens the case. This amendment merges before the read
    - Ids: `hp3r-5090-1`, with `hp3r-5090-2` as the one pre-create spare. A refusal at create uses no id.
    - It launches only after the (R) shakedown in item 7 reads `HP3 SHAKEDOWN_OK`.
    - At most one reading box starts.
-6. **Lane worst case:** the shakedowns spent $0.373. The (R) shakedown's term is 2 × $0.83 = $1.66 (item 7: `hp3r-shake-1` and its
-   spare), and the read's is $6.63. So $0.373 + $1.66 + $6.63 = **$8.66**, under $15.
+6. **Lane worst case** (bench/common rule 4's form):
+   - the shakedowns spent $0.373;
+   - the (R) shakedown: 2 × $0.83 = $1.66 (item 7: `hp3r-shake-1` and its spare; a shakedown box that does not start costs less than
+     its $0.83);
+   - the read: one started box, $6.63;
+   - a created read box that does not start (NOT_RUN, or a host refusal before the install: rc 12, 13, 15 or 18) costs its time to
+     the refusal before the spare runs. That is at most 0.5 h × $0.85 (the launcher's 420 s ssh wait, staging and the host probes)
+     plus 10 GB × $0.011 before it, so $0.54, once.
+   - So $0.373 + $1.66 + $6.63 + $0.54 = **$9.20**, under $15.
 7. **An (R) shakedown before the read** (the maintainer, 2026-10-24 04:36Z, before the independent review finished). The
    `qwen3hp3r` token is new runner code (its own venv set, the build compare at 2.8.0+cu128, the reducer's `--fallback-r` mode and
    the arm gating), and no box has run it. No earlier box ran this token or this venv set: HPN read e4b from `venv-e4b`, and HBD's E2
