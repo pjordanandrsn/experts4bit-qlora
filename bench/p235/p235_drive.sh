@@ -35,12 +35,12 @@ E4B_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null) || { say "refusing: cannot 
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78; }
 # The staging, under the names p235_run.sh expects: this lane's runner, reducer, provenance check and staged.sha256,
-# P37's vLLM driver (byte-identical) and P39's step_decomp.py, k8_bake.py and calib.json flat; P42's hook as
-# hook/usercustomize.py. staged.sha256 pins every one by the path the box sees, at P58's digests for every piece but
-# this lane's three.
+# loggetta's release proof (bench/release_proof.py, loggetta#125; byte-identical), P37's vLLM driver (byte-identical)
+# and P39's step_decomp.py, k8_bake.py and calib.json flat; P42's hook as hook/usercustomize.py. staged.sha256 pins
+# every one by the path the box sees, at P58's digests for every piece but this lane's three and the release proof.
 STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
 for f in bench/p235/p235_run.sh bench/p235/p235_reduce.py bench/p235/provenance.py bench/p235/staged.sha256 \
-         bench/h2h-20260905/p37/p37_vllm.py \
+         bench/p235/release_proof.py bench/h2h-20260905/p37/p37_vllm.py \
          bench/p39/step_decomp.py bench/p39/k8_bake.py bench/p39/calib.json; do
   [ -s "$REPO/$f" ] && cp "$REPO/$f" "$STAGE/" || { say "refusing: staged piece missing: $f"; exit 78; }
 done
@@ -139,7 +139,7 @@ mkdir -p "$OUT" && [ -z "$(find "$OUT" -mindepth 1 -maxdepth 1 -print -quit)" ] 
 # rule 8; P229 Amendment 6's form).
 rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
   --include 'work_qwen3/' --include 'work_qwen3/bake.json' --exclude 'work_qwen3/*' \
-  --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' \
+  --exclude '__pycache__' --exclude 'pycache-*' --exclude 'venv*' --exclude '.cache' --exclude 'hf' \
   "root@$HOST:$W/" "$OUT/" || { say "fetch failed"; exit 22; }
 say "fetched $(find "$OUT" -type f | wc -l | tr -d ' ') files into $OUT"
 [ "$(cat "$OUT/P235_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }

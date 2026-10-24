@@ -30,7 +30,7 @@ P58 = B / "p58"
 PIN = LANE / "staged.sha256"
 #: staged path (as the box sees it) -> the file in this checkout
 SOURCES = {"p235_run.sh": LANE / "p235_run.sh", "p235_reduce.py": LANE / "p235_reduce.py",
-           "provenance.py": LANE / "provenance.py",
+           "provenance.py": LANE / "provenance.py", "release_proof.py": LANE / "release_proof.py",
            "p37_vllm.py": B / "h2h-20260905" / "p37" / "p37_vllm.py", "step_decomp.py": B / "p39" / "step_decomp.py",
            "k8_bake.py": B / "p39" / "k8_bake.py", "calib.json": B / "p39" / "calib.json",
            "hook/usercustomize.py": B / "p42" / "hook" / "usercustomize.py"}
@@ -38,8 +38,28 @@ RUN = (LANE / "p235_run.sh").read_text(encoding="utf-8")
 DRIVE = (LANE / "p235_drive.sh").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p235.md").read_text(encoding="utf-8")
 FLAT = " ".join(PREREG.split())     # the PREREG's wrapped lines joined: a phrase reads across a line break
-NEW_FILES = [LANE / f for f in ("p235_run.sh", "p235_reduce.py", "provenance.py", "p235_drive.sh", "staged.sha256",
-                                "PREREG-p235.md")] + [REPO / "tests" / "test_p235.py", REPO / "changelog.d" / "p235-registered.md"]
+NEW_FILES = [LANE / f for f in ("p235_run.sh", "p235_reduce.py", "provenance.py", "release_proof.py", "p235_drive.sh",
+                                "staged.sha256", "PREREG-p235.md")] + [REPO / "tests" / "test_p235.py",
+                                                                         REPO / "changelog.d" / "p235-registered.md"]
+#: loggetta's bench/release_proof.py, staged byte-identical: its source and sha256 (the ONE constant a new helper
+#: version edits, beside its ONE staged.sha256 line)
+RELEASE_PROOF = {"source": "loggetta#125 at d3d84173",
+                 "sha256": "341dd130b1cf681a86f3fa1aad2b3e1bf9a2e4e6c22388e0e35b5736fc446713"}
+#: the top-level import names of the dists the arms import, read from the published wheels (experts4bit-qlora 0.57.0,
+#: grouped-nf4-gemm 0.50.0, vllm 0.32.0 and 0.30.0 x86_64; zip central directories) and from grouped-nf4-gemm's
+#: pyproject py-modules + packages at v0.50.0 and main (the same 43 names): a staged file must not shadow one
+TOP_LEVEL = {
+    "experts4bit-qlora": {"experts4bit_qlora"},
+    "grouped-nf4-gemm": {"_triton_shim", "arena_experts", "arena_moe_patch", "cold_cpu_view", "cold_deadline",
+                         "cpu_grouped", "dense_gemv", "dense_i8", "dev_row_cache", "fp8_kv", "fp8_paged_attn",
+                         "gate_native_load_20b", "gguf_reader", "gnf4_native", "gptq_pack", "host_gather", "int4_b32",
+                         "int4_pack_ref", "int4_smallm", "kquant_ref", "moonshot_gather", "mxfp4_grouped", "mxfp4_loader",
+                         "mxfp4_native_load", "mxfp4_pack_ref", "mxfp4_pipelined", "mxfp4_qlora", "mxfp4_residency",
+                         "nf4_grouped", "nf4_pack_ref", "nf4_qlora", "nf4_route", "nf4_smallm", "nvme_arena",
+                         "nvme_bake_nf4", "nvme_reader", "nvme_residency", "reuse_profile", "row_pool",
+                         "run_mxfp4_20b_qlora", "segmented_pool", "verify_provenance", "vram_slots"},
+    "vllm": {"vllm"},
+}
 #: P58's names for what P235 renamed, so P58's text and this lane's compare line for line
 TO_P58 = (("/root/p235", "/root/p58"), ("P235_", "P58_"), ("p235_reduce.py", "p58_reduce.py"),
           ("RESULTS-p235-generated.md", "RESULTS-p58-generated.md"), ("] p235: ", "] p58: "), ('"P235 arm=', '"P58 arm='),
@@ -66,10 +86,10 @@ def _pins(path):
 
 
 def _resolve(name):
-    """test_p58_staged_pin.py's map, for this lane's names: the runner, the reducer and the provenance check from
-    bench/p235; p37_vllm.py from bench/h2h-20260905/p37 (byte-identical to P37's); the hook from bench/p42; everything
+    """test_p58_staged_pin.py's map, for this lane's names: the runner, the reducer, the provenance check and the
+    release proof from bench/p235; p37_vllm.py from bench/h2h-20260905/p37 (byte-identical to P37's); the hook from bench/p42; everything
     else (step_decomp.py, k8_bake.py, calib.json) from bench/p39."""
-    if name in ("p235_run.sh", "p235_reduce.py", "provenance.py"):
+    if name in ("p235_run.sh", "p235_reduce.py", "provenance.py", "release_proof.py"):
         return LANE / name
     if name == "p37_vllm.py":
         return B / "h2h-20260905" / "p37" / name
@@ -93,6 +113,35 @@ def test_every_staged_piece_is_pinned_and_the_harness_is_p58s():
     shared = ("p37_vllm.py", "step_decomp.py", "k8_bake.py", "calib.json", "hook/usercustomize.py")
     assert all(mine[n] == p58[n] for n in shared), {n: (mine[n][:8], p58[n][:8]) for n in shared}
     assert set(p58) - set(shared) == {"p58_run.sh", "p58_reduce.py"}
+
+
+def test_the_release_proof_is_loggettas_bytes():
+    """bench/p235/release_proof.py is loggetta's helper byte for byte: the file, its staged.sha256 line and the one
+    constant here agree, and nothing else in the lane carries the digest (a new helper version is two edits)."""
+    data = (LANE / "release_proof.py").read_bytes()
+    assert hashlib.sha256(data).hexdigest() == RELEASE_PROOF["sha256"] == _pins(PIN)["release_proof.py"]
+    assert b"\r" not in data
+    for f in ("p235_run.sh", "p235_drive.sh", "PREREG-p235.md", "provenance.py"):
+        assert RELEASE_PROOF["sha256"][:8] not in (LANE / f).read_text(encoding="utf-8"), f
+    rp = _load("p235_release_proof_under_test", LANE / "release_proof.py")      # stdlib only; no network here
+    assert rp.main([]) == 2 and rp.main(["experts4bit-qlora"]) == 2
+    pins = re.findall(r"release_proof\.py ([^)>]+)\)", RUN)
+    assert len(pins) == 2, pins
+    for pin in pins:
+        for arg in pin.split():
+            dist, sep, version = arg.strip('"').partition("==")
+            assert sep and (PROV.E4B.get(dist) == version or (dist, version) == ("vllm", "${VVER[$VT]}")), arg
+
+
+def test_no_staged_file_shadows_an_imported_top_level_module():
+    """The proofs and the arms run with sys.path[0] = $W and $W/hook on PYTHONPATH, so a staged module (or a directory
+    the runner makes there) named like a top-level module of e4b, gnf4 or vLLM would be imported in its place."""
+    names = set().union(*TOP_LEVEL.values())
+    staged = {pathlib.PurePosixPath(n).stem for n in SOURCES} | {pathlib.PurePosixPath(n).parts[0] for n in SOURCES}
+    made = set(re.findall(r"mkdir -p \$W/(\w+)", RUN)) | set(re.findall(r"\$W/(\w+)/", RUN))
+    assert {"hook", "logs", "work_qwen3", "usercustomize", "step_decomp", "provenance", "release_proof"} <= staged | made
+    assert not (staged | made) & names, sorted((staged | made) & names)
+    assert "int4_b32" in names and "nf4_smallm" in names and len(TOP_LEVEL["grouped-nf4-gemm"]) == 43
 
 
 # ------------------------------------------------------------------------------------------------ provenance --
@@ -278,6 +327,70 @@ def test_each_vllm_venv_is_checked_before_its_arms_and_a_failure_refuses_that_bu
     assert 'vllm_arm(){ local VT=$1 ARM=$2 B=$3; [ "${VOK[$VT]:-0}" = 1 ] || { echo "vllm-$VT/$ARM B=$B SKIPPED' in RUN
 
 
+E4B_PROOF = ("(cd $W && PYTHONPATH=$W/hook python $W/release_proof.py experts4bit-qlora==0.58.0 grouped-nf4-gemm==0.51.0) "
+             "> $W/release_proof.jsonl 2> logs/release_proof_e4b.log || { cat logs/release_proof_e4b.log; "
+             'say "RELEASE PROOF FAIL (e4b/gnf4)"; finish 9; }')
+VLLM_PROOF = ('  (cd $W && PYTHONPATH=$W/hook $W/venv-$VT/bin/python $W/release_proof.py "vllm==${VVER[$VT]}") '
+              "> $W/release_proof_vllm_$VT.jsonl 2> logs/release_proof_vllm_$VT.log \\")
+INSTALLS = re.compile(r"pip install|python -m venv|\bvllm_install (primary|secondary)\b")
+
+
+def _last_install(lines):
+    return max(i for i, ln in enumerate(lines) if INSTALLS.search(ln) and not ln.lstrip().startswith("#"))
+
+
+def test_the_e4b_proof_is_the_last_step_before_the_first_e4b_arm():
+    """After every install (the vLLM venvs included), unconditional, in the arms' import environment, and nothing but
+    the rc bookkeeping between it and the first e4b arm; a refusal is rc 9."""
+    lines = RUN.splitlines()
+    k = lines.index(E4B_PROOF)
+    first_e4b = next(i for i, ln in enumerate(lines) if re.match(r"can_run \d+ e4b_\S+ +&& \{ e4b_arm", ln))
+    assert _last_install(lines) < k < first_e4b
+    assert all(ln.startswith("#") or ln.startswith("rc_any=0; rec(){") for ln in lines[k + 1:first_e4b]), lines[k + 1:first_e4b]
+    assert not any(INSTALLS.search(ln) for ln in lines[k:first_e4b])
+
+
+def test_each_vllm_proof_is_the_last_step_before_that_builds_arms():
+    """In that build's venv, as p37_vllm.py runs (cwd $W, PYTHONPATH=$W/hook), after every install, right before the
+    vLLM arms with only e4b arms (no install) since the e4b proof; a refusal refuses that build's rows, never the run."""
+    lines = RUN.splitlines()
+    k = lines.index(VLLM_PROOF)
+    loop = lines[k - 1]
+    assert loop == 'for VT in primary secondary; do [ "${VOK[$VT]:-0}" = 1 ] || continue   # no venv: its rows already read SKIPPED'
+    fail = lines[k + 1]
+    assert fail.lstrip().startswith("|| {") and fail.endswith("VOK[$VT]=0; }") and "finish" not in fail and "return" not in fail
+    assert lines[k + 2] == "done"
+    first_vllm = next(i for i, ln in enumerate(lines) if "vllm_arm $VT graph_r1" in ln)
+    assert _last_install(lines) < lines.index(E4B_PROOF) < k < first_vllm == k + 3
+    assert 'vllm_arm(){ local VT=$1 ARM=$2 B=$3; [ "${VOK[$VT]:-0}" = 1 ]' in RUN       # a refused build's arms skip
+
+
+def test_no_release_proof_runs_isolated_or_behind_a_switch():
+    """-I would drop PYTHONPATH and the script directory the arms import through, and the pycache prefix: never on a
+    release_proof.py line. Neither proof sits behind an environment switch."""
+    proof = [ln for ln in RUN.splitlines() if "release_proof.py" in ln and not ln.lstrip().startswith("#")]
+    assert len(proof) == 3                                                    # the stage check and the two proofs
+    assert not any(re.search(r"(^|\s)-I(\s|$)", ln) for ln in proof), proof
+    assert not re.search(r"\$\{?P235_[A-Z_]*PROOF", RUN)
+
+
+def test_the_pycache_prefix_is_fresh_exported_before_any_python_and_never_unset():
+    lines = RUN.splitlines()
+    k = lines.index('mkdir "$W/pycache-$NONCE" && export PYTHONPYCACHEPREFIX=$W/pycache-$NONCE || '
+                    '{ say "refusing: no pycache prefix"; finish 78; }')
+    assert lines[k - 1] == '[ -e "$W/pycache-$NONCE" ] && { say "refusing: $W/pycache-$NONCE exists"; finish 78; }'
+    assert lines[k + 1] == 'echo "PYTHONPYCACHEPREFIX $PYTHONPYCACHEPREFIX" >> $W/versions.txt'
+    first_python = next(i for i, ln in enumerate(lines) if re.search(r"\bpython3?\b|/pip\b", ln)
+                        and not ln.lstrip().startswith("#"))
+    assert k < first_python
+    assert sum("PYTHONPYCACHEPREFIX" in ln for ln in lines) == 2
+    assert not re.search(r"unset[^\n]*PYTHONPYCACHEPREFIX|env -i|env -u|-u PYTHONPYCACHEPREFIX", RUN)
+    for ln in lines:                                       # every install leaves its .pyc out of the wheel's RECORD
+        if re.search(r"pip install", ln):
+            assert "--no-compile" in ln, ln
+    assert "--exclude 'pycache-*'" in DRIVE
+
+
 # ------------------------------------------------------------------------------------------------- runner --
 
 def _as_p58(text):
@@ -295,14 +408,20 @@ def _body(text):
 RUN_EDITS = [
     "for v in P58_RUN_ID P58_DEADLINE_EPOCH P58_INSTANCE_ID E4B_SHA; do",
     "VLLM_PRIMARY=0.32.0; VLLM_SECONDARY=0.30.0   #",
-    "for f in step_decomp.py k8_bake.py calib.json hook/usercustomize.py p37_vllm.py p58_reduce.py provenance.py staged.sha256; do",
+    "# every python this runner starts writes and reads bytecode under a fresh, empty prefix",
+    '[ -e "$W/pycache-$NONCE" ] && { say "refusing: $W/pycache-$NONCE exists"; finish 78; }',
+    'mkdir "$W/pycache-$NONCE" && export PYTHONPYCACHEPREFIX=$W/pycache-$NONCE',
+    'echo "PYTHONPYCACHEPREFIX $PYTHONPYCACHEPREFIX" >> $W/versions.txt',
+    "for f in step_decomp.py k8_bake.py calib.json hook/usercustomize.py p37_vllm.py p58_reduce.py provenance.py "
+    "release_proof.py staged.sha256; do",
     "# ---- install (image python): experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0 as PyPI wheels",
-    "# pins; then provenance.py, unconditionally, before anything is timed",
+    "# pins, --no-compile (install-time .pyc would land under the prefix, outside the wheel's RECORD)",
+    "# unconditionally, before anything is timed (a version string is not a release)",
     'say "install experts4bit-qlora==0.58.0 + grouped-nf4-gemm==0.51.0 from PyPI',
-    "perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --index-url https://pypi.org/simple "
+    "perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --no-compile --index-url https://pypi.org/simple "
     '--prefer-binary --only-binary experts4bit-qlora "experts4bit-qlora==0.58.0" \\',
     '"transformers==5.17.0" "bitsandbytes==0.50.1"',
-    "perl -e 'alarm 900; exec @ARGV' python -m pip install -q --no-input --index-url https://pypi.org/simple "
+    "perl -e 'alarm 900; exec @ARGV' python -m pip install -q --no-input --no-compile --index-url https://pypi.org/simple "
     '--only-binary grouped-nf4-gemm --force-reinstall --no-deps "grouped-nf4-gemm==0.51.0"',
     E4B_CHECK,
     "cat logs/provenance_e4b.log",
@@ -313,13 +432,21 @@ RUN_EDITS = [
     'open("/root/p58/versions.txt", "a").write(f"e4b {e.__version__} (PyPI; provenance.json) harness@',
     "nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader | tee forensics.txt",
     "# ---- vLLM venvs: PRIMARY 0.32.0, SECONDARY 0.30.0 (the constants above)",
+    "# here and its release proof right before its arms.",
     "# Each install or provenance failure is recorded",
     "# e4b arms); that build's rows read SKIPPED",
     "python -m venv $W/venv-$TAG && perl -e 'alarm 2700; exec @ARGV' $W/venv-$TAG/bin/pip install -q --no-input "
-    '--no-cache-dir --index-url https://pypi.org/simple --only-binary vllm "vllm==$VER"',
+    '--no-compile --no-cache-dir --index-url https://pypi.org/simple --only-binary vllm "vllm==$VER"',
     VLLM_CHECK.strip(),
     '|| { cat logs/provenance_vllm_$TAG.log; say "PROVENANCE FAIL (vllm $TAG)',
     '{ echo "P58 arm=e4b_b${B}_$TAG gnf4=0.51.0 at=',
+    "# ---- release proofs: the installed bytes ARE the published wheels', read as the arms import them",
+    "# PYTHONPATH=$W/hook, the arms' python, no -I), after every install and right before that build's first arm",
+    E4B_PROOF,
+    'for VT in primary secondary; do [ "${VOK[$VT]:-0}" = 1 ] || continue',
+    VLLM_PROOF.strip(),
+    '|| { cat logs/release_proof_vllm_$VT.log; say "RELEASE PROOF FAIL (vllm $VT)',
+    "done",
 ]
 
 
@@ -531,7 +658,12 @@ def test_the_prereg_states_the_pins_bars_sequencing_and_limits():
               "The maintainer re-derives the reading from the receipts.", "A results PR follows.",
               "one RTX 5090 at ≤ $1.05/h, guard 3.0 h, download ≤ $0.02/GB × 80 GB",
               "$3.15 + $1.60 = **$4.75**, inside a **$6** lane ceiling", "`p235-5090-1..-3`", "`p235-5090-r1..-r6`",
-              "**No shakedown is registered.**", "**not collected**"):
+              "**No shakedown is registered.**", "**not collected**",
+              "**The release proof: the installed bytes.**", "(`bench/release_proof.py`, loggetta#125), staged byte-identical",
+              "its sha256 is pinned in `staged.sha256`", "`release_proof.jsonl` and `release_proof_vllm_<build>.jsonl`",
+              '"RECORD equal"', "cwd `$W`, `PYTHONPATH=$W/hook`, the arms' python, no `-I`",
+              "`PYTHONPYCACHEPREFIX=$W/pycache-<nonce>`", "Every install uses `--no-compile`.",
+              "as staged, the release proof refuses both vLLM builds", "Neither wheel has `.data/` entries."):
         assert s in FLAT, s
     assert "GNF4_SHA" not in PREREG and "placeholder" not in PREREG.lower()
 

@@ -34,6 +34,22 @@ whatever its URL or commit: a fork, a mirror or a local repo can carry the relea
 through the URL an install recorded. The pins are constants in `provenance.py` and in the runner, checked
 unconditionally, never behind a flag.
 
+**The release proof: the installed bytes.** Provenance says where an install came from; it does not prove the
+bytes. `release_proof.py` is loggetta's helper (`bench/release_proof.py`, loggetta#125), staged byte-identical; its
+sha256 is pinned in `staged.sha256`. For each pin it takes the one published PyPI wheel whose tags are the installed
+`WHEEL` Tag lines, downloads it and checks its digest against PyPI's, then requires every file in the wheel's own
+`RECORD` to be on disk with an equal hash, and nothing installed beyond bytecode and entry-point launchers. A wheel
+with `.data/` entries is refused. Each proof is the last step before its build's first arm, after every install, run
+in that build's import environment: cwd `$W`, `PYTHONPATH=$W/hook`, the arms' python, no `-I`. The receipts carry
+`release_proof.jsonl` and `release_proof_vllm_<build>.jsonl`: per distribution, the wheel filename, its sha256 and
+"RECORD equal".
+
+**Bytecode.** Every python the runner starts uses `PYTHONPYCACHEPREFIX=$W/pycache-<nonce>`, created empty per run and
+recorded in `versions.txt`, so no in-tree `.pyc` is loaded. Every install uses `--no-compile`. With the prefix set,
+pip writes its install-time bytecode outside site-packages and lists it in `RECORD` as `../` rows, which the proof
+refuses. Checked at $0 on e4b 0.57.0 and grouped-nf4-gemm 0.50.0: refused with pip's default compile, "RECORD equal"
+with `--no-compile`.
+
 | | P58 (2026-09-22) | P235 |
 |---|---|---|
 | e4b | 0.36.4, git @ `4cab05a` | **`experts4bit-qlora==0.58.0`**, PyPI wheel; provenance checked, and the tripwire asserts `experts4bit_qlora.__version__ == "0.58.0"` |
@@ -44,9 +60,11 @@ unconditionally, never behind a flag.
 | vLLM SECONDARY | 0.29.0 | **0.30.0** (P58's primary), a constant, PyPI wheel, provenance checked |
 | GPU UUID | collected | **not collected**: the forensics query drops `uuid`, and a test refuses `uuid`, `-L` or `-q` |
 
-**What a provenance failure does:**
-- **e4b or grouped-nf4-gemm** (wrong version, editable, `file://`, another host, any git commit): the run ends with
-  rc 9 before the tripwire and before any arm.
+**What a provenance or release-proof failure does:**
+- **e4b or grouped-nf4-gemm, provenance** (wrong version, editable, `file://`, another host, any git commit): the run
+  ends with rc 9 before the tripwire and before any arm.
+- **e4b or grouped-nf4-gemm, release proof:** the run ends with rc 9 before the first arm. This comes after the
+  downloads and the bake, so a refusal here costs the setup time.
 - **A vLLM build** (checked in that build's venv, on `vllm` only): that build's rows are refused (they read `SKIPPED`,
   no comparator), as P58's `PIP FAIL` rule does. The e4b arms and the other build continue.
 
@@ -59,6 +77,12 @@ unconditionally, never behind a flag.
 - the image, `pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel`.
 
 **Risks:**
+- **Known today: as staged, the release proof refuses both vLLM builds.** The published vLLM 0.32.0 and 0.30.0 x86_64
+  wheels are named `manylinux_2_28_x86_64`, but their own `WHEEL` file says `Tag: cp38-abi3-linux_x86_64`, and pip
+  copies that file into the install. The helper matches a published wheel by its filename's tags, so it finds none.
+  Checked at $0: vLLM 0.32.0 installed `--no-deps` and proved was refused with "0 published wheels carry the installed
+  tags". Neither wheel has `.data/` entries. Until the helper resolves this, both vLLM builds' rows read refused and
+  no ratio is quoted.
 - vLLM 0.32.0 pins the same torch (2.13.0) as 0.30.0, which P58 installed and ran on this image. Its Python floor
   is 3.11.
 - `p37_vllm.py` has run against vLLM 0.28 to 0.30, not 0.32.0. An API break there reads as that build's failed rows

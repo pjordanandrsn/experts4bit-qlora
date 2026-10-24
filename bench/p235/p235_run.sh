@@ -7,7 +7,7 @@
 # provenance.py checks before any arm: experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0 (a failure is rc 9; the
 # launch commit E4B_SHA is the harness's, recorded and never installed), transformers 5.17.0, bitsandbytes 0.50.1, and
 # TWO vLLM builds in their own venvs, both constants: the PRIMARY 0.32.0 and the SECONDARY 0.30.0 (P58's primary). A
-# vLLM build that fails its install or its provenance loses its rows; the e4b arms continue. P58's arms, alarms, STOP
+# vLLM build that fails its install, its provenance or its release proof loses its rows; the e4b arms continue. P58's arms, alarms, STOP
 # rules and reducer call, unchanged; nothing here changes a default. The runner does not collect the GPU's UUID.
 set -uo pipefail
 W=/root/p235; mkdir -p $W/logs; cd $W || exit 78
@@ -18,24 +18,29 @@ trap 'finish 130' INT TERM
 for v in P235_RUN_ID P235_DEADLINE_EPOCH P235_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 export PYTHONPATH=$W/hook E4B_INT4_GPTQ_DEVICE=cuda E4B_INT4_HESSIAN_BUDGET_GB=24 E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64
+# every python this runner starts writes and reads bytecode under a fresh, empty prefix: no in-tree .pyc is ever loaded
+[ -e "$W/pycache-$NONCE" ] && { say "refusing: $W/pycache-$NONCE exists"; finish 78; }
+mkdir "$W/pycache-$NONCE" && export PYTHONPYCACHEPREFIX=$W/pycache-$NONCE || { say "refusing: no pycache prefix"; finish 78; }
+echo "PYTHONPYCACHEPREFIX $PYTHONPYCACHEPREFIX" >> $W/versions.txt
 MID=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39; export E4B_MODEL_ID=$MID
 GPTQ_MID=Qwen/Qwen3-30B-A3B-GPTQ-Int4; GPTQ_REV=9b534e4318b7ebc3c961a839f13eb18b1833f441   # P37's comparator checkpoint, unchanged
 VLLM_PRIMARY=0.32.0; VLLM_SECONDARY=0.30.0   # provenance.py's VLLM pins, constants: a newer vLLM is a new reading
 export P37_INSTANCE_ID=$P235_INSTANCE_ID    # p37_vllm.py (staged byte-identical) records the instance under P37's env name
 : > summary.txt; echo "$P235_INSTANCE_ID" > INSTANCE_ID
 # ---- staged pieces, byte-for-byte
-for f in step_decomp.py k8_bake.py calib.json hook/usercustomize.py p37_vllm.py p235_reduce.py provenance.py staged.sha256; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
+for f in step_decomp.py k8_bake.py calib.json hook/usercustomize.py p37_vllm.py p235_reduce.py provenance.py release_proof.py staged.sha256; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p235/staged.sha256"; finish 9; }
 # ---- deadline guard + per-arm alarm (P54's): never start an arm that cannot finish 10 min before teardown
 can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$P235_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((P235_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
 arm_alarm(){ local cap=$1 left=$(( P235_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }
 # ---- install (image python): experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0 as PyPI wheels + P235's toolchain
-# pins; then provenance.py, unconditionally, before anything is timed (a version string is not a release)
+# pins, --no-compile (install-time .pyc would land under the prefix, outside the wheel's RECORD); then provenance.py,
+# unconditionally, before anything is timed (a version string is not a release)
 export DEBIAN_FRONTEND=noninteractive
 say "install experts4bit-qlora==0.58.0 + grouped-nf4-gemm==0.51.0 from PyPI (image python; P235 pins); harness commit $E4B_SHA, recorded, never installed"
-perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --index-url https://pypi.org/simple --prefer-binary --only-binary experts4bit-qlora "experts4bit-qlora==0.58.0" \
+perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --no-compile --index-url https://pypi.org/simple --prefer-binary --only-binary experts4bit-qlora "experts4bit-qlora==0.58.0" \
   "transformers==5.17.0" "bitsandbytes==0.50.1" datasets accelerate sentencepiece tiktoken safetensors "huggingface_hub>=0.23" > logs/pip_e4b.log 2>&1 || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
-perl -e 'alarm 900; exec @ARGV' python -m pip install -q --no-input --index-url https://pypi.org/simple --only-binary grouped-nf4-gemm --force-reinstall --no-deps "grouped-nf4-gemm==0.51.0" > logs/pip_gnf4.log 2>&1 || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
+perl -e 'alarm 900; exec @ARGV' python -m pip install -q --no-input --no-compile --index-url https://pypi.org/simple --only-binary grouped-nf4-gemm --force-reinstall --no-deps "grouped-nf4-gemm==0.51.0" > logs/pip_gnf4.log 2>&1 || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
 python -I $W/provenance.py check experts4bit-qlora=0.58.0 grouped-nf4-gemm=0.51.0 --out $W/provenance.json > logs/provenance_e4b.log 2>&1 || { cat logs/provenance_e4b.log; say "PROVENANCE FAIL (e4b/gnf4)"; finish 9; }
 cat logs/provenance_e4b.log
 PYTHONPATH=$W/hook python - <<'PYT' || { say "TRIPWIRE FAIL (e4b)"; finish 9; }
@@ -60,14 +65,15 @@ nvidia-smi --query-gpu=power.limit,clocks.max.sm --format=csv,noheader | sed "s/
 cat /sys/fs/cgroup/memory.max 2>/dev/null | sed "s/^/cgroup memory.max /" | tee -a forensics.txt; nvcc --version 2>/dev/null | tail -1 | tee -a forensics.txt
 python -c "import torch; assert torch.cuda.is_available()" || { say "DUD BOX"; finish 10; }
 df -h /root | tail -1
-# ---- vLLM venvs: PRIMARY 0.32.0, SECONDARY 0.30.0 (the constants above), each from PyPI with its provenance checked.
+# ---- vLLM venvs: PRIMARY 0.32.0, SECONDARY 0.30.0 (the constants above), each from PyPI with its provenance checked
+# here and its release proof right before its arms.
 # Each install or provenance failure is recorded and the lane continues (P37: a vLLM install failure cannot void the
 # e4b arms); that build's rows read SKIPPED (no comparator).
 declare -A VOK VVER; VVER[primary]=$VLLM_PRIMARY; VVER[secondary]=$VLLM_SECONDARY
 [ "$VLLM_PRIMARY" = "$VLLM_SECONDARY" ] && { say "primary == secondary ($VLLM_PRIMARY): one venv, the secondary rows are skipped"; VOK[secondary]=0; }
 vllm_install(){ local TAG=$1 VER=$2; [ -z "$VER" ] && { VOK[$TAG]=0; return; }
   say "install vllm==$VER into $W/venv-$TAG"
-  python -m venv $W/venv-$TAG && perl -e 'alarm 2700; exec @ARGV' $W/venv-$TAG/bin/pip install -q --no-input --no-cache-dir --index-url https://pypi.org/simple --only-binary vllm "vllm==$VER" "huggingface_hub>=0.23" > logs/pip_vllm_$TAG.log 2>&1
+  python -m venv $W/venv-$TAG && perl -e 'alarm 2700; exec @ARGV' $W/venv-$TAG/bin/pip install -q --no-input --no-compile --no-cache-dir --index-url https://pypi.org/simple --only-binary vllm "vllm==$VER" "huggingface_hub>=0.23" > logs/pip_vllm_$TAG.log 2>&1
   local rc=$?; echo "pip(vllm $TAG $VER) rc=$rc" | tee -a summary.txt; [ $rc -ne 0 ] && { tail -6 logs/pip_vllm_$TAG.log; say "PIP FAIL (vllm $TAG) -- e4b arms still run; NO $TAG COMPARATOR"; VOK[$TAG]=0; return; }
   $W/venv-$TAG/bin/python -I $W/provenance.py check "vllm=$VER" --out $W/provenance_vllm_$TAG.json > logs/provenance_vllm_$TAG.log 2>&1 \
     || { cat logs/provenance_vllm_$TAG.log; say "PROVENANCE FAIL (vllm $TAG) -- e4b arms still run; NO $TAG COMPARATOR"; echo "PROVENANCE FAIL (vllm $TAG $VER): its rows are refused" >> summary.txt; VOK[$TAG]=0; return; }
@@ -151,10 +157,17 @@ vllm_arm(){ local VT=$1 ARM=$2 B=$3; [ "${VOK[$VT]:-0}" = 1 ] || { echo "vllm-$V
   { echo -n "vllm-$VT/$ARM B=$B rc=$rc "; grep -a "P37VLLM" logs/run_vllm_${VT}_b${B}_$ARM.log | tail -1 | cut -c1-300; echo; } >> summary.txt; return $rc; }
 # ---- arms, in the pre-registered order: e4b control -> e4b int4 (first draws) -> both vLLM primaries -> repeats -> eager pairing
 rc_any=0; rec(){ local r=$1; [ "$r" = 0 ] || [ "$rc_any" != 0 ] || rc_any=$r; }
+# ---- release proofs: the installed bytes ARE the published wheels', read as the arms import them (cwd $W,
+# PYTHONPATH=$W/hook, the arms' python, no -I), after every install and right before that build's first arm
+(cd $W && PYTHONPATH=$W/hook python $W/release_proof.py experts4bit-qlora==0.58.0 grouped-nf4-gemm==0.51.0) > $W/release_proof.jsonl 2> logs/release_proof_e4b.log || { cat logs/release_proof_e4b.log; say "RELEASE PROOF FAIL (e4b/gnf4)"; finish 9; }
 can_run 900 e4b_nf4_r1_b1     && { e4b_arm nf4_r1  1  0 --no-fuse-qkv graph; rec $?; }
 can_run 900 e4b_nf4_r1_b16    && { e4b_arm nf4_r1  16 0 --no-fuse-qkv graph; rec $?; }
 can_run 900 e4b_int4_r1_b1    && { e4b_arm int4_r1 1  1 --fuse-qkv    graph; rec $?; }   # P54's licensed B=1 lever: fused q/k/v
 can_run 900 e4b_int4_r1_b16   && { e4b_arm int4_r1 16 1 --no-fuse-qkv graph; rec $?; }   # P54: no B=16 default for the fusion
+for VT in primary secondary; do [ "${VOK[$VT]:-0}" = 1 ] || continue   # no venv: its rows already read SKIPPED
+  (cd $W && PYTHONPATH=$W/hook $W/venv-$VT/bin/python $W/release_proof.py "vllm==${VVER[$VT]}") > $W/release_proof_vllm_$VT.jsonl 2> logs/release_proof_vllm_$VT.log \
+    || { cat logs/release_proof_vllm_$VT.log; say "RELEASE PROOF FAIL (vllm $VT) -- e4b arms still run; NO $VT COMPARATOR"; echo "RELEASE PROOF FAIL (vllm $VT ${VVER[$VT]}): its rows are refused" >> summary.txt; VOK[$VT]=0; }
+done
 for VT in primary secondary; do for B in 1 16; do can_run 900 vllm_${VT}_graph_r1_b$B && { vllm_arm $VT graph_r1 $B; rec $?; }; done; done
 can_run 900 e4b_nf4_r2_b1     && { e4b_arm nf4_r2  1  0 --no-fuse-qkv graph; rec $?; }
 can_run 900 e4b_nf4_r2_b16    && { e4b_arm nf4_r2  16 0 --no-fuse-qkv graph; rec $?; }
