@@ -501,17 +501,34 @@ def _need_driver(ready: bool, ci) -> None:
     if ready:
         return
     why = "the driver's tests need bash with python3 (the driver's nonce)"
-    if str(ci or "").lower() == "true":
+    if str(ci or "").strip().lower() not in ("", "0", "false"):
         pytest.fail(why)
     pytest.skip(why)
 
 
-def test_a_driver_test_without_python3_fails_under_ci_and_skips_elsewhere():
-    with pytest.raises(pytest.fail.Exception, match="python3"):
-        _need_driver(False, "true")
-    with pytest.raises(pytest.skip.Exception, match="python3"):
-        _need_driver(False, None)
-    _need_driver(True, "true")
+@pytest.mark.parametrize("ci", ["true", "1", "yes"])
+def test_a_driver_test_without_python3_fails_under_ci(ci):
+    # pytest.raises(pytest.fail.Exception) would let a skip escape (Skipped is its own outcome) and report this test
+    # SKIPPED, so a regression to skipping is caught here explicitly as a failure
+    try:
+        _need_driver(False, ci)
+    except pytest.skip.Exception:
+        pytest.fail(f"skipped under CI={ci} instead of failing")
+    except pytest.fail.Exception as e:
+        assert "python3" in str(e)
+    else:
+        pytest.fail(f"neither failed nor skipped under CI={ci}")
+    _need_driver(True, ci)
+
+
+@pytest.mark.parametrize("ci", [None, "", "0", "false"])
+def test_a_driver_test_without_python3_skips_outside_ci(ci):
+    try:
+        _need_driver(False, ci)
+    except pytest.skip.Exception as e:
+        assert "python3" in str(e)
+    else:
+        raise AssertionError(f"did not skip outside CI (CI={ci!r})")
 
 
 def test_the_driver_refuses_a_reading_without_adapters_and_dry_runs_the_shake(tmp_path):
