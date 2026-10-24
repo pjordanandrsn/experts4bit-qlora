@@ -436,16 +436,38 @@ PARITY-only test and strengthens the case. This amendment merges before the read
    - The phases are ~4.8 h: A ~0.6 (one venv + e4b + the fetch), B ~0.7, C ~2.6 for ≤10 runs, and D ~0.9.
    - The guard is 6.5 h, and the worst case is 6.5 h × $0.85 + 100 GB × $0.011 = **$6.63**.
    - Ids: `hp3r-5090-1`, with `hp3r-5090-2` as the one pre-create spare. A refusal at create uses no id.
+   - It launches only after the (R) shakedown in item 7 reads `HP3 SHAKEDOWN_OK`.
    - At most one reading box starts.
-6. **Lane worst case:** the shakedowns spent $0.373, so $0.373 + $6.63 = **$7.00**, under $15.
-7. **No (R) shakedown** (the maintainer's path for (R): independent review, the maintainer's pass, a $0 dry run and an Approved
-   on the merge).
-   - What this rests on:
-     - HPN ran e4b and Unsloth 2026.9.14 on torch 2.8.0+cu128, with e4b in venv-e4b.
-     - HBD's E2 cell ran e4b inside venv-unsloth-t28 on the 2-layer cut, on an RTX 5090.
-     - The read box's own G1' checks the bases.
-   - **What is new here:** e4b at 48 layers inside venv-unsloth-t28, with Unsloth's transformers. A box on which either framework
-     fails to install or run is a harness fault: NOT_READ, with no read and no strike, and the spare id follows a fix.
+6. **Lane worst case:** the shakedowns spent $0.373. The (R) shakedown's term is 2 × $0.83 = $1.66 (item 7: `hp3r-shake-1` and its
+   spare), and the read's is $6.63. So $0.373 + $1.66 + $6.63 = **$8.66**, under $15.
+7. **An (R) shakedown before the read** (the maintainer, 2026-10-24 04:36Z, before the independent review finished). The
+   `qwen3hp3r` token is new runner code (its own venv set, the build compare at 2.8.0+cu128, the reducer's `--fallback-r` mode and
+   the arm gating), and no box has run it. No earlier box ran this token or this venv set: HPN read e4b from `venv-e4b`, and HBD's E2
+   cell installed e4b into `venv-unsloth-t28` but ran neither this family nor this reducer mode.
+   - **Token `qwen3hp3rshake`:** the same family in its (R) mode with the shakedown switch, on the 2-layer cut (only the two shards
+     it reads are fetched), with one seed (3410) and 4-step runs, as `hp3-shake` ran. It runs, end to end:
+     - the (R) build record (both frameworks probed in `venv-unsloth-t28`, compared at torch 2.8.0+cu128);
+     - one calibration step and an export per framework, and G1' over the two bases;
+     - one confirmation run per framework, with 6(b);
+     - the evaluator on both passes, with its trainable-count check off. That branch is keyed on the ids `hp3r-shake-1` and
+       `hp3r-shake-2` alone: each mode's shakedown token refuses the other mode's ids and any reading id;
+     - the reducer's `g1` and `verdict` in `--fallback-r` mode.
+     It writes no seed plan and runs no reading phase.
+   - **Ids:** `hp3r-shake-1`, with `hp3r-shake-2` as its one spare. A refusal at create uses no id.
+   - **Tier:** explore, never data, and outside the lane's counts (no strike, no attempt). It is not quoted as a finding.
+   - **Card:** the shakedown's terms ("Hosts and budget" 1 with Amendment 1 part 8): compute capability ≥7.5, ≥16 GB, driver ≥580,
+     an RTX A4000, L4, RTX 4090 or L40S inside its memory band, never an RTX 5090, at ≤$0.40/h including a 120 GB disk.
+   - **Cost:** a guard of 1.25 h and a 30 GB download reservation. `hp3-shake-2`, with three venvs, ran 31 min and was billed $0.021
+     for its download. The worst case is 1.25 h × $0.40 + 30 GB × $0.011 = **$0.83**.
+   - **Outcomes:**
+     - `HP3 SHAKEDOWN_OK`: the read launches from the merge of a later amendment that cites this shakedown's committed record (as
+       Amendment 1 did). Then the $0 dry run, then the maintainer's approval.
+     - A host-attributable stop uses the spare: rc 12, 13, 15 or 18, a provider or boot error before any pip resolve, or a pre-named
+       host class at an arm.
+     - Anything else is an (R) **kit fault**: the kit is fixed, then the spare runs. It is never the (R) trigger, and it never
+       changes (R).
+   - **What the read still adds beyond the cut:** e4b and Unsloth at all 48 layers on the RTX 5090. A read box on which either
+     framework fails to install or run is a harness fault: NOT_READ, with no read and no strike, and its spare id follows a fix.
 
 ## Harness
 

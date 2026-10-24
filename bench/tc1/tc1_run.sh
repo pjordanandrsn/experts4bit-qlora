@@ -133,7 +133,7 @@ case " $FAMILIES " in " qwen3hbd ") NEED_AXOLOTL=0;; esac     # HBD (bench/hbd/P
 case " $FAMILIES " in " qwen3hp3 "|" qwen3hp3shake ") NEED_UNSLOTH=0; NEED_AXOLOTL=0;; esac   # HP3 (bench/hp3/HP3-PREREG.md): its own three venvs, on one build
 # HP3 Amendment 2, the (R) fallback (qwen3hp3r): e4b vs Unsloth 2026.9.14 on HPN's build, so only venv-unsloth-t28 (+ e4b in it, t28u);
 # no cu130 Unsloth venv and no axolotl
-SKIP_UNS_CU130=0; case " $FAMILIES " in " qwen3hp3r ") NEED_AXOLOTL=0; SKIP_UNS_CU130=1;; esac
+SKIP_UNS_CU130=0; case " $FAMILIES " in " qwen3hp3r "|" qwen3hp3rshake ") NEED_AXOLOTL=0; SKIP_UNS_CU130=1;; esac
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 FETCH_OK_N=0; FETCH_FAILED_N=0   # families whose model staged / did not (tc1_prepare); none staged and one failed = rc 15 at the end
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED pack=$PACK" | tee -a summary.txt
@@ -199,7 +199,7 @@ case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "BOX REFUSED: gpu '$GPU_NAME' is n
 # HP3 Amendment 1 part 8 begin -- the card's MEMORY, not only its name (the reviewer, 2026-10-23, after a name-only screen pinned a
 # 48 GB modded RTX 4090): for the HP3 tokens, memory.total must fall in the class's band (MiB), else a host refusal before any staging
 # (rc 18: the launcher's "a lane's other registered host floor"; 14 is egress there)
-case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*|*" qwen3hp3r "*)
+case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*|*" qwen3hp3r "*|*" qwen3hp3rshake "*)
   GPU_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -dc 0-9)
   case "$GPU_CLASS" in A4000) MEMBAND=15000:17000;; L4) MEMBAND=22000:24576;; 4090) MEMBAND=23000:25000;; L40S) MEMBAND=44000:49152;;
     5090) MEMBAND=31000:33000;; *) MEMBAND="";; esac
@@ -520,8 +520,8 @@ else
 fi
 # HBD's E2 (bench/hbd/PREREG-hbd.md): e4b + grouped-nf4-gemm at the same pins into venv-unsloth-t28 (torch 2.8.0+cu128, Unsloth's
 # transformers), built for the qwen3hbd token only; a failed install or tripwire makes E2 an install_failed row
-T28U_OK=0; T28U_REASON="built only for the qwen3hbd and qwen3hp3r tokens"
-case " $FAMILIES " in *" qwen3hbd "*|*" qwen3hp3r "*)
+T28U_OK=0; T28U_REASON="built only for the qwen3hbd, qwen3hp3r and qwen3hp3rshake tokens"
+case " $FAMILIES " in *" qwen3hbd "*|*" qwen3hp3r "*|*" qwen3hp3rshake "*)
   if [ "$UNS_T28_OK" = 1 ]; then
     T28U_REASON=""; say "venv-unsloth-t28 + e4b @$E4B_SHA + gnf4 @$GNF4_SHA (HBD's E2)"
     perl -e 'alarm 2400; exec @ARGV' $PY_UNS_T28 -m pip install -q --no-input --prefer-binary \
@@ -547,8 +547,8 @@ esac
 # HP3 Amendment 2, the (R) build record: e4b (t28u) and Unsloth 2026.9.14 share venv-unsloth-t28, so they are one build by construction;
 # hp3_build.py still probes each framework there and compares the build fields against torch 2.8.0+cu128 (bitsandbytes is Unsloth's own
 # resolve, recorded, never pinned by us). H3R_OK gates the family; a failure names the cause.
-H3R_OK=0; H3R_REASON="built only for the qwen3hp3r token"
-case " $FAMILIES " in *" qwen3hp3r "*)
+H3R_OK=0; H3R_REASON="built only for the qwen3hp3r and qwen3hp3rshake tokens"
+case " $FAMILIES " in *" qwen3hp3r "*|*" qwen3hp3rshake "*)
   H3R_REASON=""
   [ "$UNS_T28_OK" = 1 ] || H3R_REASON="venv-unsloth-t28 did not install/import (logs/pip_unsloth_t28.log)"
   [ -z "$H3R_REASON" ] && [ "$T28U_OK" != 1 ] && H3R_REASON="$T28U_REASON"
@@ -2867,7 +2867,7 @@ hp3_fail(){ local AF=$1 FW=$2 TAG=$3 st=$4 cls v
         --floor-mib 16384 2>/dev/null) || cls="R | the classifier failed"
   [ -n "$cls" ] || cls="R | the classifier printed nothing"
   case "$cls" in HOST_*) echo "HP3 ARM_FAILED $FW/$TAG $st: host-attributable (${cls%% |*}): the spare | ${cls#*| }";;
-    *) echo "HP3 ARM_FAILED $FW/$TAG $st: ${cls%% |*} -> the (R) fallback signal | ${cls#*| }";; esac | tee -a summary.txt; }
+    *) echo "HP3 ARM_FAILED $FW/$TAG $st: ${cls%% |*}$SIG | ${cls#*| }";; esac | tee -a summary.txt; }
 # hp3_seed_plan W NF (HP3 Amendment 1 part 7): after seed 3410 completes, the number of confirmation seeds n that fit, by TIMING alone:
 # need(k) = (k - 1) x W + 360 s x NF x k (the evaluator's pass, ~6 min a run) + 900 s (can_run's reserve), against left() - 900. n is the
 # largest k in {5, 4, 3} that fits, else 0 (a host-limited NOT_READ). It writes hp3/seed_plan.json BEFORE any later seed or the
@@ -2891,8 +2891,11 @@ tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=$
   # MODE p = build (P), the three frameworks in their HP3 venvs; MODE r = Amendment 2's (R) fallback: e4b (t28u) vs Unsloth 2026.9.14
   # (t28) on torch 2.8.0+cu128, no axolotl, the evaluator in venv-unsloth-t28, the reducer in its --fallback-r mode
   local HV=1 EV="" UV="" PYEV=$PY_H3E RFLAG=() FWS="e4b unsloth axolotl" BOK=$H3_OK BR=$H3_REASON
+  # each mode's shakedown has its own registered ids; under (R) a shakedown failure is a kit fault, never a fallback signal (the
+  # maintainer, 2026-10-24 04:36Z: hp3r-shake-1, one spare hp3r-shake-2, never data)
+  local SIDS="hp3-shake-1 hp3-shake-2"
   if [ "$MODE" = r ]; then
-    [ "$SHAKE" = 1 ] && { echo "HP3 REFUSED: the (R) fallback has no shakedown token" | tee -a summary.txt; return 0; }
+    SIDS="hp3r-shake-1 hp3r-shake-2"; [ "$SHAKE" = 1 ] && SIG=" -> an (R) kit fault: fix it, then the spare"
     HV=""; EV=t28u; UV=t28; PYEV=$PY_UNS_T28; RFLAG=(--fallback-r); FWS="e4b unsloth"; BOK=${H3R_OK:-0}; BR=${H3R_REASON:-the (R) build record is missing}
   fi
   # the evaluator's trainable-count check (hp1_eval --expect-trainable): the 2-layer cut trains far fewer parameters than the
@@ -2902,8 +2905,8 @@ tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=$
   # itself, never on an env var or a flag a reading launch could inherit; the shakedown token under any other id refuses.
   local EXPT=()
   if [ "$SHAKE" = 1 ]; then
-    case "$TC1_RUN_ID" in hp3-shake-1|hp3-shake-2) EXPT=(--expect-trainable 0);;
-      *) echo "HP3 REFUSED: the shakedown token under run id '$TC1_RUN_ID', not a registered shakedown id (hp3-shake-1/2)" | tee -a summary.txt; return 0;; esac
+    case " $SIDS " in *" $TC1_RUN_ID "*) EXPT=(--expect-trainable 0);;
+      *) echo "HP3 REFUSED: the shakedown token under run id '$TC1_RUN_ID', not a registered shakedown id (${SIDS// //})" | tee -a summary.txt; return 0;; esac
   fi
   say "===== HP3 family $FAM ($MID @ $REV; $([ "$SHAKE" = 1 ] && echo "SHAKEDOWN, never data: the 2-layer cut" || echo "the read: all 48 layers"); seeds [$SEEDS]; alarms e4b $EAL unsloth $UAL axolotl $AAL)"
   HP1_AX_DROP=1
@@ -2957,7 +2960,7 @@ tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=$
   [ "$rc" = 0 ] || { echo "HP3 G1_UNUSABLE rc=$rc" | tee -a summary.txt; rm -rf $SC; return 0; }
   # only this mode's frameworks run (FWS): under (R) a g1 record naming axolotl never starts an axolotl arm
   OKF=$($PYEV -c "import json,sys; d=json.load(open(sys.argv[1])); print(' '.join(f for f, s in d['frameworks'].items() if s['g1'] == 'PASS' and f in sys.argv[2].split()))" $W/hp3/g1.json "$FWS")
-  if [ "$SHAKE" = 1 ] && [ "$OKF" != "e4b unsloth axolotl" ]; then
+  if [ "$SHAKE" = 1 ] && [ "$OKF" != "$FWS" ]; then
     echo "HP3 SHAKEDOWN G1' at L2 is not PASS for every framework (PASS: $OKF)$SIG" | tee -a summary.txt; rm -rf $SC; return 0; fi
   # the 6(b) tolerance is READ from the reducer's record (one source; no restated number here)
   RT=$($PYEV -c "import json,sys; print(float(json.load(open(sys.argv[1]))['roundtrip_zero_centred_tol']))" $W/hp3/g1.json) \
@@ -3398,6 +3401,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3hp3)      tc1_hp3_family qwen3hp3      Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 5400 0;;   # HP3 (the read)
   qwen3hp3shake) tc1_hp3_family qwen3hp3shake Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1800 1800 1800 1;;   # HP3 shakedown (never data)
   qwen3hp3r)     tc1_hp3_family qwen3hp3r     Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600 0 r;;   # HP3 (R): e4b vs Unsloth 2026.9.14, t28
+  qwen3hp3rshake) tc1_hp3_family qwen3hp3rshake Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1800 1800 1800 1 r;;   # HP3 (R) shakedown (never data)
   qwen3hpn)    tc1_hpn_family    qwen3hpn    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HPN ($0 diagnostic, lab A2000)
   qwen3hbd)    tc1_hbd_family    qwen3hbd    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HBD (bench/hbd/PREREG-hbd.md, one rented card)
   qwen3axo1767) tc1_axo1767_family qwen3hp1   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400;;           # #1767 (AXO1767-PREREG): the four-score reading
@@ -3428,7 +3432,7 @@ echo "----- summary.txt -----"; cat summary.txt; echo "----- versions.txt -----"
 [ "$NEED_UNSLOTH" != 1 ] || [ "$SKIP_UNS_CU130" = 1 ] || [ "$UNS_OK" = 1 ] || echo "NO cu130 UNSLOTH COMPARATOR on this box (venv-unsloth: ${CU130_OK:-?} driver gate, install ok=$UNS_OK): its rows are refused/install_failed" | tee -a summary.txt
 [ "$NEED_UNSLOTH" != 1 ] || [ "$UNS_T28_OK" = 1 ] || echo "NO torch-2.8 UNSLOTH ROW on this box (venv-unsloth-t28 did not install/import)" | tee -a summary.txt
 # the HP3 tokens build axolotl in their own venv (venv-hp3-axolotl, H3_OK), never venv-axolotl, so this line would misreport them
-case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*|*" qwen3hp3r "*) ;; *) [ "$AX_OK" = 1 ] || echo "NO AXOLOTL on this box: $AX_REASON" | tee -a summary.txt;; esac
+case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*|*" qwen3hp3r "*|*" qwen3hp3rshake "*) ;; *) [ "$AX_OK" = 1 ] || echo "NO AXOLOTL on this box: $AX_REASON" | tee -a summary.txt;; esac
 case " $FAMILIES " in *" qwen3frontier "*) echo "AXOLOTL[deepspeed] extra installed=$AX_DS_OK (TC3 arm 10 is a refused row either way; its stub records the deepspeed version)" | tee -a summary.txt;; esac
 # 2026-10-09 (tc1-5090-143): a box on which no family's model staged measured nothing; it ends HARNESS_ERROR (rc 15), not OK with stubs
 if [ "$FETCH_OK_N" = 0 ] && [ "$FETCH_FAILED_N" -gt 0 ]; then say "NO MODEL STAGED: $FETCH_FAILED_N family fetch(es) failed, none succeeded -- every arm is a stub"
