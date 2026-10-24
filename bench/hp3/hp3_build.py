@@ -70,7 +70,7 @@ def bnb_lib_path(maps=None):
     return paths.pop() if len(paths) == 1 else None
 
 
-def compare(probes, want_torch, want_bnb):
+def compare(probes, want_torch, want_bnb, want_cuda="cu130"):
     """The build.json record. A field that differs across venvs, or a pin that is not met, is a MISMATCH naming it."""
     bad = []
     for f in BUILD_FIELDS:
@@ -80,11 +80,12 @@ def compare(probes, want_torch, want_bnb):
     for p in probes:
         if (p.get("torch") or "").split("+")[0] != want_torch:
             bad.append(f"{p['framework']}: torch {p.get('torch')} != the pin {want_torch}")
-        if not (p.get("torch") or "").endswith("+cu130"):
-            bad.append(f"{p['framework']}: torch {p.get('torch')} is not a cu130 build")
-        if p.get("bitsandbytes") != want_bnb:
+        if not (p.get("torch") or "").endswith("+" + want_cuda):
+            bad.append(f"{p['framework']}: torch {p.get('torch')} is not a {want_cuda} build")
+        if want_bnb != "any" and p.get("bitsandbytes") != want_bnb:
             bad.append(f"{p['framework']}: bitsandbytes {p.get('bitsandbytes')} != the pin {want_bnb}")
-    return {"tool": "bench/hp3/hp3_build.py compare", "build_fields": list(BUILD_FIELDS), "want": {"torch": want_torch, "bitsandbytes": want_bnb},
+    return {"tool": "bench/hp3/hp3_build.py compare", "build_fields": list(BUILD_FIELDS),
+            "want": {"torch": want_torch, "cuda": want_cuda, "bitsandbytes": want_bnb},
             "venvs": {p["framework"]: p for p in probes},
             "reported_never_compared": {p["framework"]: {"transformers": p.get("transformers"), "peft": p.get("peft")} for p in probes},
             "verdict": "MISMATCH" if bad else "MATCHED", "problems": bad}
@@ -131,7 +132,8 @@ def main(argv=None):
     a2 = sub.add_parser("compare")
     a2.add_argument("probes", nargs="+")
     a2.add_argument("--want-torch", required=True)
-    a2.add_argument("--want-bnb", required=True)
+    a2.add_argument("--want-bnb", required=True, help="the pinned version, or 'any' (HP3 Amendment 2's (R): Unsloth's own resolve, recorded)")
+    a2.add_argument("--want-cuda", default="cu130", help="the torch build's CUDA tag (cu130 for (P), cu128 for (R))")
     a2.add_argument("--out", required=True)
     a3 = sub.add_parser("classify")
     a3.add_argument("--log", required=True)
@@ -159,7 +161,7 @@ def main(argv=None):
             json.dump(rec, open(a.out, "w"), indent=1, sort_keys=True)
             print(f"HP3_BUILD_PROBE {a.framework}: torch {rec['torch']} bnb {rec['bitsandbytes']} lib {rec['bnb_lib']} triton {rec['triton']}")
             return EXIT_MATCHED
-        rec = compare([json.load(open(p)) for p in a.probes], a.want_torch, a.want_bnb)
+        rec = compare([json.load(open(p)) for p in a.probes], a.want_torch, a.want_bnb, a.want_cuda)
         json.dump(rec, open(a.out, "w"), indent=1, sort_keys=True)
         print(f"HP3_BUILD={rec['verdict']}" + (f" {rec['problems'][:3]}" if rec["problems"] else ""))
         return EXIT_MATCHED if rec["verdict"] == "MATCHED" else EXIT_MISMATCH

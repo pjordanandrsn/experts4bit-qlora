@@ -30,14 +30,16 @@ def drive(tmp_path, **env):
     shakedown token runs under a registered shakedown id unless a test names another (the runner refuses any other id)."""
     if env.get("FAMILY_FAM") == "qwen3hp3shake":
         env.setdefault("TC1_RUN_ID", "hp3-shake-1")
+    if env.get("FAMILY_FAM") == "qwen3hp3rshake":
+        env.setdefault("TC1_RUN_ID", "hp3r-shake-1")
     fakepy, harness = D.FAKEPY, D.HARNESS
     try:
         D.FAKEPY = fakepy.replace('  *"hp2_reduce.py verdict"*)', HP3_PY + '  *"hp2_reduce.py verdict"*)')
         D.HARNESS = (harness.replace("PY_E4B=$W/fakepy;", "PY_E4B=$W/fakepy; PY_H3E=$W/fakepy; PY_H3U=$W/fakepy; PY_H3A=$W/fakepy; H3_OK=${STUB_H3OK:-1}; "
-                                     "H3_REASON=${STUB_H3REASON:-}; DS_ALPACA_SHA=d;")
+                                     "H3_REASON=${STUB_H3REASON:-}; H3R_OK=${STUB_H3ROK:-1}; H3R_REASON=${STUB_H3RREASON:-}; DS_ALPACA_SHA=d;")
                      .replace('echo "$1 $2 $3 UNS_VENV=${UNS_VENV:-}" >> "$W/venv.log";',
                               'echo "$1 $2 $3 UNS_VENV=${UNS_VENV:-}" >> "$W/venv.log"; echo "$1 $2 $3 HP3_VENV=${HP3_VENV:-}" >> "$W/h3venv.log";')
-                     .replace("5400 2400 3600 3600", "5400 2400 3600 5400 ${HP3_SHAKE:-0}")
+                     .replace("5400 2400 3600 3600", "5400 2400 3600 5400 ${HP3_SHAKE:-0} ${HP3_MODE:-p}")
                      .replace("say(){", "left(){ echo ${STUB_LEFT:-100000}; }\nsay(){"))
         return D.drive(tmp_path, FAMILY_FN="tc1_hp3_family", **env)
     finally:
@@ -322,12 +324,13 @@ def test_the_shakedown_token_under_a_reading_id_refuses_before_any_arm(tmp_path)
     assert not arms and (not log.exists() or "hp1_eval.py" not in log.read_text())
 
 
-def _cal_argv(tmp_path, fam, shake, rid):
+def _cal_argv(tmp_path, fam, shake, rid, mode="p"):
     """The calibration evaluator's argv exactly as tc1_hp3_family builds it (the driver records every interpreter call)."""
+    import re
     import shlex
-    drive(tmp_path, FAMILY_FAM=fam, HP3_SHAKE=shake, TC1_RUN_ID=rid)
+    drive(tmp_path, FAMILY_FAM=fam, HP3_SHAKE=shake, TC1_RUN_ID=rid, HP3_MODE=mode)
     line = next(ln for ln in (tmp_path / "py.log").read_text().splitlines() if "hp1_eval.py" in ln and "eval_cal" in ln)
-    argv = shlex.split(line.split("PY: ", 1)[1])
+    argv = shlex.split(re.sub(r"^PY(\[[^]]*\])?: ", "", line))                 # PY: or PY[<interpreter>]: (the (R) t28 venv)
     return argv[next(i for i, x in enumerate(argv) if x.endswith("hp1_eval.py")) + 1:]
 
 
@@ -379,3 +382,119 @@ def test_the_shakedowns_evaluator_call_runs_on_a_cut_with_the_runners_real_argum
     ev = _run_hp1_eval(tmp_path / "r", _cal_argv(tmp_path / "r", "qwen3hp3", "0", "hp3-5090-1"), monkeypatch, trainable=26771456)
     assert ev["expect_trainable"] == 642514944
     assert all("trainable 26771456 != the registered 642514944" in str(x.get("reason")) for x in ev["arms"])
+
+
+def test_the_r_fallback_runs_e4b_and_unsloth_on_the_t28_build_with_the_r_reducer(tmp_path):
+    """HP3 Amendment 2 (R): e4b in venv-unsloth-t28 (t28u) and Unsloth 2026.9.14 (t28), no axolotl arm, the evaluator in that venv,
+    and the reducer in its --fallback-r mode, for calibration and five confirmation seeds."""
+    arms, summary = drive(tmp_path, FAMILY_FAM="qwen3hp3r", HP3_MODE="r", TC1_RUN_ID="hp3r-5090-1")
+    t = [a[2] for a in arms if a[0] == "qwen3hp3r"]
+    assert t[:2] == ["hp3cal_e4b_k00_s3407", "hp3cal_unsloth_s3407"] and not [x for x in t if "axolotl" in x]
+    assert t[2:] == [f"hp3_{r}_s{s}" for s in (3410, 3411, 3412, 3413, 3414) for r in ("k00", "unsloth")]
+    ev = (tmp_path / "e4bvenv.log").read_text().splitlines()
+    assert all(ln.endswith("E4B_VENV=t28u") for ln in ev if " e4b " in ln), ev
+    uv = (tmp_path / "venv.log").read_text().splitlines()
+    assert all(ln.endswith("UNS_VENV=t28") for ln in uv if " unsloth " in ln), uv
+    assert all(ln.endswith("HP3_VENV=") for ln in (tmp_path / "h3venv.log").read_text().splitlines())
+    py = (tmp_path / "py.log").read_text().splitlines()
+    assert [ln for ln in py if "hp1_eval.py" in ln] and all(ln.startswith("PY[fakepy-t28]") for ln in py if "hp1_eval.py" in ln)
+    red = [ln for ln in py if "hp3_reduce.py" in ln]
+    assert len(red) == 2 and all("--fallback-r" in ln for ln in red) and all(ln.startswith("PY[fakepy-t28]") for ln in red)
+
+
+def test_the_r_fallback_refuses_without_its_build(tmp_path):
+    arms, summary = drive(tmp_path, FAMILY_FAM="qwen3hp3r", HP3_MODE="r", STUB_H3ROK="0", STUB_H3RREASON="venv-unsloth-t28 did not install/import")
+    assert arms == [] and "HP3 BUILD_FAILED: venv-unsloth-t28 did not install/import" in summary and "fallback signal" not in summary
+
+
+def test_the_r_shakedown_runs_the_cut_end_to_end_on_the_t28_build(tmp_path):
+    """The (R) shakedown (the maintainer, 2026-10-24 04:36Z): the 2-layer cut, e4b (t28u) and Unsloth (t28) calibration then one
+    seed each, no axolotl; both evaluator calls skip the trainable count; both reducer calls in --fallback-r mode; SHAKEDOWN_OK."""
+    arms, summary = drive(tmp_path, FAMILY_FAM="qwen3hp3rshake", HP3_MODE="r", HP3_SHAKE="1")
+    t = [a[2] for a in arms if a[0] == "qwen3hp3rshakeL2"]
+    assert t == ["hp3cal_e4b_k00_s3407", "hp3cal_unsloth_s3407", "hp3_k00_s3410", "hp3_unsloth_s3410"]
+    assert "model-00001-of-00016.safetensors model-00016-of-00016.safetensors" in (tmp_path / "fetch_allow.log").read_text()
+    assert all(ln.endswith("E4B_VENV=t28u") for ln in (tmp_path / "e4bvenv.log").read_text().splitlines() if " e4b " in ln)
+    py = (tmp_path / "py.log").read_text().splitlines()
+    evs = [ln for ln in py if "hp1_eval.py" in ln]
+    assert len(evs) == 2 and all("--expect-trainable 0" in ln and ln.startswith("PY[fakepy-t28]") for ln in evs), evs
+    red = [ln for ln in py if "hp3_reduce.py" in ln]
+    assert len(red) == 2 and all("--fallback-r" in ln for ln in red)
+    assert "HP3 SHAKEDOWN_OK" in summary and "seed_plan" not in "\n".join(py)
+
+
+def test_an_r_shakedown_failure_is_a_kit_fault_never_a_fallback_signal(tmp_path):
+    for k, kw, want in (("b", dict(STUB_H3ROK="0", STUB_H3RREASON="t28u did not import"), "HP3 BUILD_FAILED: t28u did not import -> an (R) kit fault"),
+                        ("c", dict(STUB_H3G1="close"), "HP3 G1_CLOSED: bases differ: outside this registration -> an (R) kit fault"),
+                        ("a", dict(FAIL_FAM="qwen3hp3rshakeL2", FAIL_STATUS="error"), "HP3 ARM_FAILED e4b/hp3cal_e4b_k00_s3407 error: R -> an (R) kit fault: fix it, then the spare")):
+        (tmp_path / k).mkdir()
+        _, summary = drive(tmp_path / k, FAMILY_FAM="qwen3hp3rshake", HP3_MODE="r", HP3_SHAKE="1", **kw)
+        assert want in summary and "the (R) fallback signal" not in summary, (k, summary)
+
+
+def test_each_modes_shakedown_refuses_the_other_modes_ids(tmp_path):
+    for k, fam, mode, rid, ids in (("p", "qwen3hp3shake", "p", "hp3r-shake-1", "hp3-shake-1/hp3-shake-2"),
+                                   ("r", "qwen3hp3rshake", "r", "hp3-shake-2", "hp3r-shake-1/hp3r-shake-2"),
+                                   ("x", "qwen3hp3rshake", "r", "hp3r-5090-1", "hp3r-shake-1/hp3r-shake-2")):
+        (tmp_path / k).mkdir()
+        arms, summary = drive(tmp_path / k, FAMILY_FAM=fam, HP3_MODE=mode, HP3_SHAKE="1", TC1_RUN_ID=rid)
+        assert arms == [] and f"HP3 REFUSED: the shakedown token under run id '{rid}', not a registered shakedown id ({ids})" in summary
+    for rid in ("hp3r-shake-1", "hp3r-shake-2"):                          # the read token never carries the check-off flag
+        (tmp_path / rid).mkdir()
+        drive(tmp_path / rid, FAMILY_FAM="qwen3hp3r", HP3_MODE="r", TC1_RUN_ID=rid)
+        assert "--expect-trainable" not in (tmp_path / rid / "py.log").read_text()
+
+
+def test_the_r_shakedowns_evaluator_call_runs_on_a_cut_with_the_runners_real_arguments(tmp_path, monkeypatch):
+    sys.path.insert(0, str(D.REPO / "bench" / "hp1"))
+    sys.path.insert(0, str(D.REPO / "tests"))
+    ev = _run_hp1_eval(tmp_path, _cal_argv(tmp_path, "qwen3hp3rshake", "1", "hp3r-shake-1", mode="r"), monkeypatch, trainable=26771456)
+    assert len(ev["arms"]) == 2 and not [x for x in ev["arms"] if "trainable" in str(x.get("reason") or "")], ev["arms"]
+
+
+def test_the_r_build_record_compares_against_torch_280_cu128_with_bnb_unpinned():
+    sys.path.insert(0, str(D.REPO / "bench" / "hp3"))
+    import hp3_build as B
+    p = {"torch": "2.8.0+cu128", "cuda": "12.8", "bitsandbytes": "0.49.1", "bnb_lib_sha256": "b" * 64, "triton": "3.4.0"}
+    probes = [dict(p, framework=f) for f in ("e4b", "unsloth")]
+    assert B.compare(probes, "2.8.0", "any", "cu128")["verdict"] == "MATCHED"
+    rec = B.compare(probes, "2.8.0", "any", "cu130")
+    assert rec["verdict"] == "MISMATCH" and sum("is not a cu130 build" in x for x in rec["problems"]) == 2
+    assert B.compare([dict(p, framework="e4b"), dict(p, framework="unsloth", bnb_lib_sha256="c" * 64)], "2.8.0", "any", "cu128")["verdict"] == "MISMATCH"
+
+
+def test_the_part_8_memory_band_covers_the_r_tokens(tmp_path):
+    assert _membox(tmp_path, "5090", 32607, fams="qwen3hp3r")[0] == 0
+    assert _membox(tmp_path, "5090", 49140, fams="qwen3hp3r")[0] == 18
+    assert _membox(tmp_path, "L4", 23034, fams="qwen3hp3rshake")[0] == 0
+    assert _membox(tmp_path, "4090", 49140, fams="qwen3hp3rshake")[0] == 18
+
+
+def test_the_r_shakedown_token_is_wired_like_the_r_token():
+    """Every gate that names qwen3hp3r names qwen3hp3rshake too (no axolotl, no cu130 Unsloth, t28u, the build record, staging)."""
+    run = (D.REPO / "bench" / "tc1" / "tc1_run.sh").read_text()
+    for ln in [ln for ln in run.splitlines() if '" qwen3hp3r "' in ln]:
+        assert '" qwen3hp3rshake "' in ln, ln
+    assert "qwen3hp3rshake) tc1_hp3_family qwen3hp3rshake Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1800 1800 1800 1 r;;" in run
+    drv = (D.REPO / "bench" / "tc1" / "tc1_drive.sh").read_text()
+    assert '*" qwen3hp3rshake "*) STAGE="$STAGE' in drv
+
+
+def _gate(families):
+    """tc1_run.sh's own token-gate lines for the (R) tokens, run alone under FAMILIES: (SKIP_UNS_CU130, NEED_AXOLOTL)."""
+    import subprocess
+    src = (D.REPO / "bench" / "tc1" / "tc1_run.sh").read_text().splitlines()
+    gate = [ln for ln in src if ln.startswith("SKIP_UNS_CU130=0; case")]
+    assert len(gate) == 1, gate
+    p = subprocess.run(["bash", "-c", f'NEED_AXOLOTL=1; FAMILIES="{families}"\n{gate[0]}\necho "$SKIP_UNS_CU130 $NEED_AXOLOTL"'],
+                       capture_output=True, text=True, timeout=30)
+    assert p.returncode == 0, p.stderr
+    return tuple(p.stdout.split())
+
+
+def test_the_r_tokens_skip_the_cu130_unsloth_venv_and_axolotl_and_no_other_token_does():
+    """Amendment 2: (R) builds no cu130 Unsloth venv and no axolotl venv (the reviewer, 2026-10-24: SKIP_UNS_CU130=1 -> 0 survived)."""
+    for fam in ("qwen3hp3r", "qwen3hp3rshake"):
+        assert _gate(fam) == ("1", "0"), fam
+    for fam in ("qwen3hp3", "qwen3hp3shake", "qwen3hp2", "qwen3hbd", "qwen3"):
+        assert _gate(fam) == ("0", "1"), fam

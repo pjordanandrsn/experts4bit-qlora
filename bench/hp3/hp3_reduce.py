@@ -41,6 +41,27 @@ FRAMEWORKS = ("e4b", "unsloth", "axolotl")
 REFERENCE = "e4b"
 PAIRS = (("e4b", "unsloth"), ("e4b", "axolotl"), ("unsloth", "axolotl"))
 CAL_TAGS = {"e4b": "hp3cal_e4b_k00_s3407", "unsloth": "hp3cal_unsloth_s3407", "axolotl": "hp3cal_axolotl_s3407"}
+MODE = "p"
+# HP3 Amendment 2, the (R) fallback (registered before any data; triggered by hp3-shake-2's G1' at L2): e4b vs Unsloth 2026.9.14 on
+# HPN's build, one pair, no axolotl. Label (i) is dropped and (iii) names torch 2.8.0+cu128.
+LABELS_R = ("(R) the registered fallback: e4b K00 vs Unsloth 2026.9.14 (HP1/HP2's version) on torch 2.8.0+cu128 (HPN's build); "
+            "axolotl waits for an amendment; "
+            "(iii) the build is torch 2.8.0+cu128 with Unsloth's own bitsandbytes resolve: no HP3 (R) number is compared with an HP2 or HPN number")
+
+
+_P_GLOBALS = (FRAMEWORKS, PAIRS, LABELS)
+
+
+def set_mode_p():
+    """Back to build (P): three frameworks, three pairs, (P)'s labels (tests switch modes in one process)."""
+    global FRAMEWORKS, PAIRS, LABELS, MODE
+    (FRAMEWORKS, PAIRS, LABELS), MODE = _P_GLOBALS, "p"
+
+
+def set_fallback_r():
+    """Switch this module to (R): two frameworks, one pair, the (R) labels; the three-way read does not apply."""
+    global FRAMEWORKS, PAIRS, LABELS, MODE
+    FRAMEWORKS, PAIRS, LABELS, MODE = ("e4b", "unsloth"), (("e4b", "unsloth"),), LABELS_R, "r"
 RUN_PREFIX = {"e4b": "hp3_k00_s", "unsloth": "hp3_unsloth_s", "axolotl": "hp3_axolotl_s"}
 SEEDS = (3410, 3411, 3412, 3413, 3414)   # Amendment 1: five confirmation seeds per framework (was HP1's 3410-3412)
 EXIT_OK, EXIT_UNUSABLE, EXIT_INCOMPLETE, EXIT_G1_CLOSE = 0, 2, 3, 4
@@ -275,6 +296,12 @@ def verdict(evs, g1rec, receipts, plan=None):
                               "deltaN_reported": {"mean": round(statistics.mean(e), 6), "per_seed": e,
                                                   "term": "in-loop (the two frameworks' training forwards at step N)"}}
     vs = {k: p["verdict"] for k, p in out["pairs"].items()}
+    if MODE == "r":                                  # (R): one pair, so the pair's verdict is the reading; no three-way read
+        read = all(v not in ("CLOSE", "NOT_READ") for v in vs.values())
+        out["three_way"] = {"verdict": "NOT_APPLICABLE", "why": "(R) reads one pair (e4b-unsloth); axolotl waits for an amendment",
+                            "pairs_read": sum(v not in ("CLOSE", "NOT_READ") for v in vs.values())}
+        out["home_field"] = g1rec.get("home_field")
+        return out, (EXIT_OK if read else EXIT_INCOMPLETE)
     if any(v in ("CLOSE", "NOT_READ") for v in vs.values()):
         three = "NOT_READ"
     elif all(v == "PARITY" for v in vs.values()):
@@ -301,6 +328,7 @@ def main(argv=None):
     a1 = sub.add_parser("g1")
     a1.add_argument("eval_json")
     a1.add_argument("--rows", type=int, default=CAL_ROWS)
+    a1.add_argument("--fallback-r", action="store_true", help="HP3 Amendment 2's (R): e4b vs Unsloth only")
     a1.add_argument("--out", required=True)
     a2 = sub.add_parser("verdict")
     a2.add_argument("evals", nargs="+")
@@ -308,8 +336,11 @@ def main(argv=None):
     a2.add_argument("--arm-receipt", action="append", default=[], help="an axolotl confirmation arm's receipt (its tag inside)")
     a2.add_argument("--manifest", action="append", default=[])
     a2.add_argument("--seed-plan", help="the runner's hp3/seed_plan.json (Amendment 1 part 7); every evaluator output must carry its sha256")
+    a2.add_argument("--fallback-r", action="store_true", help="HP3 Amendment 2's (R): e4b vs Unsloth only")
     a2.add_argument("--out", required=True)
     a = ap.parse_args(argv)
+    if a.fallback_r:
+        set_fallback_r()
     try:
         if a.cmd == "g1":
             rec = g1(json.load(open(a.eval_json)), a.rows)
