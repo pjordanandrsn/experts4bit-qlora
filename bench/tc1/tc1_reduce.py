@@ -5865,8 +5865,9 @@ def pos78_oom_why(r):
 def pos78_draw(F, d):
     """One started box's draw -> (state, facts). COMPLETE: a VALID trained pb1cl256 row with all 60 steps and a step record for each. OOM: the
     arm died of an OOM at a step with its record bound (pos78_oom_why); the allocator's own line is kept. VOID: a trained or OOM row off its
-    registration, a card outside the 24 GiB band, an unread machine id, or a runner gate's pass line missing from the summary (the
-    pre-check, the pad-buckets probe, the tokens). NO_READ: no trained and no OOM row (a refused pre-check, a dead box)."""
+    registration, a card outside the 24 GiB band or a row whose recorded GPU is not an RTX 4090, an unread machine id, or a runner gate's
+    pass line missing from the summary (the pre-check, the pad-buckets probe, the tokens). NO_READ: no trained and no OOM row (a refused
+    pre-check, a dead box)."""
     R = F.get(POS78_FAM) or {}
     row = next((x for x in R.get("rows", []) if (x["fw"], x["tag"]) == POS78_ARMS[0]), None)
     r = (row or {}).get("r") or {}
@@ -5883,6 +5884,9 @@ def pos78_draw(F, d):
         return "VOID", dict(x, why=f"memory.total {bx['mib']} MiB is outside a 24 GiB card's {POS78_MIB_BAND[0]}-{POS78_MIB_BAND[1]}")
     if not bx["machine"]:
         return "VOID", dict(x, why="the machine id is unread (the launcher's receipt beside the tc1 dir)")
+    gpu = str((r.get("env") or {}).get("gpu") or "")
+    if "RTX 4090" not in gpu:                          # the band alone admits a 24 GiB RTX 3090 (24,576 MiB)
+        return "VOID", dict(x, why=f"the row's GPU {gpu or 'unread'!r} is not an RTX 4090")
     gates = [k for k, ok in (("the pre-check's OK line", bx["precheck"]), ("the pad-buckets probe's 1 True True True line", bx["probe"]),
                              ("the TOKENS MATCH line", bx["tokens"])) if not ok]
     if gates:
@@ -9425,7 +9429,8 @@ def _pos78_rec(**over):
     for k in ("lora_loop_share", "tokens_per_step", "tokens_padded_per_step"):
         if isinstance(r.get(k), list) and r[k]:
             r[k] = (r[k] * POS78_STEPS)[:POS78_STEPS]
-    r["env"] = dict(r["env"], **{"grouped-nf4-gemm": POS78_GNF4_VERSION}, gnf4_code={"commit": POS78_GNF4, "nf4_qlora_sha256": POS78_NF4_QLORA_SHA})
+    r["env"] = dict(r["env"], **{"grouped-nf4-gemm": POS78_GNF4_VERSION}, gnf4_code={"commit": POS78_GNF4, "nf4_qlora_sha256": POS78_NF4_QLORA_SHA},
+                    gpu="NVIDIA GeForce RTX 4090")
     r["chunked_lm_loss"] = dict(r["chunked_lm_loss"], env=POS78_CHUNK, chunked_calls=240, small_calls=0, stock_calls=0, runtime_refusals=0)
     r["lean_ab"] = dict(r.get("lean_ab") or {}, lora_path_calls={"loop": 0, "padded": 0, "grouped_mm": 0, "padded_bucketed": 49152},
                         gnf4_pad_buckets_env="1", gnf4_pad_buckets_mode="1", gnf4_pad_ladder=False, gnf4_pad_ladder_env=None)
@@ -12396,6 +12401,10 @@ def selftest():
         assert lane(a8, same)[::2] == ("OPEN", ["pairs", "strike (a machine already read)"]) and lane(a8, same, b8)[0] == "FIT"
         assert lane(a8, b8, n8)[2] == ["pairs", "pairs", "after the verdict"] and lane(a8, n8, b8, b8)[2][-1] == "after the verdict"
         assert box8(_pos78_rec(), mach="")[0][0] == "VOID"                                      # an unread machine id
+        for g8 in ("NVIDIA GeForce RTX 3090", "", None):                                         # a 24 GiB card that is not a 4090; no name
+            env8 = dict(_pos78_rec()["env"], gpu=g8)
+            assert box8(_pos78_rec(env=env8), mach="host-id-jjj1")[0][0] == "VOID", g8
+            assert box8(oom8(env=env8), mach="host-id-jjj1")[0][0] == "VOID", g8
         t8 = box8(_pos78_rec(losses=[ls[0] + 1e-5] + ls[1:]), mach="host-id-eee5")[0]
         assert t8[0] == "COMPLETE" and lane(a8, t8)[0] == "VOID" and "plumbing fault" in lane(a8, t8)[1]
         la8 = _pos78_rec()["lean_ab"]

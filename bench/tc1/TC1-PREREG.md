@@ -3631,8 +3631,9 @@ launch order). Per box:
   node at its default) and the modes they resolved to; every LoRA call so far width-bucketed through the compact bucketed node, at least
   one; the chunked loss patched, with no forward on the stock or small loss; a loss and a step record for each completed step; and the
   census. Its step and the allocator's own line are kept;
-- VOID: a trained or OOM row off its registration, a card outside the band, an unread machine id, or a missing pass line for the
-  pre-check, the probe or the tokens in the box's summary;
+- VOID: a trained or OOM row off its registration, a card outside the band, a row whose recorded GPU is not an RTX 4090 (the band
+  alone admits a 24 GiB RTX 3090), an unread machine id, or a missing pass line for the pre-check, the probe or the tokens in the box's
+  summary;
 - NO_READ: no trained or OOM row (a refused pre-check, a dead box).
 
 Over the started draws, in launch order:
@@ -3668,23 +3669,31 @@ padded micro-batch in these tokens is 565 tokens (step 22, from `tc1-5090-155`'s
    OOM ends the lane. The third started box is the last, whatever it reads;
 5. boot slack: a 1.5 h guard against about 30 minutes of phases leaves far more than 540 s;
 6. once closed, the tests assert this amendment's literal pins at its frozen commit;
-7. every gate fails closed: a missing memory.total, machine id, gate line, step record, path counter, knob, loss record or code record
-   reads VOID or NO_READ, on a trained row and on an OOM row, and the reducer self-test (case 132) removes each one;
+7. every gate fails closed: a missing memory.total, GPU name, machine id, gate line, step record, path counter, knob, loss record or
+   code record reads VOID or NO_READ, on a trained row and on an OOM row, and the reducer self-test (case 132) removes each one;
 8. the fetch imports no links (`tc1_drive.sh`'s `--no-links`, rule 8).
 
-**Budget.** One RTX 4090 a box, at a declared $1.00/h with 220 GB of storage, a 1.5 h guard, and up to 100 GB downloaded at $0.03/GB.
-- **A started box:** 1.5 h × $1.00 + 100 GB × $0.03 = **$4.50**, the guard running from the create.
+**Budget.** One RTX 4090 a box, at a declared $1.00/h with 220 GB of storage, a 1.5 h guard, and up to 100 GB downloaded at no more
+than $0.02/GB. The lane must fit the $15 rail, so the download price is capped and the eight retry ids are kept: a box that does not
+start is this market's common case. The cap is enforced in two places, which read one constant:
+- the kit's screen (`bench/tc1/pos78_kit.py`, `offer_why`) admits only one GPU, a listing `gpu_ram` of 24,000 to 24,600 MiB, at most
+  $1.00/h with the 220 GB disk, and download at no more than $0.02/GB;
+- the launch template (`bench/tc1/pos78_manifest_template.json`) carries `max_download_usd_per_gb` 0.02, and the launcher drops any
+  offer that bills download above it.
+`tests/test_tc1_pos78_kit.py` refuses an offer at $0.021/GB and checks that the template carries the screen's caps.
+- **A started box:** 1.5 h × $1.00 + 100 GB × $0.02 = **$3.50**, the guard running from the create.
 - **A box that does not start** (a NOT_RUN at the launcher's pre-flight, or the runner's refusal before its install: the card band, the
   GPU class, the disk, the driver) costs its time to the refusal plus its download before it. The time is at most:
   - 600 s for the provider to run the instance (the launcher's pre-flight timeout);
-  - 420 s for ssh (the allowance the kit passes; bench/common rule 5);
+  - 420 s for ssh (the template's `ssh_ready_s`; bench/common rule 5);
   - 180 s for the pre-flight's four bandwidth windows of 45 s each;
   - 120 s to stage the kit (rule 5's margin);
   - 120 s for the runner's refusal, the evidence pull and the destroy.
   That is 1,440 s = 0.4 h × $1.00 = $0.40. The download is the pre-flight's probe files, at most 1.17 GB (75 MB and up to 105 MB from
-  the generic endpoints, and 440 MB and 548 MB from the HF CDN), × $0.03 = $0.04. Each such box costs at most **$0.44**.
+  the generic endpoints, and 440 MB and 548 MB from the HF CDN), × $0.02 = $0.03 rounded up. Each such box costs at most **$0.43**.
 - **The lane:** bench/common rule 4 bounds the boxes by the ids: three reading ids plus r1 to r8 is 11 boxes, of which at most three
-  start. So the lane's worst is 3 × $4.50 + 8 × $0.44 = $13.50 + $3.52 = **$17.02**. A refusal at create uses no id and costs $0.
+  start. So the lane's worst is 3 × $3.50 + 8 × $0.43 = $10.50 + $3.44 = **$13.94**, inside the $15 rail. A refusal at create uses no
+  id and costs $0.
 
 A default change (bucketed padding or the 256-token chunk on 24 GiB cards) is not part of this amendment. It needs its own PR, citing
 this reading.

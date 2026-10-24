@@ -15,3 +15,6 @@
   loss's counters up to the OOM, so the reducer can bind it.
 - `bench/tc1/tc1_run.sh` (`tc1_pos78_family`, the card band), `bench/tc1/tc1_reduce.py` (`pos78_why`, `pos78_oom_why`, `pos78_draw`,
   `pos78_lane`, `pos78_block`, `--pos78-lane`, self-test case 132), `tests/test_tc1_pos78_family.py`.
+- `bench/tc1/pos78_kit.py` and `bench/tc1/pos78_manifest_template.json`: the lane's launch caps. The kit's offer screen and the
+  template's `max_download_usd_per_gb` both refuse download above $0.02/GB, so a started box costs at most $3.50 and the lane at most
+  $13.94. `tests/test_tc1_pos78_kit.py` refuses an offer at $0.021/GB and checks that the template carries the screen's caps.
