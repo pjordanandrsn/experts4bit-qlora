@@ -6,8 +6,8 @@ never instead of it. Every distribution is a PyPI release with its provenance ch
 release.
 - `bench/p235/provenance.py` (new): the registered pins as constants (experts4bit-qlora 0.58.0, grouped-nf4-gemm
   0.51.0, vLLM 0.32.0 and 0.30.0). For each distribution it checks the installed version and its provenance: a PyPI
-  install, or a git install at a tag commit an amendment names. Editable, `file://`, other-host and other-commit
-  installs are refused. It writes `provenance.json` into the receipts.
+  index install only. Editable, `file://`, other-host and every git install (whatever its URL or commit) are refused.
+  It writes `provenance.json` into the receipts.
 - `bench/p235/p235_run.sh` and `p235_reduce.py`: P58's runner and reducer by named edits. The runner installs
   experts4bit-qlora, grouped-nf4-gemm and each vLLM build from PyPI wheels, with transformers 5.17.0 and constant vLLM
   versions. It runs the provenance check before the tripwire and every arm (rc 9) and in each vLLM venv (a failure

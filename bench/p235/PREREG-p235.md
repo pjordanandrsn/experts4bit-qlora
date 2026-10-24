@@ -28,10 +28,11 @@ reading is quoted **beside** P58's, never in place of it.
 
 A version string is not a release. Every distribution the lane reads is installed from PyPI as a wheel at a
 registered version. Before any arm, `provenance.py` records each one's version AND provenance into the receipts: a
-PyPI install has no `direct_url.json`, or one whose url is on PyPI with no `vcs_info` or `dir_info`. Editable,
-`file://` and local-directory installs are refused. So is a git install, unless an amendment names the release tag's
-commit (`TAG_COMMITS` is empty). The pins are constants in `provenance.py` and in the runner, checked unconditionally,
-never behind a flag.
+PyPI index install has no `direct_url.json`, or one whose url is an https PyPI archive with no `vcs_info` or
+`dir_info`. Editable, `file://`, local-directory and other-host installs are refused. Every git install is refused,
+whatever its URL or commit: a fork, a mirror or a local repo can carry the release's tag, so no tag is resolved
+through the URL an install recorded. The pins are constants in `provenance.py` and in the runner, checked
+unconditionally, never behind a flag.
 
 | | P58 (2026-09-22) | P235 |
 |---|---|---|

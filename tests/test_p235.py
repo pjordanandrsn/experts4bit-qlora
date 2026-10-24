@@ -2,7 +2,7 @@
 """Lane P235 (bench/p235/PREREG-p235.md): P58's same-box vLLM head-to-head re-read at the release pins (e4b 0.58.0,
 grouped-nf4-gemm 0.51.0, vLLM 0.32.0 and 0.30.0), each installed from PyPI with its provenance checked. The staged pins,
 resolved the way test_p58_staged_pin.py resolves P58's and held to P58's digests; provenance.py's rules on fake
-distributions (PyPI OK; editable, file://, another host, a git commit not the tag's, a wrong version or a missing
+distributions (PyPI OK; editable, file://, another host, any git install, a wrong version or a missing
 distribution refused) and its constants against the PREREG and the runner; the runner as P58's by named edits (every
 changed line one of them), calling the check before the first e4b arm and in each vLLM venv before its arms; the
 reducer as P58's with its labels renamed (its output on P58's receipts unchanged but for the title); and the drive's
@@ -107,7 +107,7 @@ def _fake(site, name, version, direct_url=None):
     return site
 
 
-SHA_TAG, SHA_OTHER = "1" * 40, "2" * 40
+SHA = "1" * 40
 WHEEL = "https://files.pythonhosted.org/packages/aa/bb/experts4bit_qlora-0.58.0-py3-none-any.whl"
 
 
@@ -141,29 +141,30 @@ def test_a_file_url_is_refused(tmp_path, du):
 
 
 @pytest.mark.parametrize("url", ["https://example.com/experts4bit_qlora-0.58.0-py3-none-any.whl",
-                                 "https://files.pythonhosted.org.example.com/x.whl", "not a url"])
+                                 "https://files.pythonhosted.org.example.com/x.whl", "not a url",
+                                 "http://files.pythonhosted.org/packages/aa/bb/experts4bit_qlora-0.58.0-py3-none-any.whl"])
 def test_another_host_is_refused(tmp_path, url):
     rec, errs = _one(tmp_path, {"url": url, "archive_info": {}})
     assert rec is None and len(errs) == 1 and "which is not PyPI" in errs[0], errs
 
 
-def _vcs(commit):
-    return {"url": "https://github.com/pjordanandrsn/experts4bit-qlora.git",
-            "vcs_info": {"vcs": "git", "requested_revision": "v0.58.0", "commit_id": commit}}
+def _vcs(url, commit=SHA):
+    return {"url": url, "vcs_info": {"vcs": "git", "requested_revision": "v0.58.0", "commit_id": commit}}
 
 
-def test_a_vcs_install_at_another_commit_is_refused(tmp_path):
-    rec, errs = _one(tmp_path, _vcs(SHA_OTHER), tag_commits={"experts4bit-qlora": SHA_TAG})
-    assert rec is None and len(errs) == 1 and f"git commit {SHA_OTHER} is not the release tag's commit {SHA_TAG}" in errs[0]
+@pytest.mark.parametrize("url", ["https://github.com/pjordanandrsn/experts4bit-qlora.git",    # canonical, any commit
+                                 "https://github.com/someone-else/experts4bit-qlora.git",      # a fork with the tag
+                                 "https://mirror.example.com/experts4bit-qlora.git"])
+def test_every_git_install_is_refused_whatever_its_url_or_commit(tmp_path, url):
+    """the amended rule's path (1): index wheels only, so no tag is resolved through the URL the install recorded"""
+    rec, errs = _one(tmp_path, _vcs(url))
+    assert rec is None and errs == [f"experts4bit-qlora: a git install ({url} @ {SHA}) is not an index release"]
+    assert not hasattr(PROV, "TAG_COMMITS")
 
 
-def test_a_vcs_install_at_the_tag_is_refused_until_an_amendment_names_the_commit(tmp_path):
-    assert PROV.TAG_COMMITS == {}
-    rec, errs = _one(tmp_path, _vcs(SHA_TAG))
-    assert rec is None and len(errs) == 1 and "with no registered tag commit" in errs[0], errs
-    rec, errs = PROV.check_one("experts4bit-qlora", "0.58.0", path=[str(tmp_path / "site")],
-                               tag_commits={"experts4bit-qlora": SHA_TAG})
-    assert not errs and rec["provenance"] == f"vcs:{SHA_TAG}"
+def test_a_git_file_url_is_refused(tmp_path):
+    rec, errs = _one(tmp_path, _vcs("file:///tmp/fork/experts4bit-qlora"))
+    assert rec is None and len(errs) == 1 and "a file:// install" in errs[0], errs
 
 
 def test_a_wrong_version_is_refused(tmp_path):
@@ -516,7 +517,7 @@ def test_the_drivers_dry_run_names_the_launch(tmp_path, run_id):
 
 def test_the_prereg_states_the_pins_bars_sequencing_and_limits():
     for s in ('`experts4bit_qlora.__version__ == "0.58.0"`', '`md.version("grouped-nf4-gemm") == "0.51.0"`',
-              "A version string is not a release.", "`TAG_COMMITS` is empty",
+              "A version string is not a release.", "Every git install is refused",
               "| transformers | 5.16.1 | **5.17.0** |", "| bitsandbytes | 0.50.1 | 0.50.1 (e4b's floor is `>=0.43`) |",
               "A newer vLLM is a new reading", "the run ends with rc 9 before the tripwire and before any arm",
               "that build's rows are refused", "`p37_vllm.py` has run against vLLM 0.28 to 0.30, not 0.32.0",
