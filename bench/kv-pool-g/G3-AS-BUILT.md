@@ -22,3 +22,20 @@ The design is `bench/kv-pool-g/DESIGN.md`, section G3; this file records how ste
   - Claim-all against shared, token for token, with and without the lookahead, with claim-all run twice as the floor.
   - One shared run whose pool is sized from a cut free-memory reading, to `least + (claim_all - least) // 8` rows, so
     admission waits on its rows and every request must still finish.
+
+## The prefill graph's runtime headroom (after a served read on Qwen3-30B-A3B int4)
+
+The pool `size_shared_pool` sizes is the most rows whose need fits. Its need prices a width as `choose_max_seqs` does:
+the estimate, the prefill graph's reserve, `extra_bytes` and the margin. Claim-all's pool is fixed by the width, so a
+fitting width usually leaves slack beyond the margin. The bisection fills that slack exactly. On an RTX 5090 at 64
+slots and 4,096 tokens a slot, the pool came to 11,156 rows with 0.7 MiB to spare. After the prefill graph's capture,
+724 MiB was free. The graph's own runtime gate (`PagedModelRunner.capture_prefill_graph`, `require_headroom`) wants
+its private pool again for a later chunk's eager forward, plus the bulk KV flush: 426 + 319 = 745 MiB. So `auto`
+refused the graph.
+
+The sizing now holds back that same rule after the bisection: `serve_recipe.prefill_graph_headroom_bytes(reserve,
+bulk_flush_bytes(...))`. The runtime gate calls the same function, and `bulk_flush_bytes` uses the same
+`append_prompt_peak_bytes` at the same slot capacity. On that box's inputs the pool gives back about 1,344 rows
+(~1.06 GiB), which clears the gate. Claim-all's sizing (`choose_max_seqs`) is unchanged. `/health`'s
+`kv_pool_sizing` candidates now carry `prefill_graph_headroom_bytes`. `tests/test_kv_pool_sizing.py` holds it to the
+box's recorded numbers. A zero hold-back reproduces the refusal.
