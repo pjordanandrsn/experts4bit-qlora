@@ -96,7 +96,8 @@ case "$CUDA_PROBE" in
   *) say "DUD BOX (${CUDA_PROBE:-no probe output})"; finish 10;;
 esac
 case "$CUDA_PROBE" in *" torch=$TORCH_WANT "*) ;; *) say "REFUSED: the image's torch is not the registered $TORCH_WANT ($CUDA_PROBE)"; echo "refused: torch ($CUDA_PROBE)" > REFUSAL; finish 28;; esac
-nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,compute_cap --format=csv,noheader | tee forensics.txt
+# no uuid: the card's GPU UUID is never collected, since the public receipt never needs it
+nvidia-smi --query-gpu=name,memory.total,driver_version,compute_cap --format=csv,noheader | tee forensics.txt
 nvidia-smi --query-gpu=power.limit,enforced.power.limit,clocks.max.sm,temperature.gpu,clocks.sm --format=csv,noheader | sed "s/^/power.limit,enforced.power.limit,clocks.max.sm,temperature.gpu,clocks.sm /" | tee -a forensics.txt
 lscpu | grep -E "Model name|^Vendor ID|^CPU\(s\)|NUMA node\(s\)|^Flags" | cut -c1-2000 | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)

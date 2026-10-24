@@ -291,6 +291,18 @@ def test_the_fetch_never_imports_a_link(tmp_path):
     assert not [p for p in dst.rglob("*") if p.is_symlink()] and not (dst / "secret").exists() and not (dst / "etc").exists()
 
 
+def test_the_runner_never_collects_the_gpu_uuid():
+    """The card's GPU UUID is store-only, so the runner never asks for it: no nvidia-smi query names uuid, and no
+    nvidia-smi -L, -q or --list-gpus (which print it) runs. The old query line is refused."""
+    def bad(src):
+        return [ln for ln in src.splitlines() if not ln.lstrip().startswith("#") and "nvidia-smi" in ln
+                and ("uuid" in ln.lower() or re.search(r"nvidia-smi\s+(-L|-q|--list-gpus)(\s|$)", ln))]
+    assert sum("nvidia-smi --query-gpu=" in ln for ln in RUN.splitlines()) >= 2   # the check has its input
+    assert not bad(RUN), bad(RUN)
+    assert bad(RUN.replace("driver_version,compute_cap", "driver_version,uuid,compute_cap"))
+    assert bad("nvidia-smi -L") and bad("nvidia-smi -q | tee f") and bad("nvidia-smi --list-gpus")
+
+
 def _dry_env(tmp_path, run_id, **extra):
     return {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(tmp_path), "P233_DRIVE_DRYRUN": "1",
             "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-q", "E4B_RENT_RUN_DIR": str(tmp_path),

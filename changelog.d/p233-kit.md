@@ -3,7 +3,7 @@
 The registration's code PR, no box yet. P232's kit by counted edits.
 - **Runner** (`bench/p233/p233_run.sh`): the refusals (CUDA 18, torch image 28, card 15, disk below 140 GB 13, host RAM
   below 60 GiB 16), P231's download probe (40 MB/s, rc 19) and the pre-install guard fit (FIT 8,500 s x 1.25, rc 41)
-  before any install; no power floor (the limit is recorded, never ruled); e4b at the launch commit and grouped-nf4-gemm
+  before any install; no power floor (the limit is recorded, never ruled); the card's GPU UUID is never collected; e4b at the launch commit and grouped-nf4-gemm
   v0.50.0, with a tripwire on the head's explicit knobs, K36's quantizer and K37's plan, and eager decode at both
   placements; the premise on the card (the tier's tests 37 and the solver composition's 6 passed, rc 25); then the three
   phases A (all-vram), S (solver at 8.0 / 3.0 GiB) and C (solver at 8.0 / 0), every arm with `E4B_PAGED_GRAPHS=0`,
