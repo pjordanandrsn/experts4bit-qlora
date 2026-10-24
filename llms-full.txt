@@ -2372,6 +2372,14 @@ pairs; `e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw
   shapes are licensed, not the families: any model with those expert shapes takes them. Every other shape and smaller
   GPU keeps dot-pad; `GNF4_GEMV_BW=0` restores it.
 
+**Against bitsandbytes, op level and eager** (lane P236, 2026-10-24; **measured**, descriptive:
+[`bench/p236/RESULTS-p236.md`](../bench/p236/RESULTS-p236.md), `e4b.kernel.p236.nf4-gemv-vs-bnb.moe-experts.5090.2026-10-24`):
+on the same NF4 bytes and one RTX 5090, bitsandbytes 0.50.2's `gemm_4bit` is faster than grouped-nf4-gemm 0.51.0's
+decode GEMV at all 30 cells (six MoE expert projections of Mixtral-8x7B, Qwen3-30B-A3B and OLMoE-1B-7B, at M = 1 to
+16): the ratio (bitsandbytes' time over gnf4's) runs 0.30 to 0.92, and 0.49 to 0.87 at M = 1. These are eager calls
+that include each library's Python dispatch, not the served decode path, which runs under captured graphs, and not
+K33's device time; the served reads above stand. No default moves.
+
 **The B=1 fused stack is the default on Qwen3-MoE, Qwen3.5/3.6-MoE and Mixtral.** On top of grouped-nf4-gemm 0.43.0's
 bandwidth GEMV, fused q/k/v plus three glue folds decode one request 1.5902× and 16 requests 1.1644× as fast on
 Qwen3-30B-A3B NF4, and P115 Phase D's SANE read at T == 1 passes (bias +0.00541 nats, argmax agreement 0.9674). The four
@@ -3645,6 +3653,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24 [measured]: Lane P232 (one RTX 5090 at 575 W): on Qwen3-30B-A3B's default serve_paged server with the lm_head on its per-row int8 grid (E4B_INT8_HEAD_BW, the qwen3_moe default), routing the head's 2- to 8-row calls through grouped-nf4-gemm K37's linear_i8 (E4B_INT8_HEAD_ROWS=8) instead of F.linear on the grid's bf16 rounding …
 - e4b.serve.p233.solver-placement-quality.qwen3.5090.2026-10-24 [measured]: Lane P233 (one RTX 5090): on Qwen3-30B-A3B's serve_paged server, E4B_PAGED_PLACEMENT=solver at 8.0 GiB VRAM / 3.0 GiB DRAM (3236 / 1213 / 1695 experts on VRAM / DRAM / NVMe …
 - e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24 [measured]: Lane P234, one RTX 5090: on the DEFAULT serve_paged NF4 graph server (every serving lever unset; Mixtral-8x7B-Instruct, 16 slots x 768 tokens), E4B_NF4_SMALLM_BW=1 (2-8-token decode calls on singleton groups, so grouped-nf4-gemm's K33 bandwidth GEMV, instead of the device tile table and K25) decodes two requests …
+- e4b.kernel.p236.nf4-gemv-vs-bnb.moe-experts.5090.2026-10-24 [measured]: Lane P236 (one RTX 5090): on the same NF4 bytes, bitsandbytes 0.50.2's gemm_4bit is faster than grouped-nf4-gemm 0.51.0's K33 decode GEMV at all 30 cells (six MoE expert projections of Mixtral-8x7B, Qwen3-30B-A3B and OLMoE-1B-7B, at M = 1, 2, 4, 8 and 16), timed as eager calls between CUDA events that include each …
 
 Open items (no evidence either way):
 
@@ -3652,4 +3661,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(470 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(471 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

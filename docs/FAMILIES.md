@@ -58,12 +58,12 @@ From `docs/claims.json`. Each cell counts the current claims for that family and
 
 | family | `kernel` | `offload` | `parity` | `quality` | `serve` | `train` | newest |
 |---|---|---|---|---|---|---|---|
-| `olmoe` | - | - | - | 1 | 14 | 23 | 2026-10-18 |
-| `qwen3_moe` | 4 | - | 1 +1 private | - | 133 +2 private | 122 | 2026-10-24 |
+| `olmoe` | 1 | - | - | 1 | 14 | 23 | 2026-10-24 |
+| `qwen3_moe` | 5 | - | 1 +1 private | - | 133 +2 private | 122 | 2026-10-24 |
 | `gemma4_text` | - | - | 2 +1 private | 0 +1 private | 9 | 13 | 2026-10-10 |
 | `granitemoe` | - | - | 0 +1 private | 1 | 19 | 20 | 2026-10-18 |
 | `gpt_oss` | - | - | 1 +1 private | - | 14 | 10 | 2026-10-09 |
-| `mixtral` | 1 | - | - | 1 | 16 | 19 | 2026-10-24 |
+| `mixtral` | 2 | - | - | 1 | 16 | 19 | 2026-10-24 |
 | `lfm2_moe` | - | - | - | - | - | 3 | 2026-10-04 |
 | `granitemoehybrid` | - | - | - | - | - | 3 | 2026-10-04 |
 | `ernie4_5_moe` | - | - | - | - | - | 3 | 2026-10-04 |
