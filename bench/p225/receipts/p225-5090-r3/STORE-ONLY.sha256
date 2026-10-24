@@ -20,3 +20,8 @@ c881f5ce502ddffb433c9878b6c0e6beb52d9c4b40df65112d420cfcd736467f  logs/slot_b0A1
 51f7398c95ad37d0db89cace245151ecb73660b0b7d94879cec32dd76e6d98fb  logs/slot_b1A2.log
 61163a11286103839816e798ea18736a3fa5eae37eb55168e36c4542c8a1fd3e  logs/slot_b1B.log
 f57ad2e1c83bb31f59869e41ec61cccc99205b6d68bd5c962e951d18eec644f1  logs/train_REF.log
+# Added 2026-10-24: files that carry the rented card's GPU UUID (nvidia-smi's uuid), kept only in the private
+# receipt store, byte-exact. The public tree carries no GPU UUID (the receipts rule since 2026-10-20).
+3715b55b01644caf0fc6e90dbf7d6eb5c8f971bd61cb8e7da5abebb2b8fc4621  forensics.txt
+cda29296eb98d580bd4af27e44b03d77eef51d5cf4f4cc9686c33c0928fe3cae  outer.log
+a45ac35b0f957a570dc1dcbc41bdbf9ba30ab767f2075a10f3a7ba4d424b7502  run/receipts_REF/Qwen3-30B-A3B-device-reference-t512-20261023T154048Z-8dde0c2b.json

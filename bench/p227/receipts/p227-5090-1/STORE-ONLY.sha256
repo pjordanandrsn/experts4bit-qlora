@@ -3,3 +3,7 @@
 # file's path within this run's receipt.
 f1346693c46ac4e37b172c75cfe9b25424ffeee996a012931c8e8c29b8c5e9cf  teardown-proof.json
 dfac1f170a4885c5acbdf33e20b20d3dd3d6bf97056d5575c09df2231ee159d4  instance.json
+# Added 2026-10-24: files that carry the rented card's GPU UUID (nvidia-smi's uuid), kept only in the private
+# receipt store, byte-exact. The public tree carries no GPU UUID (the receipts rule since 2026-10-20).
+087d6a755b5c2ff7d62d4046948595cb078045a92920a38073d97e8afa0cc16f  forensics.txt
+1d2997abc1a72012996ba489f56b93d9b9f68c853d31a7871c5f654f010f83cd  outer.log
