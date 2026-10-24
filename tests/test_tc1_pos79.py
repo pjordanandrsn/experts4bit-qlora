@@ -287,3 +287,60 @@ def test_the_screen_and_the_template_carry_one_set_of_caps_inside_the_rows_cap()
 def test_every_template_guard_names_text_that_exists():
     for g in TEMPLATE["guards"]:
         assert g["repo"] == "e4b" and g["pattern"] in (REPO / g["path"]).read_text(), g
+
+
+def _drive(tmp: Path, **override):
+    """tc1_drive.sh under DRYRUN with the launch template's own command environment (and the launcher's fixture ssh), so the
+    controller's real staging and start line are what is checked; it never reaches a box."""
+    import shlex
+    import time
+    words = shlex.split(TEMPLATE["command"])
+    assigns = dict(w.split("=", 1) for w in words[:words.index("bash")])
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("E4B_", "TC1_", "GNF4_"))}
+    env.update(assigns, TC1_DRIVE_DRYRUN="1", E4B_RENT_SSH_HOST="fixture.invalid", E4B_RENT_SSH_PORT="22",
+               E4B_RENT_SSH_OPTS="-o BatchMode=yes", E4B_RENT_RUN_DIR=str(tmp), E4B_RENT_RUN_ID="tc1-5090-pos79",
+               E4B_RENT_DEADLINE_EPOCH=str(int(time.time()) + 7200), E4B_RENT_INSTANCE_ID="fixture-no-instance")
+    for k, v in override.items():
+        if v == "HEAD":
+            v = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
+        if v is None:
+            env.pop(k, None)
+        else:
+            env[k] = v
+    return subprocess.run(["bash", str(TC1 / "tc1_drive.sh")], cwd=REPO, env=env, text=True, capture_output=True, timeout=60)
+
+
+def test_pos79_drive_dry_run():
+    """The maintainer's dry-run rule: the drive, executed with the template's command env, stages release_proof.py with the kit and
+    starts the box at the kit's pins."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        r = _drive(Path(d))
+    assert r.returncode == 0, r.stdout + r.stderr
+    m = re.search(r"DRYRUN stage \[(.*?)\]", r.stdout)
+    assert m and "release_proof.py" in m.group(1).split() and "tc1_run.sh" in m.group(1).split(), r.stdout
+    start = r.stdout[r.stdout.index("DRYRUN stage"):]
+    assert f"E4B_SHA={RED.POS79_E4B_SHA}" in start and f"GNF4_SHA={RED.POS79_GNF4_SHA}" in start, start
+    for want in ("TC1_FAMILIES=qwen3pos79", "TC1_UNSLOTH_VERSION=2026.10.8", "TC1_UNSLOTH_ZOO_VERSION=2026.10.8"):
+        assert want in start, want
+    assert "TC1_E4B_ENV" not in start and "TC1_ARM_EXTRA_ENV" not in start
+
+
+@pytest.mark.parametrize("override, why", [
+    ({"E4B_SHA": "cd" * 20}, "E4B_SHA cdcd"),
+    ({"E4B_SHA": "HEAD"}, "is not the kit's f15cb7d6"),               # what the drive takes when E4B_SHA is unset: the checkout's HEAD
+    ({"GNF4_SHA": "ef" * 20}, "GNF4_SHA efef"),
+    ({"TC1_UNSLOTH_VERSION": "2026.10.7"}, "TC1_UNSLOTH_VERSION 2026.10.7"),
+    ({"TC1_E4B_ENV": "NF4_QLORA_COMPACT_DELTA=1"}, "must be empty"),
+    ({"TC1_ARM_EXTRA_ENV": "E4B_CHUNKED_LM_LOSS=256"}, "must be empty"),
+])
+def test_the_drive_refuses_any_other_pin_before_anything_is_created(tmp_path, override, why):
+    r = _drive(tmp_path, **override)
+    assert r.returncode == 78 and "refusing (amendment 79 pins)" in r.stdout and why in r.stdout, r.stdout + r.stderr
+    assert "DRYRUN stage" not in r.stdout                                   # refused before staging, so before any box
+
+
+@pytest.mark.parametrize("sh", sorted(p.name for p in TC1.glob("*.sh")))
+def test_every_tc1_shell_file_parses(sh):
+    r = subprocess.run(["bash", "-n", str(TC1 / sh)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
