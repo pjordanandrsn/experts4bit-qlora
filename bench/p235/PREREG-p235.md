@@ -164,8 +164,10 @@ term is P58's PREREG estimate with margin, or stated arithmetic:
   fast-check downloads the vLLM wheel again);
 - the two checkpoints, 78.03 GB, at 40 MB/s: **1,960 s**. The launch kit's host screen admits only hosts advertising
   `inet_down` >= 500 Mbps (62.5 MB/s), so 40 MB/s is 0.64 of the slowest admitted host's advertised rate. That rate
-  is advertised, not measured on the box (this runner has no download probe), so a host whose fetch overruns the
-  term is caught only by the later `can_run` gate, after the install;
+  is advertised, not measured on the box (this runner has no download probe). What an overrun does: a fetch past its
+  own 4,800 s alarm ends the run with rc 11 (`DL FAIL`) before any arm, a run that ended before its arms, so the
+  next id follows and its cost is bounded by that box's $4.95 worst case; a slower fetch inside the alarm uses the
+  guard's slack, and an arm that can then no longer finish is skipped by `can_run` and recorded (STOP-2), as in P58;
 - the bake and the prompt dump: **500 s** (P58 estimated about 1 min for the bake);
 - the largest gate, `can_run 900` before every arm: **900 s**, and the reserve `can_run` keeps: **600 s**.
 
