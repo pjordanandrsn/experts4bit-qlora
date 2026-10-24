@@ -5,6 +5,7 @@ drive's refusals; the runner's verdict cases; the self-tests and the reducer mut
 import hashlib
 import importlib.util
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -44,27 +45,43 @@ def _load(name, path):
 R = _load("p229_reduce_under_test", LANE / "p229_reduce.py")
 
 
-def _staged_sha(path, read_at):
-    """sha256 of the bytes the kit staged from ``path``: the file in this checkout, or, for a repo file outside the
-    lane that has moved on since the reading (tests/test_int8_head_bw.py, when E4B_INT8_HEAD_ROWS took its per-family
-    default), the file at ``read_at``, the e4b commit the reading ran at. The pins are a record of what was staged, so
-    they are never rewritten; a file outside the lane is held to them at that commit (CI checks out full history)."""
-    here = hashlib.sha256(path.read_bytes()).hexdigest()
-    if path.is_relative_to(LANE):
-        return here
+#: the one pinned file outside the lane that moved on after the reading (E4B_INT8_HEAD_ROWS took its per-family default,
+#: lane P232): it is held to its bytes at READ_AT, the immutable commit the reading ran at; every other pinned file is
+#: held to the current tree, so a later edit to any of them is still caught
+COMMIT_BOUND = REPO / "tests" / "test_int8_head_bw.py"
+
+
+def _bytes_at(path, read_at):
+    """``path``'s bytes at the e4b commit ``read_at`` (``git cat-file``). Missing history, a shallow clone or an absent
+    object FAILS under CI (``CI`` set: CI checks out full history, so the check must run there) and skips, with the
+    reason named, outside it."""
     rel = path.relative_to(REPO).as_posix()
     out = subprocess.run(["git", "cat-file", "blob", f"{read_at}:{rel}"], cwd=REPO, capture_output=True)
     if out.returncode != 0:
-        pytest.skip(f"{rel} at {read_at} is not in this checkout's history")
-    return hashlib.sha256(out.stdout).hexdigest()
+        why = f"{rel} at {read_at} is not readable here: {out.stderr.decode(errors='replace').strip()[:160]}"
+        if os.environ.get("CI"):
+            pytest.fail(f"{why} (CI must hold the full history and the reading commit)")
+        pytest.skip(why)
+    return out.stdout
 
 
 def test_every_staged_file_is_pinned_and_matches():
     pins = dict(reversed(line.split()) for line in (LANE / "staged-p229.sha256").read_text(encoding="ascii").splitlines())
     assert set(pins) == set(SOURCES)
     for name, path in SOURCES.items():
-        here = hashlib.sha256(path.read_bytes()).hexdigest()
-        assert (here if here == pins[name] else _staged_sha(path, READ_AT)) == pins[name], name
+        raw = _bytes_at(path, READ_AT) if path == COMMIT_BOUND else path.read_bytes()
+        assert hashlib.sha256(raw).hexdigest() == pins[name], name
+    assert sum(1 for p in SOURCES.values() if p == COMMIT_BOUND) == 1     # the commit-bound file is one named pin
+
+
+def test_a_missing_reading_commit_fails_under_ci_and_skips_outside(monkeypatch):
+    """The commit-bound check never passes silently: an absent object fails under CI=true and skips outside CI."""
+    monkeypatch.setenv("CI", "true")
+    with pytest.raises(pytest.fail.Exception, match="CI must hold the full history"):
+        _bytes_at(COMMIT_BOUND, "0" * 40)
+    monkeypatch.delenv("CI", raising=False)
+    with pytest.raises(pytest.skip.Exception, match="not readable here"):
+        _bytes_at(COMMIT_BOUND, "0" * 40)
 
 
 def test_the_premise_counts_are_the_suites_own():

@@ -371,6 +371,15 @@ def test_the_server_config_reads_the_rows_knob(monkeypatch):
     assert sp.INT8_HEAD_ROWS_ENV == ih.ROWS_ENV == "E4B_INT8_HEAD_ROWS"
 
 
+def test_explicit_one_keeps_the_one_row_route_and_unset_is_eight_on_qwen3_at_the_read_head():
+    """The one-row-only route stays reachable by an explicit 1 on the family whose default is 8 (lane P232); unset
+    resolves to 8 there, at the head shape P232 read (tests/test_int8_head_rows_default.py has every off case)."""
+    head = (151936, 2048)
+    assert sp.resolve_int8_head_rows(1, "qwen3_moe", head) == (1, "explicit")
+    assert sp.resolve_int8_head_rows(sp.FUSION_UNSET, "qwen3_moe", head) == (8, "default-allowlisted")
+    assert ih.apply_int8_head_rows(object(), 1) == {"rows_max": 1}      # 1 changes nothing and imports nothing
+
+
 def test_the_rows_knob_is_snapshotted_and_adapter_neutral():
     """Declared in LEVER_ENV (so /health's levers_env shows it, and the adapter census in tests/test_paged_adapter.py
     must classify it): neutral, since it widens the allowed int8 head's route and quantizes nothing itself."""
