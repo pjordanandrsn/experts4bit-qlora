@@ -97,9 +97,9 @@ else
   perl -e "alarm $(step_alarm 2400); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', allow_patterns=['*.safetensors','*.json','tokenizer*','*.txt'], max_workers=8))" > logs/fetch.log 2>&1 || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
   SNAP=$(tail -1 logs/fetch.log); [ -d "$SNAP" ] || { say "DL FAIL: no snapshot dir"; finish 11; }
   echo "FETCH $MODEL@$REV" | tee -a summary.txt
-  if [ "${D0S_PROBE:-0}" = 1 ]; then   # EXPLORE (never data): the base bake and the writer at both sources for nodq, timed
+  if [ "${D0S_PROBE:-0}" != 0 ]; then   # 1: both sources timed; 2: the oversubscription confirm (pinned vs default threads)   # EXPLORE (never data): the base bake and the writer at both sources for nodq, timed
     say "probe: the base bake and the writer for nodq at both sources (EXPLORE, never data)"
-    perl -e "alarm $(step_alarm 9000); exec @ARGV" python $W/e4bsrc/bench/d0s/d0s_writer_probe.py --snapshot "$SNAP" --adapters $W/adapters --out $W/work > logs/probe.log 2>&1 || { tail -5 logs/probe.log; say "PROBE FAILED"; finish 33; }
+    perl -e "alarm $(step_alarm 9000); exec @ARGV" python $W/e4bsrc/bench/d0s/d0s_writer_probe.py --snapshot "$SNAP" --adapters $W/adapters --out $W/work --mode $([ "$D0S_PROBE" = 2 ] && echo confirm || echo both) > logs/probe.log 2>&1 || { tail -5 logs/probe.log; say "PROBE FAILED"; finish 33; }
     tail -3 logs/probe.log | tee -a summary.txt; echo "PROBE_OK -- EXPLORE, never data" | tee -a summary.txt; : > PROBE_OK
     finish 0
   fi
