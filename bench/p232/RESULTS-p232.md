@@ -32,10 +32,11 @@ smallest of the four ABBA K/R pairs at the workload with T requests.
   - 575 W enforced in every timed block of every arm;
   - every self-pair inside the NOISY band [0.985, 1.015] (0.9925 to 1.0033), and no arm's tokens differ from its own
     arm's first record (no FUNCTION_FAIL).
-- **T = 2 and T = 4 read the same quality numbers,** to every recorded digit, R against B16 included. Each row's
-  log-probs are the same at either group size: the bucket-stability record shows every row identical (max difference 0)
-  at T = 2, 4 and 8 for both arms, so splitting the same 24 windows into groups of 2 or 4 scores the same values.
-  T = 8 differs slightly.
+- **T = 2 and T = 4 read the same quality numbers,** to every recorded digit, R against B16 included; T = 8 differs
+  slightly. That is observed, not explained by this record. The bucket-stability record does not explain it: it covers
+  the head alone, from saved hidden states over two steps, and it reads every row identical at T = 8 as well, where the
+  quality numbers differ. One interpretation, not tested here, is that the eager pass at groups of 2 and 4 takes the same
+  kernel paths for the whole model while groups of 8 do not.
 
 ## Predictions
 
