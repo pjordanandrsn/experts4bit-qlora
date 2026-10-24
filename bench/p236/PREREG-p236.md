@@ -27,11 +27,17 @@ down projection needs 456), through ONE cursor per cell that persists across the
 Consecutive calls walk all the copies, so a weight is read again only after every other copy has been (at least four
 L2s of other weights), and no arm reads a cached weight.
 
-| projection | (N, K) |
-|---|---|
-| Mixtral-8x7B gate_up / down | (28672, 4096) / (4096, 14336) |
-| Qwen3-30B-A3B gate_up / down | (1536, 2048) / (2048, 768) |
-| OLMoE-1B-7B gate_up / down | (2048, 2048) / (2048, 1024) |
+| projection | (N, K) | copies | reuse distance | x L2 |
+|---|---|---:|---:|---:|
+| Mixtral-8x7B gate_up | (28672, 4096) | 7 | 441 MiB | 4.6x |
+| Mixtral-8x7B down | (4096, 14336) | 13 | 410 MiB | 4.3x |
+| Qwen3-30B-A3B gate_up | (1536, 2048) | 228 | 385 MiB | 4.0x |
+| Qwen3-30B-A3B down | (2048, 768) | 456 | 385 MiB | 4.0x |
+| OLMoE-1B-7B gate_up | (2048, 2048) | 171 | 385 MiB | 4.0x |
+| OLMoE-1B-7B down | (2048, 1024) | 342 | 385 MiB | 4.0x |
+
+The reuse distance is the bytes (packed weight plus fp32 absmax) of the other copies read between two reads of the
+same weight, with the cursor walking every copy. At the 5090's 96 MB L2 it is at least 4x at every projection.
 
 ## The read, per cell (projection x M; 30 cells)
 
