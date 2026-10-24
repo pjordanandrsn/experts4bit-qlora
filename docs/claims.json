@@ -13086,6 +13086,33 @@
       "notes": "Pre-registered in #2114 (lever B, step B3, re-registered after P231's FUNCTION_FAIL, whose sixteen-request token-identity check ran the switched buckets in its admission ramp). All six predictions held. Reported, not ruled on: B1's tokens differ from B0's by row at W2 to W16 (the switch acts there; W16 on the same rows as P231), and W8 reads 1.22138. The default change for buckets 2 and 4 lands in its own PR citing this read. Lane cost $1.023 (the reading), plus a $0.12 exploratory shakedown before it."
     },
     {
+      "id": "e4b.kernel.p236.nf4-gemv-vs-bnb.moe-experts.5090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "kernel",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1, Qwen/Qwen3-30B-A3B, allenai/OLMoE-1B-7B-0125-Instruct (expert shapes only; seeded random NF4 bytes, no checkpoint loaded)",
+      "claim": "Lane P236 (one RTX 5090): on the same NF4 bytes, bitsandbytes 0.50.2's gemm_4bit is faster than grouped-nf4-gemm 0.51.0's K33 decode GEMV at all 30 cells (six MoE expert projections of Mixtral-8x7B, Qwen3-30B-A3B and OLMoE-1B-7B, at M = 1, 2, 4, 8 and 16), timed as eager calls between CUDA events that include each library's Python dispatch: the ratio (bitsandbytes' time over gnf4's) runs 0.2993 to 0.9176, and 0.4870 to 0.8654 at M = 1. Op level only: not the served, graph-captured decode path and not K33's device time; descriptive, it moves no default.",
+      "value": 0.9176,
+      "unit": "ratio, bitsandbytes / grouped-nf4-gemm time per eager call (above 1 = gnf4 faster), the largest of the 30 cell medians (20 palindromic reps of 50 calls; OLMoE-1B-7B gate_up at M = 16); the smallest 0.2993",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, 32607 MiB, a 575 W power limit recorded on the box), one rented Vast.ai verified host (AMD Ryzen 9 7900X, 94 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @d3b518b3 (P236's registration with Amendments 1-2, #2124's merge) + grouped-nf4-gemm v0.51.0 @30adb1bf; bitsandbytes 0.50.2 (its published wheel, RECORD-equal), torch 2.8.0+cu128, triton 3.4.0; premise per cell (bitsandbytes' dequantize_4bit bit-equal to dequant_ref on the same bytes), both correctness tolerances, engagement (one K33 launch per gnf4 call, with its split-K mark on Mixtral's down projection; one gemm_4bit dispatch per bitsandbytes call to one route) in every cell; copies spanning four times the L2; 10 warm-up calls; verdict by bench/p236/p236_reduce.py",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p236/RESULTS-p236.md",
+        "bench/p236/PREREG-p236.md",
+        "bench/p236/p236_reduce.py",
+        "bench/p236/p236_bench.py",
+        "bench/p236/receipts/p236-5090-2/verdict_p236.json",
+        "bench/p236/receipts/p236-5090-2/bench_p236.json",
+        "bench/p236/receipts/p236-5090-2/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-24/p236-5090-2/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2116 (Amendment 1 #2122: the driver's staging loop; Amendment 2 #2124: the engagement gate accepts K33's split-K mark, after p236-5090-1 read VOID, whose timings are never read), before any reading. Predictions: Q1 held (bitsandbytes took dequant at Mixtral down and OLMoE gate_up at M = 16, custom elsewhere); Q2 (gnf4 faster at M = 1, ratio 1.2 to 3) was wrong; Q3 was wrong as written (its M = 16 clause held, bitsandbytes faster on both Mixtral projections there, but the ratio does not fall with M: only Mixtral's gate_up falls, not at every step, the others are near flat, and bitsandbytes is faster at every M); Q4 in part (16 self-pair bands outside [0.95, 1.05], 3 on Mixtral); Q5 READ. That per-call dispatch dominates the small projections is a reading of their flat-in-M times, untested. The box did not write the SHA256SUMS its registration lists; the committed one is computed over the committed files. Lane cost $0.010 (the reading)."
+    },
+    {
       "id": "e4b.serve.h2h.vllm-0.32.0.p235.qwen3.b1.5090.2026-10-24",
       "package": "experts4bit-qlora",
       "area": "serve",

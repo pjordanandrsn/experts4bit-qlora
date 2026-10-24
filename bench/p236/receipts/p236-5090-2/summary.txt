@@ -1,0 +1,18 @@
+PYTHONPYCACHEPREFIX /tmp/p236-pycache.nNs8QW (0 entries at start)
+KNOBS gnf4=30adb1bfa76f95f9ce4a4c29734b8f36de907eca (0.51.0) bnb=0.50.2 torch=2.8.0+cu128 gpu_class=5090 min_disk_gb=20 min_ram_gb=16 need_bench=600
+CUDA_PROBE ok torch=2.8.0+cu128 cc=12.0 sms=170
+POWER_LIMIT_W 575 (recorded only)
+GUARD_FIT fit=1800s need=2250s left=2991s
+STARTED 2026-10-24T20:23:36Z
+gnf4 0.51.0 @30adb1bfa76f95f9ce4a4c29734b8f36de907eca
+bitsandbytes 0.50.2
+torch 2.8.0+cu128
+triton 3.4.0
+cc (12, 0)
+sm_count 170
+p236_bench self-test OK (10 checks)
+p236_reduce self-test OK (62 cases)
+release proof rc=0: {"dist": "bitsandbytes", "files": 68, "first_diff": null, "imports": {"bitsandbytes": "/opt/conda/lib/python3.11/site-packages/bitsandbytes/__init__.py"}, "pycache_fresh": true, "pycache_prefix": "/tmp/p236-pycache.nNs8QW", "record": "RECORD equal", "record_equal": true, "sha256": "55348a9a4a21bfd99
+bench rc=0 P236_BENCH rc=0 status=ok cells=30 in 10.1 s
+
+P236_VERDICT READ ["every cell correct, engaged as registered and timed; descriptive, no bar"]

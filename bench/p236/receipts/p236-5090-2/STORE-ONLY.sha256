@@ -1,0 +1,14 @@
+# p236-5090-2: files kept only in the private receipt store, byte-exact. The launcher's receipt, guard record and log,
+# heartbeat, host facts, known_hosts, instance record and teardown proof name the provider's instance or host;
+# p236/forensics.txt and p236/outer.log carry the card's GPU UUID (the nvidia-smi line). Receipts are never rewritten,
+# so they are not committed here. sha256, then the file's path within this run's receipt.
+bf07aa28323f7c2f044bc6f0ac346af635fdd249821efc85725d9748010d165b  receipt.json
+6b520b32a7a7329c984446c40c6ea55a82bb0be04cf710de88da002ab0316475  guard-armed.json
+1fe4b3d679781b3ad09b8da68cc482e3d80d424287f9947921aecf599147d09a  guard.log
+81bb390bb1d78e098f63c99ab03c902593d3705f5a55a299dc347419faec9cb0  heartbeat
+ae77ff9bd5097ef2072bdc5e5c52621170eb3bb6d6e2b61f76c9b9fac0b2d410  host_facts.json
+ea928c3d73e7c1f06cdfed437932f595d16ecf9c1bddfcf4bd150b48d8328a12  instance.json
+a60a455c85a2c06d649d6a59e322210f357f37a506d259a33cb0dba92ff48f01  known_hosts
+fd70b89d50a6815391747a7f3f41f8fb62271b8063a8afc30d4d217d17b354c9  teardown-proof.json
+38c17f011d6398bfa6c566b98654e66f6d3dbe8aa16f7193616cfccc3b5196fe  p236/forensics.txt
+e86ea5ce9a62dfb980a3d204ffc988762a0795c954e2c315bbf06014b741f503  p236/outer.log

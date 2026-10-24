@@ -265,6 +265,14 @@ pairs; `e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw
   shapes are licensed, not the families: any model with those expert shapes takes them. Every other shape and smaller
   GPU keeps dot-pad; `GNF4_GEMV_BW=0` restores it.
 
+**Against bitsandbytes, op level and eager** (lane P236, 2026-10-24; **measured**, descriptive:
+[`bench/p236/RESULTS-p236.md`](../bench/p236/RESULTS-p236.md), `e4b.kernel.p236.nf4-gemv-vs-bnb.moe-experts.5090.2026-10-24`):
+on the same NF4 bytes and one RTX 5090, bitsandbytes 0.50.2's `gemm_4bit` is faster than grouped-nf4-gemm 0.51.0's
+decode GEMV at all 30 cells (six MoE expert projections of Mixtral-8x7B, Qwen3-30B-A3B and OLMoE-1B-7B, at M = 1 to
+16): the ratio (bitsandbytes' time over gnf4's) runs 0.30 to 0.92, and 0.49 to 0.87 at M = 1. These are eager calls
+that include each library's Python dispatch, not the served decode path, which runs under captured graphs, and not
+K33's device time; the served reads above stand. No default moves.
+
 **The B=1 fused stack is the default on Qwen3-MoE, Qwen3.5/3.6-MoE and Mixtral.** On top of grouped-nf4-gemm 0.43.0's
 bandwidth GEMV, fused q/k/v plus three glue folds decode one request 1.5902× and 16 requests 1.1644× as fast on
 Qwen3-30B-A3B NF4, and P115 Phase D's SANE read at T == 1 passes (bias +0.00541 nats, argmax agreement 0.9674). The four

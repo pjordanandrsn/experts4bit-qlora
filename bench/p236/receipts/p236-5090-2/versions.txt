@@ -1,0 +1,6 @@
+gnf4 0.51.0 @30adb1bfa76f95f9ce4a4c29734b8f36de907eca
+bitsandbytes 0.50.2
+torch 2.8.0+cu128
+triton 3.4.0
+cc (12, 0)
+sm_count 170
