@@ -34,7 +34,7 @@ CONT=128; WINDOWS=24
 INSTALL_TO_GATE_S=600   # the two installs, the self-tests and the two-part premise
 NEED_FETCH=1500         # 57 GB at the probe's 40 MB/s floor
 NEED_BAKE=400
-NEED_A=600              # phase A at its two group sizes
+NEED_A=1026             # phase A at its two group sizes: 1.25 x the shakedown's 820.7 s at 24 windows (Amendment 4)
 NEED_S=2400             # phase S: eager, the tiered path's host and NVMe work at about 4x A's decode time
 NEED_C=2400             # phase C, as S
 RESERVE=600             # can_run's margin after a step: the reduce, the fetch-back and the teardown

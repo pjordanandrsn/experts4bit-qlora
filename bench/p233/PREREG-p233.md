@@ -304,3 +304,44 @@ group size, window count or cap moves. Each item fixes something the registratio
   floor is at most min(max(chunk tokens, max sequences) x k, E) = min(512 x 8, 128) = 128.
 - **The shakedown:** the next shakedown runs from this amendment's head before merge (a shakedown is never a reading); the
   reading launches only from the merged commit.
+
+## Amendment 4 (2026-10-24, after the shakedown, before any reading): the real fixture and the re-fit of A's term
+
+- **The shakedown:** the second shakedown box (`p233-shake-2`, explore tier, never a reading) ran all three phases at
+  the registered 8 windows on one RTX 5090 at Amendment 3's head. Every phase exited 0. The placement proof read as
+  registered:
+  - A: 6,144 experts in VRAM, every MoE layer on the collapse;
+  - S: 3,236 / 1,213 / 1,695 experts on VRAM / DRAM / NVMe, with 23 tiered layers;
+  - C: 3,236 / 0 / 2,908.
+
+  It reads `SHAKEDOWN`, would read `SOLVER_SANE` (SANE at T = 1 and at T = 8), and the TRIPWIRE fires on five terms
+  (T = 1: the NLL gap, argmax agreement and KL; T = 8: argmax agreement and KL). A shakedown is never a reading, and
+  the reading decides.
+- **The TRIPWIRE's terms and bounds do not move:** |NLL gap| 0.005 nats, argmax agreement 0.98, and KL max(3 x the A
+  self-pair floor, 0.002), whose floor read 0 here, so the absolute bound applied. Changing any of them after the
+  shakedown would be a rule change after data.
+- **The real fixture:** the shakedown's three quality records are committed byte for byte under
+  `bench/p233/fixtures/p233-shake-2/` and sha256-pinned in the tests.
+  - The reducer reproduces `SHAKEDOWN`, `SOLVER_SANE` and exactly those five TRIPWIRE lines from them.
+  - Another e4b pin VOIDs.
+  - The same bytes made reading-shaped (`shakedown` off) VOID on the window count alone: the 8-window shape, the R and
+    ON windows not 0..23, and the pass count W/T, 22 reasons.
+- **The re-fit:** the shakedown's phase times, with the load separated from the measurement:
+
+  | phase | wall at 8 windows | load | measure (T = 1 + T = 8) | at 24 windows (wall + 2 x measure) | term |
+  |---|---|---|---|---|---|
+  | A | 315.1 s | 37.7 s | 252.8 s | 820.7 s | 600 s, below it: **re-fit to 1,026 s** (1.25 x 820.7) |
+  | S | 399.7 s | 30.3 s | 349.3 s | 1,098.3 s | 2,400 s, kept (1.25 x 1,098.3 = 1,373) |
+  | C | 472.4 s | 26.2 s | 427.2 s | 1,326.8 s | 2,400 s, kept (1.25 x 1,326.8 = 1,659) |
+
+  - **Why S and C keep their terms:** S and C run the DRAM tier's rows on the host CPU, and the shakedown's host was a
+    96-core EPYC 9654. A slower host CPU stretches them, and the measured margin is kept for that.
+  - **The stages before the phases** measured inside their terms: install and premise within 2 minutes (600 s), the
+    fetch at 71.6 MB/s within 5 minutes (1,500 s, set by the 40 MB/s floor), and the bake within about a minute (400 s).
+  - **The fit:** FIT = 600 + 1,500 + 400 + 1,026 + 2,400 + 2,400 + 600 = **8,926 s, x 1.25 = 11,157 s**.
+  - **The guard:** (boot 300 + 8,926) x 1.25 = 11,532.5 s <= 11,700 s, so the guard stays **3.25 h**. The runner's fit
+    check still leaves 543 s for a slow ssh (420 s) plus staging (120 s).
+  - **The cost:** the worst case is unchanged: $6.2125 a started box, $14.23 for the lane.
+  - The runner's `NEED_A` becomes 1,026, and `staged-p233.sha256` is re-pinned.
+- **The reading:** it launches from this amendment's merge, after an Approved on the launch commit with the kit's
+  sha256.
