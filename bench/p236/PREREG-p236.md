@@ -77,7 +77,8 @@ same weight, with the cursor walking every copy. At the 5090's 96 MB L2 it is at
   0.50.2 with the installed `WHEEL` tags, checks its digest, and compares its `RECORD` file by file with the bytes on
   disk (only pip's bytecode and declared launchers may be extra). It also checks that `bitsandbytes` IMPORTS from
   that install in this interpreter (no earlier `sys.path` entry shadows it), and records that the proof ran under the
-  box's fresh `PYTHONPYCACHEPREFIX` (`pycache_fresh`), the same one the bench runs under. The runner calls it after the installs and before
+  box's fresh `PYTHONPYCACHEPREFIX` (`pycache_fresh`), the same one the bench runs under. Every install passes `pip --no-compile`, so no bytecode
+  lands in the installed RECORD (with pip's default, the proof refuses bitsandbytes 0.50.2: checked live on CPU); The runner calls it after the installs and before
   any timing (a refusal stops the box, rc 9), and the reducer requires its "RECORD equal" in the record;
 - a cell missing, or another rep count or ITERS;
 - the premise fails on a cell, or either arm misses the correctness tolerance on a cell;

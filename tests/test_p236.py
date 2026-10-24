@@ -272,3 +272,13 @@ def test_no_staged_file_shadows_a_library_module():
                 and (len(f.parts) > 1 or f.parts[0].endswith(".py"))}
         assert tops, dist
         assert not staged & tops, (dist, staged & tops)
+
+
+def test_every_install_skips_bytecode_so_the_release_proof_can_hold():
+    """The prefix is exported before the installs, so pip's default compile would write .pyc under it and list them in
+    the installed RECORD as ../ entries, which the release proof refuses (seen live on bitsandbytes 0.50.2: refused
+    with the default, "RECORD equal" with --no-compile). Every pip install on the box passes --no-compile, after the
+    prefix is exported."""
+    installs = [ln for ln in RUN.splitlines() if "pip install" in ln and not ln.lstrip().startswith("#")]
+    assert installs and all("--no-compile" in ln.split() for ln in installs), installs
+    assert RUN.index("export PYTHONPYCACHEPREFIX") < RUN.index("pip install")

@@ -88,10 +88,12 @@ can_run(){ local need=$1 now fit left; now=$(date +%s); fit=$((need + RESERVE));
 step_alarm(){ local cap=$1 left=$(( P236_DEADLINE_EPOCH - $(date +%s) - RESERVE )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 300 ] && left=300; echo "$left"; }
 export DEBIAN_FRONTEND=noninteractive
 echo "torch==${TORCH_WANT%%+*}" > $W/constraints.txt
+# --no-compile: the box exports PYTHONPYCACHEPREFIX first, and pip would write the installs' .pyc under it and list
+# them in RECORD as ../ entries, which release_proof.py refuses (checked live on bitsandbytes 0.50.2, 2026-10-24)
 pipx(){ local log=$1 secs=$2; shift 2
-  perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" > $log 2>&1 && return 0
+  perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input --no-compile -c $W/constraints.txt "$@" > $log 2>&1 && return 0
   say "pip failed ($(tail -1 $log | cut -c1-120)) -- one retry in 20 s"; sleep 20
-  perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" >> $log 2>&1; }
+  perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input --no-compile -c $W/constraints.txt "$@" >> $log 2>&1; }
 say "install bitsandbytes $BNB_VERSION + gnf4 @$GNF4_SHA (image python; torch held at $TORCH_WANT)"
 pipx logs/pip_bnb.log 900 --prefer-binary "bitsandbytes==$BNB_VERSION" numpy || { tail -4 logs/pip_bnb.log; say "PIP FAIL (bitsandbytes)"; finish 9; }
 pipx logs/pip_gnf4.log 900 --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
