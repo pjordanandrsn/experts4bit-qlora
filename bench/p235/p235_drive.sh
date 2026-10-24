@@ -35,8 +35,8 @@ E4B_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null) || { say "refusing: cannot 
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78; }
 # The staging, under the names p235_run.sh expects: this lane's runner, reducer, provenance check and staged.sha256,
-# loggetta's release proof (bench/release_proof.py, loggetta#125; byte-identical), P37's vLLM driver (byte-identical)
-# and P39's step_decomp.py, k8_bake.py and calib.json flat; P42's hook as hook/usercustomize.py. staged.sha256 pins
+# loggetta's release proof (bench/release_proof.py at f09e5676, #126's merge; byte-identical),
+# P37's vLLM driver (byte-identical) and P39's step_decomp.py, k8_bake.py and calib.json flat; P42's hook as hook/usercustomize.py. staged.sha256 pins
 # every one by the path the box sees, at P58's digests for every piece but this lane's three and the release proof.
 STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
 for f in bench/p235/p235_run.sh bench/p235/p235_reduce.py bench/p235/provenance.py bench/p235/staged.sha256 \

@@ -72,12 +72,12 @@ with `--no-compile`.
 - **e4b or grouped-nf4-gemm, provenance** (wrong version, editable, `file://`, another host, any git commit): the run
   ends with rc 9 before the tripwire and before any arm.
 - **e4b or grouped-nf4-gemm, release proof:** the run ends with rc 9 before the first arm. This comes after the
-  downloads, the bake and the vLLM installs, so a refusal here costs the setup: the download (at most $1.60 at the
-  80 GB cap) and the box time to that point, never more than the $4.75 worst case.
+  downloads, the bake and the vLLM installs, so a refusal here costs the setup: the download (at most $1.80 at the
+  90 GB cap) and the box time to that point, never more than the $4.95 worst case.
 - **Release-proof fast-check** (each build; not ruled): the same proof also runs right after that build's
   install and provenance check. For e4b and grouped-nf4-gemm it runs before the tripwire and the model fetch and
   refuses with rc 9. For a vLLM build it runs inside that build's install: a refusal refuses that build's rows, and
-  its binding proof then does not run. A wrong wheel at install now costs minutes, not the 80 GB setup. Its files
+  its binding proof then does not run. A wrong wheel at install now costs minutes, not the ~86 GB setup. Its files
   (`release_proof_fastcheck.jsonl`, `release_proof_vllm_<build>_fastcheck.jsonl`) travel with the receipts, but
   only the binding proof, the last step before each build's first arm, is ruled.
 - **A vLLM build** (checked in that build's venv, on `vllm` only): that build's rows are refused (they read `SKIPPED`,
@@ -145,8 +145,10 @@ Two limits of the instrument:
 
 ## Runs and budget
 
-- **Box:** one RTX 5090 at ≤ $1.05/h, guard 3.0 h, download ≤ $0.02/GB × 80 GB.
-- **Worst case:** $3.15 + $1.60 = **$4.75**, inside a **$6** lane ceiling. P58 ran the same arms in 42 minutes.
+- **Box:** one RTX 5090 at ≤ $1.05/h, guard 3.0 h, download ≤ $0.02/GB × 90 GB: the two checkpoints at their pinned
+  revisions are 78.03 GB (61.08 + 16.95), each vLLM venv about 3 GB (installed with `--no-cache-dir`), and each vLLM
+  wheel is downloaded twice more by its fast-check and binding proofs (0.32-0.33 GB each), about 86 GB in all.
+- **Worst case:** $3.15 + $1.80 = **$4.95**, inside a **$6** lane ceiling. P58 ran the same arms in 42 minutes.
 - **Run ids:** `p235-5090-1..-3` are the readings, and `p235-5090-r1..-r6` are for a box that did not start. The
   first run that completes is the reading. A run that ended before its arms (install, provenance, a dud box, a host
   fault) is followed by the next id. A release-proof refusal is not: another box would install the same published
@@ -157,7 +159,7 @@ version pins, PyPI installs with a provenance check, and names, each checked at 
 tripwire asserts, the provenance checker's tests, vLLM's torch pin). A failure at install, provenance or the tripwire
 refuses (rc 9) before the first arm and costs a few minutes of one box, about what a shakedown would cost. A
 release-proof refusal comes later, after the downloads and the bake, and costs the setup (above), bounded by the
-$4.75 worst case. grouped-nf4-gemm 0.51.0 and both vLLM builds read RECORD equal live at $0 before registration;
+$4.95 worst case. grouped-nf4-gemm 0.51.0 and both vLLM builds read RECORD equal live at $0 before registration;
 experts4bit-qlora 0.58.0 was not yet published, so its wheel is first proven on the box.
 
 Amendments, dated, go below this line before any data is read.

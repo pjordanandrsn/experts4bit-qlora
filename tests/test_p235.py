@@ -751,8 +751,8 @@ def test_the_prereg_states_the_pins_bars_sequencing_and_limits():
               "is not the server's scheduler", "**The engine advantage is understated, not inflated.**", "## Sequencing",
               "both releases (e4b 0.58.0, grouped-nf4-gemm 0.51.0) are published on PyPI", "The maintainer gives an Approved.",
               "The maintainer re-derives the reading from the receipts.", "A results PR follows.",
-              "one RTX 5090 at ≤ $1.05/h, guard 3.0 h, download ≤ $0.02/GB × 80 GB",
-              "$3.15 + $1.60 = **$4.75**, inside a **$6** lane ceiling", "`p235-5090-1..-3`", "`p235-5090-r1..-r6`",
+              "one RTX 5090 at ≤ $1.05/h, guard 3.0 h, download ≤ $0.02/GB × 90 GB",
+              "$3.15 + $1.80 = **$4.95**, inside a **$6** lane ceiling", "`p235-5090-1..-3`", "`p235-5090-r1..-r6`",
               "**No shakedown is registered.**", "**not collected**",
               "**The release proof: the installed bytes.**", "is loggetta `bench/release_proof.py` at `f09e5676` (#126's merge)", "staged byte-identical",
               "staged byte-identical and pinned in `staged.sha256`", "`release_proof.jsonl` and `release_proof_vllm_<build>.jsonl`",
@@ -765,7 +765,7 @@ def test_the_prereg_states_the_pins_bars_sequencing_and_limits():
               'not all `"pycache_fresh": true`, or not one per pin, refuses like the proof itself',
               "`RELEASE_PROOF_FRESH_PYCACHE` is exported on the same line with the same value",
               "**Release-proof fast-check** (each build; not ruled)", "before the tripwire and the model fetch",
-              "its binding proof then does not run", "A wrong wheel at install now costs minutes, not the 80 GB setup.",
+              "its binding proof then does not run", "A wrong wheel at install now costs minutes, not the ~86 GB setup.",
               "only the binding proof, the last step before each build's first arm, is ruled"):
         assert s in FLAT, s
     assert "GNF4_SHA" not in PREREG and "placeholder" not in PREREG.lower()
