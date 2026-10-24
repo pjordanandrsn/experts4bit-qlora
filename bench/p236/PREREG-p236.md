@@ -59,7 +59,7 @@ same weight, with the cursor walking every copy. At the 5090's 96 MB L2 it is at
    - **The self-pairs** of a rep are each arm's second visit over its first.
    - Eager calls include each library's Python dispatch, as a caller outside a captured graph pays it.
 
-## The rule (`bench/p236/p236_reduce.py`, self-tested on 50 cases)
+## The rule (`bench/p236/p236_reduce.py`, self-tested on 51 cases)
 
 **VOID** when any of these holds; **READ** otherwise. Each check fails closed: a missing record is a fault.
 - the record is missing, a dry run or not `ok`;
@@ -136,8 +136,8 @@ passed, immediately before the first install. The first READ ends the lane; at m
 
 - **One exact launch commit:** this registration's merge, through pod-launch with `--validate` passing there, the host
   pinned, rent-watch armed; then the maintainer's Approved naming that commit and the reading kit's hash.
-- **The pins:** grouped-nf4-gemm **0.51.0** at its release commit (`8cb2b37f` in this draft, the release head; the tag's
-  commit replaces it before merge), bitsandbytes **0.50.2** (its latest release), torch **2.8.0+cu128** (the image's).
+- **The pins:** grouped-nf4-gemm **0.51.0** at its release commit `30adb1bf` (`git rev-list -n1 v0.51.0` on the canonical
+  repository, a code constant), bitsandbytes **0.50.2** (its latest release), torch **2.8.0+cu128** (the image's).
   The runner's tripwire checks the release proof (above), that K33 engages at all six shapes on the card with
   every knob unset, and that bitsandbytes' two `gemm_4bit` routes are where the bench counts them.
 - **STOP-4:** the driver refuses a dirty tree, an `E4B_SHA` override, an unregistered run id or a staged file that
@@ -150,7 +150,7 @@ passed, immediately before the first install. The first READ ends the lane; at m
 - **On CPU (a development host):** bitsandbytes 0.50.2's `matmul_4bit` dispatches `bitsandbytes::gemm_4bit` for every M
   (not `gemv_4bit` or `dequantize_4bit` at the Python level); its `dequantize_4bit` equals `dequant_ref` rounded to
   bf16; the bytes from a bf16 and an fp32 source agree. Its CUDA rule (read from its source) takes `custom` at M <= 4.
-- **Locally:** the reducer's self-test (50 cases), the bench's self-test, and a `--dry` run of the bench on CPU through
+- **Locally:** the reducer's self-test (51 cases), the bench's self-test, and a `--dry` run of the bench on CPU through
   every cell into the reducer, which reads it VOID as a dry run with no cell fault other than the dry rep count.
 
 ## What this lane cannot say

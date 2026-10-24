@@ -58,7 +58,7 @@ ROTATE_BYTES = 384 * 1024 * 1024
 MAX_COPIES = 512                  # every registered shape spans 4x L2 under this cap (qwen3.down needs 456)
 TOL = 1.5e-2                      # the served tolerance (tests/test_nf4_smallm_bw_gpu.py), max |y - ref| / max |ref|
 GNF4_VERSION, BNB_VERSION, TORCH_VERSION = "0.51.0", "0.50.2", "2.8.0+cu128"
-GNF4_SHA = "8cb2b37f4d10fb1281b105ae546fe689b67d0451"   # grouped-nf4-gemm 0.51.0 (the release head; the tag re-pins)
+GNF4_SHA = "30adb1bfa76f95f9ce4a4c29734b8f36de907eca"   # grouped-nf4-gemm v0.51.0: `git rev-list -n1 v0.51.0` on the canonical repo
 GNF4_REPO = "github.com/pjordanandrsn/grouped-nf4-gemm"
 PYPI_HOSTS = ("files.pythonhosted.org", "pypi.org", "pypi.python.org")
 #: each library's registered release: (version, the one git commit accepted, or None when only an index wheel is)
@@ -301,6 +301,9 @@ def self_test():
             "direct_url": {"url": "https://" + GNF4_REPO + ".git", "vcs_info": {"commit_id": "0" * 40}}}})) == "VOID"),
         ("gnf4 another repo", v(fake_record(provenance={**good["provenance"], "grouped-nf4-gemm": {"version": "0.51.0",
             "direct_url": {"url": "https://github.com/x/fork.git", "vcs_info": {"commit_id": GNF4_SHA}}}})) == "VOID"),
+        ("gnf4 from a git+file:// repo at the release commit", v(fake_record(provenance={**good["provenance"],
+            "grouped-nf4-gemm": {"version": "0.51.0", "direct_url": {"url": "file:///mirror/grouped-nf4-gemm",
+                                                                     "vcs_info": {"commit_id": GNF4_SHA}}}})) == "VOID"),
         ("gnf4 a repo whose name only starts the same", v(fake_record(provenance={**good["provenance"],
             "grouped-nf4-gemm": {"version": "0.51.0", "direct_url": {"url": "https://" + GNF4_REPO + "-x.git",
                                                                      "vcs_info": {"commit_id": GNF4_SHA}}}})) == "VOID"),

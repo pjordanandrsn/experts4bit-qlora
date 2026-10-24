@@ -11,7 +11,7 @@ NONCE=${P236_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/P236_RUN_NONCE.tmp && mv 
 finish(){ local rc=$1; printf '%s\n' "$rc" > P236_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > P236_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
 trap 'finish 130' INT TERM
 for v in P236_RUN_ID P236_DEADLINE_EPOCH; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
-GNF4_SHA=8cb2b37f4d10fb1281b105ae546fe689b67d0451   # grouped-nf4-gemm 0.51.0 (the release head; the tag re-pins)
+GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca   # grouped-nf4-gemm v0.51.0: `git rev-list -n1 v0.51.0` on the canonical repo
 GNF4_VERSION=0.51.0; BNB_VERSION=0.50.2; TORCH_WANT=2.8.0+cu128
 INSTALL_TO_GATE_S=600   # the two installs, the tripwire and the self-tests
 NEED_BENCH=600          # the bench: about 2 min by the PREREG arithmetic, x5
