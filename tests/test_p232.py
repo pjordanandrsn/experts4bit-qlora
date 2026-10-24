@@ -23,6 +23,7 @@ import subprocess
 import sys
 
 import pytest
+from guard_outcomes import must_fail
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 B = REPO / "bench"
@@ -104,24 +105,11 @@ def test_every_staged_file_is_pinned_and_matches():
     assert sum(1 for p in SOURCES.values() if p == COMMIT_BOUND) == 1     # the commit-bound file is one named pin
 
 
-def _must_fail(call, match):
-    """``call()`` must FAIL with ``match`` in its message. A skip is turned into a failure here: pytest.raises does not
-    catch pytest.skip.Exception, so a CI branch that skipped instead of failing would otherwise report SKIPPED and pass
-    CI, the regression these guard tests exist to catch."""
-    try:
-        call()
-    except pytest.skip.Exception as e:
-        pytest.fail(f"skipped where a failure was required: {e}")
-    except pytest.fail.Exception as e:
-        assert re.search(match, str(e)), str(e)
-        return
-    pytest.fail("neither failed nor skipped where a failure was required")
-
-
 def test_a_missing_reading_commit_fails_under_ci_and_skips_outside(monkeypatch):
     """The commit-bound check never passes silently: an absent object fails under CI=true and skips outside CI."""
     monkeypatch.setenv("CI", "true")
-    _must_fail(lambda: _bytes_at(COMMIT_BOUND, "0" * 40), "CI must hold the full history")
+    with must_fail(match="CI must hold the full history"):
+        _bytes_at(COMMIT_BOUND, "0" * 40)
     monkeypatch.delenv("CI", raising=False)
     with pytest.raises(pytest.skip.Exception, match="not readable here"):
         _bytes_at(COMMIT_BOUND, "0" * 40)
@@ -347,7 +335,8 @@ def _add_worktree(wt, read_at):
 
 def test_a_missing_reading_commit_fails_the_worktree_under_ci_and_skips_outside(tmp_path, monkeypatch):
     monkeypatch.setenv("CI", "true")
-    _must_fail(lambda: _add_worktree(tmp_path / "a", "0" * 40), "CI must hold the full history")
+    with must_fail(match="CI must hold the full history"):
+        _add_worktree(tmp_path / "a", "0" * 40)
     monkeypatch.delenv("CI", raising=False)
     with pytest.raises(pytest.skip.Exception, match="no worktree at"):
         _add_worktree(tmp_path / "b", "0" * 40)
