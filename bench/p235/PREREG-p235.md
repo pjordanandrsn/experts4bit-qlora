@@ -74,6 +74,12 @@ with `--no-compile`.
 - **e4b or grouped-nf4-gemm, release proof:** the run ends with rc 9 before the first arm. This comes after the
   downloads, the bake and the vLLM installs, so a refusal here costs the setup: the download (at most $1.60 at the
   80 GB cap) and the box time to that point, never more than the $4.75 worst case.
+- **Release-proof fast-check** (each build; not ruled): the same proof also runs right after that build's
+  install and provenance check. For e4b and grouped-nf4-gemm it runs before the tripwire and the model fetch and
+  refuses with rc 9. For a vLLM build it runs inside that build's install: a refusal refuses that build's rows, and
+  its binding proof then does not run. A wrong wheel at install now costs minutes, not the 80 GB setup. Its files
+  (`release_proof_fastcheck.jsonl`, `release_proof_vllm_<build>_fastcheck.jsonl`) travel with the receipts, but
+  only the binding proof, the last step before each build's first arm, is ruled.
 - **A vLLM build** (checked in that build's venv, on `vllm` only): that build's rows are refused (they read `SKIPPED`,
   no comparator), as P58's `PIP FAIL` rule does. The e4b arms and the other build continue.
 

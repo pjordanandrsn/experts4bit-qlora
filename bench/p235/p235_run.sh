@@ -43,6 +43,12 @@ perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --no-compil
 perl -e 'alarm 900; exec @ARGV' python -m pip install -q --no-input --no-compile --index-url https://pypi.org/simple --only-binary grouped-nf4-gemm --force-reinstall --no-deps "grouped-nf4-gemm==0.51.0" > logs/pip_gnf4.log 2>&1 || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
 python -I $W/provenance.py check experts4bit-qlora=0.58.0 grouped-nf4-gemm=0.51.0 --out $W/provenance.json > logs/provenance_e4b.log 2>&1 || { cat logs/provenance_e4b.log; say "PROVENANCE FAIL (e4b/gnf4)"; finish 9; }
 cat logs/provenance_e4b.log
+# ---- release-proof FAST-CHECK (not ruled: only the binding proof, the last step before the first e4b arm, is): the
+# same staged release_proof.py in the arms' env, right after the installs, so a wrong wheel refuses (rc 9) before the
+# tripwire and the ~80 GB fetch, not after them. Its file travels with the receipts.
+proof_fresh(){ python -c 'import json, sys; rows = [json.loads(x) for x in open(sys.argv[1]) if x.strip()]; sys.exit(0 if len(rows) == int(sys.argv[2]) and all(r.get("pycache_fresh") is True for r in rows) else 1)' "$1" "$2"; }
+(cd $W && PYTHONPATH=$W/hook python $W/release_proof.py experts4bit-qlora==0.58.0 grouped-nf4-gemm==0.51.0) > $W/release_proof_fastcheck.jsonl 2> logs/release_proof_fastcheck_e4b.log || { cat logs/release_proof_fastcheck_e4b.log; say "RELEASE PROOF FAIL (fast-check, e4b/gnf4)"; finish 9; }
+proof_fresh $W/release_proof_fastcheck.jsonl 2 || { cat $W/release_proof_fastcheck.jsonl; say "RELEASE PROOF FAIL (fast-check, e4b/gnf4): pycache_fresh is not true"; finish 9; }
 PYTHONPATH=$W/hook python - <<'PYT' || { say "TRIPWIRE FAIL (e4b)"; finish 9; }
 import site, os, inspect, importlib.metadata as md
 assert site.ENABLE_USER_SITE, "usercustomize would not load (venv?)"
@@ -77,6 +83,10 @@ vllm_install(){ local TAG=$1 VER=$2; [ -z "$VER" ] && { VOK[$TAG]=0; return; }
   local rc=$?; echo "pip(vllm $TAG $VER) rc=$rc" | tee -a summary.txt; [ $rc -ne 0 ] && { tail -6 logs/pip_vllm_$TAG.log; say "PIP FAIL (vllm $TAG) -- e4b arms still run; NO $TAG COMPARATOR"; VOK[$TAG]=0; return; }
   $W/venv-$TAG/bin/python -I $W/provenance.py check "vllm=$VER" --out $W/provenance_vllm_$TAG.json > logs/provenance_vllm_$TAG.log 2>&1 \
     || { cat logs/provenance_vllm_$TAG.log; say "PROVENANCE FAIL (vllm $TAG) -- e4b arms still run; NO $TAG COMPARATOR"; echo "PROVENANCE FAIL (vllm $TAG $VER): its rows are refused" >> summary.txt; VOK[$TAG]=0; return; }
+  # release-proof FAST-CHECK in this venv (not ruled; the binding proof runs right before this build's arms)
+  (cd $W && PYTHONPATH=$W/hook $W/venv-$TAG/bin/python $W/release_proof.py "vllm==$VER") > $W/release_proof_vllm_${TAG}_fastcheck.jsonl 2> logs/release_proof_fastcheck_vllm_$TAG.log \
+    || { cat logs/release_proof_fastcheck_vllm_$TAG.log; say "RELEASE PROOF FAIL (fast-check, vllm $TAG) -- e4b arms still run; NO $TAG COMPARATOR"; echo "RELEASE PROOF FAIL (fast-check, vllm $TAG): vllm==$VER, its rows are refused" >> summary.txt; VOK[$TAG]=0; return; }
+  proof_fresh $W/release_proof_vllm_${TAG}_fastcheck.jsonl 1 || { say "RELEASE PROOF FAIL (fast-check, vllm $TAG): pycache_fresh is not true -- NO $TAG COMPARATOR"; echo "RELEASE PROOF FAIL (fast-check, vllm $TAG): vllm==$VER, pycache_fresh not true, its rows are refused" >> summary.txt; VOK[$TAG]=0; return; }
   $W/venv-$TAG/bin/python - "$TAG" <<'PYV' >> logs/tripwire_vllm_$TAG.log 2>&1 || { say "VLLM IMPORT FAIL ($TAG) -- NO $TAG COMPARATOR"; tail -5 logs/tripwire_vllm_$TAG.log; VOK[$TAG]=0; return; }
 import sys, vllm, torch
 tri = None
@@ -159,8 +169,8 @@ vllm_arm(){ local VT=$1 ARM=$2 B=$3; [ "${VOK[$VT]:-0}" = 1 ] || { echo "vllm-$V
 rc_any=0; rec(){ local r=$1; [ "$r" = 0 ] || [ "$rc_any" != 0 ] || rc_any=$r; }
 # ---- release proofs: the installed bytes ARE the published wheels', read as the arms import them (cwd $W,
 # PYTHONPATH=$W/hook, the arms' python, no -I), after every install and right before that build's first arm; a proof
-# file whose lines are not all pycache_fresh true (or not one per pin) refuses like the proof itself
-proof_fresh(){ python -c 'import json, sys; rows = [json.loads(x) for x in open(sys.argv[1]) if x.strip()]; sys.exit(0 if len(rows) == int(sys.argv[2]) and all(r.get("pycache_fresh") is True for r in rows) else 1)' "$1" "$2"; }
+# file whose lines are not all pycache_fresh true (or not one per pin) refuses like the proof itself. These are the
+# BINDING proofs, the only ones ruled; the fast-checks above only stop a wrong wheel early.
 (cd $W && PYTHONPATH=$W/hook python $W/release_proof.py experts4bit-qlora==0.58.0 grouped-nf4-gemm==0.51.0) > $W/release_proof.jsonl 2> logs/release_proof_e4b.log || { cat logs/release_proof_e4b.log; say "RELEASE PROOF FAIL (e4b/gnf4)"; finish 9; }
 proof_fresh $W/release_proof.jsonl 2 || { cat $W/release_proof.jsonl; say "RELEASE PROOF FAIL (e4b/gnf4): pycache_fresh is not true"; finish 9; }
 can_run 900 e4b_nf4_r1_b1     && { e4b_arm nf4_r1  1  0 --no-fuse-qkv graph; rec $?; }

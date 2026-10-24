@@ -12,7 +12,8 @@ release.
   installed distribution IS the published wheel's bytes (wheel digest, every RECORD file equal on disk, every
   top-level name importing from the proven install). It runs as
   the last step before each build's first arm, in that build's import environment, and writes
-  `release_proof*.jsonl` into the receipts. A proof whose lines are not all `pycache_fresh` true refuses. Every
+  `release_proof*.jsonl` into the receipts. A fast-check copy also runs right after each build's install, so a
+  wrong wheel refuses in minutes; only the binding proof is ruled. A proof whose lines are not all `pycache_fresh` true refuses. Every
   python uses a fresh `PYTHONPYCACHEPREFIX` (with `RELEASE_PROOF_FRESH_PYCACHE` set to the same value), and every
   install uses `--no-compile`.
 - `bench/p235/p235_run.sh` and `p235_reduce.py`: P58's runner and reducer by named edits. The runner installs

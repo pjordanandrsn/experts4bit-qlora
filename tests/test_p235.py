@@ -128,12 +128,13 @@ def test_the_release_proof_is_loggettas_bytes():
     assert f"is loggetta `bench/release_proof.py` at `{commit}` {merge}, sha256 `{RELEASE_PROOF['sha256']}`" in FLAT
     rp = _load("p235_release_proof_under_test", LANE / "release_proof.py")      # stdlib only; no network here
     assert rp.main([]) == 2 and rp.main(["experts4bit-qlora"]) == 2
-    pins = re.findall(r"release_proof\.py ([^)>]+)\)", RUN)
-    assert len(pins) == 2, pins
+    code = "\n".join(ln for ln in RUN.splitlines() if not ln.lstrip().startswith("#"))
+    pins = re.findall(r"release_proof\.py ([^)>]+)\)", code)
+    assert len(pins) == 4, pins                                  # the binding proofs and the fast-checks
     for pin in pins:
         for arg in pin.split():
             dist, sep, version = arg.strip('"').partition("==")
-            assert sep and (PROV.E4B.get(dist) == version or (dist, version) == ("vllm", "${VVER[$VT]}")), arg
+            assert sep and (PROV.E4B.get(dist) == version or (dist, version) in (("vllm", "${VVER[$VT]}"), ("vllm", "$VER"))), arg
 
 
 def test_no_staged_file_shadows_an_imported_top_level_module():
@@ -335,6 +336,19 @@ E4B_PROOF = ("(cd $W && PYTHONPATH=$W/hook python $W/release_proof.py experts4bi
              'say "RELEASE PROOF FAIL (e4b/gnf4)"; finish 9; }')
 VLLM_PROOF = ('  (cd $W && PYTHONPATH=$W/hook $W/venv-$VT/bin/python $W/release_proof.py "vllm==${VVER[$VT]}") '
               "> $W/release_proof_vllm_$VT.jsonl 2> logs/release_proof_vllm_$VT.log \\")
+FAST_E4B = ("(cd $W && PYTHONPATH=$W/hook python $W/release_proof.py experts4bit-qlora==0.58.0 grouped-nf4-gemm==0.51.0) "
+            "> $W/release_proof_fastcheck.jsonl 2> logs/release_proof_fastcheck_e4b.log || { cat logs/release_proof_fastcheck_e4b.log; "
+            'say "RELEASE PROOF FAIL (fast-check, e4b/gnf4)"; finish 9; }')
+FAST_E4B_FRESH = ("proof_fresh $W/release_proof_fastcheck.jsonl 2 || { cat $W/release_proof_fastcheck.jsonl; "
+                  'say "RELEASE PROOF FAIL (fast-check, e4b/gnf4): pycache_fresh is not true"; finish 9; }')
+FAST_VLLM = ('  (cd $W && PYTHONPATH=$W/hook $W/venv-$TAG/bin/python $W/release_proof.py "vllm==$VER") '
+             "> $W/release_proof_vllm_${TAG}_fastcheck.jsonl 2> logs/release_proof_fastcheck_vllm_$TAG.log \\")
+FAST_VLLM_FAIL = ('    || { cat logs/release_proof_fastcheck_vllm_$TAG.log; say "RELEASE PROOF FAIL (fast-check, vllm $TAG) -- e4b arms '
+                  'still run; NO $TAG COMPARATOR"; echo "RELEASE PROOF FAIL (fast-check, vllm $TAG): vllm==$VER, its rows are refused" '
+                  '>> summary.txt; VOK[$TAG]=0; return; }')
+FAST_VLLM_FRESH = ('  proof_fresh $W/release_proof_vllm_${TAG}_fastcheck.jsonl 1 || { say "RELEASE PROOF FAIL (fast-check, vllm $TAG): '
+                   'pycache_fresh is not true -- NO $TAG COMPARATOR"; echo "RELEASE PROOF FAIL (fast-check, vllm $TAG): vllm==$VER, '
+                   'pycache_fresh not true, its rows are refused" >> summary.txt; VOK[$TAG]=0; return; }')
 E4B_FRESH = ("proof_fresh $W/release_proof.jsonl 2 || { cat $W/release_proof.jsonl; "
              'say "RELEASE PROOF FAIL (e4b/gnf4): pycache_fresh is not true"; finish 9; }')
 VLLM_FRESH = ('  [ "${VOK[$VT]}" = 0 ] || proof_fresh $W/release_proof_vllm_$VT.jsonl 1 || { say "RELEASE PROOF FAIL (vllm $VT): '
@@ -357,6 +371,38 @@ def test_the_e4b_proof_is_the_last_step_before_the_first_e4b_arm():
     assert not any(INSTALLS.search(ln) for ln in lines[k:first_e4b])
 
 
+def test_the_e4b_fast_check_runs_after_provenance_and_before_the_tripwire_and_the_fetch():
+    """Not ruled, but it stops a wrong wheel in minutes: the same proof in the arms' env right after the installs and
+    provenance.py, unconditional, its pycache_fresh read next, both refusing rc 9, before the tripwire and the fetch."""
+    lines = RUN.splitlines()
+    k = lines.index(FAST_E4B)
+    prov = lines.index(E4B_CHECK)
+    trip = next(i for i, ln in enumerate(lines) if ln.startswith("PYTHONPATH=$W/hook python - <<'PYT'"))
+    fetch = lines.index('say "fetch $MID @ $REV"')
+    assert prov < k < trip < fetch and lines[k + 1] == FAST_E4B_FRESH
+    assert all(ln.startswith("#") or ln.startswith(("cat logs/provenance_e4b.log", "proof_fresh(){")) for ln in lines[prov + 1:k])
+    assert k < lines.index(E4B_PROOF)                     # the binding proof is a separate, later call
+    assert "only the binding proof, the last step before the first e4b arm, is" in RUN
+
+
+def test_each_vllm_fast_check_runs_in_its_install_and_refuses_that_build():
+    """Inside vllm_install, right after that build's provenance check and before its import tripwire: a refusal sets
+    VOK=0 and returns (that build's rows refused, its binding proof skipped), never ends the run."""
+    lines = RUN.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("vllm_install(){"))
+    end = next(i for i in range(start, len(lines)) if lines[i].endswith("VOK[$TAG]=1; }"))
+    body = lines[start:end + 1]
+    prov = next(i for i, ln in enumerate(body) if ln.startswith(VLLM_CHECK))
+    k = body.index(FAST_VLLM)
+    assert prov + 2 < k and body[k + 1] == FAST_VLLM_FAIL and body[k + 2] == FAST_VLLM_FRESH
+    assert k < next(i for i, ln in enumerate(body) if "<<'PYV'" in ln)
+    for fail in (FAST_VLLM_FAIL, FAST_VLLM_FRESH):
+        assert fail.endswith("VOK[$TAG]=0; return; }") and "finish" not in fail
+        assert 'echo "RELEASE PROOF FAIL (fast-check, vllm $TAG):' in fail
+    loop = 'for VT in primary secondary; do [ "${VOK[$VT]:-0}" = 1 ] || continue'
+    assert any(ln.startswith(loop) for ln in lines)       # a refused build's binding proof then does not run
+
+
 def test_each_vllm_proof_is_the_last_step_before_that_builds_arms():
     """In that build's venv, as p37_vllm.py runs (cwd $W, PYTHONPATH=$W/hook), after every install, right before the
     vLLM arms with only e4b arms (no install) since the e4b proof; a refusal refuses that build's rows, never the run."""
@@ -376,7 +422,7 @@ def test_no_release_proof_runs_isolated_or_behind_a_switch():
     """-I would drop PYTHONPATH and the script directory the arms import through, and the pycache prefix: never on a
     release_proof.py line. Neither proof sits behind an environment switch."""
     proof = [ln for ln in RUN.splitlines() if "release_proof.py" in ln and not ln.lstrip().startswith("#")]
-    assert len(proof) == 3                                                    # the stage check and the two proofs
+    assert len(proof) == 5                         # the stage check, the two binding proofs and the two fast-checks
     assert not any(re.search(r"(^|\s)-I(\s|$)", ln) for ln in proof), proof
     assert not re.search(r"\$\{?P235_[A-Z_]*PROOF", RUN)
 
@@ -482,7 +528,17 @@ RUN_EDITS = [
     VLLM_PROOF.strip(),
     '|| { cat logs/release_proof_vllm_$VT.log; say "RELEASE PROOF FAIL (vllm $VT)',
     "done",
-    "# file whose lines are not all pycache_fresh true (or not one per pin) refuses like the proof itself",
+    "# file whose lines are not all pycache_fresh true (or not one per pin) refuses like the proof itself. These are the",
+    "# BINDING proofs, the only ones ruled; the fast-checks above only stop a wrong wheel early.",
+    "# ---- release-proof FAST-CHECK (not ruled: only the binding proof, the last step before the first e4b arm, is): the",
+    "# same staged release_proof.py in the arms' env, right after the installs, so a wrong wheel refuses (rc 9) before the",
+    "# tripwire and the ~80 GB fetch, not after them. Its file travels with the receipts.",
+    FAST_E4B,
+    FAST_E4B_FRESH,
+    "# release-proof FAST-CHECK in this venv (not ruled; the binding proof runs right before this build's arms)",
+    FAST_VLLM.strip(),
+    FAST_VLLM_FAIL.strip(),
+    FAST_VLLM_FRESH.strip(),
     "proof_fresh(){ python -c 'import json, sys;",
     E4B_FRESH,
     VLLM_FRESH.strip(),
@@ -707,7 +763,10 @@ def test_the_prereg_states_the_pins_bars_sequencing_and_limits():
               "vLLM 0.32.0 and 0.30.0 installed from PyPI `--no-deps --no-compile` and proved as the runner runs it",
               "every top-level name the wheel installs imports from the proven install", "`pycache_fresh`",
               'not all `"pycache_fresh": true`, or not one per pin, refuses like the proof itself',
-              "`RELEASE_PROOF_FRESH_PYCACHE` is exported on the same line with the same value"):
+              "`RELEASE_PROOF_FRESH_PYCACHE` is exported on the same line with the same value",
+              "**Release-proof fast-check** (each build; not ruled)", "before the tripwire and the model fetch",
+              "its binding proof then does not run", "A wrong wheel at install now costs minutes, not the 80 GB setup.",
+              "only the binding proof, the last step before each build's first arm, is ruled"):
         assert s in FLAT, s
     assert "GNF4_SHA" not in PREREG and "placeholder" not in PREREG.lower()
 
