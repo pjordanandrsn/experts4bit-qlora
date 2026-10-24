@@ -35,7 +35,7 @@ conditions fired at both T. The full read and the written look the tripwire asks
 - **What `SHA256SUMS` covers:** every file here.
 - **What stays only in the private receipt store** (`STORE-ONLY.sha256`, by path within the run's receipt): the
   launcher's teardown proof and instance record, which name the provider's instance. The launcher's receipt, its ledger
-  row, the host facts and the guard files stay there too.
+  row, the host facts, the guard files, the heartbeat file and the launcher's known_hosts stay there too.
 - **Not copied:** the staged scripts, tests and calibration file, each byte-identical to the file `staged-p233.sha256`
   pins at `2a0a9afc`; the nonce markers, the run id, the start marker, the instance id file and the pip constraints file.
 - **No identifiers on the box:** no file here names an instance, an offer, a host name, an endpoint or a GPU UUID. The

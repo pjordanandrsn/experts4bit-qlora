@@ -64,7 +64,7 @@ phase scores P115's floor arms on the all-vram server, the same windows and the 
 | 8 | half | -0.002743 | 0.959635 | 0.009098 | 24 / 24 |
 
 In every one of the 24 windows at each T, S's KL against A is below the chunk arm's, and below the half arm's at T = 8.
-S's agreement is above every floor arm's. Splitting a prompt's prefill at a different boundary moves the reference's
+S's agreement is above every floor arm that differs from R (chunk at both T, half at T = 8). Splitting a prompt's prefill at a different boundary moves the reference's
 distributions about 2.5 times as far as the solver placement does. Every chunk window is above 0.002 (its smallest is
 0.00434 at T = 1, 0.00501 at T = 8), and both floor arms' agreement is below 0.98. The registered floor is A's repeat
 pass, which is bit-identical, so the wire's KL bound falls to 0.002. That bound sits below the instrument's own
