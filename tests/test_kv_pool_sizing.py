@@ -327,6 +327,26 @@ def test_a_zero_hold_back_reproduces_the_refusal():
     assert freed == 0 and not _gate_passes(freed)
 
 
+def test_where_the_graph_cannot_engage_nothing_is_held_back():
+    """prefill_graph='0' (reserve 0, the graph is never captured): the hold-back is 0 and the pool is the one sized with
+    no hold-back at all. The flush is still priced, so it is the `if reserve` guard that keeps it out of the sizing."""
+    from dataclasses import replace
+
+    import experts4bit_qlora.serve_recipe as sr
+    topo, st = _qwen3_30b(), replace(_box_setup(), prefill_graph="0")
+
+    def sized(rule=None):
+        with pytest.MonkeyPatch.context() as mp:
+            if rule is not None:
+                mp.setattr(sr, "prefill_graph_headroom_bytes", rule)
+            return sr.size_shared_pool(topo, st, BOX["free"], widths=sr.MAX_SEQS_AUTO_WIDTHS, extra_bytes=BOX["extra"])
+    on, off = sized(), sized(lambda pool, flush: 0)
+    c = on["candidates"][0]
+    assert c["prefill_graph_reserve_bytes"] == 0 and c["prefill_graph_headroom_bytes"] == 0
+    assert sr.bulk_flush_bytes(topo, replace_seqs(st, c["max_seqs"])) > 0
+    assert (on["max_seqs"], on["pool_rows"]) == (off["max_seqs"], off["pool_rows"])
+
+
 def test_the_runtime_gate_and_the_sizing_share_one_rule():
     import inspect
 
