@@ -267,8 +267,29 @@ def _why_not(mod, wrapper) -> str | None:
 def _compress_one(mod) -> None:
     import bitsandbytes.functional as F
 
+    payloads = {}
+    for which in _WHICH:
+        flat = mod._buffers[f"{which}_absmax"].reshape(-1)
+        # bitsandbytes quantize_4bit(compress_statistics=True), statement for statement.
+        offset = flat.mean()
+        qabsmax, state2 = F.quantize_blockwise(flat - offset, blocksize=NESTED_BLOCKSIZE)
+        payloads[which] = {"_q": qabsmax, "_s": state2.absmax, "_off": offset.reshape(1), "_code": state2.code}
+        del flat
+    install_compressed_absmax_(mod, payloads)
+
+
+@torch.no_grad()
+def install_compressed_absmax_(mod, payloads: dict) -> None:
+    """Replace ``mod``'s fp32 absmax with a GIVEN double-quantized payload, ``{which: {"_q", "_s", "_off", "_code"}}``
+    per projection, exactly as :func:`compress_expert_absmax_` leaves a stack: the same four buffers, the guard under
+    the old name, and the mark with each projection's fp32 source hash (taken here, from the fp32 absmax being
+    replaced). :func:`compress_expert_absmax_` computes the payload and installs it through this function; a stored
+    payload installs through it too. The compression's statistics depend on the device that computed them (a CPU
+    recompression of a CUDA payload is not byte-identical), so a stored payload is installed, never recomputed."""
     from .adapter_schema import absmax_sha256
 
+    if set(payloads) != set(_WHICH) or any(set(p) != set(_SUFFIXES) for p in payloads.values()):
+        raise ValueError(f"a payload per projection {list(_WHICH)}, each with {list(_SUFFIXES)}")
     source = {}
     for which in _WHICH:
         absmax = mod._buffers[f"{which}_absmax"]
@@ -276,19 +297,18 @@ def _compress_one(mod) -> None:
         # fingerprint, which a server compares with its fp32 arena exactly (no reconstruction, no device dependence).
         # The bytes are the buffer's in storage order, the same bytes expert_absmax_fp32's view of it hashes.
         source[which] = absmax_sha256(absmax)
-        flat = absmax.reshape(-1)
-        # bitsandbytes quantize_4bit(compress_statistics=True), statement for statement.
-        offset = flat.mean()
-        qabsmax, state2 = F.quantize_blockwise(flat - offset, blocksize=NESTED_BLOCKSIZE)
+        p = payloads[which]
+        if p["_q"].numel() != absmax.numel():
+            raise ValueError(f"{which}_absmax_q holds {p['_q'].numel()} values for {absmax.numel()} absmax")
         # Remove the fp32 buffer BEFORE registering the replacements, so the old name stops resolving to a
         # tensor; the guard takes the name as a plain attribute.
         delattr(mod, f"{which}_absmax")
-        mod.register_buffer(f"{which}_absmax_q", qabsmax.reshape(absmax.shape).contiguous())
-        mod.register_buffer(f"{which}_absmax_s", state2.absmax.contiguous())
-        mod.register_buffer(f"{which}_absmax_off", offset.reshape(1).to(torch.float32))
-        mod.register_buffer(f"{which}_absmax_code", state2.code.to(torch.float32).contiguous())
+        mod.register_buffer(f"{which}_absmax_q", p["_q"].reshape(absmax.shape).contiguous())
+        mod.register_buffer(f"{which}_absmax_s", p["_s"].contiguous())
+        mod.register_buffer(f"{which}_absmax_off", p["_off"].reshape(1).to(torch.float32))
+        mod.register_buffer(f"{which}_absmax_code", p["_code"].to(torch.float32).contiguous())
         object.__setattr__(mod, f"{which}_absmax", _CompressedAbsmaxGuard(f"{type(mod).__name__}.{which}_absmax"))
-        del absmax, flat
+        del absmax
     object.__setattr__(mod, _MARK, {"nested_blocksize": NESTED_BLOCKSIZE, "fp32_source_sha256": source})
 
 
