@@ -132,6 +132,7 @@ The first rung that applies decides.
 - greedy token identity at each T, from the teacher-forced argmax: positions where S's argmax differs from A's, per
   window;
 - each arm's resolved split (expert and byte counts per tier), its layer-path counts and its build time;
+- per phase, the host CPU model, its ISA flags (AVX2, AVX-512, AMX) and the CPU kernels' thread count;
 - each phase's wall time (an explore figure, never a speed claim: the instrument's passes are not the server's decode
   loop).
 
@@ -151,8 +152,11 @@ The first rung that applies decides.
 - **No other split.** One VRAM/DRAM budget (8.0 / 3.0 GiB) on one card. Other budgets move different experts between
   tiers; the arithmetic per tier is the same, but the mix is not read.
 - **No other model, card or release.** Qwen3-30B-A3B at its pinned revision on the NF4 arena, one RTX 5090,
-  grouped-nf4-gemm v0.50.0. The DRAM tier's CPU kernels run on the host's CPU, whose family is recorded but not
-  screened: they compute the same fp32 tree on every x86 host.
+  grouped-nf4-gemm v0.50.0.
+- **No other host CPU.** The DRAM tier's experts compute on the host's CPU kernels. Whether their fp32 reduction order
+  is the same across instruction sets (AVX2, AVX-512, AMX) and thread chunking is not tested here, so a result on one
+  host's CPU is not claimed for another's. The CPU model, its ISA flags and the kernels' thread count are recorded per
+  phase, not screened.
 - **No graphs, no prefill graph, no int4 experts, no `E4B_NF4_SMALLM_BW` at `solver`:** each stands down or refuses there
   (DESIGN-HC.md section 1), so none is read.
 - **No default.** `solver` stays opt-in and non-default whatever this reads.
@@ -169,10 +173,19 @@ The first rung that applies decides.
 - **Guard 3.25 h** ((boot 300 + 8,500) x 1.25 = 11,000 s <= 11,700 s). **Worst case:** 3.25 h x $1.05 + 70 GB x
   $0.04 = **$6.21** a started box. A normal box is expected near 1.5 hours, about $1.6. The shakedown reads the real phase
   times before the reading, and an amendment re-fits if they differ.
-- **Ids:** `p233-5090-1` to `-3`, and `p233-shake-1` to `-3` for the shakedown (explore tier, `--shakedown`: a reduced
-  window count, any card that holds the arms). The shakedown's record becomes the reducer's real fixture by an amendment
-  before the reading. Two consecutive started runs not read stop the lane; refusals before the install are not strikes,
-  and a shakedown never is.
+- **At most two reading boxes start.** A box STARTS when its runner passes the refusals before the install and begins
+  the install, whatever its outcome after that. Two started boxes at most cost 2 x $6.2125 = **$12.43**.
+- **A box that does not start** (refused at create, or refused before the install: the host floors, the power or card
+  read, the download probe, the guard fit) costs at most **$0.30**: about 10 minutes of a box at $1.05/h for boot and the
+  checks ($0.18), plus the probe's 2 GB at $0.04/GB ($0.08), rounded up. It counts toward no cap and no strike, but it uses an id. At most six such
+  boxes are spent in this lane; the seventh stops it for a person.
+- **The lane's worst case:** $12.43 + 6 x $0.30 = **$14.23**, inside the $15 rail. The shakedowns are explore tier,
+  at its own caps, and are not counted here.
+- **Ids:** `p233-5090-1` to `-3` for readings, plus `p233-5090-r1` to `-r6` for any box after one that did not start.
+  Ids are labels, not budget: the two-started-box cap and the six non-start cap govern. `p233-shake-1` to `-3` are for the
+  shakedown (explore tier, `--shakedown`: a reduced window count, any card that holds the arms). The shakedown's record
+  becomes the reducer's real fixture by an amendment before the reading. Two consecutive started runs not read stop the
+  lane, and a shakedown never counts.
 
 ## Sequencing
 
