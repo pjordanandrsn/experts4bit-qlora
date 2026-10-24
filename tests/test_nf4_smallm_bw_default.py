@@ -31,6 +31,9 @@ from experts4bit_qlora.engines import hot_residency as hr  # noqa: E402
 KNOBS = ("E4B_NF4_SMALLM_BW", "E4B_NF4_GROUPED_SMALLM", "E4B_NF4_T1_DEVICE_GROUPING", "GNF4_GEMV_BW")
 OTHER_FAMILIES = ("qwen3_moe", "olmoe", "granitemoe", "gpt_oss", "qwen2_moe", None)
 REAL_PART = hr._nf4_smallm_bw_part                     # before the fixture stubs it
+READ = (8, 2)                                          # P234's routing: 8 experts, top-2
+REAL_SHAPES = hr.NF4_SMALLM_BW_DEFAULT_SHAPES          # P234's expert shapes; the fixture names the stand-ins' instead
+STUB_SHAPES = frozenset({(K1, INTER), (2 * INTER, K1)})
 
 
 class _State:
@@ -59,6 +62,7 @@ def _fresh(monkeypatch):
     engages = {"on": True}
     monkeypatch.setattr(nf4_grouped, "_bw_engages", lambda N, K, dev: engages["on"], raising=False)
     monkeypatch.setattr(hr, "_nf4_smallm_bw_part", lambda dev: ((12, 0), 170))   # the part P234 read (a CUDA question)
+    monkeypatch.setattr(hr, "NF4_SMALLM_BW_DEFAULT_SHAPES", STUB_SHAPES)        # the stand-ins' shapes read as P234's
     return engages
 
 
@@ -69,6 +73,32 @@ def _routed():
 def test_the_default_table_is_mixtral_at_four_tokens():
     assert hr.NF4_SMALLM_BW_DEFAULT_FAMILIES == {"mixtral": 4} and hr.NF4_SMALLM_BW_MAX_T == 8
     assert hr.NF4_SMALLM_BW_DEFAULT_PART == ((12, 0), 170)
+    assert REAL_SHAPES == frozenset({(28672, 4096), (4096, 14336)}) and hr.NF4_SMALLM_BW_DEFAULT_ROUTING == (8, 2)
+
+
+def test_shapes_p234_did_not_read_keep_the_default_off(monkeypatch):
+    """K33 engages at the stand-ins' shapes (stubbed), but P234 read only Mixtral-8x7B's (28672, 4096) and (4096, 14336):
+    the default is the read's scope, so it stays off naming the shapes; an explicit 1 still routes them."""
+    monkeypatch.setattr(hr, "NF4_SMALLM_BW_DEFAULT_SHAPES", REAL_SHAPES)
+    r = hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral", routing=READ)
+    want = f"expert shapes {sorted(STUB_SHAPES)} not read by P234 (read: [(4096, 14336), (28672, 4096)])"
+    assert r["on"] is False and r["source"] == f"default-off: {want}", r
+    assert not any(_routed().values())
+    monkeypatch.setenv("E4B_NF4_SMALLM_BW", "1")
+    assert hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral", routing=READ)["on"] is True
+
+
+@pytest.mark.parametrize("routing,name", [((4, 2), "experts 4, top-2"), ((8, 1), "experts 8, top-1"),
+                                          ((16, 2), "experts 16, top-2"), (None, "experts None, top-None"),
+                                          ((None, 2), "experts None, top-2")])
+def test_routing_p234_did_not_read_keeps_the_default_off(monkeypatch, routing, name):
+    """P234 read 8 experts, top-2: a Mixtral-architecture model at the read's shapes with other routing (or a config
+    that does not name it) stays off, naming what it saw; an explicit 1 still routes it."""
+    r = hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral", routing=routing)
+    assert r["on"] is False and r["source"] == f"default-off: routing ({name}) not read by P234 (read: experts 8, top-2)"
+    assert not any(_routed().values())
+    monkeypatch.setenv("E4B_NF4_SMALLM_BW", "1")
+    assert hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral", routing=routing)["on"] is True
 
 
 @pytest.mark.parametrize("part,name", [(((12, 0), 188), "sm_120 at 188 SMs"), (((9, 0), 132), "sm_90 at 132 SMs"),
@@ -78,11 +108,11 @@ def test_only_the_part_p234_read_takes_the_default(monkeypatch, part, name):
     """K33 engages on any part of 160 or more SMs; the default is the READ's scope: sm_120 at 170 SMs (the RTX 5090).
     Any other part, a 188-SM sm_120 included, stays off with the part named, and an explicit 1 still routes there."""
     monkeypatch.setattr(hr, "_nf4_smallm_bw_part", lambda dev: part)
-    r = hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral")
+    r = hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral", routing=READ)
     assert r["on"] is False and r["source"] == f"default-off: no P234 read on this part ({name}; read on sm_120 at 170 SMs)"
     assert not any(_routed().values())
     monkeypatch.setenv("E4B_NF4_SMALLM_BW", "1")
-    assert hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral")["on"] is True
+    assert hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral", routing=READ)["on"] is True
 
 
 def test_the_real_part_probe_names_no_part_off_cuda():
@@ -90,7 +120,7 @@ def test_the_real_part_probe_names_no_part_off_cuda():
 
 
 def test_mixtral_unset_routes_buckets_2_and_4_only():
-    r = hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral")
+    r = hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral", routing=READ)
     assert r == {"env": None, "on": True, "max_tokens": 4, "why": None, "source": "default-allowlisted",
                  "shapes": [[K1, INTER], [2 * INTER, K1]]}
     assert {T for T, on in _routed().items() if on} == {2, 3, 4}
@@ -104,7 +134,7 @@ def test_mixtral_unset_routes_buckets_2_and_4_only():
 
 @pytest.mark.parametrize("family", OTHER_FAMILIES)
 def test_every_other_family_stays_off(family):
-    r = hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type=family)
+    r = hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type=family, routing=READ)
     assert r["on"] is False and r["source"] == f"default-off: no read licenses model_type {family!r}"
     assert not any(_routed().values())
     assert hr._collapsed_grouping(4, None) == (False, True)
@@ -112,7 +142,7 @@ def test_every_other_family_stays_off(family):
 
 def test_zero_is_the_way_back_on_mixtral(monkeypatch):
     monkeypatch.setenv("E4B_NF4_SMALLM_BW", "0")
-    r = hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral")
+    r = hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral", routing=READ)
     assert r["on"] is False and r["source"] == "explicit" and r["why"] == "E4B_NF4_SMALLM_BW=0"
     assert not any(_routed().values())
 
@@ -120,7 +150,7 @@ def test_zero_is_the_way_back_on_mixtral(monkeypatch):
 @pytest.mark.parametrize("family", ["mixtral", "qwen3_moe"])
 def test_one_is_unchanged_two_to_eight_on_any_family(monkeypatch, family):
     monkeypatch.setenv("E4B_NF4_SMALLM_BW", "1")
-    r = hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type=family)
+    r = hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type=family, routing=READ)
     assert r["on"] is True and r["max_tokens"] == 8 and r["source"] == "explicit"
     assert {T for T, on in _routed().items() if on} == set(range(2, 9))
 
@@ -142,16 +172,16 @@ def test_the_default_never_refuses_a_build(monkeypatch, _fresh, case):
         mods = _mods(collapse=False)
     else:
         mods = _mods() + [types.SimpleNamespace()]
-    r = hr.resolve_nf4_smallm_bw(mods, "cpu", model_type="mixtral")             # never raises
+    r = hr.resolve_nf4_smallm_bw(mods, "cpu", model_type="mixtral", routing=READ)             # never raises
     assert r["on"] is False and r["source"].startswith("default-off: ") and r["why"], r
     assert not any(_routed().values())
     monkeypatch.setenv("E4B_NF4_SMALLM_BW", "1")
     with pytest.raises(RuntimeError):                                           # where an explicit 1 refuses
-        hr.resolve_nf4_smallm_bw(mods, "cpu", model_type="mixtral")
+        hr.resolve_nf4_smallm_bw(mods, "cpu", model_type="mixtral", routing=READ)
 
 
 def test_the_resolved_default_yields_at_call_time_without_raising(monkeypatch):
-    hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral")
+    hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral", routing=READ)
     assert hr._nf4_smallm_bw_takes(2, None)
     assert not hr._nf4_smallm_bw_takes(2, {"kind": "mxfp4"})                  # an MXFP4 layer: not the NF4 store
     monkeypatch.setenv("E4B_NF4_GROUPED_SMALLM", "1")
@@ -159,9 +189,9 @@ def test_the_resolved_default_yields_at_call_time_without_raising(monkeypatch):
 
 
 def test_each_resolution_replaces_the_last():
-    hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral")
+    hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="mixtral", routing=READ)
     assert hr._NF4_SMALLM_BW_DEFAULT_MAX == [4]
-    hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="qwen3_moe")
+    hr.resolve_nf4_smallm_bw(_mods(), "cpu", model_type="qwen3_moe", routing=READ)
     assert hr._NF4_SMALLM_BW_DEFAULT_MAX == [0] and not any(_routed().values())
 
 
@@ -173,4 +203,6 @@ def test_the_server_passes_the_family():
     src = open(os.path.join(os.path.dirname(__file__), "..", "experts4bit_qlora", "serve_paged.py"),
                encoding="utf-8").read()
     i = src.index("nf4_smallm_bw = resolve_nf4_smallm_bw(mods, cfg.device, model_type=(")
-    assert 'getattr(model_config, "model_type", None)' in src[i:i + 300]
+    call = src[i:i + 400]
+    assert 'getattr(model_config, "model_type", None)' in call
+    assert 'routing=(getattr(_tc, "num_local_experts", None), getattr(_tc, "num_experts_per_tok", None))' in call

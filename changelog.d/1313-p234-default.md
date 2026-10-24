@@ -16,9 +16,13 @@ Lane P234 read `E4B_NF4_SMALLM_BW=1` on Mixtral-8x7B's default NF4 server (`benc
   routes 2 to 8 tokens on any family.
 - **Scope: the RTX 5090 only.** The default is the read's scope, not the kernel's: it engages on sm_120 at 170 SMs,
   the part P234 read. Any other part, a 188-SM sm_120 included where K33 also engages, resolves off with the part
-  named (`default-off: no P234 read on this part`) and stays opt-in until a read of its own. On the 5090 it also needs
-  K33 to engage (Mixtral-8x7B's two expert shapes); other Mixtral checkpoints' shapes resolve off. Calls of 5 to 8
-  tokens (bucket 8) stay opt-in.
+  named (`default-off: no P234 read on this part`) and stays opt-in until a read of its own. Calls of 5 to 8 tokens
+  (bucket 8) stay opt-in.
+- **Scope: Mixtral-8x7B's shapes and routing only.** The default also needs every expert projection to be one P234
+  read, (28672, 4096) and (4096, 14336), and the config's routing to be the read's, 8 experts with top-2. Any other
+  shape, even where K33 engages, or any other routing resolves off, naming what it saw (`default-off: expert shapes ...
+  not read by P234`, `default-off: routing ... not read by P234`). Checkpoints with the same shapes and the same 8-expert
+  top-2 routing (fine-tunes of Mixtral-8x7B) inherit the default unread.
 - **One engine per process:** the resolved default is process-wide; each engine build replaces it.
 
 Files: `experts4bit_qlora/engines/hot_residency.py`, `experts4bit_qlora/serve_paged.py`,

@@ -415,9 +415,11 @@ the kernels' tolerance contract).
 - **Unset (the default):** Mixtral's NF4 store routes calls of 2 to 4 tokens (buckets 2 and 4), on the RTX 5090 only
   (sm_120 at 170 SMs). Lane P234 read it on one RTX 5090: two requests decode 2.12452× and four 1.76481× as fast,
   within P110's quality bars at group 4 (`e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24`). Served tokens at
-  two and four requests change. Every other family, and every other part (including parts where the bandwidth GEMV
-  engages), keeps K25 until a read of its own. Where an explicit `1` would refuse (below), the default resolves off instead, naming
-  the reason, and never stops startup.
+  two and four requests change. The default also needs Mixtral-8x7B's expert shapes, (28672, 4096) and (4096, 14336),
+  and its routing, 8 experts with top-2, as read from the model's config; checkpoints with the same shapes and routing
+  (fine-tunes of Mixtral-8x7B) inherit it unread. Every other family, part (including parts where the bandwidth GEMV
+  engages), shape or routing keeps K25 until a read of its own, and `nf4_smallm_bw` names what it saw. Where an
+  explicit `1` would refuse (below), the default resolves off instead, naming the reason, and never stops startup.
 - **`E4B_NF4_SMALLM_BW=0`:** off on every family, the way back.
 - **`E4B_NF4_SMALLM_BW=1`:** 2 to 8 tokens on any family; calls of 5 to 8 tokens are not read for speed. Startup
   refuses it, naming the reason, beside `E4B_NF4_GROUPED_SMALLM=1`, with an int4 or MXFP4 expert store, on a

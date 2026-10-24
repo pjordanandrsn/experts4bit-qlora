@@ -734,6 +734,15 @@ NF4_SMALLM_BW_DEFAULT_FAMILIES = {"mixtral": 4}
 #: set to ``1``, until a read of its own.
 NF4_SMALLM_BW_DEFAULT_PART = ((12, 0), 170)
 
+#: The expert projections P234 read, as (N, K): Mixtral-8x7B's gate_up (28672, 4096) and down (4096, 14336). The
+#: default routes only a model whose every expert projection is one of these (same-shape checkpoints inherit it unread);
+#: any other shape keeps the switch off unless it is set to ``1``, even where K33 engages.
+NF4_SMALLM_BW_DEFAULT_SHAPES = frozenset({(28672, 4096), (4096, 14336)})
+
+#: The routing P234 read, as (experts per layer, experts per token): Mixtral-8x7B's 8 experts, top-2. The default routes
+#: only a model whose config names exactly this routing; any other, or one the config does not name, keeps it off.
+NF4_SMALLM_BW_DEFAULT_ROUTING = (8, 2)
+
 #: The widest call the DEFAULT routes in this process (0: off). :func:`resolve_nf4_smallm_bw` sets it at engine build
 #: from :data:`NF4_SMALLM_BW_DEFAULT_FAMILIES`, only when the switch is unset and every check an explicit ``1`` makes
 #: would pass; an unresolved process routes nothing by default.
@@ -801,7 +810,7 @@ _NF4_SMALLM_BW_RESOLVED = [False]
 NF4_SMALLM_BW_SEEN: dict = {}
 
 
-def resolve_nf4_smallm_bw(modules, device, model_type=None) -> dict:
+def resolve_nf4_smallm_bw(modules, device, model_type=None, routing=None) -> dict:
     """``E4B_NF4_SMALLM_BW`` resolved once at engine build, after the levers and before any graph is captured, so a knob
     that cannot engage fails at startup, never as a silent route. ``modules`` are the MoE modules carrying
     ``_hot_residency``; ``model_type`` names the family for the default. Returns ``{"env": the raw value or None, "on":
@@ -810,8 +819,10 @@ def resolve_nf4_smallm_bw(modules, device, model_type=None) -> dict:
     projection's (N, K) when on}``.
 
     **Unset:** the per-family default (:data:`NF4_SMALLM_BW_DEFAULT_FAMILIES`, lane P234): on where ``model_type`` is
-    listed, the device is the part P234 read (:data:`NF4_SMALLM_BW_DEFAULT_PART`) and every check below passes, routing
-    2 to the listed token count; otherwise off, with the reason. Never a refusal. ``0`` is off.
+    listed, ``routing`` (experts per layer, experts per token, from the model's config) is the read's
+    (:data:`NF4_SMALLM_BW_DEFAULT_ROUTING`), the device is the part P234 read (:data:`NF4_SMALLM_BW_DEFAULT_PART`), every
+    check below passes and every expert projection is a shape P234 read (:data:`NF4_SMALLM_BW_DEFAULT_SHAPES`), routing 2
+    to the listed token count; otherwise off, naming what it saw. Never a refusal. ``0`` is off.
 
     An explicit ``1`` is refused beside ``E4B_NF4_GROUPED_SMALLM=1``, on any layer with an int4 or MXFP4 store, on any
     layer that is not on the all-resident collapse (the only forward that reads the knob), on a kernel package without
@@ -828,6 +839,11 @@ def resolve_nf4_smallm_bw(modules, device, model_type=None) -> dict:
         if want is None:
             why = f"no read licenses model_type {model_type!r}"
             return {**base, "why": why, "source": f"default-off: {why}"}
+        seen = tuple(routing) if routing is not None else (None, None)
+        if seen != NF4_SMALLM_BW_DEFAULT_ROUTING:
+            why = (f"routing (experts {seen[0]}, top-{seen[1]}) not read by P234 (read: experts "
+                   f"{NF4_SMALLM_BW_DEFAULT_ROUTING[0]}, top-{NF4_SMALLM_BW_DEFAULT_ROUTING[1]})")
+            return {**base, "why": why, "source": f"default-off: {why}"}
         part = _nf4_smallm_bw_part(device)
         if part != NF4_SMALLM_BW_DEFAULT_PART:
             why = f"no P234 read on this part ({_part_name(part)}; read on sm_120 at 170 SMs)"
@@ -836,6 +852,11 @@ def resolve_nf4_smallm_bw(modules, device, model_type=None) -> dict:
             shapes = _nf4_smallm_bw_servable(modules, device)
         except RuntimeError as e:                            # the default never refuses: it stays off, with the reason
             return {**base, "why": str(e), "source": f"default-off: {e}"}
+        unread = sorted({tuple(nk) for nk in shapes} - NF4_SMALLM_BW_DEFAULT_SHAPES)
+        if unread:                                           # the read's shapes, not the kernel's
+            why = (f"expert shapes {unread} not read by P234 (read: "
+                   f"{sorted(NF4_SMALLM_BW_DEFAULT_SHAPES)})")
+            return {**base, "why": why, "source": f"default-off: {why}"}
         _NF4_SMALLM_BW_DEFAULT_MAX[0] = want
         return {**base, "on": True, "why": None, "source": "default-allowlisted", "shapes": shapes}
     base = {"env": raw, "on": False, "max_tokens": NF4_SMALLM_BW_MAX_T, "source": "explicit"}
