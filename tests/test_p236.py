@@ -412,6 +412,24 @@ def test_the_registered_split_is_the_pinned_kernels_plan(monkeypatch):
     assert R.SPLITK == {"mixtral.down": 2}
 
 
+def test_a_plan_override_in_the_environment_is_refused_before_started():
+    """The only way the card's _bw_plan could differ from the pinned table is GNF4_GEMV_BW_PLAN (or GNF4_GEMV_BW): a set
+    value is a frozen-knob refusal (rc 78) before STARTED, before the quiet unset, so a stray env never costs a strike."""
+    line = ('[ -z "${GNF4_GEMV_BW+x}${GNF4_GEMV_BW_PLAN+x}" ] || { say "refusing: GNF4_GEMV_BW / GNF4_GEMV_BW_PLAN set in '
+            'the environment (the plan is the release\'s)"; finish 78; }')
+    assert line in RUN
+    assert RUN.index(line) < RUN.index("unset GNF4_GEMV_BW GNF4_GEMV_BW_PLAN") < RUN.index(": > $W/STARTED")
+    if sys.platform == "win32" or shutil.which("bash") is None:
+        return
+    for env in ({"GNF4_GEMV_BW_PLAN": "4096,14336=16,512,4,1"}, {"GNF4_GEMV_BW": "1"}, {"GNF4_GEMV_BW": ""}):
+        r = subprocess.run(["bash", "-c", 'say(){ echo "$*"; }; finish(){ echo "rc=$1"; exit "$1"; }; ' + line + '; echo passed'],
+                           capture_output=True, text=True, env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), **env})
+        assert r.returncode == 78 and "rc=78" in r.stdout, (env, r.stdout)
+    r = subprocess.run(["bash", "-c", 'say(){ :; }; finish(){ exit "$1"; }; ' + line + '; echo passed'],
+                       capture_output=True, text=True, env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")})
+    assert r.returncode == 0 and "passed" in r.stdout
+
+
 def test_the_box_checks_the_split_plans_after_the_install():
     """The runner's tripwire asserts the same table on the card, after the install and before anything is timed."""
     i = RUN.index("plans = {name: ng._bw_plan(n, k)[3] for name, (n, k) in R.SHAPES.items()}")

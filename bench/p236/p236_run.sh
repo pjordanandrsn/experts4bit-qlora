@@ -27,6 +27,9 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # no stale .pyc can stand in for a proven source (the release-proof rule's R2); recorded in summary.txt and the record
 export PYTHONPYCACHEPREFIX=$(mktemp -d /tmp/p236-pycache.XXXXXX)
 export RELEASE_PROOF_FRESH_PYCACHE=$PYTHONPYCACHEPREFIX   # release_proof.py records pycache_fresh only under this marker
+# Amendment 2: the K33 route and plan are the release's own, so a set GNF4_GEMV_BW or GNF4_GEMV_BW_PLAN (the only way the
+# card's _bw_plan could differ from the pinned table) is refused here, before STARTED, as a frozen knob, never unset quietly
+[ -z "${GNF4_GEMV_BW+x}${GNF4_GEMV_BW_PLAN+x}" ] || { say "refusing: GNF4_GEMV_BW / GNF4_GEMV_BW_PLAN set in the environment (the plan is the release's)"; finish 78; }
 # every grouped-nf4-gemm and bitsandbytes knob starts unset: both libraries as they ship
 unset GNF4_GEMV_BW GNF4_GEMV_BW_PLAN GNF4_GEMV_BW_DECODE GNF4_GEMV_DOTPAD GNF4_DECODE_PLAN GNF4_GEMV_SPLITK GNF4_PDL \
       GNF4_PDL_MAX_ROWS TRITON_INTERPRET BNB_CUDA_VERSION

@@ -208,8 +208,10 @@ edited.
 - **The check that the constant is the kernel's:** the lane test reads `nf4_grouped._bw_plan(N, K)` at the pinned
   commit (CI installs grouped-nf4-gemm 30adb1bf) for all six shapes against `SPLITK`, before any box. The runner's
   tripwire asserts the same on the card after the install and before anything is timed. That needs the install, so a
-  drift there is rc 9 after `STARTED`. `_bw_plan` reads `GNF4_GEMV_BW_PLAN` first, so an override in the environment
-  is covered too.
+  drift there is rc 9 after `STARTED`. The release proof shows the installed grouped-nf4-gemm is byte-equal to the
+  release, so its plan table cannot differ on the box. The one remaining way, `GNF4_GEMV_BW_PLAN` (or `GNF4_GEMV_BW`)
+  set in the environment, is refused before `STARTED` as a frozen knob (rc 78), so a stray environment never costs a
+  strike.
 - **Tests on the real record first:** the box's 30 engagement records (the gate's input only, no timing), extracted
   from its `bench_p236.json` (sha256 `6e60465f…`) into `bench/p236/fixtures/p236-5090-1-engaged.json` and sha-pinned.
   Under the corrected gate all 30 pass. The registration's rule (no split shape) refuses exactly the five
