@@ -13054,6 +13054,36 @@
         "the private receipt store, run p233-5090-1 (receipt.json, teardown-proof.json)"
       ],
       "notes": "Pre-registered in #2103 (Amendments 1-4: the head knobs named in every arm; what the kit implements exactly; E4B_PAGED_HOT_ROWS=128 after the shakedown found the cold tier's floor; the shakedown's records as the real fixture and phase A's term re-fit), before any reading. The TRIPWIRE fired (argmax 0.974284 < 0.98; KL above 0.002, A's repeat pass bit-identical so the floor fell to the absolute bound); the verdict stands, and a doc or lane may propose solver only as an opt-in placement citing this read and its written look, with the agreement below 0.98 stated. Predictions: the verdict held; S's |gap| <= 0.002 and argmax >= 0.98, S's KL <= 0.001, and C within 0.0005 / 0.995 all missed; T = 1 and T = 8 within 2x held for argmax and KL, missed for the NLL gap (sign change). One host CPU (EPYC 7532, AVX2) and one split read; the DRAM tier's reduction order on other instruction sets is not read. Phase A ran 1,217 s against its re-fit 1,026 s term (inside its 2,400 s alarm)."
+    },
+    {
+      "id": "e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "claim": "Lane P234, one RTX 5090: on the DEFAULT serve_paged NF4 graph server (every serving lever unset; Mixtral-8x7B-Instruct, 16 slots x 768 tokens), E4B_NF4_SMALLM_BW=1 (2-8-token decode calls on singleton groups, so grouped-nf4-gemm's K33 bandwidth GEMV, instead of the device tile table and K25) decodes two requests 2.12452x and four requests 1.76481x as fast as the switch unset (min over two palindromic pairs; 73.2 -> 155.7 and 107.3 -> 189.4 tok/s, decode-only timing), with one request unchanged (0.99182, tokens identical) and sixteen requests' speed unchanged (1.00013; tokens differ in some rows, reported), and P115's teacher-forced quality at group 4 within P110's bars on wikitext and c4val1 (wikitext ON bias -0.00144, K8 perplexity -0.0065). LICENSED for buckets 2 and 4; 5 to 8 tokens stay opt-in.",
+      "value": 2.12452,
+      "unit": "decode tok/s ratio, E4B_NF4_SMALLM_BW=1 over unset, two requests (min over two palindromic pairs, decode-only timing); four requests 1.76481",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 570.133.07, 32607 MiB, 500 W power limit), one rented Vast.ai verified host (Intel Core i9-13900F, 94 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @47bf1ed2 (0.57.0 + P234's registration) + grouped-nf4-gemm @41ef086e (0.50.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; mistralai/Mixtral-8x7B-Instruct-v0.1 @eba92302, NF4 arena baked on the box; the default server at 16 x 768, buckets 1, 2, 4, 8, 16, all graphs; premise test_decode_graph_buckets.py 7 passed + test_nf4_smallm_bw_gpu.py 20 passed + the rows premise (6 routings, 0 mismatches) on the card; four palindromic arms (B0a B1a B1b B0b) differing only in E4B_NF4_SMALLM_BW, W1/W2/W4/W8/W16 wikitext 512-token prompts, 32/160 new tokens, 3 timed reps; token identity ruled on W1 only, W16 a speed regression bar; quality by P115 at group 4; verdict by bench/p234/p234_reduce.py",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p234/RESULTS-p234.md",
+        "bench/p234/PREREG-p234.md",
+        "bench/p234/p234_reduce.py",
+        "bench/p234/p234_box.py",
+        "bench/p234/receipts/p234-5090-1/verdict.json",
+        "bench/p234/receipts/p234-5090-1/arm_B0a.json",
+        "bench/p234/receipts/p234-5090-1/arm_B1a.json",
+        "bench/p234/receipts/p234-5090-1/quality_on.json",
+        "bench/p234/receipts/p234-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-24/p234-5090-1/ (receipt.json, teardown-proof.json)"
+      ],
+      "licensed_by": "e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24",
+      "notes": "Pre-registered in #2114 (lever B, step B3, re-registered after P231's FUNCTION_FAIL, whose sixteen-request token-identity check ran the switched buckets in its admission ramp). All six predictions held. Reported, not ruled on: B1's tokens differ from B0's by row at W2 to W16 (the switch acts there; W16 on the same rows as P231), and W8 reads 1.22138. The default change for buckets 2 and 4 lands in its own PR citing this read. Lane cost $1.023 (the reading), plus a $0.12 exploratory shakedown before it."
     }
   ]
 }

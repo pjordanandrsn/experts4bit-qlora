@@ -63,7 +63,7 @@ From `docs/claims.json`. Each cell counts the current claims for that family and
 | `gemma4_text` | - | - | 2 +1 private | 0 +1 private | 9 | 13 | 2026-10-10 |
 | `granitemoe` | - | - | 0 +1 private | 1 | 19 | 20 | 2026-10-18 |
 | `gpt_oss` | - | - | 1 +1 private | - | 14 | 10 | 2026-10-09 |
-| `mixtral` | 1 | - | - | 1 | 15 | 19 | 2026-10-23 |
+| `mixtral` | 1 | - | - | 1 | 16 | 19 | 2026-10-24 |
 | `lfm2_moe` | - | - | - | - | - | 3 | 2026-10-04 |
 | `granitemoehybrid` | - | - | - | - | - | 3 | 2026-10-04 |
 | `ernie4_5_moe` | - | - | - | - | - | 3 | 2026-10-04 |

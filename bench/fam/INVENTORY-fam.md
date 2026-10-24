@@ -50,6 +50,9 @@ read per family.
   folds off, the default NF4 server has no PDL-carrying kernel on any family but Qwen3. On Qwen3-30B-A3B's default NF4
   server it was read by P230 (`bench/p230/RESULTS-p230.md`): KEEP, 1.00526× at one request with identical tokens; the
   build carries seven switched kernels, and buckets 1 to 8 carry PDL.
+- **The per-row K33 route at 2 to 8 tokens** (`E4B_NF4_SMALLM_BW=1`, opt-in) was read on Mixtral-8x7B's default NF4
+  server by P234 (`bench/p234/RESULTS-p234.md`): LICENSED for buckets 2 and 4 (2.12452× at two requests, 1.76481× at
+  four, quality within P110's bars at group 4). Bucket 8 stays opt-in, and no other family is read.
 - **K19** needs the opt-in int4-b32 store. **K21** needs gpt-oss's opt-in native MXFP4 store.
 - **K23** (lean glue) also applies to K25 rows, though its docstring says K19 only. On Granite and OLMoE it ran inside
   P96's K25 arms, not alone.

@@ -454,10 +454,17 @@ an opt-in placement, never a default, and no speed is read (decode at `solver` i
 **The per-row expert GEMV at 2-8 decode tokens (`E4B_NF4_SMALLM_BW=1`, opt-in).** In a captured microbench of the expert
 call (one RTX 5090, lane P227), the per-row route runs Mixtral-8x7B's experts in a median 0.36 and 0.46 of K25's time
 at two and four tokens (upper bounds 0.3601 and 0.4655, PASS against 0.70), and Qwen3-30B-A3B's in a median 0.74 and
-0.90 (upper bounds 0.7478 and 0.9047, MISS). No served speed is claimed: a served read on Mixtral needs its own
-registration, and the knob stays off by default.
+0.90 (upper bounds 0.7478 and 0.9047, MISS).
 `e4b.kernel.p227.per-row-gemv.mixtral.5090.2026-10-23`, `e4b.kernel.p227.per-row-gemv.qwen3.5090.2026-10-23`
 ([P227](../bench/p227/RESULTS-p227.md)).
+**Served on Mixtral-8x7B's default NF4 server** (lane P234, 2026-10-24; **measured**:
+[`bench/p234/RESULTS-p234.md`](../bench/p234/RESULTS-p234.md), `e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24`):
+the switch decodes two requests 2.12452× and four requests 1.76481× as fast as unset (73.2 → 155.7 and 107.3 → 189.4
+tok/s). One request is unchanged, with identical tokens; sixteen requests decode at the same speed (1.00013), with
+tokens that differ in some rows (reported). Quality at group 4 is
+within P110's bars on both texts. LICENSED for buckets 2 and 4: the default change lands in its own PR, and 5 to 8
+tokens stay opt-in. P231's earlier read of the same question was FUNCTION_FAIL, on its sixteen-request token-identity
+check, whose admission ramp runs the switched buckets.
 
 **The tile table over 4 programs.** `E4B_INT4_TILE_PROGRAMS=4` splits the one-launch cumsum tile table over 4 programs
 (#1433, grouped-nf4-gemm #524). On Qwen3-30B-A3B int4 it makes the captured 64-row step about 15.5 % faster with identical
