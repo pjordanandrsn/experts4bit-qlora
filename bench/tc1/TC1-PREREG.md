@@ -3699,3 +3699,108 @@ start is this market's common case. The cap is enforced in two places, which rea
 
 A default change (bucketed padding or the 256-token chunk on 24 GiB cards) is not part of this amendment. It needs its own PR, citing
 this reading.
+
+### Amendment 79 (2026-10-24T15:21Z, after amendment 78's read, before any box): the field recipe's same-stack position at the 0.58.0 release, against Unsloth 2026.10.8 (one fixed rule)
+
+**Why.** Release day's head-to-head row for training. STATUS's field-recipe position is amendment 69's: at e4b 0.49.0 and Unsloth
+2026.9.14, Unsloth spent 1.92x e4b's GPU time per step, and 2.80x wall-clock on an EPYC 7713 (`tc1-5090-137`). Both frameworks have
+released since. This amendment reads amendment 69's box again at the released pins, so the position quoted beside 0.58.0 is measured on
+0.58.0.
+
+**The box** (token `qwen3pos79`, `tc1_pos79_family`). Amendment 69's, unchanged in every recipe term. That is TC1's field recipe and
+tokens (alpaca, seq 2048, micro-batch 2 x accum 4, r 16, fp32 matched adapters, `matched:3407`) over 60 steps. Both frameworks run in
+venv-unsloth (torch 2.12.1+cu130, from `unsloth[cu130-torch2121]`). e4b runs `fused_attn4_m_fd` and Unsloth runs `ckpt_unsloth_m_fv`
+(grouped_mm), with two draws each in ABBA order (fd fv fv fd). Every arm is profiled (`--profile-steps 3 --profile-warm 3`), with
+`TC1_LOAD_GATE=6.0` and `TC1_LOAD_RETRIES=2`. One RTX 5090. The axolotl venv is not built, since no arm uses it.
+
+**The pins: constants of the reviewed kit, never launch-time values.** `tc1_run.sh` (`POS79_*`), `tc1_reduce.py` (`POS79_*`), the launch
+template and this text carry one value each, and `tests/test_tc1_pos79.py` holds them equal:
+- e4b: `experts4bit-qlora` 0.58.0, a git install at v0.58.0's peeled tag commit `f15cb7d695cf7148067c6bcea543484f31dc3abd` from
+  github.com/pjordanandrsn/experts4bit-qlora (the tag object peels to it; read with `git ls-remote` at the tag line). The t212 tripwire
+  asserts the installed commit, and the commit is the byte proof.
+- grouped-nf4-gemm: 0.51.0, a git install at v0.51.0's peeled tag commit `30adb1bfa76f95f9ce4a4c29734b8f36de907eca` from
+  github.com/pjordanandrsn/grouped-nf4-gemm, asserted the same way.
+- Unsloth: unsloth 2026.10.8 and unsloth_zoo 2026.10.8 from PyPI, PyPI's latest at registration. A newer Unsloth is a new reading, not
+  this one. They are installed by the kit's existing line (`TC1_UNSLOTH_VERSION`, `TC1_UNSLOTH_ZOO_VERSION`), and proven before any arm,
+  as below.
+- transformers, peft, bitsandbytes, trl and torch are whatever `unsloth[cu130-torch2121]==2026.10.8` resolves. They are recorded in
+  `versions.txt` and on every receipt, never pinned by us and never ruled.
+
+The box refuses (rc 78, before any staging) when `E4B_SHA`, `GNF4_SHA`, `TC1_UNSLOTH_VERSION` or `TC1_UNSLOTH_ZOO_VERSION` is not the
+kit's, when the kit's e4b commit is unfilled, when another token shares the box, or when the release proof is not staged. It also
+refuses when either of the harness's two ways of handing an arm extra environment carries anything (`TC1_E4B_ENV`, every e4b arm;
+`TC1_ARM_EXTRA_ENV`, one arm). It records the pins and the helper's sha256 as a `POS79_PINS` line, and both of those as a
+`POS79_ARM_ENV` line.
+
+**The release proof.** `bench/tc1/release_proof.py` (sha256 `aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0`) is
+byte-identical to loggetta's `bench/release_proof.py` at loggetta#126's merge. It is staged with the kit.
+- **When it runs:** after every install, the e4b install into venv-unsloth included, and before any arm (`pos79_release_proof`).
+- **The bytecode prefix:** the kit first exports `PYTHONPYCACHEPREFIX` and `RELEASE_PROOF_FRESH_PYCACHE` as one fresh, empty
+  `/tmp/tc1-pycache-*` directory. pip's own compile, earlier, stays in-tree, which the proof's rule (b) allows.
+- **How it runs:** venv-unsloth's python, from `$W`, in this environment, as the arms run. It proves `unsloth==2026.10.8` and
+  `unsloth_zoo==2026.10.8`: the published wheel's RECORD on disk, every top-level name importing from the proven install, and the fresh
+  prefix.
+- **Its record:** the JSON goes to `release_proof_unsloth.json`, and an OK line naming the prefix goes to the summary.
+- **A refusal** ends the box (rc 9), and no arm runs.
+
+Every arm then reads under that prefix, which stays exported for the rest of the box. The box also records the knob environment every
+arm inherits (`POS79_KNOB_ENV`: the name of every `E4B_*`, `NF4_QLORA_*` and `GNF4_*` variable). The family hands its arms no extra
+environment, so the box's environment is theirs. `tc1_arm.py` is unchanged: bench/q235's kit pins it by sha256.
+
+**Validity** (`pos79_why`, per row):
+- torch 2.12;
+- the kit's pins as the arm recorded them (the four versions, and grouped-nf4-gemm's installed commit);
+- on e4b, a chunked-LM-loss record with no run-time refusal: a lever that refused at run time changes the arm though no knob is set;
+- the registered tags;
+- a profile with CPU ops on every arm.
+
+A row off any of these is VOID.
+
+**The box facts** (`pos79_box`, each fail-closed):
+- the `POS79_PINS` line at the kit's pins and the helper's sha256;
+- one `RELEASE_PROOF OK` line, and its fresh `/tmp/tc1-pycache-*` prefix;
+- one `POS79_ARM_ENV` line reading `e4b=[] extra=[]`;
+- one `POS79_KNOB_ENV` line, with no e4b or grouped-nf4-gemm knob in it bar the harness's own `E4B_SHA`, `E4B_VENV`, `GNF4_SHA` and
+  `GNF4_SHA_B`. Every default is therefore unset. Amendment 69 asserted the values 0.49.0's defaults resolved to; this amendment reads
+  0.58.0's defaults as 0.58.0 resolves them, so those values are not carried over;
+- the proof's JSON: one record per proven dist, at its version, `RECORD equal` with no `first_diff`, `pycache_fresh` true, the summary's
+  prefix, and its own name among the imports;
+- `versions.txt`'s t212 lines at the e4b and grouped-nf4-gemm commits;
+- the host CPU (`box.json`).
+
+**The rule** (`score_pos79`, in this order; the first that applies is the reading):
+1. **NOT_READ**: a box fact fails;
+2. **NOT_READ**: fewer than two VALID profiled draws a side;
+3. **UNSTABLE**: a side's draws differ by more than TC1's stability bound, |d1 - d2| / mean <= 0.05 for e4b and 0.10 for Unsloth, on
+   s/step or on device ms per profiled step;
+4. **QUALITY_DIFFERS**: |mean held-out at N, e4b - Unsloth| > 0.01 (amendment 69's P209 bar, here a gate before any ratio);
+5. otherwise **QUOTED**, amendment 69's quote. The device ratio comes first, the wall ratio second, named with the host:
+   "Unsloth spends D x e4b's GPU time per step (device ms per profiled step, medians of two draws); wall-clock W x on <host CPU>".
+
+**Reported, never a bar.** What 0.58.0's e4b defaults resolved to on each e4b draw (`pos79_resolved`: the double-quantized absmax,
+the checkpoint's layers and functions, grouped-nf4-gemm's bucket mode and compact bucketed delta, the chunked-loss and combine-chunk
+features), beside the quote. CPU ops per profiled step, busy_t, peak GB, J/step, the per-draw values, and amendment 69's readings beside
+this one (1.92x device, 2.80x wall on an EPYC 7713). The two readings come from two releases on two hosts, so the difference between them
+is not read as either framework's change.
+
+**The quote's scope.** One RTX 5090, one host CPU, TC1's field recipe on Qwen3-30B-A3B at `ad44e777`, these pins. It says nothing about
+another recipe, model, card or host, or another release of either framework.
+
+**bench/common's registration rules, stated:**
+1. **Launch commit:** this amendment's merge. The stack under test is the pins above, installed from the canonical repositories and PyPI.
+2. **Run ids:** `tc1-5090-pos79` for the started box, and `tc1-5090-pos79-r1` for a box that does not start. No code parses an id.
+3. **Outcome classes:** as in bench/common's table. A refusal at create or a NOT_RUN uses an id and is never a strike. The pin gate
+   (rc 78) and the proof (rc 9) are kit refusals.
+4. **The cap:** at most **one** box STARTS. A started box that is not read leaves the row NOT_READ ("not read today"), and it is not
+   re-run under this amendment.
+5. **Boot slack:** a 3.5 h guard against amendment 69's box at about 1.2 h leaves far more than 540 s.
+6. **Frozen pins:** once the row is read, the tests assert this amendment's pins at its frozen commit.
+7. **Fail closed:** every gate fails closed. A missing pin line, proof record, prefix, knob line, commit line, profile or host reads
+   VOID or NOT_READ, and the reducer self-test (case 133) removes each one.
+8. **The fetch imports no links** (`tc1_drive.sh`'s `--no-links`).
+
+**Budget.** One RTX 5090 at a declared $1.00/h with 220 GB of storage, a 3.5 h guard, and up to 100 GB downloaded at no more than
+$0.02/GB. The screen (`bench/tc1/pos79_kit.py`, `offer_why`) and the launch template carry the same caps.
+- **The started box:** 3.5 h x $1.00 + 100 GB x $0.02 = **$5.50**.
+- **A box that does not start:** at most 1,440 s at the box rate plus 1.17 GB of probes, **$0.43** (amendment 78's arithmetic).
+- **The row:** one started box plus one retry id is **$5.93**, inside the $6 cap for this row.

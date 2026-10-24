@@ -40,6 +40,8 @@ case " ${TC1_FAMILIES:-} " in *" qwen3hbd "*) STAGE="$STAGE $REPO/bench/hp1/hp1_
 # HP3 (the qwen3hp3 / qwen3hp3shake tokens; bench/hp3/HP3-PREREG.md): HP1's library, cut, tokens, evaluator and reducer (hp3_reduce reuses
 # it), AXO1767's reducer (the engagement check), the build probe and HP3's reducer
 case " ${TC1_FAMILIES:-} " in *" qwen3hp3 "*|*" qwen3hp3shake "*|*" qwen3hp3r "*|*" qwen3hp3rshake "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_trunc.py $REPO/bench/hp1/hp1_caltokens.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/tc1/axo1767_reduce.py $REPO/bench/hp3/hp3_build.py $REPO/bench/hp3/hp3_reduce.py";; esac
+# TC1 amendment 79: the release proof (bench/tc1/release_proof.py, byte-identical to loggetta's, its sha256 pinned in the PREREG and the tests)
+case " ${TC1_FAMILIES:-} " in *" qwen3pos79 "*) STAGE="$STAGE $HERE/release_proof.py";; esac
 STAGE="$STAGE ${TC1_EXTRA_STAGE:-}"; RUNNER=${TC1_RUNNER:-tc1_run.sh}
 case " $STAGE " in *"/$RUNNER "*) ;; *) say "refusing: TC1_RUNNER=$RUNNER is not a staged file"; exit 78;; esac
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
@@ -72,6 +74,18 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not a 40-char hex s
 # would fail against the tag object's id.
 GNF4_SHA=${GNF4_SHA:-846b512b905468c08f5748943d08769b572affa2}
 [ ${#GNF4_SHA} -eq 40 ] || { say "refusing: GNF4_SHA is not a 40-char hex sha ($GNF4_SHA)"; exit 78; }
+# TC1 amendment 79: the qwen3pos79 token runs only at its kit's pins, which tc1_run.sh holds (POS79_*); a mismatch refuses HERE, before any
+# box is rented, rather than on a booted one (the box's own gate refuses the same, rc 78)
+case " ${TC1_FAMILIES:-} " in *" qwen3pos79 "*)
+  p79(){ sed -n "s/^$1=\([0-9a-f.]*\).*/\1/p; s/.*; $1=\([0-9a-f.]*\).*/\1/p" "$HERE/tc1_run.sh" | head -1; }
+  P79_WHY=""
+  [ "$E4B_SHA" = "$(p79 POS79_E4B_SHA)" ] || P79_WHY="E4B_SHA $E4B_SHA is not the kit's $(p79 POS79_E4B_SHA)"
+  [ "$GNF4_SHA" = "$(p79 POS79_GNF4_SHA)" ] || P79_WHY="${P79_WHY:+$P79_WHY; }GNF4_SHA $GNF4_SHA is not the kit's $(p79 POS79_GNF4_SHA)"
+  [ "${TC1_UNSLOTH_VERSION:-}" = "$(p79 POS79_UNSLOTH)" ] || P79_WHY="${P79_WHY:+$P79_WHY; }TC1_UNSLOTH_VERSION ${TC1_UNSLOTH_VERSION:-unset} is not $(p79 POS79_UNSLOTH)"
+  [ "${TC1_UNSLOTH_ZOO_VERSION:-}" = "$(p79 POS79_UNSLOTH_ZOO)" ] || P79_WHY="${P79_WHY:+$P79_WHY; }TC1_UNSLOTH_ZOO_VERSION ${TC1_UNSLOTH_ZOO_VERSION:-unset} is not $(p79 POS79_UNSLOTH_ZOO)"
+  [ -z "${TC1_E4B_ENV:-}" ] && [ -z "${TC1_ARM_EXTRA_ENV:-}" ] || P79_WHY="${P79_WHY:+$P79_WHY; }TC1_E4B_ENV / TC1_ARM_EXTRA_ENV must be empty"
+  [ -z "$P79_WHY" ] || { say "refusing (amendment 79 pins): $P79_WHY"; exit 78; };;
+esac
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
 SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
 SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
