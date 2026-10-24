@@ -55,7 +55,7 @@ ORDER = ("gnf4", "bnb", "bnb", "gnf4")
 REPS, ITERS, WARM = 20, 50, 10
 #: rotate enough weight copies per cell that the copies span at least this many bytes (4x the 5090's 96 MB L2)
 ROTATE_BYTES = 384 * 1024 * 1024
-MAX_COPIES = 256
+MAX_COPIES = 512                  # every registered shape spans 4x L2 under this cap (qwen3.down needs 456)
 TOL = 1.5e-2                      # the served tolerance (tests/test_nf4_smallm_bw_gpu.py), max |y - ref| / max |ref|
 GNF4_VERSION, BNB_VERSION, TORCH_VERSION = "0.51.0", "0.50.2", "2.8.0+cu128"
 GNF4_SHA = "8cb2b37f4d10fb1281b105ae546fe689b67d0451"   # grouped-nf4-gemm 0.51.0 (the release head; the tag re-pins)
@@ -105,7 +105,7 @@ def provenance_faults(dists):
             commit = (du.get("vcs_info") or {}).get("commit_id")
             if sha is None:
                 out.append(f"{name}: a git install ({url}@{commit}); registered the published release only")
-            elif commit != sha or GNF4_REPO not in url:
+            elif commit != sha or urlparse(url).netloc + urlparse(url).path.removesuffix(".git") != GNF4_REPO:
                 out.append(f"{name}: git {url}@{commit}, registered {GNF4_REPO}@{sha}")
         elif "archive_info" in du:
             if urlparse(url).hostname not in PYPI_HOSTS:
@@ -301,6 +301,9 @@ def self_test():
             "direct_url": {"url": "https://" + GNF4_REPO + ".git", "vcs_info": {"commit_id": "0" * 40}}}})) == "VOID"),
         ("gnf4 another repo", v(fake_record(provenance={**good["provenance"], "grouped-nf4-gemm": {"version": "0.51.0",
             "direct_url": {"url": "https://github.com/x/fork.git", "vcs_info": {"commit_id": GNF4_SHA}}}})) == "VOID"),
+        ("gnf4 a repo whose name only starts the same", v(fake_record(provenance={**good["provenance"],
+            "grouped-nf4-gemm": {"version": "0.51.0", "direct_url": {"url": "https://" + GNF4_REPO + "-x.git",
+                                                                     "vcs_info": {"commit_id": GNF4_SHA}}}})) == "VOID"),
         ("gnf4 index wheel reads", v(fake_record(provenance={**good["provenance"], "grouped-nf4-gemm": {
             "version": "0.51.0", "direct_url": None}})) == "READ"),
         ("bnb from git", v(fake_record(provenance={**good["provenance"], "bitsandbytes": {"version": "0.50.2",
@@ -347,8 +350,9 @@ def self_test():
                                        + good["cells"][k0]["reps"][1:])) == "VOID"),
         ("palindromes, each arm leading half", order(0) == ["gnf4", "bnb", "bnb", "gnf4"]
          and order(1) == ["bnb", "gnf4", "gnf4", "bnb"] and order(2) == order(0)),
-        ("copies span 4x L2", copies_for(28672, 4096) * (28672 * 4096 // 2 + 28672 * 64 * 4) >= ROTATE_BYTES
-         and copies_for(2048, 768) == MAX_COPIES),
+        ("copies span 4x L2 at every shape, under the cap",
+         all(copies_for(n, k) * (n * k // 2 + n * (k // 64) * 4) >= ROTATE_BYTES and copies_for(n, k) < MAX_COPIES
+             for n, k in SHAPES.values())),
     ]
     # the reported ratio follows the timings: gnf4 twice as fast reads 2
     fast = fake_record()

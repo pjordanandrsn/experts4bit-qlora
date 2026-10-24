@@ -211,8 +211,8 @@ def run(a):
                 # engagement: one eager pass of 3 calls per arm, counted
                 be.sync()
                 c0 = be.gemv_counts()
-                for i in range(3):
-                    be.gnf4(x, W[i % n_copies], eids)
+                for j in range(3):                                      # engagement: three copies, untimed
+                    be.gnf4(x, W[j % n_copies], eids)
                 be.sync()
                 c1 = be.gemv_counts()
                 g_eng = {key_: c1.get(key_, 0) - c0.get(key_, 0) for key_ in R.GEMV_KEYS}
@@ -221,8 +221,8 @@ def run(a):
                     be.route[key_] = 0
                 be.count_routes(True)
                 try:
-                    for i in range(3):
-                        be.bnb_call(x, W[i % n_copies])
+                    for j in range(3):
+                        be.bnb_call(x, W[j % n_copies])
                     be.sync()
                 finally:
                     be.count_routes(False)
@@ -236,10 +236,18 @@ def run(a):
                     cell["gate_failed"] = gate
                     print(f"P236_CELL {key} GATE FAILED, not timed: {gate}", flush=True)
                     continue
-                fns = {"gnf4": lambda i: be.gnf4(x, W[i % n_copies], eids), "bnb": lambda i: be.bnb_call(x, W[i % n_copies])}
+                # ONE cursor per cell, persisting across the warm-up and every visit of both arms: consecutive calls walk
+                # all n_copies weights, so a weight is re-read only after n_copies calls (>= 4x L2 of other weights)
+                cur = [0]
+
+                def nxt():
+                    w = W[cur[0]]
+                    cur[0] = (cur[0] + 1) % n_copies
+                    return w
+                fns = {"gnf4": lambda: be.gnf4(x, nxt(), eids), "bnb": lambda: be.bnb_call(x, nxt())}
                 for arm in R.ARMS:                                           # warm, untimed
-                    for i in range(warm):
-                        fns[arm](i)
+                    for _ in range(warm):
+                        fns[arm]()
                 be.sync()
                 reps_out = []
                 for r in range(reps):
@@ -247,8 +255,8 @@ def run(a):
                     ms = []
                     for arm in o:
                         with be.timer() as tm:
-                            for i in range(iters):
-                                fns[arm](i)
+                            for _ in range(iters):
+                                fns[arm]()
                         ms.append(tm.ms / iters)
                     reps_out.append({"order": o, "ms_per_call": ms})
                 cell["reps"] = reps_out
@@ -281,7 +289,9 @@ def self_test():
         ("the order is the reducer's", "o = R.order(r)" in src),
         ("the gates before any timing", src.index("gate = R.cell_faults(key,") < src.index("for r in range(reps):")
          and "continue" in src[src.index("if gate:"):src.index("fns = {")]),
-        ("weights rotate", "W[i % n_copies]" in src and "R.copies_for(n, k)" in src),
+        ("weights rotate through one persistent cursor, never indexed from a visit's own loop variable",
+         "cur[0] = (cur[0] + 1) % n_copies" in src and "W[i % n_copies]" not in src and "R.copies_for(n, k)" in src
+         and src.count("fns[arm]()") == 2),
         ("knobs default", "os.environ.pop(k, None)" in src),
         ("the reducer's shape", R.REPS == 20 and R.ITERS == 50 and len(R.SHAPES) == 6 and R.MS == (1, 2, 4, 8, 16)),
     ]

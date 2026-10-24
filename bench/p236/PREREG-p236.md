@@ -22,8 +22,10 @@ Mixtral-8x7B, Qwen3-30B-A3B and OLMoE-1B-7B, on one RTX 5090?
 **The weights are the same bytes.** For each projection a seeded random bf16 matrix (scale 0.02) is quantized once by
 `bitsandbytes.functional.quantize_4bit` (NF4, block 64, no double quantization). grouped-nf4-gemm reads that packed
 tensor as `[N, K/2]` and its fp32 absmax as `[N, K/64]`; bitsandbytes reads its own `QuantState`. Timing rotates over
-enough distinct copies (each its own seeded matrix) to span four times the 5090's 96 MB L2, at most 256 copies, so no
-arm reads a cached weight.
+enough distinct copies (each its own seeded matrix) to span four times the 5090's 96 MB L2 (at most 512 copies; Qwen3's
+down projection needs 456), through ONE cursor per cell that persists across the warm-up and every visit of both arms.
+Consecutive calls walk all the copies, so a weight is read again only after every other copy has been (at least four
+L2s of other weights), and no arm reads a cached weight.
 
 | projection | (N, K) |
 |---|---|
@@ -51,7 +53,7 @@ arm reads a cached weight.
    - **The self-pairs** of a rep are each arm's second visit over its first.
    - Eager calls include each library's Python dispatch, as a caller outside a captured graph pays it.
 
-## The rule (`bench/p236/p236_reduce.py`, self-tested on 41 cases)
+## The rule (`bench/p236/p236_reduce.py`, self-tested on 50 cases)
 
 **VOID** when any of these holds; **READ** otherwise. Each check fails closed: a missing record is a fault.
 - the record is missing, a dry run or not `ok`;
@@ -142,7 +144,7 @@ passed, immediately before the first install. The first READ ends the lane; at m
 - **On CPU (a development host):** bitsandbytes 0.50.2's `matmul_4bit` dispatches `bitsandbytes::gemm_4bit` for every M
   (not `gemv_4bit` or `dequantize_4bit` at the Python level); its `dequantize_4bit` equals `dequant_ref` rounded to
   bf16; the bytes from a bf16 and an fp32 source agree. Its CUDA rule (read from its source) takes `custom` at M <= 4.
-- **Locally:** the reducer's self-test (41 cases), the bench's self-test, and a `--dry` run of the bench on CPU through
+- **Locally:** the reducer's self-test (50 cases), the bench's self-test, and a `--dry` run of the bench on CPU through
   every cell into the reducer, which reads it VOID as a dry run with no cell fault other than the dry rep count.
 
 ## What this lane cannot say
