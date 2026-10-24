@@ -4,6 +4,208 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.58.1 — 2026-10-24 — Mixtral-8x7B's NF4 decode at 2 to 4 requests takes K33's per-row GEMV by default on the RTX 5090; the release-day head-to-heads, read at the released pins
+
+A patch release with one serving default, plus the release-day head-to-heads.
+
+- **The default.** On Mixtral-8x7B's NF4 store on the RTX 5090, decode calls of 2 to 4 tokens now run grouped-nf4-gemm
+  K33's per-row GEMV (`E4B_NF4_SMALLM_BW` unset). P234 read two requests 2.12452x and four 1.76481x as fast, with
+  quality inside P110's bars at group 4 (`e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24`).
+- **Outputs change by default** at two and four requests there. One request is unchanged, and `E4B_NF4_SMALLM_BW=0`
+  restores the previous output.
+- **The scope is the read's.** The default applies only on `mixtral`, at Mixtral-8x7B's two expert shapes with 8-expert
+  top-2 routing, on sm_120 at 170 SMs. Any other family, shape, routing or part resolves off and names why. Checkpoints
+  with the same shapes and routing inherit it unread. Calls of 5 to 8 tokens stay opt-in.
+
+The rest is records. Each piece was re-read at the released pins against a competitor's latest release, and every pinned
+release was proven by its bytes. The results are in `docs/REPRODUCE.md`'s new head-to-head table, losses beside wins:
+- **Serving vs vLLM:** vLLM 0.32.0 is ahead of e4b's int4 serving at 1.038 (one request) and 1.203 (sixteen) on one RTX
+  5090 (`e4b.serve.h2h.vllm-0.32.0.p235.qwen3.b1.5090.2026-10-24`, `.b16`). P58's earlier reading on another box was
+  1.087 / 1.396. The difference is not read as an e4b gain.
+- **Decode GEMV vs bitsandbytes:** bitsandbytes 0.50.2's `matmul_4bit` is faster than grouped-nf4-gemm 0.51.0's decode
+  GEMV at all 30 op-level cells, timed eager with each library's Python dispatch (ratio 0.30 to 0.92;
+  `e4b.kernel.p236.nf4-gemv-vs-bnb.moe-experts.5090.2026-10-24`). That is not the served path, which runs under captured
+  graphs.
+- **Training vs Unsloth:** the head-to-head against Unsloth 2026.10.8 is NOT_READ. Both Unsloth draws failed TC1's
+  standing engagement check, so no ratio is quoted.
+- **loggetta's memory planner:** it covers 18 of 21 measured held-out training rows.
+- **Not read at 0.58.1:** held-out parity (HP3). Three other rows were not registered today.
+
+### Added
+
+- P235 results (`bench/p235/RESULTS-p235.md`). `p235-5090-1`, the one reading of PREREG-p235.md at e4b `7be9e610`,
+  re-read P58's same-box vLLM head-to-head at the release pins: experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0
+  from PyPI, each distribution proven byte-identical to its published wheel. vLLM 0.32.0 / e4b int4 = 1.038 at B=1 and
+  1.203 at B=16 (vLLM ahead); vLLM 0.30.0 / e4b int4 = 1.031 and 1.187; every arm VALID, every self-pair inside 1.03x.
+  Quoted beside P58's 1.087 / 1.396, measured on another box, so the difference is not read as an e4b gain. One RTX 5090 at a
+  470 W limit (recorded; the ratio is inside one box). It licenses nothing and moves no default. $0.86. The receipt copy
+  is under `bench/p235/receipts/p235-5090-1/`.
+
+### P236 results: bitsandbytes is faster than grouped-nf4-gemm's decode GEMV at all 30 cells, op level and eager (READ)
+
+P236 (`bench/p236/RESULTS-p236.md`) timed grouped-nf4-gemm 0.51.0's K33 decode GEMV against bitsandbytes 0.50.2's
+`gemm_4bit` on the same NF4 bytes. It covered six MoE expert projections (Mixtral-8x7B, Qwen3-30B-A3B, OLMoE-1B-7B) at M = 1, 2, 4,
+8 and 16 on one RTX 5090. **READ.**
+- **Every cell held** the premise, correctness and engagement as registered.
+- **bitsandbytes is faster at all 30 cells.** The ratio (its time over gnf4's) runs from 0.2993 to 0.9176, and at
+  M = 1 from 0.4870 to 0.8654.
+- **Graded:**
+  - Q1 held. bitsandbytes took `dequant` at Mixtral down and OLMoE gate_up at M = 16, and `custom` everywhere else.
+  - Q2 (gnf4 faster at M = 1) was wrong.
+  - Q3 was wrong as written. Its M = 16 clause held (bitsandbytes is faster on both Mixtral projections there), but the
+    ratio does not fall with M: only Mixtral's gate_up falls, and not at every step; the others are near flat, and
+    bitsandbytes is faster at every M.
+  - Q4 held in part: 16 self-pair bands fall outside [0.95, 1.05], 3 of them on Mixtral.
+- **Scope:** eager calls between CUDA events, each including its library's Python dispatch. This is not the served,
+  graph-captured decode path, and not K33's device time. No default moves.
+- **Records:** `bench/p236/receipts/p236-5090-2/`.
+  - The first box, `p236-5090-1`, read VOID (Amendment 2).
+  - The box did not write the `SHA256SUMS` its registration lists. The one committed was computed over the committed files.
+- **Next:** a device-time arm is noted for a later registration and not started.
+
+### TC1 amendment 79 read: NOT_READ (e4b 0.58.0 against Unsloth 2026.10.8)
+
+- One reading box, `tc1-5090-pos79-r1` on an RTX 5090: all four profiled arms ran 60 steps at the release pins, and Unsloth's wheels were
+  proven byte-identical to PyPI's. A first box was destroyed at pre-flight (still loading after 600 s) before any command ran. Lane
+  spend USD 2.123, against USD 5.93 registered worst.
+- NOT_READ. Both e4b draws are VALID. Both Unsloth draws are VOID on TC1's standing engagement predicate, which counts
+  `torch._grouped_mm` calls and read 0. So no position, ratio or equivalence reading is quoted, e4b's own draws included.
+- The receipts show Unsloth's own backend counters non-zero, and each Unsloth profile's op list names `unsloth_zoo::grouped_mm_triton`
+  with no `aten::_grouped_mm`. The hypothesis that Unsloth 2026.10.8's `grouped_mm` backend dispatches to its own Triton op is labelled
+  UNTESTED. The predicate change is for the next release.
+- `bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos79.md` holds the note. `receipts/tc1-5090-pos79-r1/` holds the public copy: 35 files
+  byte-identical, 26 store-only, and the derived `public/`, which rebuilds the box's RESULTS byte for byte through `tc1_public.py`.
+
+### P236 Amendment 2: the gnf4 engagement gate accepts K33's split-K mark (after p236-5090-1 read VOID)
+
+`p236-5090-1` read VOID, a strike: the gate refused `mixtral.down` at every M and those cells were never timed. In
+grouped-nf4-gemm 0.51.0 a K33 call whose plan splits K (Mixtral-8x7B's down projection, split 2) bumps `bw_splitk`
+beside `bw_prmt32` for its one launch, which the registered gate did not allow; grouped-nf4-gemm's own K33 bench
+excludes that mark from its route tally. The gate now expects `bw_splitk == calls` exactly on the registered split shape
+and 0 elsewhere. The lane test checks the constant against the pinned kernel's plan table, and the box's tripwire checks
+it on the card. Tests run on the VOID box's real engagement records first (no timing is read). The rerun is
+`p236-5090-2` from this amendment's merge, under a new Approved.
+
+### P235 registered: P58's same-box vLLM head-to-head, re-read at the release pins (e4b 0.58.0, grouped-nf4-gemm 0.51.0)
+
+A served registration, no box yet (`bench/p235/PREREG-p235.md`). P58's reviewed harness is re-read at the release
+pins against vLLM 0.32.0 and 0.30.0 (P58's primary). It is quoted beside P58's reading (1.087 at B=1, 1.396 at B=16),
+never instead of it. Every distribution is a PyPI release with its provenance checked: a version string is not a
+release.
+- `bench/p235/provenance.py` (new): the registered pins as constants (experts4bit-qlora 0.58.0, grouped-nf4-gemm
+  0.51.0, vLLM 0.32.0 and 0.30.0). For each distribution it checks the installed version and its provenance: a PyPI
+  index install only. Editable, `file://`, other-host and every git install (whatever its URL or commit) are refused.
+  It writes `provenance.json` into the receipts.
+- `bench/p235/release_proof.py` (new): loggetta bench/release_proof.py at f09e5676 (#126's merge), staged byte-identical. It proves each
+  installed distribution IS the published wheel's bytes (wheel digest, every RECORD file equal on disk, every
+  top-level name importing from the proven install). It runs as
+  the last step before each build's first arm, in that build's import environment, and writes
+  `release_proof*.jsonl` into the receipts. A fast-check copy also runs right after each build's install, so a
+  wrong wheel refuses in minutes; only the binding proof is ruled. A proof whose lines are not all `pycache_fresh` true refuses. Every
+  python uses a fresh `PYTHONPYCACHEPREFIX` (with `RELEASE_PROOF_FRESH_PYCACHE` set to the same value), and every
+  install uses `--no-compile`.
+- `bench/p235/p235_run.sh` and `p235_reduce.py`: P58's runner and reducer by named edits. The runner installs
+  experts4bit-qlora, grouped-nf4-gemm and each vLLM build from PyPI wheels, with transformers 5.17.0 and constant vLLM
+  versions. It runs the provenance check before the tripwire and every arm (rc 9) and in each vLLM venv (a failure
+  refuses that build's rows), and it no longer collects the GPU's UUID. The 18 arms, the alarms, the STOP rules and
+  the verdict code are P58's.
+- The runner checks the guard fit before its first install (`bench/common/README.md`, "Guard fit"): FIT = 6,060 s
+  from P58's record and stated arithmetic, x 1.25, refused with rc 41 (not a strike) when the box's time left is short.
+- `bench/p235/p235_drive.sh`: the pod-launch drive form (lane liveness by launch identity, the clean HEAD as the
+  harness's launch commit, the `--no-links` fetch), staging P58's harness pieces at P58's digests.
+- `tests/test_p235.py`: the provenance rules on fake distributions, the constants against the PREREG and the runner,
+  the check's place in the runner, the staged pins against P58's, every changed runner line a named edit, the
+  reducer's output on P58's receipts, and the drive's refusals and dry run.
+
+### `E4B_NF4_SMALLM_BW` defaults on for Mixtral at 2 to 4 tokens (P234, LICENSED; #1313)
+
+Lane P234 read `E4B_NF4_SMALLM_BW=1` on Mixtral-8x7B's default NF4 server (`bench/p234/RESULTS-p234.md`): on one RTX
+5090, two requests decode 2.12452x and four 1.76481x as fast, within P110's quality bars at group 4.
+- **The default:** an unset `E4B_NF4_SMALLM_BW` resolves at engine build, after the levers and before any graph is
+  captured. On `mixtral` it routes the NF4 store's calls of 2 to 4 tokens (buckets 2 and 4) through K33's per-row
+  bandwidth GEMV; everywhere else it is off. The resolution and its reason are in `nf4_smallm_bw["source"]`
+  (`explicit`, `default-allowlisted`, or `default-off: <why>`).
+- **Served tokens change** at two and four requests on Mixtral: each row now runs K33's arithmetic instead of K25's
+  (within the kernels' tolerance contract; the quality rung read it). One request is unchanged.
+  `E4B_NF4_SMALLM_BW=0` is the way back.
+- **Never a refusal by default:** wherever an explicit `1` would refuse (an int4 or MXFP4 store,
+  `E4B_NF4_GROUPED_SMALLM=1`, a layer off the all-resident collapse, a kernel package without K33, an expert shape
+  where K33 does not engage on the device), the default resolves off and names the reason. At call time it yields to an
+  int4 or MXFP4 store and to `E4B_NF4_GROUPED_SMALLM=1` without raising. An explicit `1` keeps its refusals and still
+  routes 2 to 8 tokens on any family.
+- **Scope: the RTX 5090 only.** The default is the read's scope, not the kernel's: it engages on sm_120 at 170 SMs,
+  the part P234 read. Any other part, a 188-SM sm_120 included where K33 also engages, resolves off with the part
+  named (`default-off: no P234 read on this part`) and stays opt-in until a read of its own. Calls of 5 to 8 tokens
+  (bucket 8) stay opt-in.
+- **Scope: Mixtral-8x7B's shapes and routing only.** The default also needs every expert projection to be one P234
+  read, (28672, 4096) and (4096, 14336), and the config's routing to be the read's, 8 experts with top-2. Any other
+  shape, even where K33 engages, or any other routing resolves off, naming what it saw (`default-off: expert shapes ...
+  not read by P234`, `default-off: routing ... not read by P234`). Checkpoints with the same shapes and the same 8-expert
+  top-2 routing (fine-tunes of Mixtral-8x7B) inherit the default unread.
+- **One engine per process:** the resolved default is process-wide; each engine build replaces it.
+
+Files: `experts4bit_qlora/engines/hot_residency.py`, `experts4bit_qlora/serve_paged.py`,
+`tests/test_nf4_smallm_bw_default.py`, `tests/test_nf4_smallm_bw.py`, `docs/SERVING.md`, `docs/STATUS.md`.
+
+### P236 Amendment 1: the driver stages again (a literal backslash-n broke its staging loop)
+
+The registration's `bench/p236/p236_drive.sh` carried a literal backslash-n where line 22's continuation belongs, so
+bash staged a file named `n` and the driver refused every launch before staging. No box was created. Line 22 is now a
+real continuation, and the launch commit becomes this amendment's merge. Nothing else in the lane changes.
+`tests/test_p236.py` now runs the driver's dry run for every registered id, refuses unregistered ids, parses every
+lane shell script with `bash -n`, and refuses a mangled continuation; each new test fails on the registration's driver.
+
+### TC1 amendment 79: the field recipe's same-stack position at the 0.58.0 release, against Unsloth 2026.10.8
+
+- A new family, `qwen3pos79`, which is amendment 69's box unchanged: e4b's defaults (`fused_attn4_m_fd`) against Unsloth (`ckpt_unsloth_m_fv`,
+  grouped_mm), two profiled draws each in ABBA order, both in venv-unsloth (torch 2.12.1), TC1's field recipe over 60 steps.
+- The pins are constants of the reviewed kit, held equal across `tc1_run.sh`, `tc1_reduce.py`, the launch template and the registration.
+  They are e4b 0.58.0 at its tag commit, grouped-nf4-gemm 0.51.0 at `30adb1bf`, and unsloth / unsloth_zoo 2026.10.8. The box refuses any
+  other value before staging (rc 78).
+- `bench/tc1/release_proof.py` (byte-identical to loggetta's, sha256 `aff3fc80…`) proves Unsloth's wheels against PyPI's published bytes
+  after every install and before any arm (rc 9 on a refusal). Every arm then reads under the proof's fresh bytecode prefix.
+- The box records the knob environment every arm inherits (`POS79_KNOB_ENV`), and the rule reads 0.58.0's defaults as unset knobs, not
+  as 0.49.0's values, with what they resolved to reported beside the quote. The gate refuses `TC1_E4B_ENV` or `TC1_ARM_EXTRA_ENV`
+  carrying anything, and a chunked-loss run-time refusal VOIDs an e4b row. `tc1_arm.py` is unchanged, since bench/q235's kit pins it.
+- The rule, in order: NOT_READ on any box fact, or without two VALID profiled draws a side; UNSTABLE past TC1's
+  stability bound; QUALITY_DIFFERS past 0.01 held-out; otherwise QUOTED, with the device ratio first and the wall ratio on the named
+  host CPU. One box starts: $5.50 worst, $5.93 with a retry id, inside the row's $6.
+
+### Added
+
+- P234 results (`bench/p234/RESULTS-p234.md`): `E4B_NF4_SMALLM_BW=1` (2-8-token decode calls on K33's bandwidth GEMV,
+  one group per row) on Mixtral-8x7B's DEFAULT NF4 server, one RTX 5090: **LICENSED**.
+  - **Speed:** two requests decode 2.12452x and four requests 1.76481x as fast as the switch unset (min over two
+    palindromic pairs).
+  - **Unchanged speed:** one request (0.99182, identical tokens) and sixteen requests (1.00013, tokens differ in some
+    rows).
+  - **Quality:** within P110's bars at group 4.
+  - **Records:** register row `e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24`; receipts in
+    `bench/p234/receipts/p234-5090-1/`.
+  - **What follows:** the default for buckets 2 and 4 lands in its own PR; 5 to 8 tokens stay opt-in.
+
+### Added
+
+- P233 results (`bench/p233/RESULTS-p233.md`). `p233-5090-1`, the one reading of PREREG-p233.md (Amendments 1-4) at e4b
+  `2a0a9afc`, read `SOLVER_SANE` with the TRIPWIRE fired at both group sizes. On Qwen3-30B-A3B's server,
+  `E4B_PAGED_PLACEMENT=solver` at 8.0 GiB VRAM / 3.0 GiB DRAM (23 of 48 MoE layers tiered) keeps teacher-forced quality
+  against `all-vram` inside P153's bars at T = 1 and 8 (NLL gap +0.002077 and -0.000047 nats; argmax agreement
+  0.974284 at both; KL 0.003925 and 0.003729), but the agreement is below the tripwire's 0.98 look-bar and the KL above
+  0.002. The written look in the results finds the disagreement smaller in every window than the all-vram server's own
+  chunked-prefill floor arm, unbiased in NLL, and matched in size at T = 8 by a placement with no DRAM tier. `solver`
+  may be proposed as an opt-in placement citing this read, never a default; no speed is read. $1.45. The receipt copy
+  is under `bench/p233/receipts/p233-5090-1/`.
+
+### P236 registered: grouped-nf4-gemm 0.51.0's decode GEMV against bitsandbytes 0.50.2, op level, on one RTX 5090
+
+A descriptive head-to-head at the released pins, no box yet. Both libraries read the same NF4 bytes (quantized once by
+bitsandbytes, block 64, no double quantization): grouped-nf4-gemm's singleton decode call (K33 under `auto`, as
+experts4bit-qlora's collapse makes it) against `bitsandbytes.matmul_4bit` (its `gemm_4bit` op, whose own rule picks its
+fused kernel or dequantize then `F.linear`), at 1 to 16 rows on Mixtral-8x7B's, Qwen3-30B-A3B's and OLMoE-1B-7B's expert
+projections. Per cell: the dequant premise, correctness against an fp32 reference, engagement counted, then 20
+palindrome reps. Ratios are reported beside their self-pair bands; nothing is licensed and no default moves.
+`bench/p236/` (bench, reducer, runner, driver) and `tests/test_p236.py`, which runs the bench end to end on CPU.
+
 ## 0.58.0 — 2026-10-24 — the int8 lm_head serves 2 to 8 requests by default on Qwen3-30B-A3B; a served adapter's base is verified
 
 **0.58.0.** Serving Qwen3-30B-A3B at 2 to 8 concurrent requests is faster by default. With the int8 lm_head on (its

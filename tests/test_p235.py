@@ -40,8 +40,9 @@ DRIVE = (LANE / "p235_drive.sh").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p235.md").read_text(encoding="utf-8")
 FLAT = " ".join(PREREG.split())     # the PREREG's wrapped lines joined: a phrase reads across a line break
 NEW_FILES = [LANE / f for f in ("p235_run.sh", "p235_reduce.py", "provenance.py", "release_proof.py", "p235_drive.sh",
-                                "staged.sha256", "PREREG-p235.md")] + [REPO / "tests" / "test_p235.py",
-                                                                         REPO / "changelog.d" / "p235-registered.md"]
+                                "staged.sha256", "PREREG-p235.md")] + [REPO / "tests" / "test_p235.py"]
+# The registration's changelog fragment (changelog.d/p235-registered.md) was folded into CHANGELOG.md by the 0.58.1
+# release, so it is no longer a file; its text is checked there with the rest of the release section.
 #: loggetta's bench/release_proof.py, staged byte-identical: its source and sha256 (the ONE constant a new helper
 #: version edits, beside its ONE staged.sha256 line)
 RELEASE_PROOF = {"source": "loggetta bench/release_proof.py at f09e5676 (#126's merge)",
