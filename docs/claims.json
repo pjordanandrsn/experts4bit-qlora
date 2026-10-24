@@ -11978,6 +11978,33 @@
       "notes": "USD 1.331 actual. One draw per arm: the 0.10 GB reserved/device threshold sits inside one-draw variation (cd1 vs fd moved reserved +0.021 GB on amendment 74's box and -0.147 here; allocated 0.639 on both). The chunked loss also frees the held bf16 logits (0.343 GB at fd's peak), which the registered LM-loss target did not name."
     },
     {
+      "id": "e4b.train.4090-fit.field.4090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 78 (#835), the fit reading on real 24 GiB cards: two rented RTX 4090s on two different machines (tc1-4090-1, AMD EPYC 7702P; tc1-4090-2, AMD EPYC 9684X), one draw each of e4b's matched arm with the pb1cl256 levers (NF4_QLORA_COMPACT_DELTA=1, NF4_QLORA_PAD_BUCKETS=1, E4B_CHUNKED_LM_LOSS=256) at TC1's field recipe over 60 steps. FIT: both draws trained all 60 steps with no out-of-memory error, and their steps 1-2 losses are bitwise equal. The least headrooms over both draws, against an RTX 4090's 24,564 MiB total: usable minus max allocated 1,258 MiB (step 22), usable minus max reserved 586 MiB (step 29), memory.total minus device used 586 MiB (step 29). It fits; it does not fit with room. Held-out at 60 steps 0.75444 and 0.75667 (no quality claim). FIT covers this fixture only, and the levers are opt-in.",
+      "value": 586,
+      "unit": "MiB, the least headroom over both draws: memory.total minus device used at the fullest step (also usable minus max reserved), TC1 field recipe on an RTX 4090, two draws on two machines",
+      "hardware": "RTX 4090 (sm_89, 24,564 MiB), two rented Vast.ai verified/secure hosts on two machines (tc1-4090-1, AMD EPYC 7702P; tc1-4090-2, AMD EPYC 9684X; each a 30.72-CPU quota); e4b @ 576d99e + grouped-nf4-gemm @ efdda94, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3pos78fit (TC1 amendment 78): TC1's tokens (tc1-5090-155's) and field recipe (alpaca, seq 2048, micro-batch 2 x accum 4, r 16), TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, the pb1cl256 arm (fp32 adapters, matched init) with the step memory record; each draw gated by the card band (memory.total 23,500-24,600 MiB and an RTX 4090 by name), the pre-check, the pad-buckets probe and the token check; the lane rule (pos78_draw, pos78_lane: one bound OOM decides NOT_FIT; the first two COMPLETE draws on different machines pair; a steps 1-2 bitwise loss check) by bench/tc1/tc1_reduce.py --pos78-lane; each box's public copy rebuilds its RESULTS with bench/tc1/tc1_public.py",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos78fit.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-4090-1/README.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-4090-2/README.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/tc1_public.py"
+      ],
+      "evidence_private": [
+        "the private receipt store, runs tc1-4090-1 and tc1-4090-2 (receipt.json with each run's machine id, teardown-proof.json)"
+      ],
+      "notes": "USD 1.621 actual for the lane (0.693 + 0.928), against the registered worst of 13.94. tc1-4090-1's host voided two attempts for host load (load1 medians 17.84 and 18.09 against 6.0); the third (18.22) stands under amendment 33. Each box's own RESULTS reads its draw VOID ('the machine id is unread') because the runner writes it before the launcher's receipt exists; the lane verdict reads the receipts in the store, and the maintainer re-derived it there. The longest padded micro-batch in these tokens is 565 tokens (step 22); longer batches are not covered. A default change needs its own PR citing this reading."
+    },
+    {
       "id": "e4b.train.single-ladder.field.5090.2026-10-08",
       "package": "experts4bit-qlora",
       "area": "train",

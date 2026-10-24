@@ -1,0 +1,27 @@
+# tc1-4090-2: kept only in the private receipt store, byte-exact; receipts are never rewritten. box.json, the cell receipt,
+# summary.txt, forensics.txt, outer.log, INSTANCE_ID and RESULTS-tc1.md / RESULTS.txt carry the rented host's identifiers
+# (public/ holds derived copies of box.json, the cell and summary.txt); the fetch logs carry carriage returns; the rest are the
+# run's markers, its staged copies of committed code, and its dataset and token files.
+# sha256, then the file's path within this run's receipt.
+349e8f3fe013b00ef6978464e3c6d47ca6dd35b53b7d07e994a387812b381baa  tc1/INSTANCE_ID
+37fd1e40685f7d3a00b7c43203b529e49ed5d7a8e09da80c1b3696e4a620fde8  tc1/RESULTS-tc1.md
+37fd1e40685f7d3a00b7c43203b529e49ed5d7a8e09da80c1b3696e4a620fde8  tc1/RESULTS.txt
+9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa  tc1/TC1_EXIT_CODE.a6ae0b5407b84519b2c83079afc3c3a5a77a8ea2ca6f203847c8bd4327358ee8
+5c8f2de702550f792306d1bcc991af66d34ac96a68d4ce808308d024a37350ab  tc1/TC1_RUN_NONCE
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  tc1/TC1_SUCCESS.a6ae0b5407b84519b2c83079afc3c3a5a77a8ea2ca6f203847c8bd4327358ee8
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  tc1/TP_DONE.a6ae0b5407b84519b2c83079afc3c3a5a77a8ea2ca6f203847c8bd4327358ee8
+6eb18df63159f537e32c7a860b1999f5e9db1089c4267253a631ce1c7e3d99f8  tc1/box.json
+5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb  tc1/data/ds_alpaca.json
+61a1d77e0495d9787d97968343cc845e501fd81ee0fac0e38d77640542e1e54f  tc1/forensics.txt
+71e32136ef96f7f9fe0bbd35913efe3b3f8abcc070aa1e3a1d9f53beebc2999b  tc1/logs/fetch_probe.log
+d85aeff9f8c2d2c9778396c2629438c599324febf92a7fbf3beef58cb7f8eb07  tc1/logs/fetch_qwen3pos78fit.log
+7c6653bf6dd94c307112567638f2dcc0905b71cbde5667cf3ca859f5f6793544  tc1/n9_datasets.py
+094f55b8171498b82c84fa4a9ba90069c8fbb0501f0c240da2bbac95daed8142  tc1/outer.log
+116db1155fd6bc18da1bc88a80f61dcfc5a3fa034801e837224e4cfbd08ccee6  tc1/qwen3pos78fit_e4b_fused_attn4_m_fd_pb1cl256.json
+43813a713787cff139f6e0fec4343283f84793aebde37dd7367ed285e0a6227f  tc1/summary.txt
+375f69fc47d200efb759ab114af73e3f84669f1ad8d2ddf3cd16360b05353b15  tc1/tc1_arm.py
+e0bcb5c7dc35ff39adb7b346945852b1414059e0d664f040cda9a967b372257f  tc1/tc1_reduce.py
+b28fb790d331a44622a8c551a29a339dfd7f9f6d1e662545d4f47b160e99be26  tc1/tc1_run.sh
+3c48a9472bd1d80542b1c8c67c821ef10634083c0a1cf00b3180532013d67396  tc1/tokens_qwen3pos78fit.json
+34761911c2a6986bffbcb72d3ebb5ce56d54834bb2285fec8a6f0b996562535d  tc1/tp4_alpaca.py
+62b1c5dacd4cdbd4bd4690e51b7dd8d2a6d72684c7ea9c522fd9b6e40a573156  tc1/tripwire_unsloth.py

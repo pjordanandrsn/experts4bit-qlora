@@ -107,10 +107,14 @@ descriptive, one draw a side). `e4b.train.memory-census.field.5090.2026-10-22`
 2.348 GB of it at the peak, but the peak falls only 0.639 GB, to 25.861 GB, because the LM loss backward then sets it (TC1 amendment 74,
 descriptive, one draw a side; by its registered rule no switch is a default candidate). `e4b.train.padded-delta-switches.field.5090.2026-10-22`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos74pd.md)).
-**The 4090 fit is not reached yet:** with grouped-nf4-gemm's compact delta and the chunked LM loss both on, the field recipe's
+**Amendment 75's arms do not fit a 4090:** with grouped-nf4-gemm's compact delta and the chunked LM loss both on, the field recipe's
 nvidia-smi peak is 25,727 MiB on an RTX 5090, 1,163 MiB over a 4090's total (TC1 amendment 75, descriptive, one draw a side; its rule
 credits both savings, and no arm fits). The compact delta's own backward is the next transient. `e4b.train.4090-fit-read.field.5090.2026-10-22`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos75cl.md)).
+**TC1's field recipe fits a 24 GiB RTX 4090** with the opt-in pb1cl256 levers (`NF4_QLORA_COMPACT_DELTA=1`, `NF4_QLORA_PAD_BUCKETS=1`,
+`E4B_CHUNKED_LM_LOSS=256`). Two RTX 4090s on two machines trained all 60 steps with no out-of-memory error, with 586 MiB of the card's
+total left at the fullest step (TC1 amendment 78, FIT for this fixture only; the levers stay opt-in until a default-change PR).
+`e4b.train.4090-fit.field.4090.2026-10-24` ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos78fit.md)).
 
 **On packed 4,096-token rows, Unsloth 2026.9.14 spends 1.160× e4b's GPU time per step (medians of two draws).** The
 wall-clock ratio follows the host: 1.472 on the profiled host, 1.287 and 1.773 on two others. At e4b's defaults its

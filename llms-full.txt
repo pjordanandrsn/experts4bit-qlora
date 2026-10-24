@@ -2214,10 +2214,14 @@ descriptive, one draw a side). `e4b.train.memory-census.field.5090.2026-10-22`
 2.348 GB of it at the peak, but the peak falls only 0.639 GB, to 25.861 GB, because the LM loss backward then sets it (TC1 amendment 74,
 descriptive, one draw a side; by its registered rule no switch is a default candidate). `e4b.train.padded-delta-switches.field.5090.2026-10-22`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos74pd.md)).
-**The 4090 fit is not reached yet:** with grouped-nf4-gemm's compact delta and the chunked LM loss both on, the field recipe's
+**Amendment 75's arms do not fit a 4090:** with grouped-nf4-gemm's compact delta and the chunked LM loss both on, the field recipe's
 nvidia-smi peak is 25,727 MiB on an RTX 5090, 1,163 MiB over a 4090's total (TC1 amendment 75, descriptive, one draw a side; its rule
 credits both savings, and no arm fits). The compact delta's own backward is the next transient. `e4b.train.4090-fit-read.field.5090.2026-10-22`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos75cl.md)).
+**TC1's field recipe fits a 24 GiB RTX 4090** with the opt-in pb1cl256 levers (`NF4_QLORA_COMPACT_DELTA=1`, `NF4_QLORA_PAD_BUCKETS=1`,
+`E4B_CHUNKED_LM_LOSS=256`). Two RTX 4090s on two machines trained all 60 steps with no out-of-memory error, with 586 MiB of the card's
+total left at the fullest step (TC1 amendment 78, FIT for this fixture only; the levers stay opt-in until a default-change PR).
+`e4b.train.4090-fit.field.4090.2026-10-24` ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos78fit.md)).
 
 **On packed 4,096-token rows, Unsloth 2026.9.14 spends 1.160× e4b's GPU time per step (medians of two draws).** The
 wall-clock ratio follows the host: 1.472 on the profiled host, 1.287 and 1.773 on two others. At e4b's defaults its
@@ -3582,6 +3586,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.train.memory-census.field.5090.2026-10-22 [measured]: TC1 amendment 73 (#835), descriptive, one rented RTX 5090 (tc1-5090-152, AMD EPYC 9655): amendment 69's field recipe over 60 steps with the memory census on both arms at the field-device-ratio claim's commits, e4b's matched arm at its defaults (fused_attn4_m_fd) and Unsloth 2026.9.14's (ckpt_unsloth_m_fv), one draw …
 - e4b.train.padded-delta-switches.field.5090.2026-10-22 [measured]: TC1 amendment 74 (#835), descriptive with one fixed rule, one rented RTX 5090 (tc1-5090-154, AMD EPYC 7402P): TC1's field recipe over 60 steps with the memory census, e4b's matched arm at today's pins (e4b 0.56.1, grouped-nf4-gemm 0.49.0), one draw per arm: today's defaults (fd) and one grouped-nf4-gemm switch per arm. …
 - e4b.train.4090-fit-read.field.5090.2026-10-22 [measured]: TC1 amendment 75 (#835), descriptive with one fixed rule, one rented RTX 5090 (tc1-5090-155, AMD EPYC 9474F): the 4090-fit read. …
+- e4b.train.4090-fit.field.4090.2026-10-24 [measured]: TC1 amendment 78 (#835), the fit reading on real 24 GiB cards: two rented RTX 4090s on two different machines (tc1-4090-1, AMD EPYC 7702P …
 - e4b.train.single-ladder.field.5090.2026-10-08 [measured]: TC1 amendment 70 (#835), one rented RTX 5090 (tc1-5090-138, AMD EPYC 7K62, Vast machine 152440): grouped-nf4-gemm's opt-in single-block ladder (NF4_QLORA_SINGLE_LADDER=1, grouped-nf4-gemm#513) against the single padded block at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch …
 - e4b.train.dense-executor.dq7.5090.2026-10-08 [measured]: DQ7 of Loggetta dense execution is VOID: fourteen of sixteen architecture-only arms complete; the Qwen3-32B resident 4096 anchor is refused before load; Llama allocator estimates understate both placements at 2048 and 4096 tokens …
 - e4b.train.single-ladder-auto.field.5090.2026-10-08 [measured]: TC1 amendment 71 (#835), one rented RTX 5090 (tc1-5090-139, AMD EPYC 7763, Vast machine 150670): grouped-nf4-gemm's NF4_QLORA_SINGLE_LADDER=auto (grouped-nf4-gemm#514, the single-block ladder exactly when the adapters are fp32) against 0 at TC1's field recipe over 60 load-gated steps, e4b at its defaults in …
@@ -3626,4 +3631,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(467 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(468 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

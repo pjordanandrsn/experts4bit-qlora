@@ -14,8 +14,26 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[1]
-RUN = (REPO / "bench" / "tc1" / "tc1_run.sh").read_text()
+#: bench/common rule 6: amendment 78 recorded its verdict (FIT, its read PR), so this closed lane's tests read their files at its frozen
+#: launch commit (experts4bit-qlora#2093's merge, the commit both boxes ran), never the live tree. A later change to a shared file
+#: (tc1_run.sh, TC1-PREREG.md) then neither re-pins nor fails it.
+TC1_78_FROZEN = "576d99e9fef92c406642e995d9945fc5e4cf3292"
+
+
+def _at_frozen(rel: str) -> str:
+    r = subprocess.run(["git", "-C", str(REPO), "show", f"{TC1_78_FROZEN}:{rel}"], capture_output=True, text=True)
+    if r.returncode != 0:
+        # CI checks out full history (fetch-depth: 0), so a miss there is a failure, never a skip
+        if os.environ.get("CI") == "true":
+            raise AssertionError(f"git show {TC1_78_FROZEN}:{rel} failed: {r.stderr.strip()}")
+        pytest.skip(f"the frozen commit {TC1_78_FROZEN[:8]} is not in this clone (shallow?)", allow_module_level=True)
+    return r.stdout
+
+
+RUN = _at_frozen("bench/tc1/tc1_run.sh")
 GNF4 = "efdda943d5a310343ed7fef2e23d1cbf2df27e51"
 TOKENS, TRAIN = "bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac", "604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7"
 ENV = "[NF4_QLORA_COMPACT_DELTA=1 NF4_QLORA_PAD_BUCKETS=1 E4B_CHUNKED_LM_LOSS=256 TC1_STEP_MEM=1]"
