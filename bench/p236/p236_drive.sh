@@ -19,7 +19,8 @@ if [ -n "${E4B_SHA:-}" ]; then say "refusing: E4B_SHA override; use the clean ch
 E4B_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null) || { say "refusing: cannot read HEAD of $REPO"; exit 78; }
 [ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] || { say "refusing: the checkout is dirty"; exit 78; }
 STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
-for f in bench/p236/p236_bench.py bench/p236/p236_reduce.py bench/p236/p236_run.sh bench/p236/release_proof.py \n         bench/p236/staged-p236.sha256; do
+for f in bench/p236/p236_bench.py bench/p236/p236_reduce.py bench/p236/p236_run.sh bench/p236/release_proof.py \
+         bench/p236/staged-p236.sha256; do
   cp "$REPO/$f" "$STAGE/" || { say "stage missing: $f"; exit 78; }
 done
 (cd "$STAGE" && shasum -a 256 -c staged-p236.sha256 > /dev/null) || { say "refusing: staged files differ from staged-p236.sha256"; exit 78; }
