@@ -104,3 +104,7 @@ def test_build_engine_checks_the_floor_after_the_placement_and_before_the_tier_p
     tier = src.index("n = enable_hybrid_tier(")
     assert solve < override < floor < refuse < renumber < tier
     assert 'info["hot_rows_floor"] = {**hot_floor, "hot_rows": cfg.hot_rows}' in src
+    # the floor counts one layer's rows: the tier is built without prefetch, which would share the slots with the next
+    # layer's speculative rows (hot_rows_floor's docstring)
+    call = src[tier:src.index(")", src.index("merged_arena=merge", tier)) + 1]
+    assert "prefetch" not in call or "prefetch=False" in call, call

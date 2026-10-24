@@ -1460,7 +1460,11 @@ def hot_rows_floor(manifest: dict, n_layers: int, n_experts: int, top_k: int, ch
     (forced graphs, and so speculative decode and lookahead, are refused at ``solver``). So a layer's request is at most
     ``min(F * top_k, its NVMe-tier experts)``, and the floor is the largest of those over the layers. At ``all-vram``
     no expert is on NVMe and the floor is 0. ``manifest`` is :func:`~.engines.placement.solve_placement`'s, before
-    its layers are renumbered to arena ids (layers ``0..n_layers-1``)."""
+    its layers are renumbered to arena ids (layers ``0..n_layers-1``).
+
+    The floor assumes the tier runs WITHOUT prefetch, as :func:`build_engine` builds it (``enable_hybrid_tier``'s
+    ``prefetch`` at its default, off). With prefetch on, the next layer's speculative rows share the same global
+    slots, so one forward could need both layers' rows and this floor would under-count."""
     tokens = max(int(chunk_tokens), int(max_seqs))
     nvme = [0] * int(n_layers)
     for lay, _e in manifest["tiers"].get("nvme") or []:

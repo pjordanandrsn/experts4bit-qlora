@@ -16,11 +16,13 @@ nvme_residency = pytest.importorskip("nvme_residency")
 pytest.importorskip("cpu_grouped")
 pytest.importorskip("bitsandbytes", reason="Experts4bit quantization needs bnb")
 
-from test_hybrid import E, H, K, _manifest, _module, _Wrap, arena  # noqa: E402,F401  (arena: the fixture)
+from nvme_arena import bake_expert_tensors  # noqa: E402
+from test_hybrid import LAYER, E, H, K, _manifest, _module, _st_bytes, _Wrap  # noqa: E402
 
 from experts4bit_qlora import serve_paged as sp  # noqa: E402
 from experts4bit_qlora.engines import hot_residency as hr  # noqa: E402
 from experts4bit_qlora.engines.hybrid import disable_hybrid_tier, enable_hybrid_tier  # noqa: E402
+from experts4bit_qlora.engines.nvme_experts import NF4_SEGMENTS  # noqa: E402
 
 
 def _man(n_layers, per_layer):
@@ -30,6 +32,28 @@ def _man(n_layers, per_layer):
         for t, ids in (("vram", v), ("dram", d), ("nvme", n)):
             tiers[t] += [[lay, e] for e in ids]
     return {"tiers": tiers}
+
+
+@pytest.fixture
+def tiny_arena(tmp_path):
+    """test_hybrid's one-layer, eight-expert NF4 arena (its own helpers, the same bake): the arena's path."""
+    mod = _module()
+    n1, k1 = mod._gate_up_shape
+    n2, k2 = mod._down_shape
+    payload = {"nf4.gate_up_blocks": mod.gate_up_proj.view(E, n1, k1 // 2),
+               "nf4.gate_up_absmax": mod.gate_up_absmax.view(E, n1, k1 // 64).float(),
+               "nf4.down_blocks": mod.down_proj.view(E, n2, k2 // 2),
+               "nf4.down_absmax": mod.down_absmax.view(E, n2, k2 // 64).float()}
+    dt = {torch.uint8: "U8", torch.float32: "F32"}
+    tensors = {f"model.layers.{LAYER}.mlp.experts.{e}.{kind}": (tuple(t.shape), dt[t.dtype], t.numpy().tobytes())
+               for kind, stack in payload.items() for e, t in ((e, stack[e].contiguous().cpu()) for e in range(E))}
+    snap = tmp_path / "snap"
+    snap.mkdir()
+    (snap / "model.safetensors").write_bytes(_st_bytes(tensors))
+    path = str(tmp_path / "m.arena")
+    bake_expert_tensors(str(snap), path, name_template="model.layers.{layer}.mlp.experts.{expert}.{kind}",
+                        kinds=tuple(NF4_SEGMENTS.values()), align=4096, log=lambda *a: None)
+    return path
 
 
 @pytest.fixture
@@ -74,10 +98,10 @@ def _floor(split, chunk, max_seqs):
     return sp.hot_rows_floor(_man(1, {0: (v, d, n)}), 1, E, K, chunk, max_seqs)["floor"]
 
 
-def test_the_layer_count_floor_passes_and_one_row_below_raises_in_the_forward(arena, cold_path):
+def test_the_layer_count_floor_passes_and_one_row_below_raises_in_the_forward(tiny_arena, cold_path):
     """F = 3 tokens x top-2 = 6 rows, and the layer has 6 NVMe experts: the floor is 6. A forward of F tokens that
     routes all six asks the tier for exactly 6 rows; at hot_rows 6 it runs, at 5 nvme_residency raises."""
-    _, path, _ = arena
+    path = tiny_arena
     split = ([0], [1], [2, 3, 4, 5, 6, 7])
     floor = _floor(split, chunk=3, max_seqs=1)
     assert floor == 6
@@ -96,10 +120,10 @@ def test_the_layer_count_floor_passes_and_one_row_below_raises_in_the_forward(ar
         disable_hybrid_tier(model)
 
 
-def test_the_f_times_k_floor_passes_and_one_row_below_raises_in_the_forward(arena, cold_path):
+def test_the_f_times_k_floor_passes_and_one_row_below_raises_in_the_forward(tiny_arena, cold_path):
     """F = 2 tokens x top-2 = 4 rows, below the layer's 7 NVMe experts: the floor is 4. Random routings at F never ask
     for more than 4 rows at hot_rows 4; four distinct NVMe experts in one forward raise at 3."""
-    _, path, _ = arena
+    path = tiny_arena
     split = ([0], [], [1, 2, 3, 4, 5, 6, 7])
     floor = _floor(split, chunk=2, max_seqs=1)
     assert floor == 4
@@ -120,12 +144,12 @@ def test_the_f_times_k_floor_passes_and_one_row_below_raises_in_the_forward(aren
 
 
 @pytest.mark.parametrize("offload_rows", [None, 1], ids=["dram-in-place", "dram-moved-to-the-device"])
-def test_dram_and_vram_experts_never_reach_the_cold_tier(arena, cold_path, offload_rows):
+def test_dram_and_vram_experts_never_reach_the_cold_tier(tiny_arena, cold_path, offload_rows):
     """The premise the floor stands on: with most experts in DRAM, random routings at F (4 tokens x top-2 = 8 rows)
     ask the tier only for NVMe ids, never more than the floor (the layer's 3 NVMe experts) at hot_rows 3. Both DRAM
     routes: computed in place (the default) and moved to the device from the DRAM stacks (offload_rows 1 takes that
     route on every step)."""
-    _, path, _ = arena
+    path = tiny_arena
     split = ([0], [1, 2, 3, 4], [5, 6, 7])
     floor = _floor(split, chunk=4, max_seqs=1)
     assert floor == 3
@@ -172,7 +196,7 @@ def _build(monkeypatch, tmp_path, path, **cfg_kw):
     monkeypatch.setattr(experts4bit_qlora, "load_moe_4bit_streaming", lambda *a, **k: (model, None), raising=False)
     seen = {}
 
-    def reached(m, arena, man, **k):
+    def reached(m, arena_path, man, **k):
         seen.update(man=man, hot_rows=k.get("hot_rows"))
         raise _Reached
     monkeypatch.setattr(hy, "enable_hybrid_tier", reached)
@@ -188,11 +212,11 @@ def _solver_budget(path):
     return {"vram_gb": one * 1.01, "dram_gb": one * 1.01}
 
 
-def test_build_engine_refuses_below_the_floor_by_name_before_the_tier(arena, monkeypatch, tmp_path):
+def test_build_engine_refuses_below_the_floor_by_name_before_the_tier(tiny_arena, monkeypatch, tmp_path):
     """At solver with one forward of 3 tokens x top-2 and six NVMe experts, the floor is 6: hot_rows 5 refuses at
     build, naming the knob, before enable_hybrid_tier; hot_rows 6 reaches the tier. all-vram reaches it at any
     hot_rows, the default included."""
-    _, path, _ = arena
+    path = tiny_arena
     kw = dict(placement="solver", chunk_tokens=3, max_seqs=1, max_seqs_requested="1", **_solver_budget(path))
     seen = _build(monkeypatch, tmp_path, path, hot_rows=6, **kw)
     assert len(seen["man"]["tiers"]["nvme"]) == 6 and seen["hot_rows"] == 6, seen
