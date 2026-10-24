@@ -130,6 +130,7 @@ NEED_AXOLOTL=1; case " $FAMILIES " in " qwen3hp1cal ") NEED_UNSLOTH=0; NEED_AXOL
 case " $FAMILIES " in " qwen3hp2 ") NEED_AXOLOTL=0;; esac     # HP2 (bench/hp2/HP2-PREREG.md): e4b vs Unsloth only
 case " $FAMILIES " in " qwen3hpn ") NEED_AXOLOTL=0;; esac     # HPN (bench/hpn/HPN-DESIGN.md): e4b + Unsloth readers only
 case " $FAMILIES " in " qwen3hbd ") NEED_AXOLOTL=0;; esac     # HBD (bench/hbd/PREREG-hbd.md): e4b + Unsloth cells only
+case " $FAMILIES " in " qwen3pos79 ") NEED_AXOLOTL=0;; esac   # TC1 amendment 79: amendment 69's four arms, all in venv-unsloth
 case " $FAMILIES " in " qwen3hp3 "|" qwen3hp3shake ") NEED_UNSLOTH=0; NEED_AXOLOTL=0;; esac   # HP3 (bench/hp3/HP3-PREREG.md): its own three venvs, on one build
 # HP3 Amendment 2, the (R) fallback (qwen3hp3r): e4b vs Unsloth 2026.9.14 on HPN's build, so only venv-unsloth-t28 (+ e4b in it, t28u);
 # no cu130 Unsloth venv and no axolotl
@@ -208,6 +209,25 @@ case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*|*" qwen3hp3r "*|*" qwen
     echo "BOX_REFUSED gpu_mem=${GPU_MIB:-unread}MiB class=$GPU_CLASS band=${MEMBAND:-none}" >> summary.txt; finish 18; fi;;
 esac
 # HP3 Amendment 1 part 8 end
+# TC1 amendment 79 -- the 0.58.0 release head-to-head: every pin is a constant of this reviewed kit, never a launch-time value. e4b at
+# v0.58.0's peeled tag commit and grouped-nf4-gemm at v0.51.0's (both git installs from the canonical repositories, byte-proven by the
+# commit, which the t212 tripwire asserts), Unsloth and unsloth_zoo at PyPI's latest at registration (proven by release_proof.py before any
+# arm). The token runs alone. Any other value refuses here (rc 78), before any staging.
+POS79_E4B_SHA=""                                           # v0.58.0's peeled tag commit: filled when the tag line posts, before merge
+POS79_GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca     # v0.51.0's peeled tag commit
+POS79_UNSLOTH=2026.10.8; POS79_UNSLOTH_ZOO=2026.10.8
+case " $FAMILIES " in *" qwen3pos79 "*)
+  why=""
+  [ "$FAMILIES" = qwen3pos79 ] || why="the qwen3pos79 token runs alone (got: $FAMILIES)"
+  [ ${#POS79_E4B_SHA} -eq 40 ] || why="${why:+$why; }the kit's POS79_E4B_SHA is not a 40-hex commit (unfilled)"
+  [ "$E4B_SHA" = "$POS79_E4B_SHA" ] || why="${why:+$why; }E4B_SHA $E4B_SHA is not the kit's $POS79_E4B_SHA"
+  [ "$GNF4_SHA" = "$POS79_GNF4_SHA" ] || why="${why:+$why; }GNF4_SHA $GNF4_SHA is not the kit's $POS79_GNF4_SHA"
+  [ "${TC1_UNSLOTH_VERSION:-}" = "$POS79_UNSLOTH" ] || why="${why:+$why; }TC1_UNSLOTH_VERSION ${TC1_UNSLOTH_VERSION:-unset} is not $POS79_UNSLOTH"
+  [ "${TC1_UNSLOTH_ZOO_VERSION:-}" = "$POS79_UNSLOTH_ZOO" ] || why="${why:+$why; }TC1_UNSLOTH_ZOO_VERSION ${TC1_UNSLOTH_ZOO_VERSION:-unset} is not $POS79_UNSLOTH_ZOO"
+  [ -s "$W/release_proof.py" ] || why="${why:+$why; }release_proof.py is not staged"
+  if [ -n "$why" ]; then say "BOX REFUSED (amendment 79 pins): $why"; echo "BOX_REFUSED pos79_pins: $why" >> summary.txt; finish 78; fi
+  echo "POS79_PINS e4b $E4B_SHA gnf4 $GNF4_SHA unsloth $POS79_UNSLOTH unsloth_zoo $POS79_UNSLOTH_ZOO release_proof $(sha256sum "$W/release_proof.py" | cut -c1-64)" | tee -a summary.txt;;
+esac
 # TC1 amendment 78 -- the 24 GiB fit reading: the card's memory.total must be a 24 GiB card's, else a host refusal (rc 18) before any
 # staging. The GPU name alone admits a 48 GB "RTX 4090"; the screen bands the listing's gpu_ram, and this reads the card itself.
 POS78_MIB_MIN=23500; POS78_MIB_MAX=24600
@@ -1896,6 +1916,35 @@ tc1_pos69_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   can_run 600 $FAM/e4b/m_fd_d2      && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_pos79_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 79 (2026-10-24): amendment 69's box at the 0.58.0 release against
+# Unsloth 2026.10.8 -- the same four arms in the same ABBA order (fd fv fv fd), both in venv-unsloth, every arm profiled; the pins are the
+# kit's (the gate above), and release_proof.py has proven Unsloth's wheels before this runs (pos79_release_proof).
+tc1_pos79_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
+  local ALL="e4b:fused_attn4_m_fd:fused unsloth:ckpt_unsloth_m_fv:unsloth unsloth:ckpt_unsloth_m_fv_d2:unsloth e4b:fused_attn4_m_fd_d2:fused"
+  say "===== RELEASE FIELD POSITION family $FAM ($MID @ $REV; e4b 0.58.0 vs Unsloth $POS79_UNSLOTH on one stack, profiled; amendment 79)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7 --unsloth-moe-backend grouped_mm"
+  local PP="--profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM"
+  can_run 600 $FAM/e4b/m_fd         && E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/unsloth/m_fv     && arm   $FAM unsloth ckpt_unsloth_m_fv unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS $MATCH $PP
+  can_run 600 $FAM/unsloth/m_fv_d2  && draw2 $FAM unsloth ckpt_unsloth_m_fv unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS $MATCH $PP
+  can_run 600 $FAM/e4b/m_fd_d2      && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
+# pos79_release_proof -- TC1 amendment 79: after every install and before any arm, Unsloth and unsloth_zoo must be byte-for-byte the wheels
+# PyPI publishes (release_proof.py: the RECORD compare on disk, the import origin, the fresh bytecode prefix). The bytecode prefix is
+# exported here, after the installs (pip's own compile stays in-tree, which the proof's rule (b) allows), so the proof and every arm read
+# under one fresh, empty prefix; RELEASE_PROOF_FRESH_PYCACHE names the same directory. The proof runs as the arms run: venv-unsloth's
+# python, cwd $W, this environment. Any refusal ends the box here (rc 9) and no arm runs.
+pos79_release_proof(){ local PC rc
+  [ "$UNS_OK" = 1 ] && [ "$T212_OK" = 1 ] || { say "RELEASE PROOF NOT RUN: venv-unsloth ok=$UNS_OK, e4b in it ok=$T212_OK"; echo "RELEASE_PROOF NOT_RUN uns_ok=$UNS_OK t212_ok=$T212_OK" >> summary.txt; return 1; }
+  PC=$(mktemp -d /tmp/tc1-pycache-XXXXXX) || return 1
+  export PYTHONPYCACHEPREFIX=$PC RELEASE_PROOF_FRESH_PYCACHE=$PC
+  (cd $W && perl -e 'alarm 900; exec @ARGV' $PY_UNS $W/release_proof.py "unsloth==$POS79_UNSLOTH" "unsloth_zoo==$POS79_UNSLOTH_ZOO") \
+    > $W/release_proof_unsloth.json 2> logs/release_proof.log; rc=$?
+  if [ $rc -ne 0 ]; then tail -3 logs/release_proof.log; say "RELEASE PROOF FAILED rc=$rc"; echo "RELEASE_PROOF FAILED rc=$rc $(tail -1 logs/release_proof.log | cut -c1-300)" >> summary.txt; return 1; fi
+  echo "RELEASE_PROOF OK unsloth==$POS79_UNSLOTH unsloth_zoo==$POS79_UNSLOTH_ZOO pycache_prefix $PC" | tee -a summary.txt; }
 # tc1_pos69mc_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 73 (2026-10-21): amendment 69's field recipe with the memory census --
 # its two matched arms (fd, fv), one draw each in venv-unsloth, --mem-census 1 and no profile (a profiler would sit inside the census window);
 # 60 steps with the field recipe's in-loop evaluations, as the claim's peak counted them. e4b and grouped-nf4-gemm are the drive's E4B_SHA /
@@ -3381,6 +3430,7 @@ tc1_native_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=
   free_family $FAM ${MID//\//--}; }
 # ---------------------------------------------------------------- the plan (TC1-PREREG "Model", "Alarms": e4b 3600, Unsloth 3600, HF 1800, axolotl 2700, reference 5400, profiled 2400; fetch as tp4's qwen3)
 #      FAM    MID                 REV                                       FETCH E4B  UNS  HF   AX   REF  PROF
+[ "$FAMILIES" = qwen3pos79 ] && { pos79_release_proof || finish 9; }   # TC1 amendment 79: no arm runs on an unproven Unsloth
 for FAM in $FAMILIES; do case "$FAM" in
   qwen3)       tc1_family        qwen3       Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700 5400 2400;;
   qwen3native) tc1_native_family qwen3native Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700;;
@@ -3433,6 +3483,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3pos67) tc1_pos67_family qwen3pos67 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 67: the packed-row position at the new defaults
   qwen3pos68) tc1_pos68_family qwen3pos68 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 68: amendment 67's position profiled
   qwen3pos69) tc1_pos69_family qwen3pos69 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 69: the field recipe's same-stack position profiled
+  qwen3pos79) tc1_pos79_family qwen3pos79 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 79: amendment 69's box at the 0.58.0 release vs Unsloth 2026.10.8
   qwen3pos69mc) tc1_pos69mc_family qwen3pos69mc Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 73: amendment 69's arms with the memory census
   qwen3pos74pd) tc1_pos74_family qwen3pos74pd Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 74: amendment 73's census at today's pins, one grouped-nf4-gemm switch per arm
   qwen3pos75cl) tc1_pos75_family qwen3pos75cl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 75: the 4090-fit read, the compact delta and the chunked LM loss
