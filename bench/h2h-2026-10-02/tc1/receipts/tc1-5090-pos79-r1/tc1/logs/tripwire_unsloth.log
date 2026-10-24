@@ -1,0 +1,9 @@
+W1024 19:04:45.805000 2205 venv-unsloth/lib/python3.11/site-packages/torch/utils/_pytree.py:630] <enum 'KernelPreference'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+W1024 19:04:45.840000 2205 venv-unsloth/lib/python3.11/site-packages/torch/utils/_pytree.py:630] <enum 'ScaleCalculationMode'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+/root/tc1/venv-unsloth/lib/python3.11/site-packages/unsloth/__init__.py:1684: UserWarning: WARNING: Unsloth should be imported before [transformers, peft] to ensure all optimizations are applied. Your code may run slower or encounter memory issues without these optimizations.
+
+Please restructure your imports with 'import unsloth' at the top of your file.
+  from ._gpu_init import *
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+tc1 tripwire OK (unsloth): 2026.10.8 zoo 2026.10.8 torch 2.12.1+cu130 triton 3.7.1 transformers 5.17.0 bnb 0.50.2 peft 0.21.2 torchao 0.18.0+cu130 moe_backend grouped_mm separated_lora True FastModel True

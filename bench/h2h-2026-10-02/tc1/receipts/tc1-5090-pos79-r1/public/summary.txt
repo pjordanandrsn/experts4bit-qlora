@@ -1,0 +1,31 @@
+FIXTURE field: template=alpaca steps=60 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407 pack=0
+POS79_PINS e4b f15cb7d695cf7148067c6bcea543484f31dc3abd gnf4 30adb1bfa76f95f9ce4a4c29734b8f36de907eca unsloth 2026.10.8 unsloth_zoo 2026.10.8 release_proof aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0
+POS79_ARM_ENV e4b=[] extra=[]
+OMP_NUM_THREADS=20 (physical cores) box_class=RTX 5090
+CPU allotment 20 (cgroup quota capped by affinity; physical cores 20)
+CUDA_PROBE ok
+DRIVER 615.71.09 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+RELEASE_PROOF OK unsloth==2026.10.8 unsloth_zoo==2026.10.8 pycache_prefix /tmp/tc1-pycache-9DDFaw
+POS79_KNOB_ENV E4B_SHA GNF4_SHA 
+PIN OK qwen3pos79 staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3pos79 alpaca sha=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac eval_n=8 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+qwen3pos79/e4b/fused_attn4_m_fd PROLOGUE {"phase_seconds": {"preamble": 8.681, "load_weights": 28.251, "verify": 0.001, "attn4": 10.278, "lora": 0.121, "enable": 12.414, "tokenizer": 0.561, "census": 6.172, "frozen_probe": 0.166, "trainable_sha": 6.836, "counters": 0.0, "c1_before": 93.66, "eval0": 18.43, "optimizer": 0.25}, "phase_budget_s": 1260.0, "prologue_s": 191.773, "prologue_unattributed_s": 5.952}
+qwen3pos79/e4b/fused_attn4_m_fd rc=0 CELL OK {"framework": "e4b", "fam": "qwen3pos79", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_fd", "status": "ok", "steps": 60, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r
+
+LOADGATE qwen3pos79/e4b/fused_attn4_m_fd attempt 0 load1_median 2.0 gate 6.0 status ok over 0
+qwen3pos79/unsloth/ckpt_unsloth_m_fv PROLOGUE {"phase_seconds": {"preamble": 2.011, "snapshot": 0.0, "load_weights": 40.644, "census": 6.386, "frozen_probe": 0.193, "trainable_sha": 7.867, "counters": 0.145, "c1_before": 106.78, "eval0": 22.994, "optimizer": 0.421}, "phase_budget_s": 1260.0, "prologue_s": 211.889, "prologue_unattributed_s": 24.449}
+qwen3pos79/unsloth/ckpt_unsloth_m_fv rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3pos79", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": null, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m_fv", "status": "ok", "st
+
+LOADGATE qwen3pos79/unsloth/ckpt_unsloth_m_fv attempt 0 load1_median 2.21 gate 6.0 status ok over 0
+qwen3pos79/unsloth/ckpt_unsloth_m_fv_d2 PROLOGUE {"phase_seconds": {"preamble": 2.046, "snapshot": 0.0, "load_weights": 34.579, "census": 7.789, "frozen_probe": 1.574, "trainable_sha": 6.784, "counters": 0.124, "c1_before": 103.949, "eval0": 22.348, "optimizer": 0.326}, "phase_budget_s": 1260.0, "prologue_s": 195.809, "prologue_unattributed_s": 16.29}
+qwen3pos79/unsloth/ckpt_unsloth_m_fv_d2 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3pos79", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": null, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m_fv_d2", "status": "ok", 
+
+LOADGATE qwen3pos79/unsloth/ckpt_unsloth_m_fv_d2 attempt 0 load1_median 2.37 gate 6.0 status ok over 0
+qwen3pos79/e4b/fused_attn4_m_fd_d2 PROLOGUE {"phase_seconds": {"preamble": 4.079, "load_weights": 22.968, "verify": 0.001, "attn4": 7.538, "lora": 0.048, "enable": 7.441, "tokenizer": 0.56, "census": 6.265, "frozen_probe": 4.791, "trainable_sha": 6.587, "counters": 0.0, "c1_before": 94.438, "eval0": 12.208, "optimizer": 0.25}, "phase_budget_s": 1260.0, "prologue_s": 169.998, "prologue_unattributed_s": 2.822}
+qwen3pos79/e4b/fused_attn4_m_fd_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3pos79", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_fd_d2", "status": "ok", "steps": 60, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false,
+
+LOADGATE qwen3pos79/e4b/fused_attn4_m_fd_d2 attempt 0 load1_median 2.23 gate 6.0 status ok over 0
+QWEN3POS79 DONE
+NO AXOLOTL on this box: the qwen3pos79 token runs no axolotl arm
