@@ -319,19 +319,34 @@ def test_the_driver_refuses_an_e4b_sha_override(tmp_path):
     assert out.returncode == 78 and "E4B_SHA override" in out.stdout + out.stderr
 
 
+def _add_worktree(wt, read_at):
+    """A detached git worktree at ``read_at`` in ``wt``. A missing commit or history FAILS under CI and skips, with the
+    reason named, outside it (the commit-bound check's rule)."""
+    add = subprocess.run(["git", "-C", str(REPO), "worktree", "add", "--detach", str(wt), read_at],
+                         capture_output=True, text=True)
+    if add.returncode != 0:
+        why = f"no worktree at {read_at}: {add.stderr.strip()[:160]}"
+        if os.environ.get("CI"):
+            pytest.fail(f"{why} (CI must hold the full history and the reading commit)")
+        pytest.skip(why)
+    return wt
+
+
+def test_a_missing_reading_commit_fails_the_worktree_under_ci_and_skips_outside(tmp_path, monkeypatch):
+    monkeypatch.setenv("CI", "true")
+    with pytest.raises(pytest.fail.Exception, match="CI must hold the full history"):
+        _add_worktree(tmp_path / "a", "0" * 40)
+    monkeypatch.delenv("CI", raising=False)
+    with pytest.raises(pytest.skip.Exception, match="no worktree at"):
+        _add_worktree(tmp_path / "b", "0" * 40)
+
+
 @pytest.fixture
 def reading_tree(tmp_path):
     """A detached git worktree at READ_AT, the commit P232 read at: clean by construction, so the driver there stages
     exactly what the reading staged (a later repo file, tests/test_int8_head_bw.py among them, can never make it refuse).
-    A missing commit or history fails under CI and skips, with the reason named, outside it; the worktree is removed."""
-    wt = tmp_path / "at-read"
-    add = subprocess.run(["git", "-C", str(REPO), "worktree", "add", "--detach", str(wt), READ_AT],
-                         capture_output=True, text=True)
-    if add.returncode != 0:
-        why = f"no worktree at {READ_AT}: {add.stderr.strip()[:160]}"
-        if os.environ.get("CI"):
-            pytest.fail(f"{why} (CI must hold the full history and the reading commit)")
-        pytest.skip(why)
+    The worktree is removed after the test."""
+    wt = _add_worktree(tmp_path / "at-read", READ_AT)
     try:
         yield wt
     finally:
