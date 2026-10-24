@@ -232,9 +232,9 @@ ADAPTER_NEUTRAL_KNOBS = {
     "E4B_DENSE_LT_PIN": ("a pinned cuBLASLt algorithm for named bf16 projections at 2..8 rows (K1): it reads the merged "
                          "weight as stored, re-quantizes nothing and reads no calibration; its outputs move within the "
                          "served tolerance exactly as on the base server"),
-    "E4B_INT8_HEAD_ROWS": ("routes the int8 head's 2..8 rows to K37 over the head's own codes and scales (K2b): it "
-                           "quantizes nothing and reads no calibration, and the head it widens is the allowed "
-                           "base-serving lever E4B_INT8_HEAD_BW"),
+    "E4B_INT8_HEAD_ROWS": ("routes the int8 head's 2..8 rows to K37 over the head's own codes and scales (K2b; unset, "
+                           "8 on qwen3_moe at the 151936 x 2048 head, lane P232): it quantizes nothing and reads no "
+                           "calibration, and the head it widens is the allowed base-serving lever E4B_INT8_HEAD_BW"),
 }
 ADAPTER_ALLOW_ARENA_ENV = "E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA"
 ADAPTER_ACCEPT_BASE_ENV = "E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE"
@@ -295,7 +295,8 @@ DENSE_GEMV_BW_ENV = "E4B_DENSE_GEMV_BW"
 #: (engines/int8_head_bw.py). 0 or 1; unset resolves per family and head shape (INT8_HEAD_BW_DEFAULT_FAMILIES).
 INT8_HEAD_BW_ENV = "E4B_INT8_HEAD_BW"
 #: K2b (bench/dense-small-m/DESIGN-K2.md; engines/int8_head_bw.py): the int8 head's 2..value rows on grouped-nf4-gemm
-#: K37's linear_i8. 1 to 8; unset is 1, today's route (opt-in: no read has licensed a default)
+#: K37's linear_i8. 1 to 8 (1: one row on K36, more on F.linear); unset resolves per family and head shape
+#: (INT8_HEAD_ROWS_DEFAULT_FAMILIES, lane P232)
 INT8_HEAD_ROWS_ENV = "E4B_INT8_HEAD_ROWS"
 # Lane P153's default for ``E4B_INT8_HEAD_BW`` (bench/p153/RESULTS-p153.md): an UNSET knob resolves to ``1`` on a
 # model_type here whose output head has a listed [N, K] shape, the shapes grouped-nf4-gemm K36 has a tuned plan for
@@ -308,6 +309,23 @@ INT8_HEAD_ROWS_ENV = "E4B_INT8_HEAD_ROWS"
 # resolve the default off, recorded, never a crash; an explicit ``1`` still refuses them. ``0`` opts out.
 INT8_HEAD_BW_DEFAULT_FAMILIES: dict = {
     "qwen3_moe": ((151936, 2048),),   # e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19 (bench/p153/RESULTS-p153.md)
+}
+# Lane P232's default for ``E4B_INT8_HEAD_ROWS`` (bench/p232/RESULTS-p232.md): an UNSET knob resolves to the row bound
+# listed here for a model_type and its output head's [N, K] shape, and to ``1`` (one row on K36, more on F.linear)
+# everywhere else, with the reason recorded. qwen3_moe at 151936 x 2048 takes 8 on P232's served read (p232-5090-1:
+# FLIP_ROWS_8, TRIPWIRE none; with the head on its int8 grid, 2, 4 and 8 requests decode 1.0311x, 1.0243x and 1.0165x
+# as fast as 1, the min of four ABBA pairs at each; inside P153's quality bars at every group size, NLL gap at most
+# 0.0001 nats, argmax 3064-3066 of 3072), after P229's captured microbench of the head call (GO_ROWS_8: K37's
+# linear_i8 at a median 0.51 of F.linear's time at 2, 4 and 8 rows). Outputs change at 2..8 requests: K37 and F.linear
+# round differently within bf16's output rounding of the same grid. Quality was read on Qwen3-30B-A3B; same-shape
+# checkpoints inherit the default unread. The default holds only where the int8 head is on (E4B_INT8_HEAD_BW resolved
+# 1, so the head is an Int8HeadLinear), K37 imports (grouped-nf4-gemm 0.49.0 or later) and speculative decode is off
+# (E4B_PAGED_SPEC: its gate and draft were read with the head on F.linear); otherwise it resolves to 1, recorded,
+# never a crash or a refusal. An explicit 2..8 keeps every refusal; ``1`` opts out.
+INT8_HEAD_ROWS_DEFAULT_FAMILIES: dict = {
+    # e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24 (bench/p232/RESULTS-p232.md), after
+    # e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23 (bench/p229/RESULTS-p229.md)
+    "qwen3_moe": {(151936, 2048): 8},
 }
 _FUSION_WARNED: set = set()
 
@@ -637,9 +655,13 @@ def _int8_head_bw_env(value: str) -> str:
     raise ValueError(f"{INT8_HEAD_BW_ENV}={value!r}: expected '0' or '1' (unset: per family and head shape, lane P153)")
 
 
-def _int8_head_rows_env(value: str) -> int:
-    """``E4B_INT8_HEAD_ROWS`` as the server reads it (:func:`~.engines.int8_head_bw.rows_value`): 1 to 8, unset 1."""
+def _int8_head_rows_env(value: str):
+    """``E4B_INT8_HEAD_ROWS`` as the server reads it: ``1`` to ``8`` pass through as ints
+    (:func:`~.engines.int8_head_bw.rows_value`); unset or empty is ``default``, resolved per family and head shape at
+    the build (:data:`INT8_HEAD_ROWS_DEFAULT_FAMILIES`, lane P232). Anything else is refused."""
     from .engines.int8_head_bw import rows_value
+    if not (value or "").strip():
+        return FUSION_UNSET
     return rows_value(value)
 
 
@@ -688,6 +710,58 @@ def apply_int8_head_bw_resolved(model, cfg, *, gemv=None, quantize=None) -> dict
             log(f"{INT8_HEAD_BW_ENV}: the int8 head holds {rec['copy_bytes']} B but E4B_PAGED_MAX_SEQS=auto priced "
                 f"{rec['priced_bytes']} B for it (the config and the head disagree); the width may be too wide")
     return rec
+
+
+def resolve_int8_head_rows(value, model_type, head_shape, *, head_off=None, spec=False, kernel_error=None) -> tuple:
+    """``(rows, source)``: an explicit ``1`` to ``8`` passes through (``explicit``; above 1 the route still refuses a
+    head that is not the int8 head or a package without K37, and the config refuses it with ``E4B_PAGED_SPEC``).
+    ``default`` resolves to the listed bound (``default-allowlisted``) only on a ``model_type`` in
+    :data:`INT8_HEAD_ROWS_DEFAULT_FAMILIES` whose head has a listed shape and is on its int8 grid (no ``head_off``),
+    without speculative decode (``spec``) and with K37 importable (no ``kernel_error``); otherwise to ``1`` with
+    ``default-off: <why>``, never a refusal."""
+    if value != FUSION_UNSET:
+        return value, "explicit"
+    by_shape = INT8_HEAD_ROWS_DEFAULT_FAMILIES.get(model_type)
+    if by_shape is None:
+        return 1, f"default-off: no read licenses model_type {model_type!r}"
+    shape = tuple(int(d) for d in head_shape) if head_shape is not None else None
+    if shape not in by_shape:
+        return 1, (f"default-off: head shape {list(shape) if shape else None} is not one read on {model_type} "
+                   f"({', '.join(str(list(s)) for s in by_shape)})")
+    if head_off:
+        return 1, f"default-off: {head_off}"
+    if spec:
+        return 1, "default-off: E4B_PAGED_SPEC is on: its gate and draft were read with the head on F.linear"
+    if kernel_error:
+        return 1, f"default-off: {kernel_error}"
+    return int(by_shape[shape]), "default-allowlisted"
+
+
+def apply_int8_head_rows_resolved(model, cfg, int8_head=None, *, linear=None, plan=None) -> dict:
+    """The route's record (:func:`~.engines.int8_head_bw.apply_int8_head_rows`) with its ``source``, resolved from
+    ``cfg.int8_head_rows`` for this model's family and output head after the swap (``int8_head``, the record
+    :func:`apply_int8_head_bw_resolved` returned, names why the head is off): the one place :func:`build_engine` turns
+    the knob (or its per-family default) into the route."""
+    from .engines import int8_head_bw as ih
+
+    value = getattr(cfg, "int8_head_rows", FUSION_UNSET)
+    head = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
+    shape = tuple(head.weight.shape) if getattr(head, "weight", None) is not None else None
+    model_type = getattr(getattr(model, "config", None), "model_type", None)
+    unset = value == FUSION_UNSET
+    head_off = None
+    if not isinstance(head, ih.Int8HeadLinear):      # the swap is the truth; its record says why it did not happen
+        rec = int8_head or {}
+        head_off = (f"the int8 head is off ({INT8_HEAD_BW_ENV} resolved {rec.get('mode', '0')}: "
+                    f"{rec.get('source', 'not applied')})")
+    spec = str(getattr(cfg, "spec", "off") or "off") != "off"
+    # K37 is imported only where the default could take it (a listed family, the head on, no spec): an unset knob never
+    # imports dense_i8 on another family
+    listed = model_type in INT8_HEAD_ROWS_DEFAULT_FAMILIES
+    probe = unset and linear is None and head_off is None and not spec and listed
+    rows, source = resolve_int8_head_rows(value, model_type, shape, head_off=head_off, spec=spec,
+                                          kernel_error=ih.rows_kernel_missing() if probe else None)
+    return {**ih.apply_int8_head_rows(model, rows, linear=linear, plan=plan), "source": source}
 
 
 def int8_head_copy_bytes(cfg, model_config) -> int:
@@ -789,7 +863,8 @@ class PagedServeConfig:
     attn_split_cap: str = FUSION_UNSET   # E4B_ATTN_SPLIT_CAP: 0 | 1..32, or "default" when unset (per family, P143)
     dense_gemv_bw: str = "0"             # E4B_DENSE_GEMV_BW: 0 | 1 (P151; grouped-nf4-gemm K35's gemv_bf16_bw)
     int8_head_bw: str = FUSION_UNSET     # E4B_INT8_HEAD_BW: 0 | 1, or "default" when unset (per family and head shape, P153)
-    int8_head_rows: int = 1              # E4B_INT8_HEAD_ROWS: 1 (today) | 2..8, the int8 head's rows on K37 (K2b)
+    int8_head_rows: int | str = FUSION_UNSET   # E4B_INT8_HEAD_ROWS: 1..8, or "default" when unset (per family and head
+                                               # shape, P232): the int8 head's rows on K37 (K2b)
     fusion_modes: dict = field(default_factory=dict)   # FUSION_KNOBS -> auto | 0 | 1 (_fusion_env), or "default" when
                                                        # unset (resolved per family at the build); a knob not named keeps
                                                        # its old reading: fuse_qkv, or the fold's own env var
@@ -942,11 +1017,12 @@ class PagedServeConfig:
             if self.decode_lookahead:
                 raise ValueError("E4B_PAGED_SPEC and E4B_PAGED_DECODE_LOOKAHEAD do not combine: each speculative step "
                                  "reads its accepted tokens back before the next is planned")
-            if self.int8_head_rows > 1:
+            # an EXPLICIT bound above 1 only: unset ("default") resolves to 1 under spec at the build, recorded
+            if self.int8_head_rows != FUSION_UNSET and self.int8_head_rows > 1:
                 raise ValueError(f"E4B_PAGED_SPEC and {INT8_HEAD_ROWS_ENV}={self.int8_head_rows} do not combine until "
                                  "a read covers them: SD2's gate and draft were read with the head on F.linear at 2..4 "
-                                 f"rows, and K2b's served read is plain decode ({INT8_HEAD_ROWS_ENV}=1 or "
-                                 "E4B_PAGED_SPEC=off)")
+                                 f"rows, and K2b's served read (P232) is plain decode ({INT8_HEAD_ROWS_ENV} unset or "
+                                 "1, or E4B_PAGED_SPEC=off)")
         if not self.adapter and (self.adapter_allow_unverified_arena or self.adapter_accept_unverified_base
                                  or self.adapter_accept_base_mismatch or self.merged_arena):
             raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} / {ACCEPT_BASE_MISMATCH_ENV} / "
@@ -1986,10 +2062,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # (unset: on for qwen3_moe at the head shape P153 read, else off with the reason recorded in info["int8_head_bw"])
     from .engines.int8_head_bw import engagement as int8_head_engagement
     int8_head = apply_int8_head_bw_resolved(model, cfg)
-    # K2b: the int8 head's 2..value rows on K37's linear_i8, before any capture (unset: 1, nothing imported); refused by
-    # name when the head did not resolve to int8 or the package lacks K37
-    from .engines.int8_head_bw import apply_int8_head_rows
-    int8_head_rows = apply_int8_head_rows(model, getattr(cfg, "int8_head_rows", 1))
+    # K2b: the int8 head's 2..value rows on K37's linear_i8, before any capture. Unset: 8 for qwen3_moe at the head
+    # shape P232 read when the head is on, K37 imports and spec is off, else 1 with the reason recorded in
+    # info["int8_head_bw"]["rows"]; an explicit 2..8 is refused by name when the head is off or the package lacks K37
+    int8_head_rows = apply_int8_head_rows_resolved(model, cfg, int8_head)
 
     # proof of execution, the lanes' census (serve_stack.build_served_model) + their refusal rule
     try:

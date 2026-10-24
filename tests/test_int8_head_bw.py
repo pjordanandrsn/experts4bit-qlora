@@ -360,6 +360,8 @@ def test_rows_engagement_names_the_kernel_per_routed_row_count(monkeypatch):
 
 def test_the_server_config_reads_the_rows_knob(monkeypatch):
     monkeypatch.delenv("E4B_INT8_HEAD_ROWS", raising=False)
+    assert sp.PagedServeConfig.from_env().int8_head_rows == sp.FUSION_UNSET    # per family (the default's tests)
+    monkeypatch.setenv("E4B_INT8_HEAD_ROWS", "1")
     assert sp.PagedServeConfig.from_env().int8_head_rows == 1
     monkeypatch.setenv("E4B_INT8_HEAD_ROWS", "8")
     assert sp.PagedServeConfig.from_env().int8_head_rows == 8
@@ -379,7 +381,7 @@ def test_the_rows_knob_is_snapshotted_and_adapter_neutral():
 def test_build_engine_widens_the_route_after_the_swap_and_before_any_capture():
     src = inspect.getsource(sp.build_engine)
     at = [src.index(s) for s in ("apply_int8_head_bw_resolved(model, cfg)",
-                                 'apply_int8_head_rows(model, getattr(cfg, "int8_head_rows", 1))',
+                                 "apply_int8_head_rows_resolved(model, cfg, int8_head)",
                                  "runner.enable_decode_graphs(",
                                  'info["int8_head_bw"] = {**int8_head, "rows": int8_head_rows, "engagement"')]
     assert at == sorted(at), at

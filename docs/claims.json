@@ -12925,7 +12925,7 @@
       "evidence_private": [
         "the private receipt store, run p229-5090-3 (receipt.json, teardown-proof.json)"
       ],
-      "notes": "Pre-registered in #2026 (Amendments 1-6: the shakedown and real fixture, a runner comment re-pinned, pod-launch's drive contract, the retry ids, the power admission by the latest record, and a fetch that imports no links), before any data. A microbench of the head call, not a served read: the served read (W2, W4 and W8 on the default Qwen3 server, with P153's quality bars) is registered next and comes before any default. E4B_INT8_HEAD_ROWS stays opt-in (unset is 1)."
+      "notes": "Pre-registered in #2026 (Amendments 1-6: the shakedown and real fixture, a runner comment re-pinned, pod-launch's drive contract, the retry ids, the power admission by the latest record, and a fetch that imports no links), before any data. A microbench of the head call, not a served read: the served read (W2, W4 and W8 on the default Qwen3 server, with P153's quality bars) is registered next and comes before any default. The default now follows that served read, P232 (bench/p232/RESULTS-p232.md, e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24: FLIP_ROWS_8): E4B_INT8_HEAD_ROWS resolves to 8 on qwen3_moe at the 151936 x 2048 head (serve_paged.INT8_HEAD_ROWS_DEFAULT_FAMILIES) where the int8 head is on, K37 imports (grouped-nf4-gemm 0.49.0 or later) and E4B_PAGED_SPEC is off, else to 1, recorded; E4B_INT8_HEAD_ROWS=1 opts out."
     },
     {
       "id": "e4b.kernel.p228.dense-lt-pin.o-proj.qwen3.5090.2026-10-23",

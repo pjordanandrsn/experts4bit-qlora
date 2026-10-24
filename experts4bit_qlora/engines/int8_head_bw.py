@@ -33,10 +33,13 @@ buckets capture cuBLAS on the grid.
 those calls go to grouped-nf4-gemm K37's ``dense_i8.linear_i8`` over the SAME codes and scales, instead of
 ``F.linear`` on the bf16 rounding (two bytes an element, twice the int8 head's). One row keeps K36, and more rows keep
 ``F.linear``. ``linear_i8`` accumulates ``x . q`` in fp32 through ``tl.dot`` and stores ``bf16(s * acc)``: on the same
-grid as every other row count, under K37's tolerance contract, never bitwise a row's one-row output. Unset or ``1``
-is today's route and never imports ``dense_i8``. Set, it needs the head swapped (``E4B_INT8_HEAD_BW`` resolved on) and
-a grouped-nf4-gemm with K37 (0.49.0 or later); each is refused by name. :func:`apply_int8_head_rows` records, per row
-count it routes, the plan ``linear_i8`` runs at the head's shape (K37's table, else its untimed default).
+grid as every other row count, under K37's tolerance contract, never bitwise a row's one-row output. ``1`` is the
+one-row-only route and never imports ``dense_i8``. Above 1, it needs the head swapped (``E4B_INT8_HEAD_BW`` resolved
+on) and a grouped-nf4-gemm with K37 (0.49.0 or later); each is refused by name. P232 (``bench/p232``) read 8
+FLIP_ROWS_8 served; ``serve_paged`` resolves an unset knob to 8 for qwen3_moe at that head's shape when the head is on
+and K37 is importable (``INT8_HEAD_ROWS_DEFAULT_FAMILIES``), and to 1 everywhere else. :func:`apply_int8_head_rows`
+chooses nothing: ``value`` is the caller's. It records, per row count it routes, the plan ``linear_i8`` runs at the
+head's shape (K37's table, else its untimed default).
 
 Refused: another mode, a grouped-nf4-gemm without K36, a model with no ``nn.Linear`` output head (an int4 head is an
 ``Int4Linear``), a head tied to the input embeddings (rounding it would round the embeddings), a bias, and a weight that
@@ -139,14 +142,16 @@ def kernel_missing() -> str | None:
 
 
 def rows_value(value: str) -> int:
-    """``E4B_INT8_HEAD_ROWS`` as the server reads it: unset, empty or ``1`` is ``1`` (today's route); ``2`` to
-    :data:`MAX_ROWS` widen it. Anything else is refused."""
+    """``E4B_INT8_HEAD_ROWS`` read as a row bound: empty or ``1`` is ``1`` (one row on K36, more on ``F.linear``);
+    ``2`` to :data:`MAX_ROWS` widen it. Anything else is refused. The server reads an unset knob first, as its
+    per-family default (``serve_paged._int8_head_rows_env``, lane P232); an explicit value comes here."""
     v = (value or "").strip()
     if v in ("", "1"):
         return 1
     if v.isdigit() and 2 <= int(v) <= MAX_ROWS:
         return int(v)
-    raise ValueError(f"{ROWS_ENV}={value!r}: expected 1 to {MAX_ROWS} (unset: 1, one row on K36 and more on F.linear)")
+    raise ValueError(f"{ROWS_ENV}={value!r}: expected 1 to {MAX_ROWS} (1: one row on K36 and more on F.linear; unset: "
+                     "per family and head shape, lane P232)")
 
 
 def rows_kernel():
@@ -156,6 +161,16 @@ def rows_kernel():
     except ImportError as e:
         raise RuntimeError(f"{ROWS_ENV} needs grouped-nf4-gemm with dense_i8.linear_i8 (K37, 0.49.0 or later): {e}") from e
     return linear_i8, plan
+
+
+def rows_kernel_missing() -> str | None:
+    """Why :func:`rows_kernel` cannot import here (a grouped-nf4-gemm older than 0.49.0, e.g. ``[fast]``'s floor or a
+    ``--no-deps`` install), or None."""
+    try:
+        rows_kernel()
+    except RuntimeError as e:
+        return f"grouped-nf4-gemm without dense_i8.linear_i8 (K37, 0.49.0 or later): {e.__cause__}"
+    return None
 
 
 def apply_int8_head_rows(model, value: int, *, linear=None, plan=None) -> dict:

@@ -26,6 +26,8 @@ SOURCES = {"p229_bench.py": LANE / "p229_bench.py", "p229_reduce.py": LANE / "p2
 RUN = (LANE / "p229_run.sh").read_text(encoding="utf-8")
 DRIVE = (LANE / "p229_drive.sh").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p229.md").read_text(encoding="utf-8")
+#: the e4b commit P229 read at (bench/p229/RESULTS-p229.md: the Amendment 6 merge)
+READ_AT = "32fda64d"
 
 
 def _load(name, path):
@@ -42,11 +44,27 @@ def _load(name, path):
 R = _load("p229_reduce_under_test", LANE / "p229_reduce.py")
 
 
+def _staged_sha(path, read_at):
+    """sha256 of the bytes the kit staged from ``path``: the file in this checkout, or, for a repo file outside the
+    lane that has moved on since the reading (tests/test_int8_head_bw.py, when E4B_INT8_HEAD_ROWS took its per-family
+    default), the file at ``read_at``, the e4b commit the reading ran at. The pins are a record of what was staged, so
+    they are never rewritten; a file outside the lane is held to them at that commit (CI checks out full history)."""
+    here = hashlib.sha256(path.read_bytes()).hexdigest()
+    if path.is_relative_to(LANE):
+        return here
+    rel = path.relative_to(REPO).as_posix()
+    out = subprocess.run(["git", "cat-file", "blob", f"{read_at}:{rel}"], cwd=REPO, capture_output=True)
+    if out.returncode != 0:
+        pytest.skip(f"{rel} at {read_at} is not in this checkout's history")
+    return hashlib.sha256(out.stdout).hexdigest()
+
+
 def test_every_staged_file_is_pinned_and_matches():
     pins = dict(reversed(line.split()) for line in (LANE / "staged-p229.sha256").read_text(encoding="ascii").splitlines())
     assert set(pins) == set(SOURCES)
     for name, path in SOURCES.items():
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == pins[name], name
+        here = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert (here if here == pins[name] else _staged_sha(path, READ_AT)) == pins[name], name
 
 
 def test_the_premise_counts_are_the_suites_own():

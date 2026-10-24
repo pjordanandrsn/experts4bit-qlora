@@ -324,16 +324,24 @@ GEMV, which reads half the head's bytes.
 
 `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` ([P153](../bench/p153/RESULTS-p153.md)).
 
-**The int8 head at 2 to 8 rows (`E4B_INT8_HEAD_ROWS`, opt-in).** In a captured microbench of the head call (one RTX 5090,
-lane P229), grouped-nf4-gemm K37's `linear_i8` runs Qwen3-30B-A3B's 151936 x 2048 int8 head at 2, 4 and 8 rows in a
-median 0.51 of `F.linear`'s time on the grid's bf16 rounding (upper bounds 0.5109, 0.5148 and 0.5085 against 0.70), and
-within a median 1.01-1.03 of the one-row int8 GEMV. The verdict is GO_ROWS_8, so the knob is licensed to its maximum of
-8 rows. `e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23` ([P229](../bench/p229/RESULTS-p229.md)).
+**The int8 head at 2 to 8 rows (`E4B_INT8_HEAD_ROWS`, 8 by default on `qwen3_moe`).** In a captured microbench of the
+head call (one RTX 5090, lane P229), grouped-nf4-gemm K37's `linear_i8` runs Qwen3-30B-A3B's 151936 x 2048 int8 head at
+2, 4 and 8 rows in a median 0.51 of `F.linear`'s time on the grid's bf16 rounding (upper bounds 0.5109, 0.5148 and
+0.5085 against 0.70), and within a median 1.01-1.03 of the one-row int8 GEMV. The verdict is GO_ROWS_8, so the knob is
+licensed to its maximum of 8 rows. `e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23`
+([P229](../bench/p229/RESULTS-p229.md)).
 - **Served (lane P232, one RTX 5090 at 575 W):** on Qwen3-30B-A3B's default server, `E4B_INT8_HEAD_ROWS=8` decodes 2, 4
-  and 8 requests **1.0311x, 1.0243x and 1.0165x** as fast as unset (the smallest of four ABBA pairs at each), inside
-  P153's quality bars at every group size (NLL gap at most 0.0001 nats, argmax 0.9974-0.9980 against 0.95), TRIPWIRE
-  none. The verdict is FLIP_ROWS_8, which licenses a separate PR to make 8 qwen3_moe's default; until it merges the knob
-  stays opt-in. `e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24` ([P232](../bench/p232/RESULTS-p232.md)).
+  and 8 requests **1.0311×, 1.0243× and 1.0165×** as fast as `1` (the smallest of four ABBA pairs at each), inside
+  P153's quality bars at every group size (NLL gap at most 0.0001 nats, argmax 3064-3066 of 3072), TRIPWIRE none. The
+  verdict is FLIP_ROWS_8. `e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24`
+  ([P232](../bench/p232/RESULTS-p232.md)).
+- **Outputs change** at 2 to 8 requests: K37 and `F.linear` round differently within bf16's output rounding of the same
+  grid, so near-ties can flip (76 of 112 greedy rows matched in P232).
+- **Default:** 8 for `qwen3_moe` at this head shape (151936 x 2048), where the int8 head is on (`E4B_INT8_HEAD_BW`
+  resolved 1). It needs K37, first released in grouped-nf4-gemm 0.49.0. With an older release, with the head off, and
+  with speculative decode (`E4B_PAGED_SPEC`) the default resolves to 1, recorded in `/health`'s
+  `levers.int8_head_bw.rows.source`. Every other family and head shape stays at 1. `E4B_INT8_HEAD_ROWS=1` opts out.
+- **Quality basis:** read on Qwen3-30B-A3B. Same-shape checkpoints inherit the default unread.
 
 **Pinned cuBLASLt GEMMs for o_proj and the router at 2 to 8 rows (`E4B_DENSE_LT_PIN`, opt-in).** In a captured
 microbench of the two dense sites (one RTX 5090, lane P228), the cuBLASLt configuration selected on the card (algo 21,
@@ -514,6 +522,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | attention projections of 17–64 decode rows on the int4 small-M GEMM, from the int4 grid instead of a cached bf16 copy (with the K16 route on; takes effect with a grouped-nf4-gemm release carrying #522's `block_m=`; Qwen3-30B-A3B's 64- and 32-row steps 3.2–3.8 % faster) | `Int4Linear` (serving) | `E4B_ATTN_INT4_WIDE=0` | `e4b.serve.p124.attn-int4-wide.qwen3-int4.5090.2026-10-09` |
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
 | the paged FP8 attention decode capped at 16 splits (`qwen3_moe` only; buckets 1, 2 and 4 move, 32 / 32 / 23 -> 16; bitwise-identical to the plan at contexts ≤ 1024; one request 1.044× as fast (the smallest of four ABBA pairs), 16 unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) and other cards (the cap moves B 1–6 on a PRO 6000, B 1–4 on a 4090) take it by family without a read of their own) | `serve_paged` | `E4B_ATTN_SPLIT_CAP=0` | `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` |
+| the int8 lm_head's 2 to 8 rows through grouped-nf4-gemm K37's `linear_i8` instead of `F.linear` (`qwen3_moe` at the 151936 x 2048 head only, where the int8 head is on; needs grouped-nf4-gemm 0.49.0 or later, else it resolves to 1, recorded, as it does with `E4B_PAGED_SPEC`; outputs change at 2 to 8 requests, within bf16's output rounding; 2, 4 and 8 requests 1.0311×, 1.0243× and 1.0165× as fast (the smallest of four ABBA pairs), inside P153's quality bars, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); same-shape checkpoints inherit the default unread; other head shapes and families stay at 1; the served read is P232, `bench/p232/RESULTS-p232.md`) | `serve_paged` | `E4B_INT8_HEAD_ROWS=1` | `e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23` |
 | the lm_head on its per-row int8 grid, its one-row decode GEMV through grouped-nf4-gemm K36 (`qwen3_moe` at the 151936 x 2048 head only; needs grouped-nf4-gemm 0.48.0 or later, else it resolves off, recorded; one request 1.052× as fast (the smallest of four ABBA pairs), 16 requests 0.992, an observed cost not attributed, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); quality read on Qwen3-30B-A3B @ad44e777, same-shape checkpoints inherit the default unread; other head shapes, e.g. Qwen3-235B-A22B's 151936 x 4096, stay off) | `serve_paged` | `E4B_INT8_HEAD_BW=0` | `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` |
 | K25's codebook decode by grouped-nf4-gemm K39's byte permute (`lut="prmt"`; `qwen3_moe` only; bit-identical to the select tree, every token identical on one schedule; needs grouped-nf4-gemm 0.50.0 or later and an NVIDIA device, else it resolves to the tree, recorded in `info["k25_lut"]`; sixteen requests 1.0925× as fast (the smallest of four ABBA pairs), one request unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs) at the `today` plan; other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) take it by family with no speed claimed; other families stay on the tree) | `serve_paged` | `E4B_K25_LUT=tree` | `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` |
 | K25's tile plan `c1` under K39's decode (from 0.56.1; `qwen3_moe` only, where K25's decode resolved to `prmt`, else `today`, recorded in `info["k25_plan"]["source"]`; bit-identical to `today`'s plan, every token identical on one schedule; sixteen requests 1.4654× as fast (the smallest of four ABBA pairs), one request unchanged (0.9966), measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints take it by family with no speed claimed; other families stay on `today`) | `serve_paged` | `E4B_K25_PLAN=today` | `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20` |

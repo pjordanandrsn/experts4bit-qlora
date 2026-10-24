@@ -41,6 +41,8 @@ SOURCES = {"p232_run.sh": LANE / "p232_run.sh", "p232_box.py": LANE / "p232_box.
 RUN = (LANE / "p232_run.sh").read_text(encoding="utf-8")
 DRIVE = (LANE / "p232_drive.sh").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p232.md").read_text(encoding="utf-8")
+#: the e4b commit P232 read at (p232-5090-1: the Amendment 2 merge)
+READ_AT = "f7589a02"
 FLAT = " ".join(PREREG.split())     # the PREREG's wrapped lines joined: a phrase reads across a line break
 NEW_FILES = [LANE / f for f in ("p232_run.sh", "p232_box.py", "p232_reduce.py", "p232_drive.sh", "staged-p232.sha256")] + [
     REPO / "tests" / "test_p232.py", REPO / "changelog.d" / "p232-kit.md"]
@@ -69,6 +71,21 @@ def _load(name, path):
 R = _load("p232_reduce_under_test", LANE / "p232_reduce.py")
 
 
+def _staged_sha(path, read_at):
+    """sha256 of the bytes the kit staged from ``path``: the file in this checkout, or, for a repo file outside the
+    lane that has moved on since the reading (tests/test_int8_head_bw.py, when E4B_INT8_HEAD_ROWS took its per-family
+    default), the file at ``read_at``, the e4b commit the reading ran at. The pins are a record of what was staged, so
+    they are never rewritten; a file outside the lane is held to them at that commit (CI checks out full history)."""
+    here = hashlib.sha256(path.read_bytes()).hexdigest()
+    if path.is_relative_to(LANE):
+        return here
+    rel = path.relative_to(REPO).as_posix()
+    out = subprocess.run(["git", "cat-file", "blob", f"{read_at}:{rel}"], cwd=REPO, capture_output=True)
+    if out.returncode != 0:
+        pytest.skip(f"{rel} at {read_at} is not in this checkout's history")
+    return hashlib.sha256(out.stdout).hexdigest()
+
+
 def _run(script, *args, cwd=None):
     return subprocess.run([sys.executable, str(script), *args], capture_output=True, text=True, timeout=180, cwd=cwd)
 
@@ -77,7 +94,8 @@ def test_every_staged_file_is_pinned_and_matches():
     pins = _pins(LANE / "staged-p232.sha256")
     assert list(pins) == list(SOURCES)
     for name, path in SOURCES.items():
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == pins[name], name
+        here = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert (here if here == pins[name] else _staged_sha(path, READ_AT)) == pins[name], name
 
 
 def test_the_shared_pieces_are_at_p153s_and_p229s_pins():
