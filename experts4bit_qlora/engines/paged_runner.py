@@ -1071,7 +1071,8 @@ class PagedModelRunner(StepRunner):
         # forward returned is reusable while the pool holds it): count its bound, at the slot's capacity
         pg["bulk_flush_bytes"] = (self.kv.append_prompt_peak_bytes(self.kv.blocks_per_seq * self.kv.bt, self.pool_layers)
                                   if self.bulk_kv and hasattr(self.kv, "append_prompt_peak_bytes") else 0)
-        if require_headroom and pg["free_after_bytes"] < pg["pool_bytes"] + pg["bulk_flush_bytes"]:
+        from ..serve_recipe import prefill_graph_headroom_bytes      # the one rule the shared pool's sizing holds back
+        if require_headroom and pg["free_after_bytes"] < prefill_graph_headroom_bytes(pg["pool_bytes"], pg["bulk_flush_bytes"]):
             pool_mib, free_mib = pg["pool_bytes"] / 2**20, pg["free_after_bytes"] / 2**20
             flush_mib = pg["bulk_flush_bytes"] / 2**20
             del pg

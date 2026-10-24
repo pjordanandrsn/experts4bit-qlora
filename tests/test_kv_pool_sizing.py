@@ -139,7 +139,7 @@ def _need(topo, setup, rows, c):
 
     from experts4bit_qlora.serve_recipe import MAX_SEQS_AUTO_MARGIN_BYTES, estimate_serve_footprint
     fp = estimate_serve_footprint(topo, replace(setup, max_seqs=c["max_seqs"], kv_pool_rows=rows))
-    return fp.device_bytes + c["prefill_graph_reserve_bytes"] + MAX_SEQS_AUTO_MARGIN_BYTES
+    return fp.device_bytes + c["prefill_graph_reserve_bytes"] + c["prefill_graph_headroom_bytes"] + MAX_SEQS_AUTO_MARGIN_BYTES
 
 
 def test_at_4096_tokens_a_slot_the_shared_pool_keeps_64_slots_where_claim_all_cannot():
@@ -247,3 +247,130 @@ def test_resolve_kv_pool_leaves_claim_all_alone_and_keeps_an_explicit_width(monk
     auto = _cfg(monkeypatch, **base, E4B_PAGED_MAX_SEQS="auto", E4B_PAGED_KV_POOL="shared")
     res = resolve_kv_pool(auto, mc, FREE_5090)
     assert auto.max_seqs == 64 and auto.max_seqs_resolution is res and auto.kv_pool_rows is not None
+
+
+# ---- the prefill graph's runtime headroom, held back by the shared pool (sc2j-5090-1's refusal)
+# Recorded on that box (Qwen3-30B-A3B int4, 64 slots, 4,096 tokens a slot, buckets auto, RTX 5090; its /health and the
+# refusal's own words): free before load 33,138,933,760 B; the shared pool 11,156 rows of 847,872 B (claim-all 16,448);
+# the reserve 805,306,368 B; extra 311,772,672 B (the int8 head); the prefill graph refused with "the graph's private
+# pool holds 426 MiB ... 724 MiB is free after capture ... the bulk KV flush up to 319 MiB more". The MiB figures are
+# rounded to whole MiB, so the checks take their worst side (pool and flush + 0.5, free - 0.5).
+BOX = {"free": 33138933760, "rows": 11156, "row_bytes": 847872, "claim_all_rows": 16448, "reserve": 805306368,
+       "extra": 311772672, "pool_mib": 426, "free_after_mib": 724, "flush_mib": 319}
+MIB = 2 ** 20
+
+
+def _box_setup():
+    from experts4bit_qlora.serve_recipe import ServeSetup
+    return ServeSetup(max_tokens_per_seq=4096, exp_int4=True, attn_int4=True, buckets="auto")
+
+
+def _rows_freed(headroom=None):
+    """The rows the shared pool gives back on the box's inputs because of the hold-back: the pool sized with
+    ``headroom`` (the shipped rule when None) against the pool sized with none. That is what the box's free memory
+    after capture would gain."""
+    import experts4bit_qlora.serve_recipe as sr
+    topo, st = _qwen3_30b(), _box_setup()
+
+    def sized(rule):
+        with pytest.MonkeyPatch.context() as mp:
+            if rule is not None:
+                mp.setattr(sr, "prefill_graph_headroom_bytes", rule)
+            return sr.size_shared_pool(topo, st, BOX["free"], widths=sr.MAX_SEQS_AUTO_WIDTHS, extra_bytes=BOX["extra"])
+    on, off = sized(headroom), sized(lambda pool, flush: 0)
+    assert on["max_seqs"] == off["max_seqs"] == 64
+    return off["pool_rows"] - on["pool_rows"], on
+
+
+def _gate_passes(rows_freed):
+    """The runtime gate (the one rule, serve_recipe.prefill_graph_headroom_bytes) on the box's recorded numbers, with
+    the free memory after capture raised by the rows the hold-back gives back."""
+    from experts4bit_qlora.serve_recipe import prefill_graph_headroom_bytes
+    free_after = (BOX["free_after_mib"] - 0.5) * MIB + rows_freed * BOX["row_bytes"]
+    return free_after >= prefill_graph_headroom_bytes((BOX["pool_mib"] + 0.5) * MIB, (BOX["flush_mib"] + 0.5) * MIB)
+
+
+def test_the_fixture_is_the_box():
+    """The CPU fixture prices the box's quantities: the same row bytes, reserve, flush bound and claim-all rows."""
+    import experts4bit_qlora.serve_recipe as sr
+    topo, st = _qwen3_30b(), _box_setup()
+    r = sr.size_shared_pool(topo, st, BOX["free"], widths=sr.MAX_SEQS_AUTO_WIDTHS, extra_bytes=BOX["extra"])
+    c = r["candidates"][0]
+    assert (c["row_bytes"], c["prefill_graph_reserve_bytes"], c["claim_all_rows"]) == (
+        BOX["row_bytes"], BOX["reserve"], BOX["claim_all_rows"])
+    assert abs(sr.bulk_flush_bytes(topo, replace_seqs(st, 64)) / MIB - BOX["flush_mib"]) <= 0.5
+
+
+def replace_seqs(st, w):
+    from dataclasses import replace
+    return replace(st, max_seqs=w)
+
+
+def test_the_box_as_recorded_fails_the_gate():
+    """No hold-back (the box's sizing): 724 MiB free after capture, against 426 + 319 MiB: the refusal it recorded."""
+    assert not _gate_passes(0)
+
+
+def test_the_hold_back_lets_the_box_pass_the_gate():
+    """With the hold-back, the pool gives back rows on the box's inputs, and the box's free memory after capture then
+    clears the gate's 745 MiB."""
+    freed, on = _rows_freed()
+    assert freed > 0 and _gate_passes(freed)
+    c = on["candidates"][0]
+    from experts4bit_qlora.serve_recipe import bulk_flush_bytes, prefill_graph_headroom_bytes
+    assert c["prefill_graph_headroom_bytes"] == prefill_graph_headroom_bytes(
+        c["prefill_graph_reserve_bytes"], bulk_flush_bytes(_qwen3_30b(), replace_seqs(_box_setup(), 64)))
+
+
+def test_a_zero_hold_back_reproduces_the_refusal():
+    freed, _ = _rows_freed(lambda pool, flush: 0)
+    assert freed == 0 and not _gate_passes(freed)
+
+
+def test_where_the_graph_cannot_engage_nothing_is_held_back():
+    """prefill_graph='0' (reserve 0, the graph is never captured): the hold-back is 0 and the pool is the one sized with
+    no hold-back at all. The flush is still priced, so it is the `if reserve` guard that keeps it out of the sizing."""
+    from dataclasses import replace
+
+    import experts4bit_qlora.serve_recipe as sr
+    topo, st = _qwen3_30b(), replace(_box_setup(), prefill_graph="0")
+
+    def sized(rule=None):
+        with pytest.MonkeyPatch.context() as mp:
+            if rule is not None:
+                mp.setattr(sr, "prefill_graph_headroom_bytes", rule)
+            return sr.size_shared_pool(topo, st, BOX["free"], widths=sr.MAX_SEQS_AUTO_WIDTHS, extra_bytes=BOX["extra"])
+    on, off = sized(), sized(lambda pool, flush: 0)
+    c = on["candidates"][0]
+    assert c["prefill_graph_reserve_bytes"] == 0 and c["prefill_graph_headroom_bytes"] == 0
+    assert sr.bulk_flush_bytes(topo, replace_seqs(st, c["max_seqs"])) > 0
+    assert (on["max_seqs"], on["pool_rows"]) == (off["max_seqs"], off["pool_rows"])
+
+
+def test_the_runtime_gate_and_the_sizing_share_one_rule():
+    import inspect
+
+    from experts4bit_qlora import serve_recipe as sr
+    from experts4bit_qlora.engines import paged_runner
+    src = inspect.getsource(paged_runner)
+    assert 'prefill_graph_headroom_bytes(pg["pool_bytes"], pg["bulk_flush_bytes"])' in src
+    assert 'pg["free_after_bytes"] < pg["pool_bytes"] + pg["bulk_flush_bytes"]' not in src
+    assert "prefill_graph_headroom_bytes(reserve, bulk_flush_bytes(topology, s))" in inspect.getsource(sr.size_shared_pool)
+    assert sr.prefill_graph_headroom_bytes(3, 4) == 7
+
+
+def test_claim_all_sizing_does_not_move():
+    """choose_max_seqs (claim-all) prices no hold-back: each candidate's need is the estimate, the reserve, the extra and
+    the margin, exactly as before; its claim-all rows at 32 and 64 slots are the box's."""
+    from dataclasses import replace
+
+    import experts4bit_qlora.serve_recipe as sr
+    topo, st = _qwen3_30b(), _box_setup()
+    out = sr.choose_max_seqs(topo, st, BOX["free"], widths=(64, 32, 16), extra_bytes=BOX["extra"])
+    for c in out["candidates"]:
+        s = replace(st, max_seqs=c["max_seqs"])
+        fp = sr.estimate_serve_footprint(topo, s)
+        want = fp.device_bytes + sr.prefill_graph_reserve_bytes(topo, s) + BOX["extra"] + sr.MAX_SEQS_AUTO_MARGIN_BYTES
+        assert c.get("need_bytes", want) == want and "prefill_graph_headroom_bytes" not in c
+    sh = sr.size_shared_pool(topo, st, BOX["free"], widths=(64, 32), extra_bytes=BOX["extra"])
+    assert {c["max_seqs"]: c["claim_all_rows"] for c in sh["candidates"]} == {64: 16448, 32: 8224}

@@ -147,6 +147,29 @@ MAX_SEQS_AUTO_MARGIN_BYTES = 3 << 29   # 1.5 GiB (the arithmetic is in choose_ma
 PREFILL_GRAPH_RESERVE_BYTES = 16
 
 
+def bulk_flush_bytes(topology, setup: "ServeSetup") -> int:
+    """The bulk KV flush's bound (``E4B_PAGED_BULK_KV``; 0 when off): :func:`engines.fp8_paged_kv.append_prompt_peak_bytes`
+    over the pool layers' geometry at the slot's capacity, the same function and capacity the prefill graph's runtime
+    headroom gate prices (``PagedModelRunner.capture_prefill_graph``)."""
+    if not setup.bulk_kv:
+        return 0
+    from .engines.fp8_paged_kv import _auto_k_groups, append_prompt_peak_bytes
+    n = topology.kv_layers
+    hs = topology.kv_heads if hasattr(topology.kv_heads, "__len__") else [topology.kv_heads] * n
+    ds = topology.kv_head_dims if hasattr(topology.kv_head_dims, "__len__") else [topology.kv_head_dims] * n
+    geo = [(int(h), int(d), _auto_k_groups(int(d)) if setup.kv_groups == "auto" else int(setup.kv_groups))
+           for h, d in zip(list(hs)[:n], list(ds)[:n])]
+    return append_prompt_peak_bytes(geo, -(-setup.max_tokens_per_seq // BLOCK_TOKENS) * BLOCK_TOKENS)
+
+
+def prefill_graph_headroom_bytes(pool_bytes: int, bulk_flush: int) -> int:
+    """The free memory the first-chunk prefill graph needs AFTER its capture, the one rule its runtime gate applies
+    (``PagedModelRunner.capture_prefill_graph``, ``require_headroom``): a later chunk's eager forward needs about the
+    graph's private pool again, and the bulk KV flush allocates on top of it. The shared pool's sizing holds this back
+    too (:func:`size_shared_pool`), so a pool it sizes leaves the graph room to engage."""
+    return int(pool_bytes) + int(bulk_flush)
+
+
 def prefill_graph_reserve_bytes(topology, setup: "ServeSetup") -> int:
     """What :func:`choose_max_seqs` holds back for the first-chunk prefill graph's pool (see
     :data:`PREFILL_GRAPH_RESERVE_BYTES`); 0 where the graph cannot engage (the conditions the estimate names it under)."""
@@ -240,13 +263,20 @@ def size_shared_pool(topology, setup: "ServeSetup", free_bytes, *, widths, margi
         per_slot = -(-min(SHARED_POOL_MIN_TOKENS_PER_SLOT, int(setup.max_tokens_per_seq)) // bt)
         least = scratch + max(bps, w * per_slot)
         reserve = prefill_graph_reserve_bytes(topology, s)
+        # the bisection fills the rows up to the margin's edge (claim-all's width leaves slack this does not), so the
+        # graph's RUNTIME headroom is held back on top: the same rule its gate applies, at the reserve (its pool's
+        # estimate) and the flush bound. sc2j-5090-1: without it the pool left 724 MiB free after capture, under the
+        # 745 MiB the gate wanted, and the graph refused.
+        headroom = prefill_graph_headroom_bytes(reserve, bulk_flush_bytes(topology, s)) if reserve else 0
 
         def need(rows):
             fp = estimate_serve_footprint(topology, replace(s, kv_pool_rows=rows))
-            return None if fp.refusals else fp.device_bytes + reserve + int(extra_bytes) + int(margin_bytes), fp
+            return None if fp.refusals else (fp.device_bytes + reserve + headroom + int(extra_bytes)
+                                             + int(margin_bytes)), fp
         n_least, fp = need(min(least, full))
         cand = {"max_seqs": w, "scratch_slots": scratch, "blocks_per_seq": bps, "claim_all_rows": full,
-                "least_rows": least, "row_bytes": row, "prefill_graph_reserve_bytes": reserve}
+                "least_rows": least, "row_bytes": row, "prefill_graph_reserve_bytes": reserve,
+                "prefill_graph_headroom_bytes": headroom}
         if n_least is None:
             out["candidates"].append(dict(cand, refused=list(fp.refusals)))
             continue
@@ -651,15 +681,9 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
                                    "fp32 recurrent state per slot (engines.linear_state.LinearStatePool, allocated at "
                                    "each layer's first prompt chunk)"))
     if setup.bulk_kv:
-        from .engines.fp8_paged_kv import _auto_k_groups, append_prompt_peak_bytes
-        n = topology.kv_layers
-        hs = topology.kv_heads if hasattr(topology.kv_heads, "__len__") else [topology.kv_heads] * n
-        ds = topology.kv_head_dims if hasattr(topology.kv_head_dims, "__len__") else [topology.kv_head_dims] * n
-        geo = [(int(h), int(d), _auto_k_groups(int(d)) if setup.kv_groups == "auto" else int(setup.kv_groups))
-               for h, d in zip(list(hs)[:n], list(ds)[:n])]
         cap = -(-setup.max_tokens_per_seq // BLOCK_TOKENS) * BLOCK_TOKENS
         items.append(FootprintItem("bulk KV flush (one prompt's K/V quantized and written at once)", "device",
-                                   append_prompt_peak_bytes(geo, cap), "derived",
+                                   bulk_flush_bytes(topology, setup), "derived",
                                    f"E4B_PAGED_BULK_KV (the server's default): a finished prompt's K/V for every pool "
                                    f"layer is quantized and held until one bulk write "
                                    f"(fp8_paged_kv.append_prompt_peak_bytes at the slot's {cap} tokens); transient, "
