@@ -1,0 +1,31 @@
+e4b 0.58.0 @f15cb7d695cf7148067c6bcea543484f31dc3abd (GitHub main)
+gnf4 0.51.0 @30adb1bfa76f95f9ce4a4c29734b8f36de907eca (GitHub main)
+torch(e4b/hf) 2.8.0+cu128
+triton(e4b/hf) 3.4.0
+transformers(e4b/hf) 5.18.0
+bitsandbytes(e4b/hf) 0.50.2
+peft(hf) 0.21.2
+huggingface_hub(e4b/hf) 2.3.0
+httpx2(e4b/hf) 2.16.0
+brotli(e4b/hf) 1.2.1
+unsloth(unsloth-t28) 2026.10.8
+unsloth_zoo(unsloth-t28) 2026.10.8
+torch(unsloth-t28) 2.8.0+cu128
+triton(unsloth-t28) 3.4.0
+transformers(unsloth-t28) 5.17.0
+bitsandbytes(unsloth-t28) 0.50.2
+peft(unsloth-t28) 0.21.2
+torchao(unsloth-t28) None
+moe_backend(unsloth-t28) unsloth_triton
+unsloth(unsloth) 2026.10.8
+unsloth_zoo(unsloth) 2026.10.8
+torch(unsloth) 2.12.1+cu130
+triton(unsloth) 3.7.1
+transformers(unsloth) 5.17.0
+bitsandbytes(unsloth) 0.50.2
+peft(unsloth) 0.21.2
+torchao(unsloth) 0.18.0+cu130
+moe_backend(unsloth) grouped_mm
+e4b(t212) 0.58.0 @f15cb7d695cf7148067c6bcea543484f31dc3abd
+gnf4(t212) 0.51.0 @30adb1bfa76f95f9ce4a4c29734b8f36de907eca
+torch(e4b-t212) 2.12.1+cu130
