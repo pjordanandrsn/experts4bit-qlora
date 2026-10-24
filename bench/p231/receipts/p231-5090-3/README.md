@@ -40,7 +40,8 @@ arms. The timing and quality figures are reported, never graded.
   - the launcher's receipt, guard record and log, heartbeat, host facts, known hosts, instance record and teardown
     proof, and the box's `INSTANCE_ID`, which name the provider's instance or host;
   - nine box logs whose progress bars carry carriage returns: the four arm logs, `fetch.log`, `fit.log`, `prompts.log`
-    and the two quality logs.
+    and the two quality logs;
+  - `forensics.txt` and `outer.log`, which carry the card's GPU UUID.
 - **Not copied:** the staged scripts, each byte-identical to the file `staged-p231.sha256` pins at `fa40c752`, and the
   nonce markers, the run-id file, the start marker and the pip constraints file.
 - **No identifiers on the box:** no file here names an instance, an offer, a host name or an endpoint.

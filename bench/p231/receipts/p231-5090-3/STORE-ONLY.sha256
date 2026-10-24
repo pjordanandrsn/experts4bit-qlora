@@ -2,6 +2,7 @@
 # heartbeat, host facts, known_hosts, instance record and teardown proof, and the box's INSTANCE_ID, name the provider's
 # instance or host; the four arm logs and the fetch, fit, prompts and two quality logs carry progress bars' carriage
 # returns. Receipts are never rewritten, so they are not committed here. sha256, then the file's path within this run's receipt.
+# forensics.txt and outer.log carry the card's GPU UUID (the nvidia-smi line), so they are store-only too.
 59653c6311cc539ffccc33258aa2433e0ffc24c2f7249027d1f35bf78d5040f7  receipt.json
 9b3997f12fdcab68f883b89b6dc0b6f0fd3f8f654ea17d6f3e946145d282dcfa  guard-armed.json
 0a67b5a078de78743fee08e495dcce7296c15de84f26834980b23423dc308f40  guard.log
@@ -20,3 +21,5 @@ ed0964262654eae4db9764b43e1ceb7281329ad9961c2b83e67531e0eedee009  p231/logs/arm_
 be41a3416e3800c526c3dc0b4eea0548aba9ba91cf6d4d1b8516d7b70da7b316  p231/logs/prompts.log
 e8ea1d5e4ab1697857b5637f13c708ee9ed8c121c287c889575ed8be601d92bf  p231/logs/quality_off.log
 3a143702a081645d2779974d97e1c055c8542b3c24f183e68a1064204f79f13a  p231/logs/quality_on.log
+cab16bc0c8e2bc5af008406c8f9026343b32e5eae165a2b0d596c94d2c6cfd2d  p231/forensics.txt
+ca37488d5c2199cb1fdf86349fb4b9776e6d2542d3379892834e5f26980cc09e  p231/outer.log

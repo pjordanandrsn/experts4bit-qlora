@@ -58,7 +58,7 @@ streams.
 | Q3 | g2 between 1.6 and 2.6, g4 between 1.4 and 2.2 | **yes** (2.096, 1.729), reported only |
 | Q4 | g1 and g16 between 0.99 and 1.01; W8's g above 1 | **yes** (0.998, 1.001; W8 1.207), reported only |
 | Q5 | ON passes P110's bars on both texts | not graded: FUNCTION_FAIL is read first |
-| Q6 | the verdict | FUNCTION_FAIL, which the registration gave about 1 % |
+| Q6 | the verdict | FUNCTION_FAIL; the registration gave SLOWER or FUNCTION_FAIL about 1 % together |
 
 ## Why the W16 control moved: one reading refuted, one untested
 
