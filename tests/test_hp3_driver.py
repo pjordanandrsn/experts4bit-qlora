@@ -293,3 +293,16 @@ def test_an_unwritable_seed_plan_is_a_harness_fault_never_host_limited(tmp_path)
         rc, out, _ = _seed_plan(Path(d), 600, 3, 100000)
         (Path(d) / "hp3").chmod(0o700)
         assert rc == 1 and out == "UNWRITABLE"
+
+
+def test_the_shakedown_evaluator_skips_the_registered_trainable_count_and_the_read_keeps_it(tmp_path):
+    """hp3-shake-1 (2026-10-23): the 2-layer cut trains 26,771,456 parameters, not the registered 642,514,944, so the evaluator VOIDed
+    every calibration arm and G1' had no base. The shakedown passes --expect-trainable 0 to both evaluator calls; the read passes none."""
+    (tmp_path / "s").mkdir()
+    drive(tmp_path / "s", FAMILY_FAM="qwen3hp3shake", HP3_SHAKE="1")
+    evs = [ln for ln in (tmp_path / "s" / "py.log").read_text().splitlines() if "hp1_eval.py" in ln]
+    assert len(evs) == 2 and all("--expect-trainable 0" in ln for ln in evs), evs
+    (tmp_path / "r").mkdir()
+    drive(tmp_path / "r", FAMILY_FAM="qwen3hp3")
+    evs = [ln for ln in (tmp_path / "r" / "py.log").read_text().splitlines() if "hp1_eval.py" in ln]
+    assert len(evs) == 2 and not any("--expect-trainable" in ln for ln in evs), evs
