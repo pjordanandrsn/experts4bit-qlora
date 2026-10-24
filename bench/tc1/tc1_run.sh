@@ -2866,7 +2866,13 @@ tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=$
   # the evaluator's trainable-count check (hp1_eval --expect-trainable): the 2-layer cut trains far fewer parameters than the
   # registered 48-layer count, so the shakedown passes 0 (not checked), as HP1's shakedown and AXO1767 do; the read keeps the
   # registered count. hp3-shake-1 (2026-10-23) VOIDed every calibration arm on it ("trainable 26771456 != the registered 642514944").
-  local EXPT=(); [ "$SHAKE" = 1 ] && EXPT=(--expect-trainable 0)
+  # 0 turns hp1_eval's check OFF, so it is reachable only from a registered SHAKEDOWN id (the reviewer, 2026-10-24): keyed on the id
+  # itself, never on an env var or a flag a reading launch could inherit; the shakedown token under any other id refuses.
+  local EXPT=()
+  if [ "$SHAKE" = 1 ]; then
+    case "$TC1_RUN_ID" in hp3-shake-1|hp3-shake-2) EXPT=(--expect-trainable 0);;
+      *) echo "HP3 REFUSED: the shakedown token under run id '$TC1_RUN_ID', not a registered shakedown id (hp3-shake-1/2)" | tee -a summary.txt; return 0;; esac
+  fi
   say "===== HP3 family $FAM ($MID @ $REV; $([ "$SHAKE" = 1 ] && echo "SHAKEDOWN, never data: the 2-layer cut" || echo "the read: all 48 layers"); seeds [$SEEDS]; alarms e4b $EAL unsloth $UAL axolotl $AAL)"
   HP1_AX_DROP=1
   [ "$H3_OK" = 1 ] || { echo "HP3 BUILD_FAILED: $H3_REASON$SIG" | tee -a summary.txt; return 0; }
