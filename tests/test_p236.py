@@ -222,9 +222,13 @@ def test_the_release_proof_is_the_shared_helper_and_runs_before_any_timing():
     assert got == R.RELEASE_PROOF_SHA256 == "341dd130b1cf681a86f3fa1aad2b3e1bf9a2e4e6c22388e0e35b5736fc446713"
     assert R.RELEASE_PROOF_SHA256 in PREREG
     i = RUN.index('python $W/release_proof.py "bitsandbytes==$BNB_VERSION"')
-    assert RUN.index("tripwire OK") < i < RUN.index("p236_bench.py --self-test") < RUN.index("p236_bench.py --out")
-    assert 'RELEASE PROOF FAILED' in RUN[i:RUN.index("p236_bench.py --self-test")] and "finish 9" in RUN[i:RUN.index(
-        "p236_bench.py --self-test")]
+    bench = RUN.index("python $W/p236_bench.py --out")
+    assert RUN.index("tripwire OK") < RUN.index("p236_reduce.py --self-test") < RUN.index("can_run $NEED_BENCH") < i < bench
+    between = RUN[i:bench]
+    assert "RELEASE PROOF FAILED" in between and "finish 9" in between
+    assert "pip" not in between and "install" not in between, "nothing is installed between the proof and the bench"
+    assert RUN[RUN.rindex(chr(10), 0, i):i].strip().startswith("RELEASE_PROOF_NETWORK=1 PYTHONPATH= ")
+    assert RUN[RUN.rindex(chr(10), 0, bench):bench].strip().startswith("PYTHONPATH= "), "the same PYTHONPATH as the proof"
     line_start = RUN.rindex(chr(10), 0, i)
     assert "RELEASE_PROOF_NETWORK=1" in RUN[line_start:i], "the network proof is mandatory on the box"
     assert "--release-proof $W/release_proof.json" in RUN
@@ -234,3 +238,36 @@ def test_the_release_proof_is_the_shared_helper_and_runs_before_any_timing():
     assert mod.main([]) == 2 and mod.main(["bitsandbytes"]) == 2, "bad usage exits 2"
     with pytest.raises(mod.ReleaseProofError, match="not installed"):
         mod.prove("no-such-dist-p236", "0.0.0")
+
+
+def test_bytecode_only_under_a_fresh_prefix_from_the_first_python_call():
+    """R2: every python the box runs reads and writes bytecode only under a fresh, empty PYTHONPYCACHEPREFIX, exported
+    before the first python call and recorded; the bench records it and the reducer requires it."""
+    i = RUN.index("export PYTHONPYCACHEPREFIX=$(mktemp -d /tmp/p236-pycache.XXXXXX)")
+    offsets, pos = [], 0
+    for ln in RUN.splitlines(keepends=True):                 # the first python CALL (comment lines are not calls)
+        if not ln.lstrip().startswith("#") and re.search(r"(^|[ (])python[ -]", ln):
+            offsets.append(pos)
+        pos += len(ln)
+    first_python = min(offsets)
+    assert i < first_python and "PYTHONPYCACHEPREFIX $PYTHONPYCACHEPREFIX" in RUN
+    assert 'rec["pycache_prefix"] = os.environ.get("PYTHONPYCACHEPREFIX")' in (LANE / "p236_bench.py").read_text(
+        encoding="utf-8")
+    R = _load("p236_reduce")
+    assert R.reduce(R.fake_record(pycache_prefix=None))["verdict"] == "VOID"
+
+
+def test_no_staged_file_shadows_a_library_module():
+    """The proof checks bitsandbytes' bytes and the git pin gnf4's; neither holds if a file the box stages in $W (which
+    is sys.path[0] for every python there) shadows one of their top-level modules, or torch's."""
+    from importlib import metadata
+    staged = {pathlib.PurePosixPath(n).stem for n in STAGED if n.endswith(".py")}
+    for dist in ("grouped-nf4-gemm", "bitsandbytes", "torch"):
+        try:
+            files = metadata.distribution(dist).files or []
+        except metadata.PackageNotFoundError:
+            pytest.skip(f"{dist} is not installed here")
+        tops = {f.parts[0].removesuffix(".py") for f in files if not f.parts[0].endswith((".dist-info", ".data"))
+                and (len(f.parts) > 1 or f.parts[0].endswith(".py"))}
+        assert tops, dist
+        assert not staged & tops, (dist, staged & tops)

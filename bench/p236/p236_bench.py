@@ -180,6 +180,7 @@ def run(a):
         rec["provenance"] = {name: R.dist_record(name) for name in R.RELEASES}   # the reducer's release proof
     except Exception as e:                       # noqa: BLE001
         rec["versions_error"] = f"{type(e).__name__}: {e}"
+    rec["pycache_prefix"] = os.environ.get("PYTHONPYCACHEPREFIX")      # R2: bytecode only under a fresh prefix
     if a.release_proof:                          # the runner's release_proof.py output: one JSON object per pin
         with open(a.release_proof, encoding="utf-8") as f:
             rec["release_proof"] = {d["dist"]: d for d in (json.loads(ln) for ln in f if ln.strip())}

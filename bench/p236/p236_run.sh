@@ -23,10 +23,14 @@ case "$P236_RUN_ID" in
 esac
 [ -z "${P236_GPU_CLASS:-}${P236_MIN_DISK_GB:-}${P236_MIN_RAM_GB:-}${P236_NEED_BENCH:-}" ] || { say 'reading knobs are frozen'; finish 78; }
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+# every python this box runs reads and writes bytecode only under a fresh, empty prefix, never an in-tree __pycache__, so
+# no stale .pyc can stand in for a proven source (the release-proof rule's R2); recorded in summary.txt and the record
+export PYTHONPYCACHEPREFIX=$(mktemp -d /tmp/p236-pycache.XXXXXX)
 # every grouped-nf4-gemm and bitsandbytes knob starts unset: both libraries as they ship
 unset GNF4_GEMV_BW GNF4_GEMV_BW_PLAN GNF4_GEMV_BW_DECODE GNF4_GEMV_DOTPAD GNF4_DECODE_PLAN GNF4_GEMV_SPLITK GNF4_PDL \
       GNF4_PDL_MAX_ROWS TRITON_INTERPRET BNB_CUDA_VERSION
 : > summary.txt; echo "$P236_RUN_ID" > RUN_ID
+echo "PYTHONPYCACHEPREFIX $PYTHONPYCACHEPREFIX ($(find "$PYTHONPYCACHEPREFIX" -mindepth 1 | wc -l | tr -d ' ') entries at start)" | tee -a summary.txt
 echo "KNOBS gnf4=$GNF4_SHA ($GNF4_VERSION) bnb=$BNB_VERSION torch=$TORCH_WANT gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB need_bench=$NEED_BENCH" | tee -a summary.txt
 # ---- staged pieces, byte-for-byte
 for f in p236_bench.py p236_reduce.py p236_run.sh release_proof.py staged-p236.sha256; do
@@ -117,16 +121,17 @@ open("/root/p236/versions.txt", "a").write(f"gnf4 {md.version('grouped-nf4-gemm'
 print("tripwire OK: gnf4", md.version("grouped-nf4-gemm"), "bnb", md.version("bitsandbytes"), "torch", torch.__version__)
 PYT
 cat versions.txt | tee -a summary.txt
-# ---- the release proof (the rule for every head-to-head row, 2026-10-24): bitsandbytes' installed BYTES are the wheel PyPI
-# publishes for 0.50.2 (release_proof.py, staged byte-identical; its sha256 is named in the PREREG); before any timing.
-# grouped-nf4-gemm is git at the v0.51.0 commit, which the tripwire's provenance check already pins.
-RELEASE_PROOF_NETWORK=1 PYTHONPATH= perl -e 'alarm 600; exec @ARGV' python $W/release_proof.py "bitsandbytes==$BNB_VERSION" > $W/release_proof.json 2> logs/release_proof.err
-rp=$?; { echo -n "release proof rc=$rp: "; head -c 300 $W/release_proof.json; head -c 300 logs/release_proof.err; echo; } | tee -a summary.txt
-[ "$rp" = 0 ] || { say "RELEASE PROOF FAILED: bitsandbytes is not the published $BNB_VERSION"; finish 9; }
 python $W/p236_bench.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BENCH SELF-TEST FAILED"; finish 21; }
 python $W/p236_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 21; }
 # ---- the bench: per projection and M, the premise, correctness, engagement, then the timed palindromes
 can_run $NEED_BENCH bench || finish 40
+# ---- the release proof (the rule for every head-to-head row, 2026-10-24): bitsandbytes' installed BYTES are the wheel
+# PyPI publishes for 0.50.2 (release_proof.py, staged byte-identical; its sha256 is named in the PREREG). It is the LAST
+# step before the bench, in the bench's exact import environment (this interpreter, cwd $W, sys.path[0] $W, PYTHONPATH
+# empty, the same PYTHONPYCACHEPREFIX), with nothing installed in between. grouped-nf4-gemm is git at the v0.51.0 commit, which the tripwire's provenance check already pins.
+RELEASE_PROOF_NETWORK=1 PYTHONPATH= perl -e 'alarm 600; exec @ARGV' python $W/release_proof.py "bitsandbytes==$BNB_VERSION" > $W/release_proof.json 2> logs/release_proof.err
+rp=$?; { echo -n "release proof rc=$rp: "; head -c 300 $W/release_proof.json; head -c 300 logs/release_proof.err; echo; } | tee -a summary.txt
+[ "$rp" = 0 ] || { say "RELEASE PROOF FAILED: bitsandbytes is not the published $BNB_VERSION"; finish 9; }
 AL=$(step_alarm 1200); say "bench (alarm=$AL)"
 PYTHONPATH= perl -e "alarm $AL; exec @ARGV" python $W/p236_bench.py --out $W/bench_p236.json --release-proof $W/release_proof.json > logs/bench.log 2>&1
 rc=$?

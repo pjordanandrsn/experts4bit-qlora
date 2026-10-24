@@ -216,6 +216,8 @@ def reduce(rec):
             void.append(f"{k_} {rec.get(k_)!r}, registered {want}")
     void += provenance_faults(rec.get("provenance"))
     void += release_proof_faults(rec.get("release_proof"))
+    if not rec.get("dry") and not str(rec.get("pycache_prefix") or "").startswith("/tmp/p236-pycache."):
+        void.append(f"the read did not run under a fresh PYTHONPYCACHEPREFIX ({rec.get('pycache_prefix')!r})")
     if "5090" not in str(rec.get("device")) or rec.get("cc") != [12, 0] or (rec.get("sm_count") or 0) < 160:
         void.append(f"the card {rec.get('device')!r} cc {rec.get('cc')} sms {rec.get('sm_count')}, registered an RTX "
                     "5090 (cc 12.0, >= 160 SMs)")
@@ -283,6 +285,7 @@ def fake_record(**over):
            "provenance": {"grouped-nf4-gemm": {"version": GNF4_VERSION, "direct_url": {
                "url": "https://" + GNF4_REPO + ".git", "vcs_info": {"vcs": "git", "commit_id": GNF4_SHA}}},
                "bitsandbytes": {"version": BNB_VERSION, "direct_url": None}},
+           "pycache_prefix": "/tmp/p236-pycache.Ab12Cd",
            "release_proof": {"bitsandbytes": {"dist": "bitsandbytes", "version": BNB_VERSION, "files": 60,
                                               "wheel": f"bitsandbytes-{BNB_VERSION}-py3-none-manylinux_2_24_x86_64.whl",
                                               "sha256": "0" * 64, "record": "RECORD equal", "record_equal": True,
@@ -316,6 +319,8 @@ def self_test():
         ("another gnf4", v(fake_record(gnf4="0.50.0")) == "VOID"),
         ("no provenance", v(fake_record(provenance=None)) == "VOID"),
         ("no release proof", v(fake_record(release_proof=None)) == "VOID"),
+        ("no pycache prefix", v(fake_record(pycache_prefix=None)) == "VOID"),
+        ("another pycache prefix", v(fake_record(pycache_prefix="/root/p236/__pycache__")) == "VOID"),
         ("a refused release proof", v(fake_record(release_proof={"bitsandbytes": {
             **good["release_proof"]["bitsandbytes"], "record_equal": False, "first_diff": "bitsandbytes/x.py"}})) == "VOID"),
         ("a release proof of another version", v(fake_record(release_proof={"bitsandbytes": {
