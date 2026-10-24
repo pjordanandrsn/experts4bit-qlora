@@ -1,0 +1,23 @@
+# p223-5090-1: files kept only in the private receipt store, byte-exact. The launcher's receipt, guard record and log,
+# heartbeat, host facts, known_hosts, instance record and teardown proof, and the box's INSTANCE_ID, name the provider's
+# instance or host; the eight arm logs and the fetch and prompts logs carry progress bars' carriage returns. Receipts
+# are never rewritten, so they are not committed here. sha256, then the file's path within this run's receipt.
+6ae84bdd9d01369275c4b2dbfd284b638249817cedef49417c74f73fb5c2780a  receipt.json
+3631296ff0945e112394462d469279937d7292f3fb438a1161647eacae7ec0b8  guard-armed.json
+9279f00c529385b29529f00bb264733be80df0ac1852056174d6e490738f8e6f  guard.log
+7deb9628d31588a8d843ec7ad5df22f82fc7c72b613033c79b3ab000320526f1  heartbeat
+1c3d5fababed59902812f1887bce60919ec6e2d02521deec3133c23ebfd13d67  host_facts.json
+b66beb907b4b4ea7b3fb7d7883bd15a30655bda9b4b5e2d1957915072c683f3d  instance.json
+81e4b6a729f8c678ce7596049e1febf1bd13852a4b4d7cac356535c7bfb7bc84  known_hosts
+4912bca374b130eb86961be8a1a0754aa1151f0b859f249ee7037d14e40ba9c6  teardown-proof.json
+8ca7543772217825dc6bb145909817756e85b59f82541460e3afb5069753ba15  p223/INSTANCE_ID
+d5b8bf03aaf607dff672587c92cafe97dc10da5da3270066eeb9fe445f418d95  p223/logs/arm_D0a.log
+bbbcf89c0462a56185d418c94014d6a6869415583be9480302abf1aa2733ecab  p223/logs/arm_I0a.log
+3268b6a72b8acc89b83d69b1e4237aea98bf6bf20e67ed5818f40df9cd83c7ef  p223/logs/arm_I1a.log
+ca8beaec1e1802f2b57573bad23dadf64250b9390513e536d479b6cb4e41b436  p223/logs/arm_D1a.log
+4e9e180c384c7ff7132267077bf9b66fe305621a068c5f195e2b0dbd5a8e4d9d  p223/logs/arm_D1b.log
+25f5c33b6429702a6a5d8a3a7436d5f56da44a9f0aba7ddf8cd24df38e0ac14f  p223/logs/arm_I1b.log
+a1b92c0429809a1cb468f938a55cd8fb70d18535cf258a62bf3dce6fdfc01312  p223/logs/arm_I0b.log
+478952bad7fe2780a120b0aeca0a3904eaa8c4ed96fd4876c465e8999bc2e00b  p223/logs/arm_D0b.log
+d8d53a6120dd54ac31226a26ebf6c7a2e533c4c107e817eb08e2f546d5288a90  p223/logs/fetch.log
+7e00ad183d54bae17d74af0633bccecde6fcb1562e53a439921197e81b82bd3f  p223/logs/prompts.log

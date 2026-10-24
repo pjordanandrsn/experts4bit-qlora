@@ -1,0 +1,56 @@
+KNOBS run=p223-5090-1 shake=0 e4b=817acb946bf41fdc46aa008129daa7c39aa79417 gnf4=a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7 model=mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 gpu_class=5090 min_disk_gb=200 min_ram_gb=60 min_power_w=575 min_dl_mb_s=40 short=32 long=160 reps=5
+CUDA_PROBE ok
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.126.18, GPU-4aa241ae-359f-a934-4db5-1ec418d0a1bd, 12.0
+power.limit,enforced.power.limit,clocks.max.sm,temperature.gpu,clocks.sm 575.00 W, 575.00 W, 3090 MHz, 28, 4567 MHz
+CPU(s):                                  128
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 9334 32-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             755         426         124           0         204         324
+overlay         250G   12M  250G   1% /
+POWER_LIMIT_W 575 ENFORCED_W 575 (floor 575)
+DOWNLOAD status=200 bytes=1622147072 seconds=20.01 mb_s=81.1
+GUARD_FIT 9510s x 125% = 11887s of 12472s left
+[2026-10-23T23:54:05Z] p223: install e4b @817acb946bf41fdc46aa008129daa7c39aa79417 + gnf4 @a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7 (image python; transformers 5.17.0; torch held at 2.8.0)
+tripwire OK: 0.57.0 gnf4 0.49.0 torch 2.8.0+cu128
+e4b 0.57.0 @817acb946bf41fdc46aa008129daa7c39aa79417
+gnf4 0.49.0 @a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p223_reduce self-test: 71/71 OK
+p223_box self-test: 19/19 OK
+premise K37 rc=0: 28 passed in 5.06s
+premise engine rc=0: 4 passed in 6.63s
+premise ok
+[2026-10-23T23:55:13Z] p223: fetch mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a2861cdc0098cc54bc9f17cb2c47eb61
+FETCH mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 /root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61
+[2026-10-24T00:01:55Z] p223: bake the NF4 arena
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=9689e662d473cbd1e114ddf251817490aeaef5bdd788ec2e034d0937bd10dbbb
+[2026-10-24T00:03:50Z] p223: arm D0a (the default server) (alarm=1080)
+arm D0a rc=0 P223_ARM {"arm": "D0", "tag": "D0a", "load_s": 44.81, "int8": 0, "buckets": [1, 2, 4, 8, 16], "split": {"cap": null, "source": "default-off", "plans": {}}, "W16": 321.47, "W1": 124.69} 
+P223_GATE D0a: OK
+[2026-10-24T00:08:00Z] p223: arm I0a E4B_ATTN_SPLIT_CAP=1 E4B_PAGED_BUCKETS=2,4,8,16 (alarm=1080)
+arm I0a rc=0 P223_ARM {"arm": "I0", "tag": "I0a", "load_s": 51.03, "int8": 0, "buckets": [2, 4, 8, 16], "split": {"cap": 1, "source": "explicit", "plans": {"2": {"calls": 96, "plan": 12, "n_split": 1}, "4": {"calls": 96, "plan": 11, "n_split": 1}, "8": {"calls": 96, "plan": 5, "n_split": 1}, "16": {"calls": 96, "plan": 2, "n_split": 1}}}, "W16": 321.17, "W1": 35.53} 
+P223_GATE I0a: OK
+[2026-10-24T00:12:39Z] p223: arm I1a E4B_SERVE_ATTN_INT8=1 E4B_ATTN_SPLIT_CAP=1 E4B_PAGED_BUCKETS=2,4,8,16 (alarm=1080)
+arm I1a rc=0 P223_ARM {"arm": "I1", "tag": "I1a", "load_s": 31.77, "int8": 128, "buckets": [2, 4, 8, 16], "split": {"cap": 1, "source": "explicit", "plans": {"2": {"calls": 96, "plan": 12, "n_split": 1}, "4": {"calls": 96, "plan": 11, "n_split": 1}, "8": {"calls": 96, "plan": 5, "n_split": 1}, "16": {"calls": 96, "plan": 2, "n_split": 1}}}, "W16": 325.98, "W1": 36.61} 
+P223_GATE I1a: OK
+[2026-10-24T00:17:00Z] p223: arm D1a E4B_SERVE_ATTN_INT8=1 (alarm=1080)
+arm D1a rc=0 P223_ARM {"arm": "D1", "tag": "D1a", "load_s": 35.95, "int8": 128, "buckets": [1, 2, 4, 8, 16], "split": {"cap": null, "source": "default-off", "plans": {}}, "W16": 326.51, "W1": 142.33} 
+P223_GATE D1a: OK
+[2026-10-24T00:21:01Z] p223: arm D1b E4B_SERVE_ATTN_INT8=1 (alarm=1080)
+arm D1b rc=0 P223_ARM {"arm": "D1", "tag": "D1b", "load_s": 50.45, "int8": 128, "buckets": [1, 2, 4, 8, 16], "split": {"cap": null, "source": "default-off", "plans": {}}, "W16": 327.81, "W1": 142.48} 
+[2026-10-24T00:25:16Z] p223: arm I1b E4B_SERVE_ATTN_INT8=1 E4B_ATTN_SPLIT_CAP=1 E4B_PAGED_BUCKETS=2,4,8,16 (alarm=1080)
+arm I1b rc=0 P223_ARM {"arm": "I1", "tag": "I1b", "load_s": 35.64, "int8": 128, "buckets": [2, 4, 8, 16], "split": {"cap": 1, "source": "explicit", "plans": {"2": {"calls": 96, "plan": 12, "n_split": 1}, "4": {"calls": 96, "plan": 11, "n_split": 1}, "8": {"calls": 96, "plan": 5, "n_split": 1}, "16": {"calls": 96, "plan": 2, "n_split": 1}}}, "W16": 326.51, "W1": 36.59} 
+[2026-10-24T00:29:42Z] p223: arm I0b E4B_ATTN_SPLIT_CAP=1 E4B_PAGED_BUCKETS=2,4,8,16 (alarm=1080)
+arm I0b rc=0 P223_ARM {"arm": "I0", "tag": "I0b", "load_s": 44.25, "int8": 0, "buckets": [2, 4, 8, 16], "split": {"cap": 1, "source": "explicit", "plans": {"2": {"calls": 96, "plan": 12, "n_split": 1}, "4": {"calls": 96, "plan": 11, "n_split": 1}, "8": {"calls": 96, "plan": 5, "n_split": 1}, "16": {"calls": 96, "plan": 2, "n_split": 1}}}, "W16": 319.92, "W1": 35.56} 
+[2026-10-24T00:34:14Z] p223: arm D0b (the default server) (alarm=1080)
+arm D0b rc=0 P223_ARM {"arm": "D0", "tag": "D0b", "load_s": 42.58, "int8": 0, "buckets": [1, 2, 4, 8, 16], "split": {"cap": null, "source": "default-off", "plans": {}}, "W16": 320.21, "W1": 124.69} 
+[2026-10-24T00:38:21Z] p223: reduce
+P223_VERDICT READ: S0: SCHEDULE_INVARIANT; S1: SCHEDULE_INVARIANT; S0: p1 0.2849, p16 0.9991 (reported, never a bar); S1: p1 0.2568, p16 0.996 (reported, never a bar)
+[2026-10-24T00:38:21Z] p223: TP_DONE rc=0
