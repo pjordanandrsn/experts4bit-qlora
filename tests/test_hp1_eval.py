@@ -232,3 +232,16 @@ def test_hp2_round_trip_is_centred_on_each_runs_own_zero_adapter_gap():
     assert got["a"]["status"] == "SCORED" and got["a"]["zero_gap"] == 0.025 and got["a"]["adapter_roundtrip"] == 0.005
     assert got["b"]["status"] == "VOID" and "zero-centred" in got["b"]["reason"] and got["b"]["void_level"] == "run"
     assert got["b"]["adapter_roundtrip"] == 0.015 and bases[0]["status"] == "OK"
+
+
+def test_the_seed_plan_binding_hashes_the_raw_bytes_and_an_unreadable_plan_stops_the_evaluator(tmp_path):
+    """HP3 Amendment 1 part 7: --seed-plan's sha256 is read at the evaluator's start (main records it as plan_sha256). HP1/HP2/HPN
+    never pass it, so their output is unchanged."""
+    import hashlib
+    p = tmp_path / "seed_plan.json"
+    p.write_bytes(b'{"n": 4}\n')
+    assert hp1_eval.plan_binding(str(p)) == hashlib.sha256(b'{"n": 4}\n').hexdigest()
+    with pytest.raises(OSError):
+        hp1_eval.plan_binding(str(tmp_path / "missing.json"))
+    src = Path(hp1_eval.__file__).read_text()
+    assert src.index("plan_sha = plan_binding(a.seed_plan)") < src.index("tc1 = load_tc1_arm()") < src.index('out["plan_sha256"] = plan_sha')

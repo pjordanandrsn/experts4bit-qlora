@@ -13,6 +13,20 @@ sys.path.insert(0, str(REPO / "bench" / "sc2"))
 import sc2_kit_hold as kh  # noqa: E402
 
 
+class AtGit(kh.Git):
+    """The repo's real objects, read as if the staging checkout were ``at``, clean: these tests check REGISTERED commits'
+    content; the staging-checkout rule (HEAD == --at, porcelain empty) has its own self-test cases."""
+    def __init__(self, at):
+        super().__init__(str(REPO))
+        self._at = at
+
+    def head(self):
+        return self.sha(self._at)
+
+    def dirty(self):
+        return False
+
+
 def test_self_test_refuses_each_gate_with_its_evidence_removed():
     r = subprocess.run([sys.executable, str(REPO / "bench" / "sc2" / "sc2_kit_hold.py"), "--self-test"],
                        capture_output=True, text=True)
@@ -25,7 +39,7 @@ def test_the_hold_is_registered():
 
 
 def test_the_registered_delta_is_exactly_the_declared_set():
-    rec = kh.check(kh.Git(str(REPO)), kh.HOLD, at=kh.HOLD, e4b_sha=kh.STACK)
+    rec = kh.check(AtGit(kh.HOLD), kh.HOLD, at=kh.HOLD, e4b_sha=kh.STACK)
     assert rec["verdict"] == "OK", rec["why"]
     kinds = [x["kind"] for x in rec["run_hunks"]]
     assert kinds.count("brotli") == 1 and kinds.count("fetch-retry") == 4
@@ -41,8 +55,8 @@ def test_the_check_itself_is_not_staged():
 
 
 def test_the_check_refuses_a_launch_without_the_stack():
-    assert kh.check(kh.Git(str(REPO)), kh.HOLD, at=kh.HOLD)["verdict"] == "REFUSE"
-    assert kh.check(kh.Git(str(REPO)), kh.HOLD, at=kh.HOLD, e4b_sha=kh.HOLD)["verdict"] == "REFUSE"
+    assert kh.check(AtGit(kh.HOLD), kh.HOLD, at=kh.HOLD)["verdict"] == "REFUSE"
+    assert kh.check(AtGit(kh.HOLD), kh.HOLD, at=kh.HOLD, e4b_sha=kh.HOLD)["verdict"] == "REFUSE"
 
 
 FIX = REPO / "tests" / "fixtures" / "sc2_verdict_stack"   # a real fetched run's records (sc2j-r3: box Q at 7b8f1f69)
@@ -92,12 +106,12 @@ def test_package_hold_on_registered_commits():
     """SC2j Amendment 3: the stack pinned to Amendment 1's merge (ea298854), the kit checked out at #2066's merge
     (5c9579bb), whose package differs (a training-only change): OK only with E4B_SHA = ea298854 in full. Across a
     staged-kit change (1a25b209 -> 7b8f1f69) it refuses even with the pin."""
-    g = kh.Git(str(REPO))
     pin, kit = "ea298854139fc6b5ea9bddcb392b3d82d3b9ef6d", "5c9579bbbb4ce8f85afd8d9e1f947bb8df23ffff"
+    g = AtGit(kit)
     assert kh.package_hold(g, pin, kit, e4b_sha=pin)["verdict"] == "OK"
     for bad in (None, kit, pin[:8]):
         assert kh.package_hold(g, pin, kit, e4b_sha=bad)["verdict"] == "REFUSE", bad
-    r = kh.package_hold(g, kh.BASE, kh.HOLD, e4b_sha=kh.BASE)
+    r = kh.package_hold(AtGit(kh.HOLD), kh.BASE, kh.HOLD, e4b_sha=kh.BASE)
     assert r["verdict"] == "REFUSE" and any("staged.sha256" in w for w in r["why"])
 
 
@@ -107,3 +121,14 @@ def test_verdict_stack_takes_the_lanes_pin(tmp_path):
         (tmp_path / f).write_text((FIX / f).read_text())
     assert kh.verdict_stack(tmp_path, stack=kh.HOLD)["verdict"] == "OK"
     assert kh.verdict_stack(tmp_path)["verdict"] == "VOID"
+
+
+def test_the_hold_passes_a_registered_main_commit_with_box_qs_and_rule_8s_deltas():
+    """ac7e6ed1 (main after SC2j Am. 1-3 and rule 8): sc2j_box_q.sh changed, sc2j_quality.py added and staged, and
+    pull_box's --no-links. The HOLD exceptions (SC2f Am. 6, SC2h Am. 4, SC2i Am. 3) read OK; 1a25b209 -> it does not."""
+    at = "ac7e6ed123403af2bd4582cd792a2c5bb4114076"
+    g = AtGit(at)
+    r = kh.check(g, kh.HOLD, at=at, e4b_sha=kh.STACK)
+    assert r["verdict"] == "OK", r["why"]
+    assert r["hold_diff"] == ["sc2j_box_q.sh", "sc2j_quality.py"]
+    assert kh.check(g, kh.HOLD, at=at, e4b_sha=kh.HOLD)["verdict"] == "REFUSE"      # the stack gate still holds

@@ -103,6 +103,13 @@ adertha://
 # Any /home/<name>/ except /home/node/, a container home that many records name legitimately:
 #added-only: /home/(n|no|nod|[^n/][^/]*|n[^o/][^/]*|no[^d/][^/]*|nod[^e/][^/]*|node[^/]+)/
 
+# The control plane's bare name (2026-10-23): it reached public comments as a module path and as "the <name>
+# reconciler", and no rule above sees the bare word. Public text says what the tool does instead: "the launcher",
+# "the launcher's host probe", "the receipt store", "the message bus", "the control plane". The lines already
+# merged keep theirs: many sit in closed kits whose files are pinned by sha256. No trailing word boundary: "_" is a
+# word character, so one would let identifiers (a module file, an UPPER_CASE environment variable) through.
+#added-only: \badertha
+
 # --- RECEIPT STORE: the private receipt store's ledger and receipt records ----
 # The store's records are private, and none of the patterns above can see them.
 # They are matched by SHAPE, never by name: this file is public, so naming the

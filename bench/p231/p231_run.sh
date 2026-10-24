@@ -32,9 +32,13 @@ INSTALL_TO_GATE_S=600   # the two installs, the self-tests and both premises
 RESERVE=600             # can_run's margin after a step: the reduce, the fetch-back and the teardown
 GPU_CLASS=5090; MIN_DISK_GB=220; MIN_RAM_GB=60; MIN_DL_MB_S=40   # 93 GB at 40 MB/s is 2,325 s, inside NEED_FETCH
 case "$P231_RUN_ID" in
-  p231-5090-1|p231-5090-2|p231-5090-r1|p231-5090-r2|p231-5090-r3|p231-5090-r4|p231-5090-r5|p231-5090-r6|p231-5090-r7|p231-5090-r8) :;;
+  p231-5090-1|p231-5090-2|p231-5090-r1|p231-5090-r2|p231-5090-r3|p231-5090-r4|p231-5090-r5|p231-5090-r6|p231-5090-r7|p231-5090-r8) SHAKE=0;;
+  # Amendment 2: an explore shakedown runs this runner through the installs, the tripwire and the self-tests, then stops
+  # (rc 0) before the premise; nothing is fetched, it is never a reading and never counts toward the box-started cap
+  p231-shake-1|p231-shake-2|p231-shake-3) SHAKE=1;;
   *) say "unregistered run ID: $P231_RUN_ID"; finish 78;;
 esac
+[ "$SHAKE" = 1 ] && MIN_DISK_GB=40   # Amendment 2: a shakedown fetches no checkpoint (the installs only)
 [ -z "${P231_GPU_CLASS:-}${P231_MIN_DISK_GB:-}${P231_MIN_RAM_GB:-}${P231_MIN_DL_MB_S:-}${P231_SHORT:-}${P231_LONG:-}${P231_REPS:-}${P231_WINDOWS:-}${P231_CONT:-}" ] || { say 'reading knobs are frozen'; finish 78; }
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever, engine knob and kernel switch starts unset: the default server is the subject, and
@@ -149,7 +153,9 @@ case "$DL" in status=2[0-9][0-9]\ *) ;; *) DL_MB_S=0;; esac
 [ "${DL_MB_S:-0}" -ge "$MIN_DL_MB_S" ] 2>/dev/null || { say "REFUSED: download ${DL:-none} -- below ${MIN_DL_MB_S} MB/s"; echo "refused: download ${DL:-none}" > REFUSAL; finish 19; }
 # ---- the pre-install fit check (bench/common/README.md, "Guard fit"): before any install and any staged script
 FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
-FIT=$((INSTALL_TO_GATE_S + NEED_FETCH + NEED_BAKE + NEED_FIT + 4 * NEED_ARM + NEED_QOFF + NEED_QON + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P231_DEADLINE_EPOCH - $(date +%s)))
+FIT=$((INSTALL_TO_GATE_S + NEED_FETCH + NEED_BAKE + NEED_FIT + 4 * NEED_ARM + NEED_QOFF + NEED_QON + RESERVE))
+[ "$SHAKE" = 1 ] && FIT=$((INSTALL_TO_GATE_S + RESERVE))   # Amendment 2: a shakedown stops before the premise
+FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((P231_DEADLINE_EPOCH - $(date +%s)))
 # rc 41: a refusal before the install, not a start; two consecutive headroom refusals count as one strike
 [ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
 echo "GUARD_FIT fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s" | tee -a summary.txt
@@ -177,7 +183,7 @@ assert md.version("grouped-nf4-gemm") == "0.50.0", md.version("grouped-nf4-gemm"
 assert md.version("bitsandbytes") == "0.50.2", md.version("bitsandbytes")
 import transformers
 assert transformers.__version__ == "5.17.0", transformers.__version__
-import torch, triton
+import torch, triton, types
 assert torch.__version__ == os.environ["WANT_TORCH"], torch.__version__
 from experts4bit_qlora import serve_paged
 from experts4bit_qlora.engines import hot_residency as hr
@@ -185,15 +191,36 @@ from experts4bit_qlora.engines.paged_runner import PagedModelRunner
 assert serve_paged._graphs_env("", "cuda", "all-vram") is True, "the subject is the graph default"
 assert hasattr(PagedModelRunner, "_capture_bucket") and "def _capture_bucket(self, b" in inspect.getsource(PagedModelRunner)
 assert isinstance(hr.ROUTE_SEEN, dict) and callable(hr._fused_over_stack)
-# the switch the lane reads, at the boundary it moves: unset, 2..8 tokens take device grouping; set, singleton groups
+TRIPWIRE_DEVICE = "cuda"
+# >>> the routing block (Amendment 2; tests/test_p231.py runs this block from this file, on CPU, against the repo) >>>
+# the switch the lane reads, at the boundary it moves: unset, 2..8 tokens take device grouping; set, singleton groups.
+# Set, it routes only after resolve_nf4_smallm_bw(modules, device) (the engine build calls it on every measured path):
+# unresolved it must REFUSE by name, then the REAL resolve runs on stand-in MoE modules at Mixtral's expert shapes on this
+# device (K33 must engage there), and the routing is read; the resolution is undone in a finally either way.
 hr.DEVICE_GROUPING[0] = True
 os.environ.pop("E4B_NF4_SMALLM_BW", None)
 assert hr._collapsed_grouping(1, None) == (True, False) and hr._collapsed_grouping(4, None) == (False, True)
 os.environ["E4B_NF4_SMALLM_BW"] = "1"
-assert all(hr._collapsed_grouping(t, None) == (True, False) for t in (2, 4, 8)), "B1: 2..8 tokens take singleton groups"
-assert hr._collapsed_grouping(16, None) == (False, True), "B1 is inert above 8 tokens"
-del os.environ["E4B_NF4_SMALLM_BW"]
-hr.DEVICE_GROUPING[0] = False
+hr._NF4_SMALLM_BW_RESOLVED[0] = False
+try:
+    hr._collapsed_grouping(4, None)
+except RuntimeError as e:
+    assert "routes 2..8-token calls only after hot_residency.resolve_nf4_smallm_bw(modules, device)" in str(e), \
+        f"unresolved E4B_NF4_SMALLM_BW=1 refused for another reason: {e}"
+else:
+    raise AssertionError("unresolved E4B_NF4_SMALLM_BW=1 routed a 4-token call: the resolve guard is gone")
+_moe = types.SimpleNamespace(_hot_residency=types.SimpleNamespace(
+    _int4_stores=None, collapse_resident=True, _all_hot=lambda: True, shapes=(28672, 4096, 4096, 14336)))
+try:
+    res = hr.resolve_nf4_smallm_bw([_moe] * 32, TRIPWIRE_DEVICE)
+    assert res["on"] is True and res["shapes"] == [[4096, 14336], [28672, 4096]], f"resolve: {res}"
+    assert all(hr._collapsed_grouping(t, None) == (True, False) for t in (2, 4, 8)), "B1: 2..8 tokens take singleton groups"
+    assert hr._collapsed_grouping(16, None) == (False, True), "B1 is inert above 8 tokens"
+finally:
+    hr._NF4_SMALLM_BW_RESOLVED[0] = False
+    os.environ.pop("E4B_NF4_SMALLM_BW", None)
+    hr.DEVICE_GROUPING[0] = False
+# <<< the routing block <<<
 import nf4_grouped as ng
 dev = torch.device("cuda")
 assert all(ng._bw_engages(n, k, dev) for n, k in ((28672, 4096), (4096, 14336))), "K33 at Mixtral's shapes (P141's licence)"
@@ -209,6 +236,8 @@ cat versions.txt | tee -a summary.txt
 python $W/p231_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 21; }
 python $W/p231_box.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BOX SELF-TEST FAILED"; finish 21; }
 python $W/p115_quality.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "QUALITY SELF-TEST FAILED"; finish 21; }
+# Amendment 2: a shakedown stops here, before the premise and before anything is fetched (rc 0, never a reading)
+[ "$SHAKE" = 1 ] && { echo "SHAKE OK: the installs, the tripwire (the routing block's real resolve on this card) and the self-tests passed; stopping before the premise" | tee -a summary.txt; finish 0; }
 # ---- the premise, on THIS card, before anything is fetched: e4b's graph buckets (read from the junit report), then the
 # ROWS premise (B1's expert call bitwise per row at T = 1, 2 and 4); a failure HALTS the lane until it is amended (25)
 (cd $W && PYTHONPATH='' perl -e 'alarm 900; exec @ARGV' python -m pytest test_decode_graph_buckets.py -q -rs -p no:cacheprovider --junitxml=$W/logs/premise_served.xml) > logs/premise.log 2>&1

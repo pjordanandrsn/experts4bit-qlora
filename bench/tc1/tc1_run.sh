@@ -193,6 +193,18 @@ done
 for f in tc1_arm.py tc1_reduce.py tp4_alpaca.py n9_datasets.py ds_manifest.json; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done   # TC1b: + the clinical builder and its manifest (tc1_drive.sh's STAGE)
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "BOX REFUSED: gpu '$GPU_NAME' is not the registered class ($GPU_CLASS)"; echo "BOX_REFUSED gpu=$GPU_NAME" >> summary.txt; finish 12;; esac
+# HP3 Amendment 1 part 8 begin -- the card's MEMORY, not only its name (the reviewer, 2026-10-23, after a name-only screen pinned a
+# 48 GB modded RTX 4090): for the HP3 tokens, memory.total must fall in the class's band (MiB), else a host refusal before any staging
+# (rc 18: the launcher's "a lane's other registered host floor"; 14 is egress there)
+case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*)
+  GPU_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -dc 0-9)
+  case "$GPU_CLASS" in A4000) MEMBAND=15000:17000;; L4) MEMBAND=22000:24576;; 4090) MEMBAND=23000:25000;; L40S) MEMBAND=44000:49152;;
+    5090) MEMBAND=31000:33000;; *) MEMBAND="";; esac
+  if [ -z "$MEMBAND" ] || [ -z "$GPU_MIB" ] || [ "$GPU_MIB" -lt "${MEMBAND%%:*}" ] || [ "$GPU_MIB" -gt "${MEMBAND##*:}" ]; then
+    say "BOX REFUSED: gpu memory ${GPU_MIB:-unread} MiB is outside the $GPU_CLASS band (${MEMBAND:-none registered}) -- host-limited"
+    echo "BOX_REFUSED gpu_mem=${GPU_MIB:-unread}MiB class=$GPU_CLASS band=${MEMBAND:-none}" >> summary.txt; finish 18; fi;;
+esac
+# HP3 Amendment 1 part 8 end
 # K: the class label the arm records (TC1_BOX_CLASS): "RTX <n>" for a numeric class, the class string itself otherwise (H100 NVL / SXM / PCIE pass the substring check above)
 case "$GPU_CLASS" in [0-9]*) BOX_CLASS="RTX $GPU_CLASS";; *) BOX_CLASS="$GPU_CLASS";; esac
 # F [F19]: every arm runs with OMP_NUM_THREADS = the box's PHYSICAL core count (recorded in the receipt's arm_facts)
@@ -219,13 +231,35 @@ echo "CPU allotment $ALLOT (cgroup quota capped by affinity; physical cores $PHY
 case " $FAMILIES " in *" qwen3ompab "*)
   [ "$ALLOT" -lt "$PHYS" ] || { say "BOX REFUSED: the container's CPU allotment ($ALLOT) is not below the physical cores ($PHYS) -- amendment 45's threads A/B has no contrast on this host (host floor)"; echo "BOX_REFUSED cpu_allotment=$ALLOT phys=$PHYS" >> summary.txt; finish 18; };;
 esac
-# TC1 amendment 76: a CPU-allotment floor in the pre-flight (P224's lesson, applied before data). Box tc1-5090-155 ran amendment 75's four
-# arms in 36.6 min at an allotment of 47. Scaling its CPU-bound phases as 47/ALLOT, every arm run three times (the load gate's two re-runs),
-# with 25 % headroom, the 2 h guard covers an allotment of 42 or more (TC1-PREREG amendment 76, "The CPU floor"). Below it the box refuses
-# here, before any venv or fetch.
-POS76_MIN_ALLOT=42
+# TC1 amendment 76's CPU-allotment floor (42) is SUPERSEDED by amendment 77: the quota is recorded (arm_facts.threads), never screened.
+# TC1 amendment 77: a SINGLE-THREAD floor in the pre-flight, before any venv or fetch. The probe is the launcher's own cpu_loop_mops loop
+# (its host probe; the same body as bench/p225/p225_probe.py), the median of 5 runs of at least 2 s each. Box tc1-5090-155 read 25.91
+# Mops (its launcher host facts); scaling its CPU-bound phases as 25.91/M, every arm run three times, with 25 % headroom, a 3 h guard
+# covers 15 Mops or more (TC1-PREREG amendment 77). Below the floor the box refuses here (rc 18, a host floor).
+POS77_MIN_MOPS=15
+single_thread_mops(){ python3 - <<'PYM' 2>/dev/null
+import statistics, time
+def loop():
+    x = 0
+    for i in range(1_000_000):
+        x = (x + i * 7) & 0xFFFF
+    return x
+def once(min_s=2.0):
+    t0, n = time.perf_counter(), 0
+    while True:
+        loop()
+        n += 1
+        dt = time.perf_counter() - t0
+        if dt >= min_s:
+            return n * 1_000_000 / dt / 1e6
+print("%.2f" % statistics.median(once() for _ in range(5)))
+PYM
+}
 case " $FAMILIES " in *" qwen3pos76co "*)
-  [ "$ALLOT" -ge "$POS76_MIN_ALLOT" ] || { say "BOX REFUSED: the container's CPU allotment ($ALLOT) is under amendment 76's floor ($POS76_MIN_ALLOT): the 2 h guard would not cover the four arms with the load gate's re-runs (host floor)"; echo "BOX_REFUSED cpu_allotment=$ALLOT floor=$POS76_MIN_ALLOT (amendment 76)" >> summary.txt; finish 18; };;
+  MOPS=$(single_thread_mops)
+  echo "SINGLE_THREAD ${MOPS:-unreadable} Mops (median of 5; floor $POS77_MIN_MOPS; python $(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null); amendment 77)" | tee -a summary.txt
+  python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "${MOPS:-0}" "$POS77_MIN_MOPS" 2>/dev/null \
+    || { say "BOX REFUSED: single-thread speed ${MOPS:-unreadable} Mops is under amendment 77's floor ($POS77_MIN_MOPS): the 3 h guard would not cover the four arms with the load gate's re-runs (host floor)"; echo "BOX_REFUSED single_thread_mops=${MOPS:-unreadable} floor=$POS77_MIN_MOPS (amendment 77)" >> summary.txt; finish 18; };;
 esac
 # P48 run 1 (2026-09-19) drew a host whose container overlay was 32 GB and died ENOSPC mid-fetch; box B fetches ~120 GB of
 # checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.
@@ -2793,7 +2827,7 @@ tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
 # tc1_hp3_family FAM MID REV FAL EAL UAL AAL SHAKE -- HP3 (bench/hp3/HP3-PREREG.md). Every arm runs in its framework's HP3 venv, all on the
 # one matched build (H3_OK, hp3/build.json). Phase B is one calibration step per framework on rows 97-396, each base exported. The one
 # evaluator, in venv-hp3-e4b, then reads each base with a zero adapter, and hp3_reduce.py g1 applies G1'. Exit 4 (a whole-box CLOSE)
-# ends the draw. Phase C runs confirmation seeds 3410-3412 for each framework that passed G1', with e4b first at each seed; the first
+# ends the draw. Phase C runs confirmation seeds 3410-3414 (Amendment 1) for each framework that passed G1', with e4b first at each seed; the first
 # run per framework re-exports its base. axolotl runs kernels OFF (--axolotl-kernels off --axolotl-best 0), as the prereg's label (ii)
 # says. Phase D is the evaluator's pass and hp3_reduce.py verdict, with the axolotl receipts for the engagement check.
 # No redraw: a VOID run makes its pairs NOT_READ.
@@ -2809,11 +2843,26 @@ hp3_fail(){ local AF=$1 FW=$2 TAG=$3 st=$4 cls v
   [ -n "$cls" ] || cls="R | the classifier printed nothing"
   case "$cls" in HOST_*) echo "HP3 ARM_FAILED $FW/$TAG $st: host-attributable (${cls%% |*}): the spare | ${cls#*| }";;
     *) echo "HP3 ARM_FAILED $FW/$TAG $st: ${cls%% |*} -> the (R) fallback signal | ${cls#*| }";; esac | tee -a summary.txt; }
+# hp3_seed_plan W NF (HP3 Amendment 1 part 7): after seed 3410 completes, the number of confirmation seeds n that fit, by TIMING alone:
+# need(k) = (k - 1) x W + 360 s x NF x k (the evaluator's pass, ~6 min a run) + 900 s (can_run's reserve), against left() - 900. n is the
+# largest k in {5, 4, 3} that fits, else 0 (a host-limited NOT_READ). It writes hp3/seed_plan.json BEFORE any later seed or the
+# evaluator's pass, and echoes n; a failed write echoes UNWRITABLE and returns 1 (a harness fault). No loss, receipt or verdict is read.
+hp3_seed_plan(){ local SW=$1 NF=$2 L k n=0 need=""
+  L=$(left)
+  for k in 5 4 3; do local nk=$(( (k - 1) * SW + 360 * NF * k + 900 ))
+    need="$need \"$k\": $nk,"; [ $n = 0 ] && [ $nk -le $(( L - 900 )) ] && n=$k; done
+  $PY_E4B -c "import json,sys,time; n,W,L,nf=map(int,sys.argv[2:6]); seeds=[3410,3411,3412,3413,3414][:n]
+json.dump({'n': n, 'seeds': seeds, 'basis': 'timing', 'seed1_wall_s': W, 'left_s': L, 'frameworks': nf, 'need_s': json.loads(sys.argv[6]),
+           'eval_s_per_run': 360, 'reserve_s': 900, 'written_at_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+           'reason': ('fit: %d seeds at seed 3410\\'s wall time %d s' % (n, W)) if n else 'host-limited: fewer than 3 seeds fit at seed 3410\\'s wall time %d s' % W},
+          open(sys.argv[1], 'w'), indent=1)" $W/hp3/seed_plan.json $n $SW $L $NF "{${need%,} }" || { echo UNWRITABLE; return 1; }
+  echo $n; }
 hp3_run(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 RC=$8 TOK=$9 TS=${10}; shift 10
   can_run 1500 $FAM/$FW/$TAG && HP3_VENV=1 arm $FAM $FW $TAG $ARM $AL "$MID" $REV 0 $RC $TOK $TS "$@"; }
 tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=${8:-0} TOK TS TOKC TSC rc s fw B RT OKF st x ALL=""
-  local CE=hp3cal_e4b_k00_s3407 CU=hp3cal_unsloth_s3407 CA=hp3cal_axolotl_s3407 SEEDS=$HP1_CONF_SEEDS RC=hp3 PR=() RCP=() SIG=""
-  [ "$SHAKE" = 1 ] && { SEEDS=${HP1_CONF_SEEDS%% *}; RC=hp3shake; SIG=" -> the (R) fallback signal"; }
+  # HP3 Amendment 1: five confirmation seeds per framework, a literal (never HP1's TC1_HP1_CONF_SEEDS knob); the shakedown runs the first
+  local CE=hp3cal_e4b_k00_s3407 CU=hp3cal_unsloth_s3407 CA=hp3cal_axolotl_s3407 SEEDS="3410 3411 3412 3413 3414" RC=hp3 PR=() RCP=() SIG=""
+  [ "$SHAKE" = 1 ] && { SEEDS=3410; RC=hp3shake; SIG=" -> the (R) fallback signal"; }
   say "===== HP3 family $FAM ($MID @ $REV; $([ "$SHAKE" = 1 ] && echo "SHAKEDOWN, never data: the 2-layer cut" || echo "the read: all 48 layers"); seeds [$SEEDS]; alarms e4b $EAL unsloth $UAL axolotl $AAL)"
   HP1_AX_DROP=1
   [ "$H3_OK" = 1 ] || { echo "HP3 BUILD_FAILED: $H3_REASON$SIG" | tee -a summary.txt; return 0; }
@@ -2868,8 +2917,22 @@ tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=$
   RT=$($PY_H3E -c "import json,sys; print(float(json.load(open(sys.argv[1]))['roundtrip_zero_centred_tol']))" $W/hp3/g1.json) \
     || { echo "HP3 G1_UNUSABLE (no 6(b) tolerance in g1.json)" | tee -a summary.txt; rm -rf $SC; return 0; }
   echo "HP3 G1' readable frameworks: $OKF; 6(b) VOIDs a run iff its adapter round trip exceeds $RT; no redraw" | tee -a summary.txt
-  local X="--hp1-export $W/hp1" BE=1 BU=1 BA=1
+  local X="--hp1-export $W/hp1" BE=1 BU=1 BA=1 T0 i=0 NPLAN=5 PLAN=() NF
+  NF=$(echo $OKF | wc -w | tr -d ' '); T0=$(date +%s)
   for s in $SEEDS; do
+    i=$((i + 1))
+    if [ "$SHAKE" != 1 ] && [ $i = 2 ]; then       # Amendment 1 part 7: the seed plan, from seed 3410's wall time across every framework
+      if ! NPLAN=$(hp3_seed_plan $(( $(date +%s) - T0 )) $NF); then
+        # a harness fault, never the host's (the maintainer, 2026-10-23 20:58Z): no read, and the record names the harness
+        echo "HP3 SEED_PLAN_UNWRITABLE: hp3/seed_plan.json could not be written (a harness fault, not host-limited); NOT_READ" | tee -a summary.txt
+        rm -rf $SC; hp1_bulk_manifest "$W"; return 0; fi
+      PLAN=(--seed-plan $W/hp3/seed_plan.json)
+      echo "HP3 SEED_PLAN n=$NPLAN ($($PY_E4B -c "import json,sys; print(json.load(open(sys.argv[1]))['reason'])" $W/hp3/seed_plan.json 2>/dev/null))" | tee -a summary.txt
+      if [ "$NPLAN" = 0 ]; then
+        echo "HP3 HOST_LIMITED: fewer than 3 complete seeds fit inside the guard; NOT_READ, a host refusal note, no strike" | tee -a summary.txt
+        rm -rf $SC; hp1_bulk_manifest "$W"; return 0; fi
+    fi
+    [ $i -gt $NPLAN ] && break
     case " $OKF " in *" e4b "*) B=""; [ $BE = 1 ] && { B="--hp1-export-base 1"; BE=0; }
       TC1_ARM_EXTRA_ENV="$E" hp3_run $AF e4b hp3_k00_s$s fused $EAL "$TM" $TR $RC $TLS $TS --attn-4bit 1 $(hp1_cell k00 $s) --seed $s --order-seed $s $X $B;; esac
     case " $OKF " in *" unsloth "*) B=""; [ $BU = 1 ] && { B="--hp1-export-base 1"; BU=0; }
@@ -2886,10 +2949,11 @@ tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=$
     done
   fi
   env $E HF_HUB_OFFLINE=1 $PY_H3E $W/hp1_eval.py --receipts "${PR[@]}" --bases $W/hp1/base_*_$AF --tokens $TLS --eval-n $HP1_EVAL_N --model "$TM" --revision $TR \
-    --zero-report-only 1 --roundtrip-zero-centred $RT --out $W/hp3/eval_P.json > logs/hp3_eval_P.log 2>&1; tail -1 logs/hp3_eval_P.log
+    --zero-report-only 1 --roundtrip-zero-centred $RT ${PLAN[@]+"${PLAN[@]}"} --out $W/hp3/eval_P.json > logs/hp3_eval_P.log 2>&1; tail -1 logs/hp3_eval_P.log
   rm -rf $SC
   hp1_bulk_manifest "$W"
-  $PY_H3E $W/hp3_reduce.py verdict $W/hp3/eval_P.json --g1 $W/hp3/g1.json --manifest $W/hp1/bulk_manifest.json "${RCP[@]}" --out $W/hp3/verdict.json 2>&1 | tee -a summary.txt
+  $PY_H3E $W/hp3_reduce.py verdict $W/hp3/eval_P.json --g1 $W/hp3/g1.json --manifest $W/hp1/bulk_manifest.json "${RCP[@]}" ${PLAN[@]+"${PLAN[@]}"} \
+    --out $W/hp3/verdict.json 2>&1 | tee -a summary.txt
   if [ "$SHAKE" = 1 ]; then      # the kit check: every run that exists is non-VOID (one seed, so the pairs themselves read NOT_READ)
     $PY_H3E -c "import json,sys; v=json.load(open(sys.argv[1]))['void']; bad={k: w for k, w in v.items() if w != 'absent'}
 print('HP3 SHAKEDOWN_OK' if not bad else 'HP3 SHAKEDOWN_FAILED ' + json.dumps(bad)); sys.exit(1 if bad else 0)" $W/hp3/verdict.json 2>&1 | tee -a summary.txt

@@ -3489,7 +3489,7 @@ comparable as context, not as the control. Both commits carry the release string
 - One RTX 5090 by the launcher's ranking. A pin names only a machine whose listing has held across at least two screen sweeps and 180 s,
   with its latest read fresh, on an offer that read listed. `TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`.
 
-**The CPU floor, in the pre-flight** (P224's lesson, applied before data). A box whose container CPU allotment is under **42** refuses
+**The CPU floor, in the pre-flight** (P224's lesson, applied before data; superseded by amendment 77). A box whose container CPU allotment is under **42** refuses
 before any venv or fetch (`BOX_REFUSED`, rc 18). The floor is sized from box `tc1-5090-155`, which ran amendment 75's four arms at an
 allotment of 47 (48 physical cores) in 36.6 min:
 
@@ -3544,7 +3544,7 @@ fit. A 4090 box needs its own registration.
 amendment 75's numbers that would put cd1cl1's zero-gap projection under a 4090's total, but not its device peak at amendment 75's
 allocator gap.
 
-**Budget.** One RTX 5090 at the declared $1.05/h, a 2 h guard, TC1's 98 GB host floor.
+**Budget** (superseded by amendment 77)**.** One RTX 5090 at the declared $1.05/h, a 2 h guard, TC1's 98 GB host floor.
 - **Time:** about 11 min of venvs and fetch, about 3 min of pre-check, four arms at about 9 min each, and two reinstalls: about 55 min.
 - **Worst case:** 2 h × $1.05 + 100 GB × $0.011/GB = **$3.20**. Expected about $1.5.
 
@@ -3552,3 +3552,33 @@ allocator gap.
 finding) runs amendment 75's arms on a real RTX 4090. Once this is pushed, explore boxes may run this family on a real RTX 4090 as well.
 Nothing they show changes this rule or this box, and none of their numbers is cited in this read. A 4090 fit is claimed only through its
 own registration.
+
+### Amendment 77 (2026-10-23T20:08Z, after amendment 76's registration, before any box): amendment 76's host floor screens single-thread speed, under a 3 h guard
+
+(The number 77 was once drafted for a thread-pinning change in a pull request closed unmerged. It was never registered.)
+
+**Why.** Amendment 76 sized its pre-flight floor on the container's CPU allotment (42). By the maintainer's ruling of 2026-10-23, the
+floor screens single-thread speed instead: the launcher's `cpu_loop_mops`, which it measures on every box. The allotment and the thread
+pools are recorded (`arm_facts.threads`), never screened.
+
+**The floor.** Box `tc1-5090-155` read **25.91 Mops** (its launcher host facts, in the private receipt store). Amendment 76's phase table
+is unchanged: 8.4 min that does not scale with the CPU, and 76.65 min that does, with every arm run three times. This amendment ASSUMES
+the CPU-bound part scales as 25.91/M; the 25 % headroom is what covers departures from that.
+
+| guard | 1.25 × (8.4 + 76.65 × 25.91/M) <= guard | floor | worst |
+|---|---|---|---|
+| 2 h | M >= 22.67 | 23 Mops | $3.20 |
+| 2.5 h | M >= 17.80 | 18 Mops | $3.72 |
+| **3 h** | M >= 14.65 | **15 Mops** | **$4.25** |
+
+Registered: the **3 h guard** and the **15 Mops** floor. It admits slower hosts for about $1 more worst case.
+
+**The probe.** The pre-flight, before any venv or fetch, times the launcher's own `cpu_loop_mops` loop (the same body as
+`bench/p225/p225_probe.py`): the median of 5 runs of at least 2 s each. `summary.txt` gets a `SINGLE_THREAD` line. Under 15 Mops, or an
+unreadable reading, the box refuses (`BOX_REFUSED`, rc 18, a host floor; no data is read). The launcher's own `cpu_loop_mops` from the
+same box is recorded beside it in the receipt.
+
+**Budget** (supersedes amendment 76's): one RTX 5090 at the declared $1.05/h, a 3 h guard, TC1's 98 GB host floor. Worst case
+3 h × $1.05 + 100 GB × $0.011/GB = **$4.25**. Expected about $1.5.
+
+Everything else is amendment 76's: the arms, the pre-check, the validity predicates, the rule, the window and the read.

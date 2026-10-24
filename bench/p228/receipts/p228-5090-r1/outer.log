@@ -1,0 +1,31 @@
+KNOBS e4b=32fda64d2e606deb429b72c862a14bbbf493ba99 gpu_class=5090 min_disk_gb=20 min_ram_gb=16 min_power_w=575 need_bench=1200
+CUDA_PROBE ok
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.126.18, GPU-965eee19-7929-a50e-dfdd-0ff0151769d7, 12.0
+power.limit,clocks.max.sm 575.00 W, 3090 MHz
+CPU(s):                                  128
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 9334 32-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             755         453          79           0         221         295
+overlay          40G   12M   40G   1% /
+POWER_LIMIT_W 575 (floor 575)
+GUARD_FIT fit=2400s need=3000s left=3489s
+[2026-10-23T22:46:56Z] p228: install e4b @32fda64d2e606deb429b72c862a14bbbf493ba99 (image python; transformers 5.17.0; torch held at 2.8.0)
+tripwire OK: 0.57.0 cublaslt 120804
+e4b 0.57.0 @32fda64d2e606deb429b72c862a14bbbf493ba99
+torch 2.8.0+cu128
+cublaslt 120804 /opt/conda/lib/python3.11/site-packages/nvidia/cublas/lib/libcublasLt.so.12
+cc (12, 0)
+sm_count 170
+p228_bench self-test OK (11 checks)
+p228_reduce self-test OK (26 checks)
+premise rc=0: 37 passed in 4.92s
+premise ok
+[2026-10-23T22:47:37Z] p228: microbench (alarm=1800)
+bench rc=0 P228_BENCH rc=0 in 78.7 s; clocks n=11582 error=None
+
+[2026-10-23T22:49:04Z] p228: reduce
+P228_VERDICT o_proj=PASS router=PASS
+  o_proj: PASS -- M=2: P/D 0.5978, upper bound 0.5981, clock-adjusted 0.5981; M=4: P/D 0.6008, upper bound 0.6009, clock-adjusted 0.6009; both <= 0.85 at M = [2, 4]
+  router: PASS -- M=2: P/D 0.2831, upper bound 0.2832, clock-adjusted 0.2832; M=4: P/D 0.2842, upper bound 0.2843, clock-adjusted 0.2843; both <= 0.85 at M = [2, 4]
+[2026-10-23T22:49:04Z] p228: TP_DONE rc=0

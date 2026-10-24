@@ -12926,6 +12926,56 @@
         "the private receipt store, run p229-5090-3 (receipt.json, teardown-proof.json)"
       ],
       "notes": "Pre-registered in #2026 (Amendments 1-6: the shakedown and real fixture, a runner comment re-pinned, pod-launch's drive contract, the retry ids, the power admission by the latest record, and a fetch that imports no links), before any data. A microbench of the head call, not a served read: the served read (W2, W4 and W8 on the default Qwen3 server, with P153's quality bars) is registered next and comes before any default. E4B_INT8_HEAD_ROWS stays opt-in (unset is 1)."
+    },
+    {
+      "id": "e4b.kernel.p228.dense-lt-pin.o-proj.qwen3.5090.2026-10-23",
+      "package": "experts4bit-qlora",
+      "area": "kernel",
+      "model": "Qwen/Qwen3-30B-A3B (o_proj shape only, 2048 x 4096; random bf16 weights, no checkpoint loaded)",
+      "claim": "Lane P228 (one RTX 5090, cuBLASLt 120804): at 2 and 4 rows of Qwen3-30B-A3B's 2048 x 4096 o_proj, the cuBLASLt configuration selected on the card (algo 21, tile 5, split_k 16, reduction scheme 4) and run through E4B_DENSE_LT_PIN's installed path takes a median 0.60 of F.linear's time in a captured graph of 48 copies (upper bounds 0.5981 and 0.6009 against P228's 0.85 bar; 0.6025 at 8 rows, which never rules); P228's verdict for o_proj is PASS.",
+      "value": 0.6009,
+      "unit": "ratio, P / D o_proj call time, the larger upper bound over the ruling M = 2, 4 (median + 2 SE over 60 reps, at M = 4; clock-adjusted bounds equal: every arm in a cell ran at the same median SM clock)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 580.126.18, a 575 W power limit read on the box before any install), one rented Vast.ai host (verified-secure, AMD EPYC 9334, 128 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @32fda64d (P228's registration with Amendments 1-7, #2061's merge), 0.57.0; torch 2.8.0+cu128 with its own cuBLASLt 120804, transformers 5.17.0; premise on the card exactly as registered (K1's GPU suite, 10, and CPU suite, 27: 37 passed); block A: every configuration on cuBLASLt's own heuristic list per (site, M in 2, 4, 8) (6 each) checked, run bitwise twice, compared with F.linear within 1.5e-2 and timed, the pin named by p228_reduce.select (algo 21, tile 5, split_k 16, reduction scheme 4, 20 stages in all six cells); block B: the pins installed by e4b's own apply_dense_lt_pin on toy modules holding the same random bf16 weights (o_proj 48 copies, router 384); arms D (F.linear at M, the control), D2 (D captured again, the self-pair), P (the pinned call through e4b's installed path) and T1 (F.linear at one row) in captured graphs, 60 reps of Williams-ordered arms with spacer replays, P155's larger-of SE, clock-adjusted bounds from a sampled SM clock; verdict by bench/p228/p228_reduce.py",
+      "measured_on": "2026-10-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p228/RESULTS-p228.md",
+        "bench/p228/PREREG-p228.md",
+        "bench/p228/p228_reduce.py",
+        "bench/p228/receipts/p228-5090-r1/verdict_p228.json",
+        "bench/p228/receipts/p228-5090-r1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p228-5090-r1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2021 (Amendments 1-7: the shakedown and real fixture, wording, a runner comment re-pinned, pod-launch's drive contract, the retry ids, the power admission by the latest record, and a fetch that imports no links), before any data. A microbench of the two dense projections, not a served read: a code PR fills K1's LT_PINS from the verdict's pin table with no speed claim, and a served read with B3's quality bar, per bucket and with the router as its own arm, comes before any default. E4B_DENSE_LT_PIN stays opt-in."
+    },
+    {
+      "id": "e4b.kernel.p228.dense-lt-pin.router.qwen3.5090.2026-10-23",
+      "package": "experts4bit-qlora",
+      "area": "kernel",
+      "model": "Qwen/Qwen3-30B-A3B (router gate shape only, 128 x 2048; random bf16 weights, no checkpoint loaded)",
+      "claim": "Lane P228 (one RTX 5090, cuBLASLt 120804): at 2 and 4 rows of Qwen3-30B-A3B's 128 x 2048 router gate, the cuBLASLt configuration selected on the card (algo 21, tile 5, split_k 16, reduction scheme 4) and run through E4B_DENSE_LT_PIN's installed path (router_linear) takes a median 0.28 of F.linear's time in a captured graph of 384 copies (upper bounds 0.2832 and 0.2843 against P228's 0.85 bar); P228's verdict for the router is PASS. At 8 rows, which never rules, it reads 0.884 (upper bound), above the bar: the pinned call is flat (3.61 to 3.71 us) while F.linear's own choice goes split-K there.",
+      "value": 0.2843,
+      "unit": "ratio, P / D router call time, the larger upper bound over the ruling M = 2, 4 (median + 2 SE over 60 reps, at M = 4; clock-adjusted bounds equal: every arm in a cell ran at the same median SM clock)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 580.126.18, a 575 W power limit read on the box before any install), one rented Vast.ai host (verified-secure, AMD EPYC 9334, 128 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @32fda64d (P228's registration with Amendments 1-7, #2061's merge), 0.57.0; torch 2.8.0+cu128 with its own cuBLASLt 120804, transformers 5.17.0; premise on the card exactly as registered (K1's GPU suite, 10, and CPU suite, 27: 37 passed); block A: every configuration on cuBLASLt's own heuristic list per (site, M in 2, 4, 8) (6 each) checked, run bitwise twice, compared with F.linear within 1.5e-2 and timed, the pin named by p228_reduce.select (algo 21, tile 5, split_k 16, reduction scheme 4, 20 stages in all six cells); block B: the pins installed by e4b's own apply_dense_lt_pin on toy modules holding the same random bf16 weights (o_proj 48 copies, router 384); arms D (F.linear at M, the control), D2 (D captured again, the self-pair), P (the pinned call through e4b's installed path) and T1 (F.linear at one row) in captured graphs, 60 reps of Williams-ordered arms with spacer replays, P155's larger-of SE, clock-adjusted bounds from a sampled SM clock; verdict by bench/p228/p228_reduce.py",
+      "measured_on": "2026-10-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p228/RESULTS-p228.md",
+        "bench/p228/PREREG-p228.md",
+        "bench/p228/p228_reduce.py",
+        "bench/p228/receipts/p228-5090-r1/verdict_p228.json",
+        "bench/p228/receipts/p228-5090-r1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p228-5090-r1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2021 (Amendments 1-7: the shakedown and real fixture, wording, a runner comment re-pinned, pod-launch's drive contract, the retry ids, the power admission by the latest record, and a fetch that imports no links), before any data. A microbench of the two dense projections, not a served read: a code PR fills K1's LT_PINS from the verdict's pin table with no speed claim, and a served read with B3's quality bar, per bucket and with the router as its own arm, comes before any default. E4B_DENSE_LT_PIN stays opt-in. The router claim is bounded to M <= 4: at 8 rows the default closes most of the gap."
     }
   ]
 }
