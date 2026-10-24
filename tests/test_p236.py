@@ -191,3 +191,23 @@ def test_the_release_proof_reads_installed_dists(tmp_path, case):
     else:
         assert len(faults) == 1, faults
     assert "provenance_faults(dists)" in RUN and RUN.index("provenance_faults(dists)") < RUN.index("p236_bench.py --out")
+
+
+def test_a_cell_that_fails_a_gate_is_never_timed(tmp_path, monkeypatch):
+    """The gates come before any timing: with grouped-nf4-gemm's output pushed off the reference (a stand-in fault),
+    every cell records its gate failure and no rep, and the reducer VOIDs."""
+    pytest.importorskip("nf4_grouped")
+    pytest.importorskip("nf4_pack_ref")
+    B = _load("p236_bench")
+    real = B.Dry.gnf4
+
+    def off(self, x, w, eids):
+        return real(self, x, w, eids) * 1.1
+    monkeypatch.setattr(B.Dry, "gnf4", off)
+    out = tmp_path / "gated.json"
+    import argparse
+    assert B.run(argparse.Namespace(dry=True, out=str(out))) == 0
+    rec = json.loads(out.read_text(encoding="utf-8"))
+    assert len(rec["cells"]) == 30
+    assert all(c["reps"] == [] and any("fp32 reference" in g for g in c["gate_failed"]) for c in rec["cells"].values())
+    assert _load("p236_reduce").reduce(rec)["verdict"] == "VOID"

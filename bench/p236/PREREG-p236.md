@@ -42,7 +42,9 @@ arm reads a cached weight.
    `bw_prmt32` launch per call and no other decode-GEMV route; bitsandbytes makes one `gemm_4bit` dispatch per call, all
    to one route, counted at `bitsandbytes.backends.cuda.ops._gemm_4bit_kernel_impl` (`custom`) and
    `_dequant_linear_fallback` (`dequant`).
-4. **Timing:** 10 untimed warm-up calls per arm, then **20 reps**. Each rep visits the arms in a palindrome,
+4. **Timing**, only for a cell whose premise, correctness and engagement all hold (checked by the reducer's own cell
+   rules before any timing; a failed cell is recorded with its reason, never timed, and VOIDs the read): 10 untimed
+   warm-up calls per arm, then **20 reps**. Each rep visits the arms in a palindrome,
    **gnf4 bnb bnb gnf4**, and odd reps swap the arms (bnb gnf4 gnf4 bnb), so each arm leads half the reps. A visit is
    **50 eager calls** between two CUDA events, rotating the weight copies; its time is the events' interval over 50.
    - **The ratio** of a rep is the bnb visits' sum over the gnf4 visits' sum: above 1, grouped-nf4-gemm is faster.

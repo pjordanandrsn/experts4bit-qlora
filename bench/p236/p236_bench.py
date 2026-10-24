@@ -13,8 +13,10 @@ The weights: per projection, a seeded random bf16 matrix quantized ONCE by ``bit
 (NF4, block 64, no double quant). grouped-nf4-gemm reads the same bytes as ``[N, K/2]`` and the same fp32 absmax as
 ``[N, K/64]``; bitsandbytes' ``dequantize_4bit`` must equal ``nf4_grouped.dequant_ref`` rounded to the weight dtype on
 those bytes (the premise, per cell). Timing rotates over enough distinct weight copies to span 4x the card's L2, so no
-arm reads a cached weight. Per cell: the premise, correctness against the fp32 reference, an eager engagement pass, a
-warm-up, then REPS reps of the palindrome (odd reps swap the arms), each visit ITERS eager calls between CUDA events.
+arm reads a cached weight. Per cell: the premise, correctness against the fp32 reference and an eager engagement pass,
+gated by the reducer's own cell rules BEFORE any timing (a failed cell is recorded with its reason and never timed);
+then a warm-up and REPS reps of the palindrome (odd reps swap the arms), each visit ITERS eager calls between CUDA
+events.
 
     python p236_bench.py --out bench_p236.json
     python p236_bench.py --out dry.json --dry        (CPU, no CUDA: the control flow and the record, never a reading)
@@ -225,6 +227,15 @@ def run(a):
                 finally:
                     be.count_routes(False)
                 b_eng = dict(be.route, calls=3)
+                cell = {"n": n, "k": k, "m": m, "copies": n_copies, "dequant_equal": deq_equal, "rel_err": rel,
+                        "engaged": {"gnf4": g_eng, "bnb": b_eng}, "reps": []}
+                rec["cells"][key] = cell
+                gate = R.cell_faults(key, {**cell, "reps": [{"order": R.order(i), "ms_per_call": [1.0] * len(R.ORDER)}
+                                                             for i in range(R.REPS)]})
+                if gate:                                 # the gates come before any timing: a failed cell is never timed
+                    cell["gate_failed"] = gate
+                    print(f"P236_CELL {key} GATE FAILED, not timed: {gate}", flush=True)
+                    continue
                 fns = {"gnf4": lambda i: be.gnf4(x, W[i % n_copies], eids), "bnb": lambda i: be.bnb_call(x, W[i % n_copies])}
                 for arm in R.ARMS:                                           # warm, untimed
                     for i in range(warm):
@@ -240,8 +251,7 @@ def run(a):
                                 fns[arm](i)
                         ms.append(tm.ms / iters)
                     reps_out.append({"order": o, "ms_per_call": ms})
-                rec["cells"][key] = {"n": n, "k": k, "m": m, "copies": n_copies, "dequant_equal": deq_equal,
-                                     "rel_err": rel, "engaged": {"gnf4": g_eng, "bnb": b_eng}, "reps": reps_out}
+                cell["reps"] = reps_out
                 print(f"P236_CELL {key} copies={n_copies} deq_eq={deq_equal} rel={rel['gnf4']:.4f}/{rel['bnb']:.4f} "
                       f"gnf4={g_eng['bw_prmt32']}/3 bnb={b_eng} med_ms g={sorted(x_['ms_per_call'][0] for x_ in reps_out)[len(reps_out) // 2]:.4f}",
                       flush=True)
@@ -269,6 +279,8 @@ def self_test():
         ("the premise", "torch.equal(be.dequant_bnb(w0), ref_w.to(torch.bfloat16))" in src),
         ("the reference is fp32", "ref = x.float() @ ref_w.t()" in src),
         ("the order is the reducer's", "o = R.order(r)" in src),
+        ("the gates before any timing", src.index("gate = R.cell_faults(key,") < src.index("for r in range(reps):")
+         and "continue" in src[src.index("if gate:"):src.index("fns = {")]),
         ("weights rotate", "W[i % n_copies]" in src and "R.copies_for(n, k)" in src),
         ("knobs default", "os.environ.pop(k, None)" in src),
         ("the reducer's shape", R.REPS == 20 and R.ITERS == 50 and len(R.SHAPES) == 6 and R.MS == (1, 2, 4, 8, 16)),
