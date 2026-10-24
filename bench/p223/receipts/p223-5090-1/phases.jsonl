@@ -1,0 +1,24 @@
+{"phase": "install", "event": "start", "kind": "setup", "t": 1792799645}
+{"phase": "install", "event": "end", "t": 1792799713}
+{"phase": "fetch", "event": "start", "kind": "setup", "t": 1792799713}
+{"phase": "fetch", "event": "end", "t": 1792800115}
+{"phase": "bake", "event": "start", "kind": "setup", "t": 1792800115}
+{"phase": "bake", "event": "end", "t": 1792800221}
+{"phase": "D0a", "event": "start", "kind": "measure", "t": 1792800230}
+{"phase": "D0a", "event": "end", "t": 1792800480}
+{"phase": "I0a", "event": "start", "kind": "measure", "t": 1792800480}
+{"phase": "I0a", "event": "end", "t": 1792800759}
+{"phase": "I1a", "event": "start", "kind": "measure", "t": 1792800759}
+{"phase": "I1a", "event": "end", "t": 1792801020}
+{"phase": "D1a", "event": "start", "kind": "measure", "t": 1792801020}
+{"phase": "D1a", "event": "end", "t": 1792801261}
+{"phase": "D1b", "event": "start", "kind": "measure", "t": 1792801261}
+{"phase": "D1b", "event": "end", "t": 1792801516}
+{"phase": "I1b", "event": "start", "kind": "measure", "t": 1792801516}
+{"phase": "I1b", "event": "end", "t": 1792801782}
+{"phase": "I0b", "event": "start", "kind": "measure", "t": 1792801782}
+{"phase": "I0b", "event": "end", "t": 1792802054}
+{"phase": "D0b", "event": "start", "kind": "measure", "t": 1792802054}
+{"phase": "D0b", "event": "end", "t": 1792802301}
+{"phase": "reduce", "event": "start", "kind": "reduce", "t": 1792802301}
+{"phase": "reduce", "event": "end", "t": 1792802301}

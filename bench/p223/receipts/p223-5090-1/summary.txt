@@ -1,0 +1,34 @@
+KNOBS run=p223-5090-1 shake=0 e4b=817acb946bf41fdc46aa008129daa7c39aa79417 gnf4=a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7 model=mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 gpu_class=5090 min_disk_gb=200 min_ram_gb=60 min_power_w=575 min_dl_mb_s=40 short=32 long=160 reps=5
+CUDA_PROBE ok
+POWER_LIMIT_W 575 ENFORCED_W 575 (floor 575)
+DOWNLOAD status=200 bytes=1622147072 seconds=20.01 mb_s=81.1
+GUARD_FIT 9510s x 125% = 11887s of 12472s left
+e4b 0.57.0 @817acb946bf41fdc46aa008129daa7c39aa79417
+gnf4 0.49.0 @a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+sm_count 170
+p223_reduce self-test: 71/71 OK
+p223_box self-test: 19/19 OK
+premise K37 rc=0: 28 passed in 5.06s
+premise engine rc=0: 4 passed in 6.63s
+premise ok
+FETCH mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 /root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=9689e662d473cbd1e114ddf251817490aeaef5bdd788ec2e034d0937bd10dbbb
+arm D0a rc=0 P223_ARM {"arm": "D0", "tag": "D0a", "load_s": 44.81, "int8": 0, "buckets": [1, 2, 4, 8, 16], "split": {"cap": null, "source": "default-off", "plans": {}}, "W16": 321.47, "W1": 124.69} 
+P223_GATE D0a: OK
+arm I0a rc=0 P223_ARM {"arm": "I0", "tag": "I0a", "load_s": 51.03, "int8": 0, "buckets": [2, 4, 8, 16], "split": {"cap": 1, "source": "explicit", "plans": {"2": {"calls": 96, "plan": 12, "n_split": 1}, "4": {"calls": 96, "plan": 11, "n_split": 1}, "8": {"calls": 96, "plan": 5, "n_split": 1}, "16": {"calls": 96, "plan": 2, "n_split": 1}}}, "W16": 321.17, "W1": 35.53} 
+P223_GATE I0a: OK
+arm I1a rc=0 P223_ARM {"arm": "I1", "tag": "I1a", "load_s": 31.77, "int8": 128, "buckets": [2, 4, 8, 16], "split": {"cap": 1, "source": "explicit", "plans": {"2": {"calls": 96, "plan": 12, "n_split": 1}, "4": {"calls": 96, "plan": 11, "n_split": 1}, "8": {"calls": 96, "plan": 5, "n_split": 1}, "16": {"calls": 96, "plan": 2, "n_split": 1}}}, "W16": 325.98, "W1": 36.61} 
+P223_GATE I1a: OK
+arm D1a rc=0 P223_ARM {"arm": "D1", "tag": "D1a", "load_s": 35.95, "int8": 128, "buckets": [1, 2, 4, 8, 16], "split": {"cap": null, "source": "default-off", "plans": {}}, "W16": 326.51, "W1": 142.33} 
+P223_GATE D1a: OK
+arm D1b rc=0 P223_ARM {"arm": "D1", "tag": "D1b", "load_s": 50.45, "int8": 128, "buckets": [1, 2, 4, 8, 16], "split": {"cap": null, "source": "default-off", "plans": {}}, "W16": 327.81, "W1": 142.48} 
+arm I1b rc=0 P223_ARM {"arm": "I1", "tag": "I1b", "load_s": 35.64, "int8": 128, "buckets": [2, 4, 8, 16], "split": {"cap": 1, "source": "explicit", "plans": {"2": {"calls": 96, "plan": 12, "n_split": 1}, "4": {"calls": 96, "plan": 11, "n_split": 1}, "8": {"calls": 96, "plan": 5, "n_split": 1}, "16": {"calls": 96, "plan": 2, "n_split": 1}}}, "W16": 326.51, "W1": 36.59} 
+arm I0b rc=0 P223_ARM {"arm": "I0", "tag": "I0b", "load_s": 44.25, "int8": 0, "buckets": [2, 4, 8, 16], "split": {"cap": 1, "source": "explicit", "plans": {"2": {"calls": 96, "plan": 12, "n_split": 1}, "4": {"calls": 96, "plan": 11, "n_split": 1}, "8": {"calls": 96, "plan": 5, "n_split": 1}, "16": {"calls": 96, "plan": 2, "n_split": 1}}}, "W16": 319.92, "W1": 35.56} 
+arm D0b rc=0 P223_ARM {"arm": "D0", "tag": "D0b", "load_s": 42.58, "int8": 0, "buckets": [1, 2, 4, 8, 16], "split": {"cap": null, "source": "default-off", "plans": {}}, "W16": 320.21, "W1": 124.69} 
+P223_VERDICT READ: S0: SCHEDULE_INVARIANT; S1: SCHEDULE_INVARIANT; S0: p1 0.2849, p16 0.9991 (reported, never a bar); S1: p1 0.2568, p16 0.996 (reported, never a bar)
