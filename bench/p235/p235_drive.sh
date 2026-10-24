@@ -1,13 +1,13 @@
 #!/bin/bash
 # Lane P235's controller (bench/p235/PREREG-p235.md): P233's controller (bench/p233/) by named edits -- this lane's run
-# ids (the reading's -1..-3 and the -r1..-r6 after a box that did not start; no shakedown), runner and reducer; P58's
-# harness staged under the names the runner expects (P37's vLLM driver, P39's step_decomp.py, k8_bake.py and
-# calib.json flat, P42's hook under hook/), copied into a stage directory and checked there against staged.sha256.
-# grouped-nf4-gemm's commit is an input (P58's form), refused unless it is a 40-char hex sha. pod-launch's contract
-# (P229 Amendments 3 and 6): the launch commit is the clean checkout HEAD, an E4B_SHA override is refused, and the box
-# tree is fetched into $RUN_DIR/p235/ with --no-links, a non-empty target refused. Polls the nonce-bound completion
-# marker, and fetches receipts without the hub cache, the vLLM venvs or the NF4 arena. It does not create, destroy, or
-# approve compute.
+# ids (the reading's -1..-3 and the -r1..-r6 after a box that did not start; no shakedown), runner, reducer and
+# provenance check; P58's harness staged under the names the runner expects (P37's vLLM driver, P39's step_decomp.py,
+# k8_bake.py and calib.json flat, P42's hook under hook/), copied into a stage directory and checked there against
+# staged.sha256. The box installs every distribution from PyPI at the runner's constants; this checkout's commit is
+# the harness's. pod-launch's contract (P229 Amendments 3 and 6): the launch commit is the clean checkout HEAD, an
+# E4B_SHA override is refused, and the box tree is fetched into $RUN_DIR/p235/ with --no-links, a non-empty target
+# refused. Polls the nonce-bound completion marker, and fetches receipts without the hub cache, the vLLM venvs or the
+# NF4 arena. It does not create, destroy, or approve compute.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p235_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID; do
@@ -20,11 +20,6 @@ case "$RUN_ID" in
   p235-5090-1|p235-5090-2|p235-5090-3|p235-5090-r1|p235-5090-r2|p235-5090-r3|p235-5090-r4|p235-5090-r5|p235-5090-r6) :;;
   *) say "refusing unregistered run ID: $RUN_ID (is not p235-5090-N or p235-5090-rN)"; exit 78;;
 esac
-# grouped-nf4-gemm's commit is passed to the runner (P58's form): the 0.51.0 release's, which PREREG-p235.md names by a
-# pre-data amendment. The runner's tripwire refuses (rc 9) an install whose version is not 0.51.0.
-GNF4_SHA=${GNF4_SHA:-}
-case "$GNF4_SHA" in *[!0-9a-f]*|"") say "refusing: GNF4_SHA is not a 40-char hex sha (${GNF4_SHA:-unset}); pass the 0.51.0 commit PREREG-p235.md names"; exit 78;; esac
-[ ${#GNF4_SHA} -eq 40 ] || { say "refusing: GNF4_SHA is not a 40-char hex sha ($GNF4_SHA)"; exit 78; }
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # Lane liveness by launch identity (PID + /proc identity, host uptime; #1512, #1517): the helper is sourced here and
 # streamed to the box over stdin for the launch and each probe; it is never staged (staged.sha256 does not list it).
@@ -39,11 +34,13 @@ E4B_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null) || { say "refusing: cannot 
 [ -z "$(git -C "$REPO" status --porcelain 2>/dev/null)" ] || { say "refusing: $REPO is dirty -- the box would install a commit that does not describe this tree"; exit 78; }
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78; }
-# The staging, under the names p235_run.sh expects: this lane's runner, reducer and staged.sha256, P37's vLLM driver
-# (byte-identical) and P39's step_decomp.py, k8_bake.py and calib.json flat; P42's hook as hook/usercustomize.py.
-# staged.sha256 pins every one by the path the box sees, at P58's digests for every piece but the runner and reducer.
+# The staging, under the names p235_run.sh expects: this lane's runner, reducer, provenance check and staged.sha256,
+# P37's vLLM driver (byte-identical) and P39's step_decomp.py, k8_bake.py and calib.json flat; P42's hook as
+# hook/usercustomize.py. staged.sha256 pins every one by the path the box sees, at P58's digests for every piece but
+# this lane's three.
 STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
-for f in bench/p235/p235_run.sh bench/p235/p235_reduce.py bench/p235/staged.sha256 bench/h2h-20260905/p37/p37_vllm.py \
+for f in bench/p235/p235_run.sh bench/p235/p235_reduce.py bench/p235/provenance.py bench/p235/staged.sha256 \
+         bench/h2h-20260905/p37/p37_vllm.py \
          bench/p39/step_decomp.py bench/p39/k8_bake.py bench/p39/calib.json; do
   [ -s "$REPO/$f" ] && cp "$REPO/$f" "$STAGE/" || { say "refusing: staged piece missing: $f"; exit 78; }
 done
@@ -54,16 +51,17 @@ done
 (cd "$STAGE" && { sha256sum -c staged.sha256 2>/dev/null || shasum -a 256 -c staged.sha256; } > /dev/null) || { say "refusing: staged files differ from staged.sha256"; exit 78; }
 [ "$(cd "$STAGE" && find . -type f ! -name staged.sha256 | wc -l | tr -d ' ')" = "$(grep -c '^[0-9a-f]\{64\}  ' "$STAGE/staged.sha256")" ] \
   || { say "refusing: the stage and staged.sha256 list different files"; exit 78; }
-# The box installs e4b at THIS commit and grouped-nf4-gemm at GNF4_SHA (both checked above).
+# The box installs experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0 from PyPI and records their provenance; THIS
+# commit is the harness's launch commit, recorded and never installed.
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
 SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
 SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 POLL=${P235_POLL_S:-60}; W=/root/p235; OUT="$RUN_DIR/p235"
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
-PASS="P235_RUN_ID=$RUN_ID P235_RUN_NONCE=$NONCE P235_DEADLINE_EPOCH=$DEADLINE P235_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA"
+PASS="P235_RUN_ID=$RUN_ID P235_RUN_NONCE=$NONCE P235_DEADLINE_EPOCH=$DEADLINE P235_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
 if [ "${P235_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage $(find "$STAGE" -type f | wc -l | tr -d ' ') files -> root@$HOST:$W ; start: env $PASS bash p235_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $OUT"; exit 0; fi
-say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); gnf4 $GNF4_SHA; the other pins are the runner's constants; receipts -> $OUT; deadline $DEADLINE"
+say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; harness commit $E4B_SHA (from $REPO); the installs are the runner's PyPI pins, provenance-checked on the box; receipts -> $OUT; deadline $DEADLINE"
 $SSH "test ! -e $W && mkdir -p $W/logs /root/.cache/huggingface" || { say "stage failed: remote work directory exists"; exit 20; }
 $SCP -r "$STAGE"/* "root@$HOST:$W/" || { say "stage failed: scp"; exit 20; }
 if [ -s "$HF_TOKEN_FILE" ]; then   # authenticated pulls (unauthenticated shards throttle); the token never appears on a command line

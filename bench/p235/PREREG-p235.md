@@ -8,35 +8,46 @@ reading is quoted **beside** P58's, never in place of it.
 ## The harness: P58's, by named edits
 
 - `p235_run.sh` is `bench/p58/p58_run.sh` with the names changed from P58 to P235 (work directory `/root/p235`, the
-  `P235_*` environment and marker names) and with the pin changes below. P58's 18 arms, their order, the per-arm
-  alarms, STOP-2 (an arm that cannot finish 10 min before the deadline is skipped and recorded), the engagement greps
-  and the reducer call are unchanged.
+  `P235_*` environment and marker names) and with the pin and provenance changes below. P58's 18 arms, their order,
+  the per-arm alarms, STOP-2 (an arm that cannot finish 10 min before the deadline is skipped and recorded), the
+  engagement greps and the reducer call are unchanged.
 - `p235_reduce.py` is `bench/p58/p58_reduce.py` with its labels renamed (title, docstring, usage). The verdict code is
   byte-identical.
+- `provenance.py` (new, stdlib only) holds the registered pins as constants and checks each installed distribution's
+  version and provenance.
 - P37's vLLM driver (`p37_vllm.py`), P39's `step_decomp.py`, `k8_bake.py` and `calib.json`, and P42's hook are staged
   at P58's digests (`staged.sha256`; `tests/test_p235.py` checks them against P58's pins).
 - `p235_drive.sh` follows the pod-launch drive form (P233's): lane liveness by launch identity, the clean checkout HEAD
   as the launch commit with an `E4B_SHA` override refused, the `--no-links` fetch into an empty `$RUN_DIR/p235/`, and
-  explicit run ids.
+  explicit run ids. The launch commit is the harness's (the staged pieces), recorded and never installed.
 - At $0, before registration, every e4b call the staged harness makes was bound against e4b main's signatures
   (`47bf1ed2`), and the tripwire's API asserts hold at grouped-nf4-gemm main. Nothing in the harness needed an edit
   to run at these pins.
 
-## Pins (what changes from P58)
+## Pins and provenance (what changes from P58)
+
+A version string is not a release. Every distribution the lane reads is installed from PyPI as a wheel at a
+registered version. Before any arm, `provenance.py` records each one's version AND provenance into the receipts: a
+PyPI install has no `direct_url.json`, or one whose url is on PyPI with no `vcs_info` or `dir_info`. Editable,
+`file://` and local-directory installs are refused. So is a git install, unless an amendment names the release tag's
+commit (`TAG_COMMITS` is empty). The pins are constants in `provenance.py` and in the runner, checked unconditionally,
+never behind a flag.
 
 | | P58 (2026-09-22) | P235 |
 |---|---|---|
-| e4b | 0.36.4 @ `4cab05a` | **0.58.0**: the launch commit. The tripwire asserts `experts4bit_qlora.__version__ == "0.58.0"` and refuses (rc 9) |
-| grouped-nf4-gemm | 0.32.1 @ `65cb104` | **0.51.0** @ `GNF4_SHA`. The tripwire asserts `md.version("grouped-nf4-gemm") == "0.51.0"` (rc 9) |
+| e4b | 0.36.4, git @ `4cab05a` | **`experts4bit-qlora==0.58.0`**, PyPI wheel; provenance checked, and the tripwire asserts `experts4bit_qlora.__version__ == "0.58.0"` |
+| grouped-nf4-gemm | 0.32.1, git @ `65cb104` | **`grouped-nf4-gemm==0.51.0`**, PyPI wheel (P58's `--force-reinstall --no-deps` form); provenance checked, and the tripwire asserts `md.version("grouped-nf4-gemm") == "0.51.0"` |
 | transformers | 5.16.1 | **5.17.0** |
 | bitsandbytes | 0.50.1 | 0.50.1 (e4b's floor is `>=0.43`) |
-| vLLM PRIMARY | latest PyPI at launch (0.30.0) | latest PyPI at launch (**0.32.0** today) |
-| vLLM SECONDARY | 0.29.0 | **0.30.0** (P58's primary) |
+| vLLM PRIMARY | latest PyPI at launch (0.30.0) | **0.32.0**, a constant, PyPI wheel, provenance checked. A newer vLLM is a new reading |
+| vLLM SECONDARY | 0.29.0 | **0.30.0** (P58's primary), a constant, PyPI wheel, provenance checked |
 | GPU UUID | collected | **not collected**: the forensics query drops `uuid`, and a test refuses `uuid`, `-L` or `-q` |
 
-**The one placeholder: `GNF4_SHA`.** It is the commit of grouped-nf4-gemm's 0.51.0 release, which does not exist
-yet. Amendment 1 names it after the tag and before any data. The drive passes it to the runner (P58's form) and refuses
-any value that is not a 40-char hex sha.
+**What a provenance failure does:**
+- **e4b or grouped-nf4-gemm** (wrong version, editable, `file://`, another host, any git commit): the run ends with
+  rc 9 before the tripwire and before any arm.
+- **A vLLM build** (checked in that build's venv, on `vllm` only): that build's rows are refused (they read `SKIPPED`,
+  no comparator), as P58's `PIP FAIL` rule does. The e4b arms and the other build continue.
 
 **Also unchanged from P58:**
 - the model, `Qwen/Qwen3-30B-A3B` @ `ad44e777bcd18fa416d9da3bd8f70d33ebb85d39`;
@@ -46,12 +57,13 @@ any value that is not a 40-char hex sha.
 - e4b's two stacks (the NF4 control, and the int4 stack with fused q/k/v at B=1 and unfused at B=16);
 - the image, `pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel`.
 
-vLLM 0.32.0 pins the same torch (2.13.0) as 0.30.0, which P58 installed and ran on this image. Its Python floor is
-3.11. A vLLM install or import failure leaves the e4b arms running and reads as that build's `PIP FAIL` or
-`vllm_init_failed` row (P58's rule).
-
-**The release pins bind.** The tripwire refuses any e4b whose version is not 0.58.0, so a launch from a commit past
-the next version bump refuses before the first arm.
+**Risks:**
+- vLLM 0.32.0 pins the same torch (2.13.0) as 0.30.0, which P58 installed and ran on this image. Its Python floor
+  is 3.11.
+- `p37_vllm.py` has run against vLLM 0.28 to 0.30, not 0.32.0. An API break there reads as that build's failed rows
+  (`vllm_init_failed`), never as a void of the e4b arms.
+- The launch commit must carry the staged pieces at the pins in `staged.sha256`. The installed e4b is PyPI's 0.58.0,
+  whatever the checkout's version.
 
 ## Bars (the harness's own; registered and descriptive)
 
@@ -64,17 +76,43 @@ the next version bump refuses before the first arm.
 **Quoted beside P58's reading, never instead of it:** vLLM 0.30.0 / e4b int4 = **1.087** at B=1 and **1.396** at
 B=16 (vLLM ahead). This lane licenses nothing and changes no default. FAIL stays FAIL, and DRIFT stays DRIFT.
 
+## What this lane cannot say
+
+P58's not-measured list carries over:
+- TTFT and prefill (informational only, with no ratio);
+- other batch sizes or context lengths;
+- memory footprint (vLLM reserves 0.90 of VRAM by policy);
+- any other checkpoint;
+- `GNF4_GEMV_FUSED_REDUCE=1`;
+- an fp8-KV vLLM arm.
+
+Two limits of the instrument:
+- **The e4b window is not the shipped server's path.** `step_decomp`'s graph-replay window is not the server's
+  scheduler.
+- **The engine advantage is understated, not inflated.** vLLM's slope includes its scheduler and detokenisation,
+  while e4b's window has neither.
+
+## Sequencing
+
+1. This registration is reviewed independently.
+2. It merges after the tags exist AND both releases (e4b 0.58.0, grouped-nf4-gemm 0.51.0) are published on PyPI.
+3. A $0 validation follows.
+4. The maintainer gives an Approved.
+5. The box runs.
+6. The maintainer re-derives the reading from the receipts.
+7. A results PR follows.
+
 ## Runs and budget
 
 - **Box:** one RTX 5090 at ≤ $1.05/h, guard 3.0 h, download ≤ $0.02/GB × 80 GB.
 - **Worst case:** $3.15 + $1.60 = **$4.75**, inside a **$6** lane ceiling. P58 ran the same arms in 42 minutes.
 - **Run ids:** `p235-5090-1..-3` are the readings, and `p235-5090-r1..-r6` are for a box that did not start. The
-  first run that completes is the reading. A run that ended before its arms (install, a dud box, a host fault) is
-  followed by the next id. A completed run is never re-run, whatever it reads (P58 STOP-4).
+  first run that completes is the reading. A run that ended before its arms (install, provenance, a dud box, a host
+  fault) is followed by the next id. A completed run is never re-run, whatever it reads (P58 STOP-4).
 
 **No shakedown is registered.** P58's runner ran all 18 arms on a 5090 in this exact shape. The changes here are
-version pins and names, each checked at $0 (the API binding above, the tripwire asserts, vLLM's torch pin). A failure
-at install or the tripwire refuses (rc 9) before the first arm and costs a few minutes of one box, about what a
-shakedown would cost.
+version pins, PyPI installs with a provenance check, and names, each checked at $0 (the API binding above, the
+tripwire asserts, the provenance checker's tests, vLLM's torch pin). A failure at install, provenance or the tripwire
+refuses (rc 9) before the first arm and costs a few minutes of one box, about what a shakedown would cost.
 
 Amendments, dated, go below this line before any data is read.

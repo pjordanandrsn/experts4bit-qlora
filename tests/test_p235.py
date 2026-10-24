@@ -1,12 +1,17 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """Lane P235 (bench/p235/PREREG-p235.md): P58's same-box vLLM head-to-head re-read at the release pins (e4b 0.58.0,
-grouped-nf4-gemm 0.51.0). The staged pins, resolved the way test_p58_staged_pin.py resolves P58's and held to P58's
-digests; the runner as P58's by named edits (every changed line one of them: the release-pin asserts in the tripwire,
-transformers 5.17.0, the 0.30.0 secondary, no GPU UUID); the reducer as P58's with its labels renamed (its output on
-P58's receipts unchanged but for the title); and the drive's pod-launch contract, refusals and dry run (P233's form)."""
+grouped-nf4-gemm 0.51.0, vLLM 0.32.0 and 0.30.0), each installed from PyPI with its provenance checked. The staged pins,
+resolved the way test_p58_staged_pin.py resolves P58's and held to P58's digests; provenance.py's rules on fake
+distributions (PyPI OK; editable, file://, another host, a git commit not the tag's, a wrong version or a missing
+distribution refused) and its constants against the PREREG and the runner; the runner as P58's by named edits (every
+changed line one of them), calling the check before the first e4b arm and in each vLLM venv before its arms; the
+reducer as P58's with its labels renamed (its output on P58's receipts unchanged but for the title); and the drive's
+pod-launch contract, refusals and dry run (P233's form)."""
 import ast
 import difflib
 import hashlib
+import importlib.util
+import json
 import os
 import pathlib
 import re
@@ -25,6 +30,7 @@ P58 = B / "p58"
 PIN = LANE / "staged.sha256"
 #: staged path (as the box sees it) -> the file in this checkout
 SOURCES = {"p235_run.sh": LANE / "p235_run.sh", "p235_reduce.py": LANE / "p235_reduce.py",
+           "provenance.py": LANE / "provenance.py",
            "p37_vllm.py": B / "h2h-20260905" / "p37" / "p37_vllm.py", "step_decomp.py": B / "p39" / "step_decomp.py",
            "k8_bake.py": B / "p39" / "k8_bake.py", "calib.json": B / "p39" / "calib.json",
            "hook/usercustomize.py": B / "p42" / "hook" / "usercustomize.py"}
@@ -32,12 +38,22 @@ RUN = (LANE / "p235_run.sh").read_text(encoding="utf-8")
 DRIVE = (LANE / "p235_drive.sh").read_text(encoding="utf-8")
 PREREG = (LANE / "PREREG-p235.md").read_text(encoding="utf-8")
 FLAT = " ".join(PREREG.split())     # the PREREG's wrapped lines joined: a phrase reads across a line break
-NEW_FILES = [LANE / f for f in ("p235_run.sh", "p235_reduce.py", "p235_drive.sh", "staged.sha256", "PREREG-p235.md")] + [
-    REPO / "tests" / "test_p235.py", REPO / "changelog.d" / "p235-registered.md"]
+NEW_FILES = [LANE / f for f in ("p235_run.sh", "p235_reduce.py", "provenance.py", "p235_drive.sh", "staged.sha256",
+                                "PREREG-p235.md")] + [REPO / "tests" / "test_p235.py", REPO / "changelog.d" / "p235-registered.md"]
 #: P58's names for what P235 renamed, so P58's text and this lane's compare line for line
 TO_P58 = (("/root/p235", "/root/p58"), ("P235_", "P58_"), ("p235_reduce.py", "p58_reduce.py"),
           ("RESULTS-p235-generated.md", "RESULTS-p58-generated.md"), ("] p235: ", "] p58: "), ('"P235 arm=', '"P58 arm='),
           ("bench/p235/staged.sha256", "bench/p58/staged.sha256"))
+
+
+def _load(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+PROV = _load("p235_provenance_under_test", LANE / "provenance.py")
 
 
 def _pins(path):
@@ -50,10 +66,10 @@ def _pins(path):
 
 
 def _resolve(name):
-    """test_p58_staged_pin.py's map, for this lane's names: the runner and the reducer from bench/p235; p37_vllm.py
-    from bench/h2h-20260905/p37 (byte-identical to P37's); the hook from bench/p42; everything else (step_decomp.py,
-    k8_bake.py, calib.json) from bench/p39."""
-    if name in ("p235_run.sh", "p235_reduce.py"):
+    """test_p58_staged_pin.py's map, for this lane's names: the runner, the reducer and the provenance check from
+    bench/p235; p37_vllm.py from bench/h2h-20260905/p37 (byte-identical to P37's); the hook from bench/p42; everything
+    else (step_decomp.py, k8_bake.py, calib.json) from bench/p39."""
+    if name in ("p235_run.sh", "p235_reduce.py", "provenance.py"):
         return LANE / name
     if name == "p37_vllm.py":
         return B / "h2h-20260905" / "p37" / name
@@ -71,13 +87,197 @@ def test_staged_file_matches_its_pin(name, want):
 
 
 def test_every_staged_piece_is_pinned_and_the_harness_is_p58s():
-    """The pins name exactly the staged pieces, and every piece but the runner and the reducer is at P58's digest."""
+    """The pins name exactly the staged pieces, and every piece but this lane's three is at P58's digest."""
     mine, p58 = _pins(PIN), _pins(P58 / "staged.sha256")
     assert list(mine) == list(SOURCES)
     shared = ("p37_vllm.py", "step_decomp.py", "k8_bake.py", "calib.json", "hook/usercustomize.py")
     assert all(mine[n] == p58[n] for n in shared), {n: (mine[n][:8], p58[n][:8]) for n in shared}
     assert set(p58) - set(shared) == {"p58_run.sh", "p58_reduce.py"}
 
+
+# ------------------------------------------------------------------------------------------------ provenance --
+
+def _fake(site, name, version, direct_url=None):
+    """a dist-info for NAME-VERSION under `site`, with direct_url.json when given"""
+    d = site / f"{name.replace('-', '_')}-{version}.dist-info"
+    d.mkdir(parents=True)
+    (d / "METADATA").write_text(f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n", encoding="utf-8")
+    if direct_url is not None:
+        (d / "direct_url.json").write_text(json.dumps(direct_url), encoding="utf-8")
+    return site
+
+
+SHA_TAG, SHA_OTHER = "1" * 40, "2" * 40
+WHEEL = "https://files.pythonhosted.org/packages/aa/bb/experts4bit_qlora-0.58.0-py3-none-any.whl"
+
+
+def _one(tmp_path, direct_url=None, version="0.58.0", pin="0.58.0", name="experts4bit-qlora", **kw):
+    site = _fake(tmp_path / "site", name, version, direct_url)
+    return PROV.check_one(name, pin, path=[str(site)], **kw)
+
+
+def test_a_pypi_wheel_without_direct_url_passes(tmp_path):
+    rec, errs = _one(tmp_path)
+    assert not errs and rec == {"version": "0.58.0", "provenance": "pypi", "direct_url": None}
+
+
+@pytest.mark.parametrize("url", [WHEEL, "https://pypi.org/packages/x/experts4bit_qlora-0.58.0-py3-none-any.whl"])
+def test_a_direct_url_on_pypi_passes(tmp_path, url):
+    du = {"url": url, "archive_info": {"hashes": {"sha256": "0" * 64}}}
+    rec, errs = _one(tmp_path, du)
+    assert not errs and rec["provenance"] == "pypi" and rec["direct_url"] == du
+
+
+def test_an_editable_install_is_refused(tmp_path):
+    rec, errs = _one(tmp_path, {"url": "file:///src/experts4bit-qlora", "dir_info": {"editable": True}})
+    assert rec is None and len(errs) == 1 and "an editable install" in errs[0], errs
+
+
+@pytest.mark.parametrize("du", [{"url": "file:///tmp/experts4bit_qlora-0.58.0-py3-none-any.whl", "archive_info": {}},
+                                {"url": "FILE:///src", "dir_info": {}}])
+def test_a_file_url_is_refused(tmp_path, du):
+    rec, errs = _one(tmp_path, du)
+    assert rec is None and len(errs) == 1 and "a file:// install" in errs[0], errs
+
+
+@pytest.mark.parametrize("url", ["https://example.com/experts4bit_qlora-0.58.0-py3-none-any.whl",
+                                 "https://files.pythonhosted.org.example.com/x.whl", "not a url"])
+def test_another_host_is_refused(tmp_path, url):
+    rec, errs = _one(tmp_path, {"url": url, "archive_info": {}})
+    assert rec is None and len(errs) == 1 and "which is not PyPI" in errs[0], errs
+
+
+def _vcs(commit):
+    return {"url": "https://github.com/pjordanandrsn/experts4bit-qlora.git",
+            "vcs_info": {"vcs": "git", "requested_revision": "v0.58.0", "commit_id": commit}}
+
+
+def test_a_vcs_install_at_another_commit_is_refused(tmp_path):
+    rec, errs = _one(tmp_path, _vcs(SHA_OTHER), tag_commits={"experts4bit-qlora": SHA_TAG})
+    assert rec is None and len(errs) == 1 and f"git commit {SHA_OTHER} is not the release tag's commit {SHA_TAG}" in errs[0]
+
+
+def test_a_vcs_install_at_the_tag_is_refused_until_an_amendment_names_the_commit(tmp_path):
+    assert PROV.TAG_COMMITS == {}
+    rec, errs = _one(tmp_path, _vcs(SHA_TAG))
+    assert rec is None and len(errs) == 1 and "with no registered tag commit" in errs[0], errs
+    rec, errs = PROV.check_one("experts4bit-qlora", "0.58.0", path=[str(tmp_path / "site")],
+                               tag_commits={"experts4bit-qlora": SHA_TAG})
+    assert not errs and rec["provenance"] == f"vcs:{SHA_TAG}"
+
+
+def test_a_wrong_version_is_refused(tmp_path):
+    rec, errs = _one(tmp_path, version="0.57.0")
+    assert rec is None and errs == ["experts4bit-qlora: installed version 0.57.0 is not the registered 0.58.0"]
+
+
+def test_a_missing_distribution_is_refused(tmp_path):
+    (tmp_path / "site").mkdir()
+    assert PROV.check_one("grouped-nf4-gemm", "0.51.0", path=[str(tmp_path / "site")]) == (
+        None, ["grouped-nf4-gemm: not installed"])
+
+
+@pytest.mark.parametrize("name,version", [("experts4bit-qlora", "0.57.0"), ("grouped-nf4-gemm", "0.50.0"),
+                                          ("vllm", "0.31.0"), ("vllm", "0.33.0"), ("torch", "2.8.0")])
+def test_an_unregistered_pin_is_refused_before_the_lookup(tmp_path, name, version):
+    site = _fake(tmp_path / "site", name, version)
+    assert PROV.check_one(name, version, path=[str(site)]) == (None, [f"{name}=={version} is not a registered pin"])
+
+
+def test_check_names_every_failure_and_an_empty_list_fails(tmp_path):
+    site = _fake(tmp_path / "site", "experts4bit-qlora", "0.58.0", {"url": "file:///src", "dir_info": {"editable": True}})
+    _fake(site, "grouped-nf4-gemm", "0.50.0")
+    recs, errs = PROV.check([("experts4bit-qlora", "0.58.0"), ("grouped-nf4-gemm", "0.51.0")], path=[str(site)])
+    assert recs == {} and len(errs) == 2
+    assert PROV.check([], path=[str(site)]) == ({}, ["no distributions named"])
+
+
+def _cli(site, out, *pins):
+    """provenance.py as the box runs it, but with site-packages off (-S) and the fake site first on sys.path"""
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "PYTHONPATH": str(site)}
+    return subprocess.run([sys.executable, "-S", str(LANE / "provenance.py"), "check", *pins, "--out", str(out)],
+                          capture_output=True, text=True, env=env, timeout=60)
+
+
+def test_the_cli_writes_provenance_only_when_every_dist_passes(tmp_path):
+    site = _fake(tmp_path / "site", "experts4bit-qlora", "0.58.0")
+    _fake(site, "grouped-nf4-gemm", "0.51.0", {"url": WHEEL.replace("experts4bit_qlora-0.58.0", "grouped_nf4_gemm-0.51.0"),
+                                               "archive_info": {}})
+    out = tmp_path / "provenance.json"
+    r = _cli(site, out, "experts4bit-qlora=0.58.0", "grouped-nf4-gemm=0.51.0")
+    assert r.returncode == 0, r.stdout + r.stderr
+    rec = json.loads(out.read_text(encoding="utf-8"))
+    assert {k: (v["version"], v["provenance"]) for k, v in rec.items()} == {
+        "experts4bit-qlora": ("0.58.0", "pypi"), "grouped-nf4-gemm": ("0.51.0", "pypi")}
+    bad = tmp_path / "bad"
+    _fake(bad, "vllm", "0.32.0", {"url": "file:///src/vllm", "dir_info": {"editable": True}})
+    r = _cli(bad, tmp_path / "v.json", "vllm=0.32.0")
+    assert r.returncode == 1 and "PROVENANCE FAIL: vllm: an editable install" in r.stdout and not (tmp_path / "v.json").exists()
+    r = _cli(site, tmp_path / "w.json", "experts4bit-qlora")
+    assert r.returncode == 1 and "is not NAME=VERSION" in r.stdout
+
+
+def _vllm_constants(run):
+    m = re.search(r"^VLLM_PRIMARY=(\S+); VLLM_SECONDARY=(\S+)   #", run, re.M)
+    return m and {"primary": m.group(1), "secondary": m.group(2)}
+
+
+def test_the_constants_are_the_preregs_and_the_runners():
+    assert PROV.E4B == {"experts4bit-qlora": "0.58.0", "grouped-nf4-gemm": "0.51.0"}
+    assert PROV.VLLM == {"primary": "0.32.0", "secondary": "0.30.0"}
+    assert _vllm_constants(RUN) == PROV.VLLM
+    assert 'vllm_install primary "$VLLM_PRIMARY"' in RUN and 'vllm_install secondary "$VLLM_SECONDARY"' in RUN
+    for name, version in PROV.E4B.items():
+        assert f'"{name}=={version}"' in RUN, name                      # the pip pin
+        assert f" {name}={version}" in RUN, name                        # the provenance call
+    assert f'experts4bit_qlora.__version__ == "{PROV.E4B["experts4bit-qlora"]}"' in RUN
+    assert f'md.version("grouped-nf4-gemm") == "{PROV.E4B["grouped-nf4-gemm"]}"' in RUN
+    assert "`experts4bit-qlora==0.58.0`" in FLAT and "`grouped-nf4-gemm==0.51.0`" in FLAT
+    assert "| vLLM PRIMARY | latest PyPI at launch (0.30.0) | **0.32.0**, a constant" in FLAT
+    assert "| vLLM SECONDARY | 0.29.0 | **0.30.0** (P58's primary), a constant" in FLAT
+
+
+def test_no_git_install_and_no_latest_vllm_lookup_remain():
+    assert "git+" not in RUN and "pip install" in RUN
+    assert "pypi.org/pypi/vllm" not in RUN and "P235_VLLM_PRIMARY" not in RUN and "P235_VLLM_SECONDARY" not in RUN
+    for line in RUN.splitlines():
+        if re.search(r"pip install .*(experts4bit-qlora|grouped-nf4-gemm|vllm==)", line):
+            assert "--index-url https://pypi.org/simple" in line and "--only-binary" in line, line
+
+
+E4B_CHECK = ("python -I $W/provenance.py check experts4bit-qlora=0.58.0 grouped-nf4-gemm=0.51.0 --out $W/provenance.json "
+             '> logs/provenance_e4b.log 2>&1 || { cat logs/provenance_e4b.log; say "PROVENANCE FAIL (e4b/gnf4)"; finish 9; }')
+VLLM_CHECK = '  $W/venv-$TAG/bin/python -I $W/provenance.py check "vllm=$VER" --out $W/provenance_vllm_$TAG.json'
+
+
+def test_the_e4b_check_runs_after_the_installs_and_before_the_tripwire_and_every_arm():
+    lines = RUN.splitlines()
+    k = lines.index(E4B_CHECK)
+    gnf4 = next(i for i, ln in enumerate(lines) if '"grouped-nf4-gemm==0.51.0" > logs/pip_gnf4.log' in ln)
+    trip = next(i for i, ln in enumerate(lines) if ln.startswith("PYTHONPATH=$W/hook python - <<'PYT'"))
+    first_arm = next(i for i, ln in enumerate(lines) if re.match(r"can_run \d+ \S+ +&& \{ (e4b|vllm)_arm", ln))
+    assert gnf4 + 1 == k < trip < first_arm
+    assert not any(ln.startswith(("if ", "[ ")) and "provenance" in ln for ln in lines)      # never behind a condition
+
+
+def test_each_vllm_venv_is_checked_before_its_arms_and_a_failure_refuses_that_build():
+    lines = RUN.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("vllm_install(){"))
+    end = next(i for i in range(start, len(lines)) if lines[i].endswith("VOK[$TAG]=1; }"))
+    body = lines[start:end + 1]
+    k = next(i for i, ln in enumerate(body) if ln.startswith(VLLM_CHECK))
+    pip = next(i for i, ln in enumerate(body) if '"vllm==$VER"' in ln)
+    imp = next(i for i, ln in enumerate(body) if "<<'PYV'" in ln)
+    assert pip < k < imp
+    fail = body[k + 1]
+    assert fail.lstrip().startswith("|| {") and "VOK[$TAG]=0; return; }" in fail and "finish" not in fail
+    calls = [i for i, ln in enumerate(lines) if re.match(r'(\[.*\] \|\| )?vllm_install (primary|secondary) ', ln)]
+    first_vllm_arm = next(i for i, ln in enumerate(lines) if "vllm_arm $VT" in ln)
+    assert len(calls) == 2 and all(end < c < first_vllm_arm for c in calls)
+    assert 'vllm_arm(){ local VT=$1 ARM=$2 B=$3; [ "${VOK[$VT]:-0}" = 1 ] || { echo "vllm-$VT/$ARM B=$B SKIPPED' in RUN
+
+
+# ------------------------------------------------------------------------------------------------- runner --
 
 def _as_p58(text):
     for new, old in TO_P58:
@@ -90,14 +290,36 @@ def _body(text):
     return text[text.index("set -uo pipefail\n"):]
 
 
-#: one needle per line P235 adds to P58's runner body: each named edit, and nothing else
-RUN_EDITS = ["VLLM_SECONDARY=${P58_VLLM_SECONDARY:-0.30.0}",
-             "# ---- install: e4b at the launch commit (0.58.0) + P235's toolchain pins (image python); gnf4 at GNF4_SHA (0.51.0)",
-             'say "install e4b @$E4B_SHA (image python; P235 pins)"', '"transformers==5.17.0" "bitsandbytes==0.50.1"',
-             "import experts4bit_qlora", 'assert experts4bit_qlora.__version__ == "0.58.0"',
-             'assert md.version("grouped-nf4-gemm") == "0.51.0"', "(P235 runs the two-launch default, as P58)",
-             "nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader | tee forensics.txt",
-             "SECONDARY = 0.30.0 pinned"]
+#: the line prefix of each line P235 adds to P58's runner body (P58's names): each named edit, and nothing else
+RUN_EDITS = [
+    "for v in P58_RUN_ID P58_DEADLINE_EPOCH P58_INSTANCE_ID E4B_SHA; do",
+    "VLLM_PRIMARY=0.32.0; VLLM_SECONDARY=0.30.0   #",
+    "for f in step_decomp.py k8_bake.py calib.json hook/usercustomize.py p37_vllm.py p58_reduce.py provenance.py staged.sha256; do",
+    "# ---- install (image python): experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0 as PyPI wheels",
+    "# pins; then provenance.py, unconditionally, before anything is timed",
+    'say "install experts4bit-qlora==0.58.0 + grouped-nf4-gemm==0.51.0 from PyPI',
+    "perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --index-url https://pypi.org/simple "
+    '--prefer-binary --only-binary experts4bit-qlora "experts4bit-qlora==0.58.0" \\',
+    '"transformers==5.17.0" "bitsandbytes==0.50.1"',
+    "perl -e 'alarm 900; exec @ARGV' python -m pip install -q --no-input --index-url https://pypi.org/simple "
+    '--only-binary grouped-nf4-gemm --force-reinstall --no-deps "grouped-nf4-gemm==0.51.0"',
+    E4B_CHECK,
+    "cat logs/provenance_e4b.log",
+    "import experts4bit_qlora",
+    'assert experts4bit_qlora.__version__ == "0.58.0"',
+    'assert md.version("grouped-nf4-gemm") == "0.51.0"',
+    'assert hasattr(int4_b32, "gemv_counter_len")',
+    'open("/root/p58/versions.txt", "a").write(f"e4b {e.__version__} (PyPI; provenance.json) harness@',
+    "nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader | tee forensics.txt",
+    "# ---- vLLM venvs: PRIMARY 0.32.0, SECONDARY 0.30.0 (the constants above)",
+    "# Each install or provenance failure is recorded",
+    "# e4b arms); that build's rows read SKIPPED",
+    "python -m venv $W/venv-$TAG && perl -e 'alarm 2700; exec @ARGV' $W/venv-$TAG/bin/pip install -q --no-input "
+    '--no-cache-dir --index-url https://pypi.org/simple --only-binary vllm "vllm==$VER"',
+    VLLM_CHECK.strip(),
+    '|| { cat logs/provenance_vllm_$TAG.log; say "PROVENANCE FAIL (vllm $TAG)',
+    '{ echo "P58 arm=e4b_b${B}_$TAG gnf4=0.51.0 at=',
+]
 
 
 def test_the_runner_is_p58s_by_named_edits():
@@ -105,21 +327,22 @@ def test_the_runner_is_p58s_by_named_edits():
     is there: the arms, their order, the alarms, the STOP rules, the engagement greps and the reducer call are P58's."""
     diff = list(difflib.unified_diff(_body((P58 / "p58_run.sh").read_text(encoding="utf-8")).splitlines(),
                                      _body(_as_p58(RUN)).splitlines(), lineterm="", n=0))
-    added = [ln[1:] for ln in diff if ln.startswith("+") and not ln.startswith("+++")]
+    added = [ln[1:].strip() for ln in diff if ln.startswith("+") and not ln.startswith("+++")]
     removed = [ln[1:] for ln in diff if ln.startswith("-") and not ln.startswith("---")]
-    hits = {ln: [n for n in RUN_EDITS if n in ln] for ln in added}
-    assert all(len(h) == 1 for h in hits.values()), hits
+    hits = {ln: [n for n in RUN_EDITS if ln.startswith(n)] for ln in added}
+    assert all(len(h) == 1 for h in hits.values()), {ln: h for ln, h in hits.items() if len(h) != 1}
     assert sorted(n for h in hits.values() for n in h) == sorted(RUN_EDITS)
-    assert len(removed) == len(RUN_EDITS) - 3          # the three tripwire lines are insertions
-    assert any("driver_version,uuid" in ln for ln in removed) and any("transformers==5.16.1" in ln for ln in removed)
+    assert len(removed) == 17, removed
+    for gone in ("driver_version,uuid", "transformers==5.16.1", "git+https://github.com/pjordanandrsn/experts4bit-qlora.git",
+                 "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git", "pypi.org/pypi/vllm/json", ":-0.29.0}"):
+        assert any(gone in ln for ln in removed), gone
 
 
 def test_the_pins_the_prereg_states_are_the_runners():
     assert 'MID=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39;' in RUN
     assert "GPTQ_MID=Qwen/Qwen3-30B-A3B-GPTQ-Int4; GPTQ_REV=9b534e4318b7ebc3c961a839f13eb18b1833f441" in RUN
-    assert '"transformers==5.17.0" "bitsandbytes==0.50.1"' in RUN and "VLLM_SECONDARY=${P235_VLLM_SECONDARY:-0.30.0}" in RUN
-    assert "https://pypi.org/pypi/vllm/json" in RUN and "P235_VLLM_PRIMARY" not in DRIVE   # the drive passes no pin
-    assert '"git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA"' in RUN
+    assert '"transformers==5.17.0" "bitsandbytes==0.50.1"' in RUN
+    assert "GNF4_SHA" not in RUN and "E4B_SHA" in RUN.split("PYT", 1)[0]   # the launch commit is recorded, not installed
 
 
 def _tripwire():
@@ -176,7 +399,7 @@ def _docstring_split(text):
     return text[a:b], text[b:]
 
 
-def test_the_reducer_is_p58s_with_its_labels_renamed(tmp_path):
+def test_the_reducer_is_p58s_with_its_labels_renamed():
     """Below the docstring the reducer is P58's byte for byte but the title, and on P58's committed receipts it prints
     P58's table but for the title line."""
     mine_doc, mine = _docstring_split((LANE / "p235_reduce.py").read_text(encoding="utf-8"))
@@ -195,16 +418,16 @@ def test_the_reducer_is_p58s_with_its_labels_renamed(tmp_path):
 # ----------------------------------------------------------------------------------------------------- drive --
 
 def test_the_drive_follows_pod_launchs_contract():
-    """pod-launch runs a reading's drive without E4B_SHA: the drive derives the launch commit from the clean HEAD,
-    refuses an override, takes grouped-nf4-gemm's commit as a checked input and passes both to the runner, and fetches
-    the box tree into $RUN_DIR/p235/, refusing a non-empty target."""
+    """pod-launch runs a reading's drive without E4B_SHA: the drive derives the launch commit (the harness's) from the
+    clean HEAD, refuses an override, takes no grouped-nf4-gemm commit (the box installs PyPI's release), and fetches the
+    box tree into $RUN_DIR/p235/, refusing a non-empty target."""
     assert 'if [ -n "${E4B_SHA:-}" ]; then say "refusing: E4B_SHA override; use the clean checkout HEAD"; exit 78; fi' in DRIVE
     assert 'E4B_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null)' in DRIVE and "is dirty" in DRIVE
     assert 'OUT="$RUN_DIR/p235"' in DRIVE and '"$RUN_DIR/"' not in DRIVE
     assert 'mkdir -p "$OUT" && [ -z "$(find "$OUT" -mindepth 1 -maxdepth 1 -print -quit)" ] || { say "fetch failed: $OUT is not an empty directory"; exit 22; }' in DRIVE
     assert ('case "$RUN_ID" in\n  p235-5090-1|p235-5090-2|p235-5090-3|p235-5090-r1|p235-5090-r2|p235-5090-r3|p235-5090-r4|'
             'p235-5090-r5|p235-5090-r6) :;;\n  *) say "refusing unregistered run ID') in DRIVE
-    assert 'E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA"' in DRIVE and DRIVE.index("GNF4_SHA=${GNF4_SHA:-}") < DRIVE.index("PASS=")
+    assert "GNF4" not in DRIVE and 'E4B_SHA=$E4B_SHA"' in DRIVE
     for name, path in SOURCES.items():
         assert path.relative_to(REPO).as_posix() in DRIVE, name
     assert "bench/p235/staged.sha256" in DRIVE and 'cp "$REPO/$f" "$STAGE/hook/"' in DRIVE
@@ -226,14 +449,10 @@ def test_the_fetch_never_imports_a_link():
     assert not _fetches_without_no_links("echo fetch\n")[0]                          # no rsync -> the count above fails
 
 
-GNF4 = "b" * 40
-
-
 def _dry_env(tmp_path, run_id, **extra):
     return {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(tmp_path), "P235_DRIVE_DRYRUN": "1",
             "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-q", "E4B_RENT_RUN_DIR": str(tmp_path),
-            "E4B_RENT_RUN_ID": run_id, "E4B_RENT_DEADLINE_EPOCH": "4102444800", "E4B_RENT_INSTANCE_ID": "0",
-            "GNF4_SHA": GNF4, **extra}
+            "E4B_RENT_RUN_ID": run_id, "E4B_RENT_DEADLINE_EPOCH": "4102444800", "E4B_RENT_INSTANCE_ID": "0", **extra}
 
 
 def _drive(tmp_path, run_id, **extra):
@@ -252,12 +471,6 @@ def test_the_driver_refuses_another_run_id(tmp_path, run_id):
 def test_the_driver_refuses_an_e4b_sha_override(tmp_path):
     out = _drive(tmp_path, "p235-5090-1", E4B_SHA="a" * 40)
     assert out.returncode == 78 and "E4B_SHA override" in out.stdout + out.stderr
-
-
-@pytest.mark.parametrize("gnf4", ["", "a" * 39, "a" * 41, "B" * 40, "g" * 40, "v0.51.0"])
-def test_the_driver_refuses_a_gnf4_sha_that_is_not_one(tmp_path, gnf4):
-    out = _drive(tmp_path, "p235-5090-1", GNF4_SHA=gnf4)
-    assert out.returncode == 78 and "GNF4_SHA is not a 40-char hex sha" in out.stdout + out.stderr
 
 
 def _clean_or_skip(dirty):
@@ -284,33 +497,42 @@ def test_a_dirty_checkout_fails_under_ci_and_skips_locally(monkeypatch, ci, outc
 
 @pytest.mark.parametrize("run_id", ["p235-5090-1", "p235-5090-3", "p235-5090-r6"])
 def test_the_drivers_dry_run_names_the_launch(tmp_path, run_id):
-    """The driver dry-runs on a clean checkout: it stages the seven pieces and the pin file, checks them there, and
-    starts the runner with both commits."""
+    """The driver dry-runs on a clean checkout: it stages the eight pieces and the pin file, checks them there, and
+    starts the runner with the harness's commit and no grouped-nf4-gemm commit (a GNF4_SHA in the environment is not
+    passed on)."""
     if sys.platform == "win32" or shutil.which("bash") is None:
         pytest.skip("the driver needs a POSIX bash")
     _clean_or_skip(subprocess.run(["git", "-C", str(REPO), "status", "--porcelain"], capture_output=True,
                                   text=True).stdout)
-    out = _drive(tmp_path, run_id)
+    out = _drive(tmp_path, run_id, GNF4_SHA="b" * 40)
     assert out.returncode == 0, out.stdout + out.stderr
     assert f"DRYRUN stage {len(SOURCES) + 1} files -> root@h:/root/p235" in out.stdout and "bash p235_run.sh" in out.stdout
-    assert f"P235_RUN_ID={run_id} " in out.stdout and f"GNF4_SHA={GNF4} " in out.stdout
+    assert f"P235_RUN_ID={run_id} " in out.stdout and "GNF4" not in out.stdout
     assert re.search(r" E4B_SHA=[0-9a-f]{40} ", out.stdout)
     assert f"fetch -> {tmp_path}/p235" in out.stdout
 
 
 # ------------------------------------------------------------------------------------------ prereg, files --
 
-def test_the_prereg_states_the_pins_bars_and_budget():
+def test_the_prereg_states_the_pins_bars_sequencing_and_limits():
     for s in ('`experts4bit_qlora.__version__ == "0.58.0"`', '`md.version("grouped-nf4-gemm") == "0.51.0"`',
+              "A version string is not a release.", "`TAG_COMMITS` is empty",
               "| transformers | 5.16.1 | **5.17.0** |", "| bitsandbytes | 0.50.1 | 0.50.1 (e4b's floor is `>=0.43`) |",
-              "latest PyPI at launch (**0.32.0** today)", "| vLLM SECONDARY | 0.29.0 | **0.30.0** (P58's primary) |",
-              "**The one placeholder: `GNF4_SHA`.**", "`Qwen/Qwen3-30B-A3B` @ `ad44e777bcd18fa416d9da3bd8f70d33ebb85d39`",
+              "A newer vLLM is a new reading", "the run ends with rc 9 before the tripwire and before any arm",
+              "that build's rows are refused", "`p37_vllm.py` has run against vLLM 0.28 to 0.30, not 0.32.0",
+              "`Qwen/Qwen3-30B-A3B` @ `ad44e777bcd18fa416d9da3bd8f70d33ebb85d39`",
               "`Qwen/Qwen3-30B-A3B-GPTQ-Int4` @ `9b534e4318b7ebc3c961a839f13eb18b1833f441`", "`a8e6ea1d…` (B=1) and `f67e7e4d…` (B=16)",
               "must be inside **1.03×**", "only with an equal `prompts_sha` on both sides", "**VOID arms never enter a ratio**",
-              "**1.087** at B=1 and **1.396** at B=16", "one RTX 5090 at ≤ $1.05/h, guard 3.0 h, download ≤ $0.02/GB × 80 GB",
+              "**1.087** at B=1 and **1.396** at B=16", "## What this lane cannot say", "TTFT and prefill",
+              "vLLM reserves 0.90 of VRAM by policy", "`GNF4_GEMV_FUSED_REDUCE=1`", "an fp8-KV vLLM arm",
+              "is not the server's scheduler", "**The engine advantage is understated, not inflated.**", "## Sequencing",
+              "both releases (e4b 0.58.0, grouped-nf4-gemm 0.51.0) are published on PyPI", "The maintainer gives an Approved.",
+              "The maintainer re-derives the reading from the receipts.", "A results PR follows.",
+              "one RTX 5090 at ≤ $1.05/h, guard 3.0 h, download ≤ $0.02/GB × 80 GB",
               "$3.15 + $1.60 = **$4.75**, inside a **$6** lane ceiling", "`p235-5090-1..-3`", "`p235-5090-r1..-r6`",
               "**No shakedown is registered.**", "**not collected**"):
         assert s in FLAT, s
+    assert "GNF4_SHA" not in PREREG and "placeholder" not in PREREG.lower()
 
 
 def test_the_new_files_are_lf_only_and_the_shell_scripts_parse():

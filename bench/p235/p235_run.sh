@@ -3,37 +3,41 @@
 # named edits. Started detached by p235_drive.sh with the run's nonce; P235_RUN_NONCE first, then
 # P235_EXIT_CODE.<nonce> + TP_DONE.<nonce> on every exit and P235_SUCCESS.<nonce> only on clean completion.
 #
-# P58's same-box vLLM head-to-head re-read at the release pins: e4b 0.58.0 and grouped-nf4-gemm 0.51.0 (the tripwire
-# refuses any other version, rc 9), transformers 5.17.0, bitsandbytes 0.50.1, and TWO vLLM builds in their own venvs:
-# the PRIMARY = the latest PyPI release at launch (the drive passes no pin) and the SECONDARY = 0.30.0 pinned (P58's
-# primary). P58's arms, alarms, STOP rules and reducer call, unchanged; nothing here changes a default. The runner
-# does not collect the GPU's UUID.
+# P58's same-box vLLM head-to-head re-read at the release pins, each a PyPI release whose version AND provenance
+# provenance.py checks before any arm: experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0 (a failure is rc 9; the
+# launch commit E4B_SHA is the harness's, recorded and never installed), transformers 5.17.0, bitsandbytes 0.50.1, and
+# TWO vLLM builds in their own venvs, both constants: the PRIMARY 0.32.0 and the SECONDARY 0.30.0 (P58's primary). A
+# vLLM build that fails its install or its provenance loses its rows; the e4b arms continue. P58's arms, alarms, STOP
+# rules and reducer call, unchanged; nothing here changes a default. The runner does not collect the GPU's UUID.
 set -uo pipefail
 W=/root/p235; mkdir -p $W/logs; cd $W || exit 78
 say(){ echo "[$(date -u +%FT%TZ)] p235: $*"; }
 NONCE=${P235_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/P235_RUN_NONCE.tmp && mv $W/P235_RUN_NONCE.tmp $W/P235_RUN_NONCE
 finish(){ local rc=$1; printf '%s\n' "$rc" > P235_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > P235_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
 trap 'finish 130' INT TERM
-for v in P235_RUN_ID P235_DEADLINE_EPOCH P235_INSTANCE_ID E4B_SHA GNF4_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
+for v in P235_RUN_ID P235_DEADLINE_EPOCH P235_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 export PYTHONPATH=$W/hook E4B_INT4_GPTQ_DEVICE=cuda E4B_INT4_HESSIAN_BUDGET_GB=24 E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64
 MID=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39; export E4B_MODEL_ID=$MID
 GPTQ_MID=Qwen/Qwen3-30B-A3B-GPTQ-Int4; GPTQ_REV=9b534e4318b7ebc3c961a839f13eb18b1833f441   # P37's comparator checkpoint, unchanged
-VLLM_SECONDARY=${P235_VLLM_SECONDARY:-0.30.0}
+VLLM_PRIMARY=0.32.0; VLLM_SECONDARY=0.30.0   # provenance.py's VLLM pins, constants: a newer vLLM is a new reading
 export P37_INSTANCE_ID=$P235_INSTANCE_ID    # p37_vllm.py (staged byte-identical) records the instance under P37's env name
 : > summary.txt; echo "$P235_INSTANCE_ID" > INSTANCE_ID
 # ---- staged pieces, byte-for-byte
-for f in step_decomp.py k8_bake.py calib.json hook/usercustomize.py p37_vllm.py p235_reduce.py staged.sha256; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
+for f in step_decomp.py k8_bake.py calib.json hook/usercustomize.py p37_vllm.py p235_reduce.py provenance.py staged.sha256; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p235/staged.sha256"; finish 9; }
 # ---- deadline guard + per-arm alarm (P54's): never start an arm that cannot finish 10 min before teardown
 can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$P235_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((P235_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
 arm_alarm(){ local cap=$1 left=$(( P235_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }
-# ---- install: e4b at the launch commit (0.58.0) + P235's toolchain pins (image python); gnf4 at GNF4_SHA (0.51.0)
+# ---- install (image python): experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0 as PyPI wheels + P235's toolchain
+# pins; then provenance.py, unconditionally, before anything is timed (a version string is not a release)
 export DEBIAN_FRONTEND=noninteractive
-say "install e4b @$E4B_SHA (image python; P235 pins)"
-perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
+say "install experts4bit-qlora==0.58.0 + grouped-nf4-gemm==0.51.0 from PyPI (image python; P235 pins); harness commit $E4B_SHA, recorded, never installed"
+perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --index-url https://pypi.org/simple --prefer-binary --only-binary experts4bit-qlora "experts4bit-qlora==0.58.0" \
   "transformers==5.17.0" "bitsandbytes==0.50.1" datasets accelerate sentencepiece tiktoken safetensors "huggingface_hub>=0.23" > logs/pip_e4b.log 2>&1 || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
-perl -e 'alarm 900; exec @ARGV' python -m pip install -q --no-input --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" > logs/pip_gnf4.log 2>&1 || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
+perl -e 'alarm 900; exec @ARGV' python -m pip install -q --no-input --index-url https://pypi.org/simple --only-binary grouped-nf4-gemm --force-reinstall --no-deps "grouped-nf4-gemm==0.51.0" > logs/pip_gnf4.log 2>&1 || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
+python -I $W/provenance.py check experts4bit-qlora=0.58.0 grouped-nf4-gemm=0.51.0 --out $W/provenance.json > logs/provenance_e4b.log 2>&1 || { cat logs/provenance_e4b.log; say "PROVENANCE FAIL (e4b/gnf4)"; finish 9; }
+cat logs/provenance_e4b.log
 PYTHONPATH=$W/hook python - <<'PYT' || { say "TRIPWIRE FAIL (e4b)"; finish 9; }
 import site, os, inspect, importlib.metadata as md
 assert site.ENABLE_USER_SITE, "usercustomize would not load (venv?)"
@@ -48,7 +52,7 @@ import int4_b32
 assert hasattr(int4_b32, "gemv_counter_len") and int4_b32.gemv_fused_reduce_default() is False, "gnf4 cut is not K17's, or the fused reduce is defaulted on (P235 runs the two-launch default, as P58)"
 import usercustomize  # noqa: F401
 import experts4bit_qlora as e, torch, triton, transformers
-open("/root/p235/versions.txt", "a").write(f"e4b {e.__version__} @{os.environ['E4B_SHA']}\ngnf4 {md.version('grouped-nf4-gemm')} @{os.environ['GNF4_SHA']}\ntorch(e4b) {torch.__version__}\ntriton(e4b) {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {md.version('bitsandbytes')}\n")
+open("/root/p235/versions.txt", "a").write(f"e4b {e.__version__} (PyPI; provenance.json) harness@{os.environ['E4B_SHA']}\ngnf4 {md.version('grouped-nf4-gemm')} (PyPI; provenance.json)\ntorch(e4b) {torch.__version__}\ntriton(e4b) {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {md.version('bitsandbytes')}\n")
 print("tripwire OK (e4b):", e.__version__, "gnf4", md.version("grouped-nf4-gemm"), "torch", torch.__version__, "triton", triton.__version__)
 PYT
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader | tee forensics.txt
@@ -56,16 +60,17 @@ nvidia-smi --query-gpu=power.limit,clocks.max.sm --format=csv,noheader | sed "s/
 cat /sys/fs/cgroup/memory.max 2>/dev/null | sed "s/^/cgroup memory.max /" | tee -a forensics.txt; nvcc --version 2>/dev/null | tail -1 | tee -a forensics.txt
 python -c "import torch; assert torch.cuda.is_available()" || { say "DUD BOX"; finish 10; }
 df -h /root | tail -1
-# ---- vLLM venvs: PRIMARY = latest PyPI at launch (or P235_VLLM_PRIMARY), SECONDARY = 0.30.0 pinned. Each install
-# failure is recorded and the lane continues (P37: a vLLM install failure cannot void the e4b arms).
-VLLM_PRIMARY=${P235_VLLM_PRIMARY:-$(python -c "import json,urllib.request; print(json.load(urllib.request.urlopen('https://pypi.org/pypi/vllm/json',timeout=60))['info']['version'])" 2>/dev/null)}
-[ -z "$VLLM_PRIMARY" ] && { say "VLLM PRIMARY VERSION UNRESOLVED (set P235_VLLM_PRIMARY)"; echo "VLLM primary UNRESOLVED" >> summary.txt; }
+# ---- vLLM venvs: PRIMARY 0.32.0, SECONDARY 0.30.0 (the constants above), each from PyPI with its provenance checked.
+# Each install or provenance failure is recorded and the lane continues (P37: a vLLM install failure cannot void the
+# e4b arms); that build's rows read SKIPPED (no comparator).
 declare -A VOK VVER; VVER[primary]=$VLLM_PRIMARY; VVER[secondary]=$VLLM_SECONDARY
 [ "$VLLM_PRIMARY" = "$VLLM_SECONDARY" ] && { say "primary == secondary ($VLLM_PRIMARY): one venv, the secondary rows are skipped"; VOK[secondary]=0; }
 vllm_install(){ local TAG=$1 VER=$2; [ -z "$VER" ] && { VOK[$TAG]=0; return; }
   say "install vllm==$VER into $W/venv-$TAG"
-  python -m venv $W/venv-$TAG && perl -e 'alarm 2700; exec @ARGV' $W/venv-$TAG/bin/pip install -q --no-input --no-cache-dir "vllm==$VER" "huggingface_hub>=0.23" > logs/pip_vllm_$TAG.log 2>&1
+  python -m venv $W/venv-$TAG && perl -e 'alarm 2700; exec @ARGV' $W/venv-$TAG/bin/pip install -q --no-input --no-cache-dir --index-url https://pypi.org/simple --only-binary vllm "vllm==$VER" "huggingface_hub>=0.23" > logs/pip_vllm_$TAG.log 2>&1
   local rc=$?; echo "pip(vllm $TAG $VER) rc=$rc" | tee -a summary.txt; [ $rc -ne 0 ] && { tail -6 logs/pip_vllm_$TAG.log; say "PIP FAIL (vllm $TAG) -- e4b arms still run; NO $TAG COMPARATOR"; VOK[$TAG]=0; return; }
+  $W/venv-$TAG/bin/python -I $W/provenance.py check "vllm=$VER" --out $W/provenance_vllm_$TAG.json > logs/provenance_vllm_$TAG.log 2>&1 \
+    || { cat logs/provenance_vllm_$TAG.log; say "PROVENANCE FAIL (vllm $TAG) -- e4b arms still run; NO $TAG COMPARATOR"; echo "PROVENANCE FAIL (vllm $TAG $VER): its rows are refused" >> summary.txt; VOK[$TAG]=0; return; }
   $W/venv-$TAG/bin/python - "$TAG" <<'PYV' >> logs/tripwire_vllm_$TAG.log 2>&1 || { say "VLLM IMPORT FAIL ($TAG) -- NO $TAG COMPARATOR"; tail -5 logs/tripwire_vllm_$TAG.log; VOK[$TAG]=0; return; }
 import sys, vllm, torch
 tri = None
@@ -123,7 +128,7 @@ vram_stop(){ kill $1 2>/dev/null; wait $1 2>/dev/null; }
 e4b_arm(){ local TAG=$1 B=$2 EXP=$3 FUSE=$4 LOOP=$5; local G=1 R=1 E=1 AI=1; [ "$EXP" = 0 ] && { G=0; R=0; E=0; AI=0; }
   local AL; AL=$(arm_alarm 1800); local sp; sp=$(vram_start e4b_b${B}_$TAG)
   say "arm e4b/$TAG (B=$B exp=$EXP attn_int4=$AI fuse=$FUSE loop=$LOOP alarm=$AL)"
-  { echo "P235 arm=e4b_b${B}_$TAG gnf4=$GNF4_SHA at=$(date -u +%FT%TZ)"; } > logs/run_e4b_b${B}_$TAG.log
+  { echo "P235 arm=e4b_b${B}_$TAG gnf4=0.51.0 at=$(date -u +%FT%TZ)"; } > logs/run_e4b_b${B}_$TAG.log
   env E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4=$AI E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E \
     perl -e "alarm $AL; exec @ARGV" python $W/step_decomp.py --model "$MID" --arena "$QA" --calib $W/calib.json --placement-override all-vram --amort off \
       --batch $B --prompt-len 512 --gen-tokens 128 --b1d-loop $LOOP --b1d-timed --no-fuse-qkv $FUSE \
