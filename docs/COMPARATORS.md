@@ -6,7 +6,8 @@ Which version of each comparator the current claims in `docs/claims.json` were m
 
 | comparator | PyPI | version | current claims | areas | newest `measured_on` |
 |---|---|---|---|---|---|
-| vLLM | `vllm` | 0.30.0 | 9 | serve | 2026-10-01 |
+| vLLM | `vllm` | 0.32.0 | 2 | serve | 2026-10-24 |
+| vLLM | `vllm` | 0.30.0 | 11 | serve | 2026-10-24 |
 | vLLM | `vllm` | 0.29.0 | 6 | serve | 2026-09-22 |
 | vLLM | `vllm` | 0.28.0 | 18 | serve | 2026-09-05 |
 | SGLang | `sglang` | none on record | 0 | - | - |

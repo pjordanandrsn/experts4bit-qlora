@@ -27,8 +27,8 @@ self-pairs inside 1.03x and an equal `prompts_sha`.
 - **Beside P58's reading** (2026-09-22, vLLM 0.30.0 / e4b 0.36.4 int4): 1.087 at B=1 and 1.396 at B=16. That reading
   was taken on another box (an AMD EPYC 9655 host at 575 W). The two readings are not divided into each other, and the
   difference between them is **not read as** an e4b gain: the box, the host and the power limit all differ.
-- The reducer's own sensitivity lines (median-of-3 slopes, the r2 draws) move no ratio by more than 0.004:
-  B=1 1.038 / 1.037, B=16 1.207 / 1.202 for vLLM 0.32.0.
+- The reducer's own sensitivity lines (median-of-3 slopes, the r2 draws) move vLLM 0.32.0's ratios by no more than 0.004
+  (B=1 1.038 / 1.037, B=16 1.207 / 1.202); vLLM 0.30.0's move by up to 0.005 (B=16 median-of-3 1.192).
 
 ## Every distribution proven to be its release
 
@@ -48,7 +48,8 @@ self-pairs inside 1.03x and an equal `prompts_sha`.
 
 - **The card's power limit read 470 W, not 575.** The PREREG registers no power floor: the ratio is read inside one box,
   where both engines decode under the same limit.
-- **The host:** an Intel Core Ultra 9 285K (P58's box was an AMD EPYC 9655). B=1 is host-bound on both engines.
+- **The host:** an Intel Core Ultra 9 285K (P58's box was an AMD EPYC 9655). P58 read B=1 as host-bound on both
+  engines; P235 does not measure that.
 - **The torch builds:** e4b's arms on torch 2.8.0+cu129 (the image python); each vLLM venv on torch 2.13.0+cu130 (triton
   3.7.1). transformers 5.17.0, bitsandbytes 0.50.1.
 - **STOP-1 (informational):** e4b's B=16 step, 9.496 ms, is outside ±8 % of P54's 11.42 ms on its box. At B=1, P54's
