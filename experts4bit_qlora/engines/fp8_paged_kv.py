@@ -120,6 +120,15 @@ def _resolve_fused_append(env, device_str, kernel_present, capability=None) -> b
 
 _KERNEL_KW_CACHE: dict = {}
 
+#: ``E4B_ATTN_SPLIT_FIXED``'s pinned call (the fp8 split path): every argument ``fp8_paged_decode_attention`` would
+#: otherwise resolve per call, at the value it resolves to on that path, so the call differs across row counts only in
+#: B. ``n_split`` (the one choice its ``decode_split_plan`` makes from B) is the knob's S, added at the call. The kernel's
+#: split boundaries are a row's own (tiles_per = ceil(ceil(len / KTILE) / n_split), t_lo = split * tiles_per * KTILE)
+#: and its fused combine reduces splits 0..n_split-1 in order, so with these fixed a row's arithmetic does not depend
+#: on the batch it decodes in. ``sm_scale`` (from head_dim) is already per-call constant and is left to the wrapper.
+SPLIT_FIXED_PINS = {"compute": "fp8", "fuse_combine": True, "num_warps": 4, "ktile": 64, "num_stages": 3,
+                    "pack_heads": False}
+
 
 def _step_select_env(value) -> bool:
     """``E4B_KV_STEP_SELECT`` (SC1b's lever; ON by default since lane P111): with a decode-graph bucket bound, select the active set's
@@ -328,6 +337,8 @@ class Fp8PagedKV:
         self.bt = BLOCK_TOKENS
         self.split_cap = None      # E4B_ATTN_SPLIT_CAP, set by the server's build (lane P143): None = the library's plan
         self.split_plans = {}      # B -> {calls, plan, n_split}: what the cap met (lane P143's engagement record)
+        self.split_fixed = None    # E4B_ATTN_SPLIT_FIXED, set by the server's build: None = off; S = n_split S at every B
+        self.split_fixed_plans = {}  # B -> {calls, plan, n_split, pins}: what the fixed split met (its engagement record)
         self.kgs = kgs
         # the uniform value when there is one (what callers used to read);
         # None under mixed geometry -- read ``kgs[layer]``
@@ -1344,8 +1355,18 @@ class Fp8PagedKV:
             raise ValueError(
                 f"q has {q.shape[0]} rows but the block table has "
                 f"{tbl.shape[0]} — pass slots= so rows map to sequences")
+        # E4B_ATTN_SPLIT_FIXED: n_split S at every row count, and every other choice the wrapper makes per call pinned
+        # (SPLIT_FIXED_PINS), so a row's arithmetic cannot depend on the bucket it decodes in. Never on speculative
+        # verify (lens_override), never over a caller's n_split or packed heads, and on the fp8 split path only.
+        if (self.split_fixed and lens_override is None and "n_split" not in kw and not kw.get("pack_heads")
+                and self._split_cap_applies(layer, q, kw)):
+            # a caller's own value (constant at its call site) stands; an absent or None one would leave the wrapper's
+            # per-call default, so it takes the pin
+            kw = {**kw, **{k: v for k, v in SPLIT_FIXED_PINS.items() if kw.get(k) is None},
+                  "n_split": int(self.split_fixed)}
+            self._record_fixed(layer, q, tbl, kw)
         # never on speculative verify (lens_override): lane P143 read the decode step only
-        if (self.split_cap and lens_override is None and "n_split" not in kw and not kw.get("pack_heads")
+        elif (self.split_cap and lens_override is None and "n_split" not in kw and not kw.get("pack_heads")
                 and _kernel_takes(fp8_paged_decode_attention, "split_cap") and self._split_cap_applies(layer, q, kw)):
             kw = dict(kw, split_cap=int(self.split_cap))
             self._record_split(layer, q, tbl, kw)
@@ -1382,6 +1403,23 @@ class Fp8PagedKV:
                           sms=_sm_count(q.device))
             rec["plan"] = plan_fn(*args, **kwargs)
             rec["n_split"] = plan_fn(*args, split_cap=int(self.split_cap), **kwargs)
+
+    def _record_fixed(self, layer: int, q: torch.Tensor, tbl: torch.Tensor, kw: dict):
+        """The fixed split's engagement record, as :meth:`_record_split`'s: for each row count B, the calls, the plan
+        the library would have chosen (for reference), the split count handed over, and every pinned choice as handed
+        (a captured graph replays without calling back here, so this is what each bucket captured with)."""
+        import fp8_paged_attn
+        plan_fn = getattr(fp8_paged_attn, "decode_split_plan", None)
+        B = int(q.shape[0])
+        rec = self.split_fixed_plans.setdefault(B, {"calls": 0})
+        rec["calls"] += 1
+        if "n_split" not in rec:
+            rec["n_split"] = int(kw["n_split"])
+            rec["pins"] = {k: kw.get(k) for k in SPLIT_FIXED_PINS}
+            if plan_fn is not None:
+                rec["plan"] = plan_fn(B, self.Hs[layer], int(tbl.shape[1]), block_tokens=self.bt,
+                                      ktile=kw.get("ktile") or 64, compute="fp8", pack_heads=False,
+                                      sms=_sm_count(q.device))
 
     def seen_device(self, layer: int, seq: int) -> int:
         """Authoritative token count for (layer, seq), read from DEVICE
