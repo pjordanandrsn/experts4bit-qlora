@@ -1,0 +1,307 @@
+{
+ "engaged_gnf4": {
+  "mixtral.down|M1": {
+   "bw_prmt32": 3,
+   "bw_splitk": 3,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "mixtral.down|M16": {
+   "bw_prmt32": 3,
+   "bw_splitk": 3,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "mixtral.down|M2": {
+   "bw_prmt32": 3,
+   "bw_splitk": 3,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "mixtral.down|M4": {
+   "bw_prmt32": 3,
+   "bw_splitk": 3,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "mixtral.down|M8": {
+   "bw_prmt32": 3,
+   "bw_splitk": 3,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "mixtral.gate_up|M1": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "mixtral.gate_up|M16": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "mixtral.gate_up|M2": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "mixtral.gate_up|M4": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "mixtral.gate_up|M8": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "olmoe.down|M1": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "olmoe.down|M16": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "olmoe.down|M2": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "olmoe.down|M4": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "olmoe.down|M8": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "olmoe.gate_up|M1": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "olmoe.gate_up|M16": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "olmoe.gate_up|M2": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "olmoe.gate_up|M4": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "olmoe.gate_up|M8": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "qwen3.down|M1": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "qwen3.down|M16": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "qwen3.down|M2": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "qwen3.down|M4": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "qwen3.down|M8": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "qwen3.gate_up|M1": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "qwen3.gate_up|M16": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "qwen3.gate_up|M2": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "qwen3.gate_up|M4": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "qwen3.gate_up|M8": {
+   "bw_prmt32": 3,
+   "bw_splitk": 0,
+   "bw_tree": 0,
+   "calls": 3,
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  }
+ },
+ "note": "each cell's engaged.gnf4 record only (the gate input); no timing is carried",
+ "source": "p236-5090-1 bench_p236.json (the private receipt store)",
+ "source_sha256": "6e60465f55c867c3eee832f306c7af4b6744b96d7a7c80caa4ea598c4116c0b2"
+}

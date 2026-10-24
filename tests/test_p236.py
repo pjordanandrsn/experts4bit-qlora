@@ -347,3 +347,91 @@ def test_no_lane_script_carries_a_mangled_line_continuation():
     for sh in sorted(LANE.glob("*.sh")):
         for i, line in enumerate(sh.read_text(encoding="utf-8").splitlines(), 1):
             assert not re.search(r"\\n {2,}\S", line), f"{sh.name}:{i}: {line.strip()[:120]}"
+
+
+# ---- Amendment 2: the gnf4 engagement gate under K33's split-K plan, on the VOID box's real records first
+FIXTURE = LANE / "fixtures" / "p236-5090-1-engaged.json"
+FIXTURE_SHA256 = "ff40fbb31802cc16dc8e3fa12f8978f5eca93c12d5333c2a4a44348ddd94d61e"
+SOURCE_SHA256 = "6e60465f55c867c3eee832f306c7af4b6744b96d7a7c80caa4ea598c4116c0b2"   # the receipt's bench_p236.json
+
+
+def _engagement_faults(R, key, g):
+    return [f for f in R.cell_faults(key, {"engaged": {"gnf4": g}}) if "gnf4 engagement" in f]
+
+
+def _real_records():
+    raw = FIXTURE.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == FIXTURE_SHA256, "the fixture is not the pinned extract"
+    rec = json.loads(raw)
+    assert rec["source_sha256"] == SOURCE_SHA256 and len(rec["engaged_gnf4"]) == 30
+    return rec["engaged_gnf4"]
+
+
+def test_the_void_boxs_real_records_pass_the_amended_gate():
+    """p236-5090-1's 30 engagement records (the gate's input, no timing): under Amendment 2 every cell passes,
+    mixtral.down's five with bw_splitk == calls beside bw_prmt32 == calls."""
+    R = _load("p236_reduce")
+    recs = _real_records()
+    assert {k for k, g in recs.items() if g["bw_splitk"]} == {f"mixtral.down|M{m}" for m in R.MS}
+    assert {k: _engagement_faults(R, k, g) for k, g in recs.items()} == {k: [] for k in recs}
+
+
+def test_the_old_rule_fails_on_the_real_records(monkeypatch):
+    """The registration's rule (no split-K shape) refuses exactly the five mixtral.down cells, as the box did."""
+    R = _load("p236_reduce")
+    monkeypatch.setattr(R, "SPLITK", {})
+    recs = _real_records()
+    assert {k for k, g in recs.items() if _engagement_faults(R, k, g)} == {f"mixtral.down|M{m}" for m in R.MS}
+
+
+@pytest.mark.parametrize("case,key,edit", [
+    ("the split mark missing", "mixtral.down|M4", {"bw_splitk": 0}),
+    ("the split mark twice a call", "mixtral.down|M4", {"bw_splitk": 6}),
+    ("the split mark short", "mixtral.down|M1", {"bw_splitk": 2}),
+    ("two launches a call on the split shape", "mixtral.down|M8", {"bw_prmt32": 6}),
+    ("a split mark on a split-1 shape", "qwen3.down|M4", {"bw_splitk": 3}),
+    ("another route beside K33", "mixtral.down|M2", {"dotpad": 3}),
+    ("no calls", "mixtral.down|M16", {"calls": 0, "bw_prmt32": 0, "bw_splitk": 0}),
+])
+def test_the_amended_gate_still_refuses(case, key, edit):
+    R = _load("p236_reduce")
+    g = {**_real_records()[key], **edit}
+    assert _engagement_faults(R, key, g), case
+
+
+def test_the_registered_split_is_the_pinned_kernels_plan(monkeypatch):
+    """The check before any box: R.SPLITK equals grouped-nf4-gemm 0.51.0's own plan table at every read shape (CI
+    installs the pinned commit), so a drift fails here, not on a rented card."""
+    ng = pytest.importorskip("nf4_grouped")
+    import importlib.metadata as md
+    R = _load("p236_reduce")
+    assert md.version("grouped-nf4-gemm") == R.GNF4_VERSION
+    monkeypatch.delenv("GNF4_GEMV_BW_PLAN", raising=False)
+    assert {name: ng._bw_plan(n, k)[3] for name, (n, k) in R.SHAPES.items()} == {
+        name: R.SPLITK.get(name, 1) for name in R.SHAPES}
+    assert R.SPLITK == {"mixtral.down": 2}
+
+
+def test_a_plan_override_in_the_environment_is_refused_before_started():
+    """The only way the card's _bw_plan could differ from the pinned table is GNF4_GEMV_BW_PLAN (or GNF4_GEMV_BW): a set
+    value is a frozen-knob refusal (rc 78) before STARTED, before the quiet unset, so a stray env never costs a strike."""
+    line = ('[ -z "${GNF4_GEMV_BW+x}${GNF4_GEMV_BW_PLAN+x}" ] || { say "refusing: GNF4_GEMV_BW / GNF4_GEMV_BW_PLAN set in '
+            'the environment (the plan is the release\'s)"; finish 78; }')
+    assert line in RUN
+    assert RUN.index(line) < RUN.index("unset GNF4_GEMV_BW GNF4_GEMV_BW_PLAN") < RUN.index(": > $W/STARTED")
+    if sys.platform == "win32" or shutil.which("bash") is None:
+        return
+    for env in ({"GNF4_GEMV_BW_PLAN": "4096,14336=16,512,4,1"}, {"GNF4_GEMV_BW": "1"}, {"GNF4_GEMV_BW": ""}):
+        r = subprocess.run(["bash", "-c", 'say(){ echo "$*"; }; finish(){ echo "rc=$1"; exit "$1"; }; ' + line + '; echo passed'],
+                           capture_output=True, text=True, env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), **env})
+        assert r.returncode == 78 and "rc=78" in r.stdout, (env, r.stdout)
+    r = subprocess.run(["bash", "-c", 'say(){ :; }; finish(){ exit "$1"; }; ' + line + '; echo passed'],
+                       capture_output=True, text=True, env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")})
+    assert r.returncode == 0 and "passed" in r.stdout
+
+
+def test_the_box_checks_the_split_plans_after_the_install():
+    """The runner's tripwire asserts the same table on the card, after the install and before anything is timed."""
+    i = RUN.index("plans = {name: ng._bw_plan(n, k)[3] for name, (n, k) in R.SHAPES.items()}")
+    assert RUN.index("pipx logs/pip_gnf4.log") < i < RUN.index("p236_bench.py --self-test")
+    assert "assert plans == {name: R.SPLITK.get(name, 1) for name in R.SHAPES}" in RUN

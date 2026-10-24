@@ -27,6 +27,9 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # no stale .pyc can stand in for a proven source (the release-proof rule's R2); recorded in summary.txt and the record
 export PYTHONPYCACHEPREFIX=$(mktemp -d /tmp/p236-pycache.XXXXXX)
 export RELEASE_PROOF_FRESH_PYCACHE=$PYTHONPYCACHEPREFIX   # release_proof.py records pycache_fresh only under this marker
+# Amendment 2: the K33 route and plan are the release's own, so a set GNF4_GEMV_BW or GNF4_GEMV_BW_PLAN (the only way the
+# card's _bw_plan could differ from the pinned table) is refused here, before STARTED, as a frozen knob, never unset quietly
+[ -z "${GNF4_GEMV_BW+x}${GNF4_GEMV_BW_PLAN+x}" ] || { say "refusing: GNF4_GEMV_BW / GNF4_GEMV_BW_PLAN set in the environment (the plan is the release's)"; finish 78; }
 # every grouped-nf4-gemm and bitsandbytes knob starts unset: both libraries as they ship
 unset GNF4_GEMV_BW GNF4_GEMV_BW_PLAN GNF4_GEMV_BW_DECODE GNF4_GEMV_DOTPAD GNF4_DECODE_PLAN GNF4_GEMV_SPLITK GNF4_PDL \
       GNF4_PDL_MAX_ROWS TRITON_INTERPRET BNB_CUDA_VERSION
@@ -114,6 +117,12 @@ dev = torch.device("cuda")
 # the gnf4 arm: K33 engages at every registered shape on this card, with every knob at its default
 shapes = [(28672, 4096), (4096, 14336), (1536, 2048), (2048, 768), (2048, 2048), (2048, 1024)]
 assert all(ng._bw_engages(n, k, dev) for n, k in shapes), "K33 auto does not engage at a registered shape"
+# Amendment 2: the plan's split on this card is the registered expectation (R.SPLITK), at every shape, before anything is
+# timed. It needs the install, so a drift here is rc 9 after STARTED; the check before any box is the lane test against
+# the same pinned commit (tests/test_p236.py, CI's grouped-nf4-gemm 30adb1bf). _bw_plan reads GNF4_GEMV_BW_PLAN before
+# _BW_PLANS, so this also covers an override in the environment: keep the call, never read _BW_PLANS directly
+plans = {name: ng._bw_plan(n, k)[3] for name, (n, k) in R.SHAPES.items()}
+assert plans == {name: R.SPLITK.get(name, 1) for name in R.SHAPES}, f"K33 split-K plans {plans} are not the registered {R.SPLITK}"
 assert ng._bw_decode(dev) == "prmt32", ng._bw_decode(dev)
 assert set(ng.dispatch_counts()) >= {"bw_prmt32", "bw_tree", "bw_splitk", "dotpad", "dotpad_splitk", "scalar", "scalar_splitk"}
 # the bnb arm: matmul_4bit dispatches bitsandbytes::gemm_4bit, whose CUDA kernel picks one of these two routes

@@ -188,3 +188,36 @@ belongs. bash reads it as the word `n`, so the driver tried to stage a file name
 - **New tests:** `tests/test_p236.py` dry-runs the driver itself for every registered id (it must stage the five pinned
   files and print its launch line), refuses unregistered ids, runs `bash -n` on every `bench/p236/*.sh`, and refuses
   a backslash-n followed by indentation in any of them. Each new test fails on the registration's driver.
+
+## Amendment 2 (2026-10-24, after `p236-5090-1`): the gnf4 engagement gate under K33's split-K plan
+
+`p236-5090-1` read **VOID** (rc 27), a strike. What was seen is the gate's faults only: the gnf4 engagement gate refused
+`mixtral.down` at every M (five cells), and those cells were therefore never timed. No timing, ratio or band of that box
+is read, quoted or used, here or in any results PR. That box stays VOID, strike 1 stands, and its receipt is never
+edited.
+- **The cause:** the registered gate demanded `bw_prmt32 == calls` and every other dispatch key 0. In
+  grouped-nf4-gemm 0.51.0, a K33 call whose plan splits K bumps `bw_splitk` beside its decode key, for its one launch.
+  `_BW_PLANS` gives Mixtral-8x7B's down projection (4096, 14336) the plan (16, 512, 4, 2), split-K 2. Every other read
+  shape is split 1. The box's records show exactly this: the five `mixtral.down` cells read `bw_prmt32 3, bw_splitk 3,
+  calls 3`, and the other 25 read `bw_splitk 0`. The prior art was in the kernel repository: grouped-nf4-gemm's own
+  `kernel/k33_bench.py` excludes `bw_splitk` from its route tally for this reason. This lane's gate did not.
+- **The gate, corrected:** `bw_prmt32 == calls` at every cell. `bw_splitk == calls` EXACTLY on a shape in the
+  registered constant `SPLITK = {mixtral.down: 2}` (`p236_reduce.py`), and `bw_splitk == 0` on every other shape.
+  Every other key is 0. A missing, short or doubled split mark, a split mark on a split-1 shape, and any other route
+  still refuse.
+- **The check that the constant is the kernel's:** the lane test reads `nf4_grouped._bw_plan(N, K)` at the pinned
+  commit (CI installs grouped-nf4-gemm 30adb1bf) for all six shapes against `SPLITK`, before any box. The runner's
+  tripwire asserts the same on the card after the install and before anything is timed. That needs the install, so a
+  drift there is rc 9 after `STARTED`. The release proof shows the installed grouped-nf4-gemm is byte-equal to the
+  release, so its plan table cannot differ on the box. The one remaining way, `GNF4_GEMV_BW_PLAN` (or `GNF4_GEMV_BW`)
+  set in the environment, is refused before `STARTED` as a frozen knob (rc 78), so a stray environment never costs a
+  strike.
+- **Tests on the real record first:** the box's 30 engagement records (the gate's input only, no timing), extracted
+  from its `bench_p236.json` (sha256 `6e60465f…`) into `bench/p236/fixtures/p236-5090-1-engaged.json` and sha-pinned.
+  Under the corrected gate all 30 pass. The registration's rule (no split shape) refuses exactly the five
+  `mixtral.down` cells, as the box did. Each refusal case above is a test. The reducer's self-test gains the three
+  split-K cases, and the bench's CPU stand-in now bumps `bw_splitk` wherever the pinned module's plan splits K.
+- **The rerun** is `p236-5090-2`, the lane's last started box; a second strike ends the lane. The lane worst is
+  unchanged (USD 2.81375). The launch commit is this amendment's merge. The staged files change, so the reading kit
+  is re-cut (a new staged pin), reviewed, dry-run and validated at $0, and a NEW Approved names the merge and the new
+  kit hash. The first Approved does not carry.
