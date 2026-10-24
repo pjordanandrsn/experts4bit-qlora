@@ -71,9 +71,11 @@ difference between arms is where the experts sit.
   (`tests/test_hybrid_cold_dest.py`, `tests/test_serve_hybrid_compose.py`), at counts the kit names, or rc 25.
 - **Pins:** e4b at the kit's merge; grouped-nf4-gemm v0.50.0 `41ef086e`; torch 2.8.0+cu128, triton 3.4.0, transformers
   5.17.0; Qwen/Qwen3-30B-A3B @ `ad44e777`.
-- **Defaults are named per arm** (the e4b default at the launch commit, the same in every arm, and recorded):
-  `E4B_INT8_HEAD_BW`, `E4B_INT8_HEAD_ROWS`, the split cap, the fusions. The reducer requires the same resolved values in
-  every phase.
+- **The head knobs are named explicitly, the same in every arm:** `E4B_INT8_HEAD_BW=1` and `E4B_INT8_HEAD_ROWS=8`, the
+  qwen3_moe default since e4b#2095 (`e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24`). An unset knob is never relied
+  on. Each phase records the resolved values (`levers.int8_head_bw` with its `rows` and `source`), and the reducer requires
+  the same resolved values in every phase. The split cap and the fusions stay at the e4b default at the launch commit,
+  the same in every arm and recorded.
 
 ## The quality bar, and why
 
