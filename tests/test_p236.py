@@ -21,7 +21,7 @@ LANE = REPO / "bench" / "p236"
 PREREG = (LANE / "PREREG-p236.md").read_text(encoding="utf-8")
 RUN = (LANE / "p236_run.sh").read_text(encoding="utf-8")
 DRIVE = (LANE / "p236_drive.sh").read_text(encoding="utf-8")
-STAGED = ("p236_bench.py", "p236_reduce.py", "p236_run.sh")
+STAGED = ("p236_bench.py", "p236_reduce.py", "p236_run.sh", "release_proof.py")
 RUN_IDS = ["p236-5090-1", "p236-5090-2", "p236-5090-r1", "p236-5090-r2", "p236-5090-r3"]
 SSH_READY_S, STAGING_MARGIN_S, GUARD_H = 420, 300, 0.85
 ENV = {**os.environ, "PYTHONPATH": str(LANE)}
@@ -206,8 +206,31 @@ def test_a_cell_that_fails_a_gate_is_never_timed(tmp_path, monkeypatch):
     monkeypatch.setattr(B.Dry, "gnf4", off)
     out = tmp_path / "gated.json"
     import argparse
-    assert B.run(argparse.Namespace(dry=True, out=str(out))) == 0
+    assert B.run(argparse.Namespace(dry=True, out=str(out), release_proof=None)) == 0
     rec = json.loads(out.read_text(encoding="utf-8"))
     assert len(rec["cells"]) == 30
     assert all(c["reps"] == [] and any("fp32 reference" in g for g in c["gate_failed"]) for c in rec["cells"].values())
     assert _load("p236_reduce").reduce(rec)["verdict"] == "VOID"
+
+
+def test_the_release_proof_is_the_shared_helper_and_runs_before_any_timing():
+    """bitsandbytes' bytes are proven by the shared helper (loggetta bench/release_proof.py), staged BYTE-IDENTICAL: its
+    sha256 is the reducer's constant and the PREREG's; the runner calls it after the installs and before the self-tests
+    and the bench, and a refusal stops the box; the bench records its output and the reducer requires it."""
+    R = _load("p236_reduce")
+    got = hashlib.sha256((LANE / "release_proof.py").read_bytes()).hexdigest()
+    assert got == R.RELEASE_PROOF_SHA256 == "341dd130b1cf681a86f3fa1aad2b3e1bf9a2e4e6c22388e0e35b5736fc446713"
+    assert R.RELEASE_PROOF_SHA256 in PREREG
+    i = RUN.index('python $W/release_proof.py "bitsandbytes==$BNB_VERSION"')
+    assert RUN.index("tripwire OK") < i < RUN.index("p236_bench.py --self-test") < RUN.index("p236_bench.py --out")
+    assert 'RELEASE PROOF FAILED' in RUN[i:RUN.index("p236_bench.py --self-test")] and "finish 9" in RUN[i:RUN.index(
+        "p236_bench.py --self-test")]
+    line_start = RUN.rindex(chr(10), 0, i)
+    assert "RELEASE_PROOF_NETWORK=1" in RUN[line_start:i], "the network proof is mandatory on the box"
+    assert "--release-proof $W/release_proof.json" in RUN
+    rp = importlib.util.spec_from_file_location("release_proof_p236", LANE / "release_proof.py")
+    mod = importlib.util.module_from_spec(rp)
+    rp.loader.exec_module(mod)
+    assert mod.main([]) == 2 and mod.main(["bitsandbytes"]) == 2, "bad usage exits 2"
+    with pytest.raises(mod.ReleaseProofError, match="not installed"):
+        mod.prove("no-such-dist-p236", "0.0.0")

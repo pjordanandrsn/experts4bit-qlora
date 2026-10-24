@@ -63,6 +63,8 @@ GNF4_REPO = "github.com/pjordanandrsn/grouped-nf4-gemm"
 PYPI_HOSTS = ("files.pythonhosted.org", "pypi.org", "pypi.python.org")
 #: each library's registered release: (version, the one git commit accepted, or None when only an index wheel is)
 RELEASES = {"grouped-nf4-gemm": (GNF4_VERSION, GNF4_SHA), "bitsandbytes": (BNB_VERSION, None)}
+#: the shared release-proof helper (loggetta bench/release_proof.py at d3d84173), staged byte-identical
+RELEASE_PROOF_SHA256 = "341dd130b1cf681a86f3fa1aad2b3e1bf9a2e4e6c22388e0e35b5736fc446713"
 BNB_ROUTES = ("custom", "dequant")    # bitsandbytes.backends.cuda.ops: _gemm_4bit_kernel_impl / _dequant_linear_fallback
 GEMV_KEYS = ("bw_prmt32", "bw_tree", "bw_splitk", "dotpad", "dotpad_splitk", "scalar", "scalar_splitk")
 HOST_CODES = {13: "free disk", 15: "card, compute capability, SM count or VRAM", 16: "host RAM", 18: "CUDA unusable"}
@@ -113,6 +115,19 @@ def provenance_faults(dists):
         else:
             out.append(f"{name}: an install of unknown provenance ({du!r})")
     return out
+
+
+def release_proof_faults(proofs):
+    """bitsandbytes, the index install, must carry release_proof.py's verdict: its installed bytes ARE the wheel PyPI
+    publishes for the registered version (grouped-nf4-gemm is git at the release commit: provenance_faults pins it)."""
+    p = (proofs or {}).get("bitsandbytes") if isinstance(proofs, dict) else None
+    if not isinstance(p, dict):
+        return [f"bitsandbytes: no release proof ({p!r})"]
+    ok = (p.get("dist") == "bitsandbytes" and p.get("version") == BNB_VERSION and p.get("record") == "RECORD equal"
+          and p.get("record_equal") is True and p.get("first_diff") is None
+          and str(p.get("wheel", "")).startswith(f"bitsandbytes-{BNB_VERSION}-") and str(p.get("wheel")).endswith(".whl")
+          and isinstance(p.get("sha256"), str) and len(p["sha256"]) == 64)
+    return [] if ok else [f"bitsandbytes: the release proof does not hold ({p})"]
 
 
 def cell_key(shape, m):
@@ -200,6 +215,7 @@ def reduce(rec):
         if rec.get(k_) != want:
             void.append(f"{k_} {rec.get(k_)!r}, registered {want}")
     void += provenance_faults(rec.get("provenance"))
+    void += release_proof_faults(rec.get("release_proof"))
     if "5090" not in str(rec.get("device")) or rec.get("cc") != [12, 0] or (rec.get("sm_count") or 0) < 160:
         void.append(f"the card {rec.get('device')!r} cc {rec.get('cc')} sms {rec.get('sm_count')}, registered an RTX "
                     "5090 (cc 12.0, >= 160 SMs)")
@@ -267,6 +283,10 @@ def fake_record(**over):
            "provenance": {"grouped-nf4-gemm": {"version": GNF4_VERSION, "direct_url": {
                "url": "https://" + GNF4_REPO + ".git", "vcs_info": {"vcs": "git", "commit_id": GNF4_SHA}}},
                "bitsandbytes": {"version": BNB_VERSION, "direct_url": None}},
+           "release_proof": {"bitsandbytes": {"dist": "bitsandbytes", "version": BNB_VERSION, "files": 60,
+                                              "wheel": f"bitsandbytes-{BNB_VERSION}-py3-none-manylinux_2_24_x86_64.whl",
+                                              "sha256": "0" * 64, "record": "RECORD equal", "record_equal": True,
+                                              "first_diff": None}},
            "torch": TORCH_VERSION, "device": "NVIDIA GeForce RTX 5090", "cc": [12, 0], "sm_count": 170, "reps": REPS,
            "iters": ITERS, "cells": cells}
     rec.update(over)
@@ -295,6 +315,12 @@ def self_test():
         ("not ok", v(fake_record(status="error")) == "VOID"),
         ("another gnf4", v(fake_record(gnf4="0.50.0")) == "VOID"),
         ("no provenance", v(fake_record(provenance=None)) == "VOID"),
+        ("no release proof", v(fake_record(release_proof=None)) == "VOID"),
+        ("a refused release proof", v(fake_record(release_proof={"bitsandbytes": {
+            **good["release_proof"]["bitsandbytes"], "record_equal": False, "first_diff": "bitsandbytes/x.py"}})) == "VOID"),
+        ("a release proof of another version", v(fake_record(release_proof={"bitsandbytes": {
+            **good["release_proof"]["bitsandbytes"], "version": "0.50.1",
+            "wheel": "bitsandbytes-0.50.1-py3-none-manylinux_2_24_x86_64.whl"}})) == "VOID"),
         ("gnf4 editable", v(fake_record(provenance={**good["provenance"], "grouped-nf4-gemm": {"version": "0.51.0",
             "direct_url": {"url": "file:///src/gnf4", "dir_info": {"editable": True}}}})) == "VOID"),
         ("gnf4 another commit", v(fake_record(provenance={**good["provenance"], "grouped-nf4-gemm": {"version": "0.51.0",

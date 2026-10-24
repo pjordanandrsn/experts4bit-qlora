@@ -59,7 +59,7 @@ same weight, with the cursor walking every copy. At the 5090's 96 MB L2 it is at
    - **The self-pairs** of a rep are each arm's second visit over its first.
    - Eager calls include each library's Python dispatch, as a caller outside a captured graph pays it.
 
-## The rule (`bench/p236/p236_reduce.py`, self-tested on 51 cases)
+## The rule (`bench/p236/p236_reduce.py`, self-tested on 54 cases)
 
 **VOID** when any of these holds; **READ** otherwise. Each check fails closed: a missing record is a fault.
 - the record is missing, a dry run or not `ok`;
@@ -71,6 +71,12 @@ same weight, with the cursor walking every copy. At the 5090's 96 MB L2 it is at
   install whose `vcs_info.commit_id` is the registered release commit. An editable install, a `file://` install, another
   commit or a git install of bitsandbytes is refused. The pins are constants checked unconditionally, and the box's
   tripwire runs the same check before anything is timed (rc 9);
+- **bitsandbytes' bytes are not proven** to be the published release: `release_proof.py`, the shared helper (loggetta
+  `bench/release_proof.py` at `d3d84173`, staged byte-identical, sha256
+  `341dd130b1cf681a86f3fa1aad2b3e1bf9a2e4e6c22388e0e35b5736fc446713`), downloads the one wheel PyPI publishes for
+  0.50.2 with the installed `WHEEL` tags, checks its digest, and compares its `RECORD` file by file with the bytes on
+  disk (only pip's bytecode and declared launchers may be extra). The runner calls it after the installs and before
+  any timing (a refusal stops the box, rc 9), and the reducer requires its "RECORD equal" in the record;
 - a cell missing, or another rep count or ITERS;
 - the premise fails on a cell, or either arm misses the correctness tolerance on a cell;
 - engagement as registered fails on a cell (gnf4 not one K33 launch per call, or another route; bnb not one dispatch
@@ -150,7 +156,7 @@ passed, immediately before the first install. The first READ ends the lane; at m
 - **On CPU (a development host):** bitsandbytes 0.50.2's `matmul_4bit` dispatches `bitsandbytes::gemm_4bit` for every M
   (not `gemv_4bit` or `dequantize_4bit` at the Python level); its `dequantize_4bit` equals `dequant_ref` rounded to
   bf16; the bytes from a bf16 and an fp32 source agree. Its CUDA rule (read from its source) takes `custom` at M <= 4.
-- **Locally:** the reducer's self-test (51 cases), the bench's self-test, and a `--dry` run of the bench on CPU through
+- **Locally:** the reducer's self-test (54 cases), the bench's self-test, and a `--dry` run of the bench on CPU through
   every cell into the reducer, which reads it VOID as a dry run with no cell fault other than the dry rep count.
 
 ## What this lane cannot say

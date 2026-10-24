@@ -29,7 +29,7 @@ unset GNF4_GEMV_BW GNF4_GEMV_BW_PLAN GNF4_GEMV_BW_DECODE GNF4_GEMV_DOTPAD GNF4_D
 : > summary.txt; echo "$P236_RUN_ID" > RUN_ID
 echo "KNOBS gnf4=$GNF4_SHA ($GNF4_VERSION) bnb=$BNB_VERSION torch=$TORCH_WANT gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB need_bench=$NEED_BENCH" | tee -a summary.txt
 # ---- staged pieces, byte-for-byte
-for f in p236_bench.py p236_reduce.py p236_run.sh staged-p236.sha256; do
+for f in p236_bench.py p236_reduce.py p236_run.sh release_proof.py staged-p236.sha256; do
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged-p236.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p236/staged-p236.sha256"; finish 9; }
 # ---- refusals before anything is installed: CUDA, the torch image, the card, the disk, the host RAM, the guard fit
@@ -117,12 +117,18 @@ open("/root/p236/versions.txt", "a").write(f"gnf4 {md.version('grouped-nf4-gemm'
 print("tripwire OK: gnf4", md.version("grouped-nf4-gemm"), "bnb", md.version("bitsandbytes"), "torch", torch.__version__)
 PYT
 cat versions.txt | tee -a summary.txt
+# ---- the release proof (the rule for every head-to-head row, 2026-10-24): bitsandbytes' installed BYTES are the wheel PyPI
+# publishes for 0.50.2 (release_proof.py, staged byte-identical; its sha256 is named in the PREREG); before any timing.
+# grouped-nf4-gemm is git at the v0.51.0 commit, which the tripwire's provenance check already pins.
+RELEASE_PROOF_NETWORK=1 PYTHONPATH= perl -e 'alarm 600; exec @ARGV' python $W/release_proof.py "bitsandbytes==$BNB_VERSION" > $W/release_proof.json 2> logs/release_proof.err
+rp=$?; { echo -n "release proof rc=$rp: "; head -c 300 $W/release_proof.json; head -c 300 logs/release_proof.err; echo; } | tee -a summary.txt
+[ "$rp" = 0 ] || { say "RELEASE PROOF FAILED: bitsandbytes is not the published $BNB_VERSION"; finish 9; }
 python $W/p236_bench.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "BENCH SELF-TEST FAILED"; finish 21; }
 python $W/p236_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 21; }
 # ---- the bench: per projection and M, the premise, correctness, engagement, then the timed palindromes
 can_run $NEED_BENCH bench || finish 40
 AL=$(step_alarm 1200); say "bench (alarm=$AL)"
-PYTHONPATH= perl -e "alarm $AL; exec @ARGV" python $W/p236_bench.py --out $W/bench_p236.json > logs/bench.log 2>&1
+PYTHONPATH= perl -e "alarm $AL; exec @ARGV" python $W/p236_bench.py --out $W/bench_p236.json --release-proof $W/release_proof.json > logs/bench.log 2>&1
 rc=$?
 { echo -n "bench rc=$rc "; grep -a "^P236_BENCH" logs/bench.log | tail -1 | cut -c1-300; echo; } | tee -a summary.txt
 [ "$rc" = 0 ] || { tail -4 logs/bench.log | cut -c1-300 | tee -a summary.txt; say "BENCH FAILED (rc=$rc) -- the reducer will VOID"; }

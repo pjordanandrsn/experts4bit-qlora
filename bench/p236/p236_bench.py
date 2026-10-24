@@ -180,6 +180,9 @@ def run(a):
         rec["provenance"] = {name: R.dist_record(name) for name in R.RELEASES}   # the reducer's release proof
     except Exception as e:                       # noqa: BLE001
         rec["versions_error"] = f"{type(e).__name__}: {e}"
+    if a.release_proof:                          # the runner's release_proof.py output: one JSON object per pin
+        with open(a.release_proof, encoding="utf-8") as f:
+            rec["release_proof"] = {d["dist"]: d for d in (json.loads(ln) for ln in f if ln.strip())}
     if not be.dry:
         p = torch.cuda.get_device_properties(0)
         rec.update(device=torch.cuda.get_device_name(0), cc=list(torch.cuda.get_device_capability()),
@@ -304,6 +307,7 @@ def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--out")
     p.add_argument("--dry", action="store_true")
+    p.add_argument("--release-proof", help="release_proof.py's JSON lines (the runner's), recorded for the reducer")
     p.add_argument("--self-test", action="store_true")
     p.add_argument("--check-args", action="store_true", help="parse and validate the arguments, then exit (tests)")
     a = p.parse_args(argv)
