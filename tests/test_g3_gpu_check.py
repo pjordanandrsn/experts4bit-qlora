@@ -14,10 +14,13 @@
 """
 import importlib.util
 import inspect
+import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -309,3 +312,112 @@ def test_the_fetch_carries_e4b_2041s_brotli_pin_and_one_retry():
 def test_the_summary_carries_no_gpu_uuid():
     line = next(ln for ln in RUN.splitlines() if ln.startswith("cat forensics.txt"))
     assert "cut -d, -f1-3,5- forensics.txt" in line and "uuid" in RUN.split("nvidia-smi --query-gpu=", 1)[1].split(" ", 1)[0]
+
+
+# ---- g3-gpu-check-1's kit fault: serve_paged died at import ("No module named 'uvicorn'"); no state was read
+def test_the_install_is_e4b_with_its_serve_extra_and_pins_inside_its_ranges():
+    import tomllib
+    install = RUN[RUN.index('pipx logs/pip_e4b.log'):RUN.index('|| { tail -4 logs/pip_e4b.log')]
+    assert '"experts4bit-qlora[serve] @ git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA"' in install
+    assert '"fastapi==$FASTAPI_PIN" "uvicorn==$UVICORN_PIN"' in install
+    pins = dict(re.findall(r"\b(FASTAPI|UVICORN)_PIN=([0-9.]+)", RUN))
+    box_e = (REPO / "bench" / "sc2" / "sc2_box_e.sh").read_text()
+    serve = tomllib.loads((REPO / "pyproject.toml").read_text())["project"]["optional-dependencies"]["serve"]
+    for pkg in ("fastapi", "uvicorn"):
+        pin = pins[pkg.upper()]
+        assert f'"{pkg}=={pin}"' in box_e                                     # SC2's pins
+        floor = next(r for r in serve if r.startswith(pkg)).split(">=")[1]
+        assert tuple(map(int, pin.split("."))) >= tuple(map(int, floor.split(".")))   # inside the extra's range
+
+
+def _webstack_block():
+    a = RUN.index("<<'PYW'")
+    return RUN[RUN.index("\n", a) + 1:RUN.index("\nPYW\n", a)]
+
+
+def _stub_pkgs(root, fastapi="0.141.1", uvicorn="0.54.0", drop=()):
+    (root / "fastapi").mkdir(parents=True)
+    (root / "fastapi" / "__init__.py").write_text(f"__version__ = {fastapi!r}\nDepends = FastAPI = Header = HTTPException = Request = object\n")
+    (root / "fastapi" / "responses.py").write_text("StreamingResponse = object\n")
+    (root / "uvicorn.py").write_text(f"__version__ = {uvicorn!r}\n")
+    (root / "pydantic.py").write_text("VERSION = '2.9.0'\nBaseModel = object\n")
+    for name in drop:
+        (root / name).write_text("raise ImportError('not installed (test)')\n")
+    return root
+
+
+@pytest.mark.parametrize("case,kw,ok", [("the pinned web stack", {}, True),
+                                        ("no uvicorn", {"drop": ("uvicorn.py",)}, False),
+                                        ("uvicorn off its pin", {"uvicorn": "0.29.0"}, False),
+                                        ("fastapi off its pin", {"fastapi": "0.110.0"}, False)])
+def test_the_webstack_tripwire(tmp_path, case, kw, ok):
+    root = _stub_pkgs(tmp_path / "site", **kw)
+    env = {"PATH": os.environ["PATH"], "PYTHONPATH": str(root), "WANT_FASTAPI": "0.141.1", "WANT_UVICORN": "0.54.0"}
+    out = subprocess.run([sys.executable, "-c", _webstack_block()], capture_output=True, text=True, env=env)
+    assert (out.returncode == 0) == ok, (case, out.stdout + out.stderr)
+    assert RUN.index("<<'PYW'") < RUN.index('say "fetch $QWEN @ $QWEN_REV"')      # before the 61 GB fetch
+
+
+def _run_tail(tmp_path, start, end, rdy, drv):
+    """The run script's own verdict and exit block, against a box-like dir with a start and an end record."""
+    w = tmp_path / "w"
+    w.mkdir()
+    shutil.copy(KIT / "g3check.py", w / "g3check.py")
+    for name, h in (("health_start.json", start), ("health_end.json", end)):
+        if h is not None:
+            (w / name).write_text(json.dumps(h))
+    block = RUN[RUN.index('HF=$W/health_end.json; [ -s "$HF" ]'):RUN.index('finish "$RC"')]
+    script = (f'set -uo pipefail\nW={w}; PY={sys.executable}; RDY={rdy}; DRV={drv}; touch summary.txt\n' + block + 'echo "RC=$RC"\n')
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, cwd=w)
+    return int(re.search(r"RC=(\d+)", out.stdout).group(1))
+
+
+def test_one_exit_code_per_cause(tmp_path):
+    at_ready = g3c._health(prefill_graph__replays=0)                  # the start record: captured, nothing replayed yet
+    refused = g3c._health(prefill_graph={"status": "refused", "why": "x", "requested": "auto"})
+    err = {"status": "error", "error": "CUDA out of memory"}
+    cases = [("PASS: end record passes", at_ready, g3c._health(), 0, 0, 0),
+             ("FAIL: the end record fails", at_ready, g3c._health(prefill_graph__T=256), 0, 0, 1),
+             ("FAIL: refused at start, end record too", refused, refused, 0, 0, 1),
+             ("FAIL: refused at start, no end record", refused, None, 0, 1, 1),
+             ("UNREAD: no server state", None, None, 1, 0, 31),
+             ("UNREAD: answered, never ready", {"status": "loading"}, None, 1, 0, 31),
+             ("FAIL: an engine error at start", err, None, 1, 0, 1),
+             ("A. FAIL: an engine error during the prompts", at_ready, err, 0, 1, 1),
+             ("B. UNREAD: prompts OK, the end /health fetch failed", at_ready, None, 0, 0, 31),
+             ("C. UNREAD: the prompts failed and the server is gone", at_ready, None, 0, 1, 31),
+             ("32: the prompts failed, the server stayed up", at_ready, g3c._health(), 0, 1, 32)]
+    for i, (name, start, end, rdy, drv, want) in enumerate(cases):
+        d = tmp_path / str(i)
+        d.mkdir()
+        assert _run_tail(d, start, end, rdy, drv) == want, name
+    assert not set(re.findall(r"\bRC=(\d+)", RUN)) & {"13", "14", "17", "18", "23", "24"}
+
+
+def test_the_verdict_reads_three_ways(tmp_path):
+    assert g3c.verdict(g3c._health())["verdict"] == "PASS"
+    assert g3c.verdict({"status": "error", "error": "OOM"})["verdict"] == "FAIL"
+    assert g3c.verdict({})["verdict"] == "UNREAD" and g3c.verdict(None)["verdict"] == "UNREAD"
+    assert g3c.main(["verdict", "--health", str(tmp_path / "missing.json")]) == 3
+
+
+def test_every_bench_script_that_starts_serve_paged_installs_its_web_stack():
+    """A kit copied from an in-process smoke inherits that smoke's dependency set (g3-gpu-check-1). Every bench shell
+    script that starts ``-m experts4bit_qlora.serve_paged`` installs uvicorn itself, or is an SC2 box script that
+    sc1_run.sh sources on a line that also runs install_sc2_client (sc2_box_e.sh's fastapi + uvicorn install)."""
+    sc1 = (REPO / "bench" / "sc1" / "sc1_run.sh").read_text()
+    box_e = (REPO / "bench" / "sc2" / "sc2_box_e.sh").read_text().replace("\\\n", " ")
+    assert re.search(r"^install_sc2_client\(\)\{[^\n]*\n[^\n]*pip install[^\n]*\"uvicorn==", box_e, re.M)
+    bad = []
+    for p in sorted((REPO / "bench").rglob("*.sh")):
+        t = p.read_text(errors="replace")
+        if "-m experts4bit_qlora.serve_paged" not in t:
+            continue
+        code = "\n".join(re.sub(r"\s#.*$", "", ln) for ln in t.replace("\\\n", " ").splitlines()
+                         if not ln.lstrip().startswith("#"))           # comments, whole-line and trailing, never count
+        own = re.search(r"^[^\n]*(?:pip3? install|pipx )[^\n]*uvicorn", code, re.M)
+        calls = re.search(r"(?:^|[;&|{(]\s*|\s)install_sc2_client\b(?!\(\))", code, re.M)
+        sourced = any(f"$W/{p.name}" in ln and "install_sc2_client" in ln for ln in sc1.splitlines())
+        if not (own or calls or sourced):
+            bad.append(str(p.relative_to(REPO)))
+    assert not bad, bad
