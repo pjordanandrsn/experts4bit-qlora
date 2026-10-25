@@ -672,3 +672,27 @@ was read on the old pair, so nothing is lost and no reading crosses releases.
 the outcomes, the box, the proof and reading guards, the $0 shakedown, Amendment 5's DELTA, PIN and INERT gates and
 `verdict-stack` (now naming `605d21e6`), and Amendment 6's two exceptions. Run ids: `sc2f-prove-11` to `-13` for the
 three attempts, and `sc2f-5090-1` onward.
+
+### Amendment 8 (registered before any SC2f run): the qualify wrapper requires the lane driver's success marker
+
+**Why.** `bench/sc1/sc1_drive.sh`, which the kit hold keeps byte-identical, ends by exiting the box's own rc when the
+success marker is missing. If that rc is 0 without `SC1_SUCCESS.<nonce>`, it exits 0. That is the class of fault the
+G3 kit fixed in e4b#2137. Amendment 7's `bench/sc2/sc2_qualify_drive.sh` read the driver's exit 0 as a clean run.
+
+**The change** (the wrapper only; `sc1_drive.sh` and every staged entry are unchanged, so the HOLD is untouched):
+- after `sc1_drive.sh` exits 0, the wrapper also requires THIS run's fetched `SC1_RUN_NONCE`, its
+  `SC1_SUCCESS.<nonce>`, and `SC1_EXIT_CODE.<nonce>` reading 0;
+- otherwise the record is malformed: rc 24, a harness fault, never a PASS and never a host fault;
+- the sampler is still fetched and judged, for the record.
+
+SC2h (Amendment 5) and SC2i (Amendment 4) take this with Amendment 7, by reference.
+
+**Evidence.** `tests/test_sc2f_am7.py`, each clause alone:
+- a driver exit 0 without the marker reads rc 24, on a proof and on a reading;
+- with the marker present, an exit file reading 23, a missing exit file, a non-numeric one, or no `SC1_RUN_NONCE` each
+  read 24. So does no `SC1_RUN_NONCE` beside files literally named `SC1_SUCCESS.` and `SC1_EXIT_CODE.`, the one record the
+  nonce clause alone refuses;
+- the complete record reads 0;
+- a mutant that drops any one of the three clauses fails at least one of these tests.
+
+**Unchanged:** everything else Amendment 7 registered.
