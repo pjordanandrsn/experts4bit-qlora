@@ -6222,6 +6222,181 @@ def _selftest_memcensus(a, d, rec):
     return out
 
 
+EXTENSION_KEYS = ("arm_hook", "vram_cap", "unsloth_offload_layers", "layer_major", "step_contract")
+
+_SELFTEST_HOOK_SRC = '''"""tc1_arm's selftest observing hook (written to the selftest dir and pinned by its sha256 at run time)."""
+
+
+class _Hook:
+    """Wraps the model's forward and returns its output UNCHANGED (unless mutate), noting which step edge each training forward fell in."""
+
+    def __init__(self, mutate=False):
+        self.mutate, self.edges, self.cur, self.train_fwd, self.seen = mutate, [], None, [], []
+
+    def post_import(self, args):
+        self.seen.append("post_import")
+
+    def post_load(self, args, model):
+        self.seen.append("post_load")
+        orig, hook = model.forward, self
+
+        def fwd(*a, **k):
+            out = orig(*a, **k)
+            if model.training:
+                hook.train_fwd.append(hook.cur)
+                if hook.mutate:
+                    out.loss = out.loss * 1.001
+            return out
+        model.forward = fwd
+
+    def step_edge(self, i):
+        self.edges.append(i)
+        self.cur = i
+
+    def record(self):
+        by = {}
+        for e in self.train_fwd:
+            by[str(e)] = by.get(str(e), 0) + 1
+        return {"edges": list(self.edges), "train_forwards_by_edge": by, "seen": list(self.seen)}
+
+
+class _EdgesOnly:
+    def __init__(self):
+        self.edges = []
+
+    def step_edge(self, i):
+        self.edges.append(i)
+
+    def record(self):
+        return {"edges": list(self.edges)}
+
+
+def make():
+    return _Hook()
+
+
+def make_mutant():
+    return _Hook(mutate=True)
+
+
+def make_edges_only():
+    return _EdgesOnly()
+
+
+def make_broken():
+    raise RuntimeError("selftest: factory failure injected")
+'''
+
+
+def _selftest_harness_extension(a, d):
+    """The TC1 harness extension (P237 / P238) on the tiny e4b fused model, CPU:
+    - unset: a baseline arm carries none of the extension's keys;
+    - the observing hook: the same losses and held-out curve as the baseline (observe-only), every phase called the registered number
+      of times, the edges 0..N, and every training forward inside a step (accum of them per edge; none before edge 0, none after N);
+    - the output-equality MUTANT (a hook scaling the training loss by 1.001) moves the losses, so the check above can fail;
+    - a hook defining only some phases: only those are called and recorded;
+    - the refusals (exit 10, a harness_error row, never a fallback): a wrong sha, a factory that raises, a missing factory, a spec
+      without ``:factory``, a module that is not on the path;
+    - --layer-major 1 through a counting stand-in for the engine (the real one refuses this tiny model by class;
+      tests/test_layer_major.py pins it): the guard call before the window plus one call per step, accum micro-batches each at weight
+      1/accum, the same rows (tokens and padded lengths) as the stock loop, the step-0 loss equal and the rest within summation order."""
+    out = {}
+    hdir = os.path.join(d, "hookmod")
+    os.makedirs(hdir, exist_ok=True)
+    hp = os.path.join(hdir, "tc1_selftest_hook.py")
+    with open(hp, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(_SELFTEST_HOOK_SRC)
+    with open(hp, "rb") as fh:
+        sha = hashlib.sha256(fh.read()).hexdigest()
+    saved_env = {k: os.environ.get(k) for k in (ARM_HOOK_ENV, ARM_HOOK_SHA_ENV)}
+    saved = (a.framework, a.arm, a.tag, a.attn_4bit, a.lora_init, a.adapter_dtype, a.note, a.expect_trainable, a.microbatch_timing)
+    a.framework, a.arm, a.attn_4bit, a.lora_init, a.adapter_dtype, a.note, a.expect_trainable = "e4b", "fused", 1, "native", "fp32", None, None
+    a.microbatch_timing = 0                     # main() refuses --layer-major with it; every run here uses the same setting
+    sys.path.insert(0, hdir)
+    real_engine = globals()["layer_major_engine"]
+    try:
+        for k in (ARM_HOOK_ENV, ARM_HOOK_SHA_ENV):
+            os.environ.pop(k, None)
+        a.tag = "fused_attn4_ext_base"
+        base = run_arm(a, _selftest_load_e4b, sampler=False)
+        assert not set(EXTENSION_KEYS) & set(base), sorted(set(EXTENSION_KEYS) & set(base))
+
+        os.environ[ARM_HOOK_ENV], os.environ[ARM_HOOK_SHA_ENV] = "tc1_selftest_hook:make", sha
+        a.tag = "fused_attn4_ext_hook"
+        hk = run_arm(a, _selftest_load_e4b, sampler=False)
+        assert hk["losses"] == base["losses"], (hk["losses"][:3], base["losses"][:3])
+        assert [c["heldout_loss"] for c in hk["eval_curve"]] == [c["heldout_loss"] for c in base["eval_curve"]]
+        h = hk["arm_hook"]
+        assert h["sha256"] == sha and h["file"] == "tc1_selftest_hook.py" and h["phases"] == list(ARM_HOOK_PHASES), h
+        assert h["calls"] == {"post_import": 1, "post_load": 1, "step_edge": a.steps + 1, "record": 1}, h["calls"]
+        assert h["record"]["edges"] == list(range(a.steps + 1)) and h["record"]["seen"] == ["post_import", "post_load"], h["record"]
+        assert h["record"]["train_forwards_by_edge"] == {str(i): a.accum for i in range(a.steps)}, h["record"]["train_forwards_by_edge"]
+        assert set(hk) - set(base) == {"arm_hook"}, sorted(set(hk) ^ set(base))
+        out["hook"] = {"edges": len(h["record"]["edges"]), "losses_equal": True}
+
+        os.environ[ARM_HOOK_ENV] = "tc1_selftest_hook:make_mutant"
+        a.tag = "fused_attn4_ext_mutant"
+        mu = run_arm(a, _selftest_load_e4b, sampler=False)
+        assert mu["losses"] != base["losses"], "the output-equality mutant left the losses unchanged: the observe-only check could not fail"
+        print(f"FAILING-CASE ext-hook-output-equality: a hook scaling the training loss by 1.001 moves losses[0] {base['losses'][0]} -> "
+              f"{mu['losses'][0]} (the observe-only equality catches it)", flush=True)
+
+        os.environ[ARM_HOOK_ENV] = "tc1_selftest_hook:make_edges_only"
+        a.tag = "fused_attn4_ext_edges"
+        eo = run_arm(a, _selftest_load_e4b, sampler=False)
+        assert eo["arm_hook"]["phases"] == ["step_edge", "record"] and eo["arm_hook"]["calls"] == {"step_edge": a.steps + 1, "record": 1}, eo["arm_hook"]
+
+        refusals = (("tc1_selftest_hook:make", "0" * 64, "not the staged"), ("tc1_selftest_hook:make_broken", sha, "factory failure injected"),
+                    ("tc1_selftest_hook:nope", sha, "AttributeError"), ("tc1_selftest_hook", sha, "module:factory"),
+                    ("tc1_no_such_hook:make", sha, "is not a file"))
+        for spec, want_sha, why in refusals:
+            os.environ[ARM_HOOK_ENV], os.environ[ARM_HOOK_SHA_ENV] = spec, want_sha
+            a.tag = "fused_attn4_ext_refuse"
+            try:
+                run_arm(a, _selftest_load_e4b, sampler=False)
+                raise AssertionError(f"{spec}: the hook was not refused")
+            except SystemExit as e:
+                assert e.code == 10, (spec, e.code)
+            row = json.load(open(receipt_path(a)))
+            assert row["status"] == "harness_error" and why in row["reason"], (spec, row["status"], row["reason"])
+        out["refusals"] = len(refusals)
+        for k in (ARM_HOOK_ENV, ARM_HOOK_SHA_ENV):
+            os.environ.pop(k, None)
+
+        calls = []
+
+        def _counting_engine():
+            def step(model, batches, weights):
+                calls.append((len(batches), list(weights), bool(model.training)))
+                losses = [model(**b).loss for b in batches]
+                sum(w * loss for w, loss in zip(weights, losses)).backward()
+                return [loss.detach() for loss in losses]
+            return step
+        globals()["layer_major_engine"] = _counting_engine
+        a.layer_major, a.tag = 1, "fused_attn4_ext_lm"
+        lm = run_arm(a, _selftest_load_e4b, sampler=False)
+        assert len(calls) == a.steps + 1 and all(c == (a.accum, [1.0 / a.accum] * a.accum, True) for c in calls), calls[:2]
+        assert lm["tokens_per_step"] == base["tokens_per_step"] and lm["microbatch_padded_len"] == base["microbatch_padded_len"]
+        assert lm["losses"][0] == base["losses"][0], (lm["losses"][0], base["losses"][0])
+        assert all(abs(x - y) <= 1e-4 * max(1.0, abs(y)) for x, y in zip(lm["losses"], base["losses"])), (lm["losses"], base["losses"])
+        assert "layer_major_guard" in lm["phase_seconds"] and lm["layer_major"]["guard"]["microbatches"] == a.accum, lm.get("layer_major")
+        assert lm["step_contract"]["optimizer_steps"] == a.steps and set(lm) - set(base) == {"layer_major", "step_contract"}
+        out["layer_major"] = {"engine_calls": len(calls), "loss0_equal": True,
+                              "max_rel": max(abs(x - y) / max(1.0, abs(y)) for x, y in zip(lm["losses"], base["losses"]))}
+    finally:
+        globals()["layer_major_engine"] = real_engine
+        a.layer_major = 0
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        sys.path.remove(hdir)
+        sys.modules.pop("tc1_selftest_hook", None)
+        (a.framework, a.arm, a.tag, a.attn_4bit, a.lora_init, a.adapter_dtype, a.note, a.expect_trainable, a.microbatch_timing) = saved
+    return out
+
+
 def selftest(a):
     global DEV
     DEV = "cpu"
@@ -6537,13 +6712,15 @@ def selftest(a):
     assert all("order" not in r and "hp1" not in r for r in R.values()), "a default arm must carry neither `order` nor `hp1`"
     assert "hp1_lib" not in sys.modules, "hp1_lib is imported only by an --hp1-export run"
     mcen = _selftest_memcensus(a, d, rec)          # TC1 amendment 23: the memory census's CPU-reachable paths
+    assert all(not set(EXTENSION_KEYS) & set(r) for r in R.values()), "a default arm carries none of the harness extension's keys"
+    ext = _selftest_harness_extension(a, d)       # P237 / P238: the observe-only hook, its mutant and refusals, --layer-major's wiring
     a.framework, a.arm, a.tag, a.lora_init, a.adapter_dtype = "e4b", "fused", "fused_attn4", "native", "fp32"
 
     print(f"SELFTEST OK dir={d} receipts={sorted(R)} e4b ref/fused loss_last {e_ref['loss_last']}/{e_fu['loss_last']} unsloth {u1['loss_last']} "
           f"hf {hfr['loss_last']} accum={a.accum} autocast={a.autocast} kcalls fused={e_fu['kernel_calls_per_step_min']} unsloth={u1['kernel_calls_per_step_min']} "
           f"hf={hfr['kernel_calls_per_step_min']} mb2_pads={ {k: v['tokens_padded_total'] for k, v in mb.items()} } detector_dryruns={det} "
           f"expert_selection_dryruns={sel} matched_step0={s0} matched_tolerance={tol} matched_slots={n_slots} memcensus={mcen} "
-          f"frozen_probe_real={probe_real} phase2={p2} phase3={p3} tc2={tc2} tc3={tc3}")
+          f"frozen_probe_real={probe_real} phase2={p2} phase3={p3} tc2={tc2} tc3={tc3} extension={ext}")
     return d
 
 
