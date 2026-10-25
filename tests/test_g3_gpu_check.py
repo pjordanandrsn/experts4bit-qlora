@@ -64,7 +64,11 @@ def _health(captured=True, replays=6, requested="auto", kv_pool="shared", widths
                                 bt=16)
     parts = SimpleNamespace(runner=runner, scheduler=None)
     cfg = SimpleNamespace(kv_pool=kv_pool, kv_pool_resolution=res, prefill_graph=requested)
-    return {"engine": {"max_seqs": res["max_seqs"], "kv_pool": kv_pool, "kv_pool_sizing": _kv_pool_health(cfg, parts)},
+    # the configuration fields as sc2j-5090-1's own /health carried them (the fixture below)
+    return {"model": "Qwen/Qwen3-30B-A3B",
+            "levers": {"moe_layers": 48, "int4_expert_layers": 48, "int4_attn_projections": 96},
+            "engine": {"max_seqs": res["max_seqs"], "max_tokens_per_seq": 4096, "kv_pool": kv_pool,
+                       "kv_pool_sizing": _kv_pool_health(cfg, parts)},
             "prefill_graph": prefill_graph_report(cfg, SimpleNamespace(parts=parts))}
 
 
@@ -105,6 +109,56 @@ def test_with_no_hold_back_the_candidate_reads_fail(monkeypatch):
     monkeypatch.setattr(sr, "prefill_graph_headroom_bytes", lambda pool, flush: 0)
     v = g3c.verdict(_health())
     assert v["verdict"] == "FAIL" and any("hold-back" in w for w in v["why"])
+
+
+@pytest.mark.parametrize("name,path,value", [
+    ("wrong model", ("model",), "ibm-granite/granite-3.1-3b-a800m-instruct"),
+    ("2048 tokens a slot", ("engine", "max_tokens_per_seq"), 2048),
+    ("bf16 experts", ("levers", "int4_expert_layers"), 0),
+    ("bf16 attention", ("levers", "int4_attn_projections"), 0),
+])
+def test_each_configuration_mutant_reads_fail(name, path, value):
+    h = _health()
+    node = h
+    for k in path[:-1]:
+        node = node[k]
+    node[path[-1]] = value
+    v = g3c.verdict(h)
+    assert v["verdict"] == "FAIL" and len(v["why"]) == 1, (name, v["why"])
+
+
+# ---- sc2j-5090-1's own /health (the shared arm's start record, receipt store sha256 below): the field names are the
+# server's, and the record reads FAIL for the refusal and for the stack without #2087's hold-back
+SC2J_HEALTH = REPO / "tests" / "fixtures" / "g3check" / "sc2j-5090-1_health_e4b_sh_d1_start.json"
+SC2J_HEALTH_SHA256 = "87e43542a1207e39df0e74c0cb0f91809a2da51e263f7186eb489f6b957c83b8"
+
+
+def _sc2j_health():
+    import hashlib
+    import json
+    raw = SC2J_HEALTH.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == SC2J_HEALTH_SHA256
+    return json.loads(raw)
+
+
+def test_the_box_own_record_reads_fail_for_the_refusal_and_the_missing_hold_back():
+    v = g3c.verdict(_sc2j_health())
+    assert v["verdict"] == "FAIL"
+    assert v["model"] == "Qwen/Qwen3-30B-A3B" and v["max_tokens_per_seq"] == 4096 and v["max_seqs"] == 64
+    assert v["int4_expert_layers"] == v["moe_layers"] == 48 and v["int4_attn_projections"] == 96
+    assert sorted(w.split(" ")[0] for w in v["why"]) == sorted(
+        ["no", "prefill_graph.status", "prefill_graph.T", "prefill_graph.replays"]), v["why"]
+    assert any("prefill_graph_headroom_bytes" in w for w in v["why"])
+
+
+def test_the_box_own_record_with_a_capture_and_the_hold_back_reads_pass():
+    """Only the fields #2087 and a capture change: the 64-slot candidate's hold-back, and the graph's record."""
+    h = _sc2j_health()
+    cand = next(c for c in h["engine"]["kv_pool_sizing"]["derivation"]["candidates"] if c["max_seqs"] == 64)
+    cand["prefill_graph_headroom_bytes"] = 1_929_379_840
+    h["prefill_graph"] = {"status": "on", "T": 512, "replays": 6, "eager_chunks": 6, "pool_mib": 426,
+                          "free_after_mib": 1800, "bulk_flush_mib": 319, "requested": "auto"}
+    assert g3c.verdict(h)["verdict"] == "PASS", g3c.verdict(h)["why"]
 
 
 # ---- the capture evidence the verdict cites

@@ -29,6 +29,12 @@ checkout is clean, HEAD is on `origin/main`, and HEAD carries `fc1f630a`. The bo
 
 PASS needs every one of these, and a missing field is a FAIL:
 
+- the configuration, from the live server, never the launch env:
+  - top-level `model == "Qwen/Qwen3-30B-A3B"`;
+  - `engine.max_tokens_per_seq == 4096`;
+  - int4 experts on every MoE layer (`levers.int4_expert_layers == levers.moe_layers > 0`, counted from the expert
+    layers that carry an int4 store);
+  - int4 attention (`levers.int4_attn_projections > 0`, the `Int4Linear` modules counted on the model as served);
 - `engine.max_seqs == 64` and `engine.kv_pool == "shared"`;
 - `engine.kv_pool_sizing.pool_rows < claim_all_rows`;
 - the derivation's fitting 64-slot candidate carries `prefill_graph_headroom_bytes > 0`;
@@ -43,8 +49,11 @@ PASS needs every one of these, and a missing field is a FAIL:
 margin is recorded as information only.
 
 `tests/test_g3_gpu_check.py` builds `/health` from the runtime's own functions on sc2j-5090-1's inputs: a captured
-graph reads PASS, while the box's refusal, a graph with no replays, a forced graph, claim-all, 32 slots and a sizing
-with no hold-back each read FAIL.
+graph reads PASS. Each of these reads FAIL: the box's refusal, a graph with no replays, a forced graph, claim-all,
+32 slots, a sizing with no hold-back, the wrong model, 2,048 tokens a slot, bf16 experts and bf16 attention.
+sc2j-5090-1's own shared-arm `/health` (a fixture, pinned by sha256 to the receipt store) reads FAIL for its refusal
+and its missing hold-back. With only a capture and the hold-back added, it reads PASS. That shows the verdict's field
+names are the server's.
 
 ## Cost
 

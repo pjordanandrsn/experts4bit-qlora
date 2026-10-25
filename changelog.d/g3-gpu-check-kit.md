@@ -4,6 +4,8 @@
   carries e4b#2087. The verdict binds on the capture evidence:
   - `prefill_graph.status == "on"` under `requested == "auto"`, which the runner sets only after the headroom gate;
   - `T == 512` and `replays > 0` after six long prompts;
+  - the configuration from the live server (`model`, `max_tokens_per_seq` 4096, and the int4 expert and attention
+    census in `levers`);
   - 64 slots, and a shared pool smaller than claim-all, whose 64-slot candidate held back
     `prefill_graph_headroom_bytes > 0`.
 

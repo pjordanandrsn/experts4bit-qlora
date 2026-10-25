@@ -10,6 +10,10 @@ headroom and e4b#2087 fixed. A correctness check, not a reading.
 
 PASS needs every one of these, read from the server's state, never from the environment it was given. A missing field
 is a FAIL (fail closed):
+  - the configuration SC2j's shared arm ran, from the live server: top-level model == "Qwen/Qwen3-30B-A3B",
+    engine.max_tokens_per_seq == 4096, and int4 experts AND int4 attention by ``levers``' census of the model as served
+    (``int4_expert_layers`` counts the expert layers carrying an int4 store and must equal ``moe_layers`` > 0, a full
+    stack; ``int4_attn_projections`` counts the ``Int4Linear`` modules and must be > 0), never the launch env;
   - engine.max_seqs == 64 and engine.kv_pool == "shared";
   - engine.kv_pool_sizing.pool_rows < claim_all_rows (the shared pool's own sizing ran, not the claim-all fallback),
     and the derivation's fitting 64-slot candidate carries prefill_graph_headroom_bytes > 0 (#2087's hold-back took
@@ -31,6 +35,7 @@ import sys
 import urllib.request
 
 SLOTS, T = 64, 512
+MODEL, TOKENS = "Qwen/Qwen3-30B-A3B", 4096
 PARAGRAPH = ("The shared KV pool hands each running sequence the cache rows it needs, step by step, instead of "
              "reserving a full sequence for every slot up front. ")
 
@@ -62,6 +67,17 @@ def drive(port: int, model: str, n: int, max_tokens: int) -> int:
 def verdict(h: dict) -> dict:
     why = []
     e = (h or {}).get("engine") or {}
+    lv = (h or {}).get("levers") or {}
+    if (h or {}).get("model") != MODEL:
+        why.append(f"model {(h or {}).get('model', '<missing>')!r}, not {MODEL!r}")
+    if e.get("max_tokens_per_seq") != TOKENS:
+        why.append(f"engine.max_tokens_per_seq {e.get('max_tokens_per_seq', '<missing>')!r}, not {TOKENS}")
+    il, ml = lv.get("int4_expert_layers"), lv.get("moe_layers")
+    if not (isinstance(il, int) and isinstance(ml, int) and not isinstance(il, bool) and ml > 0 and il == ml):
+        why.append(f"levers.int4_expert_layers {il!r} of moe_layers {ml!r}: the experts are not int4 on every MoE layer")
+    ia = lv.get("int4_attn_projections")
+    if not isinstance(ia, int) or isinstance(ia, bool) or ia <= 0:
+        why.append(f"levers.int4_attn_projections {ia!r}: attention is not int4")
     if e.get("max_seqs") != SLOTS:
         why.append(f"engine.max_seqs {e.get('max_seqs', '<missing>')!r}, not {SLOTS}")
     if e.get("kv_pool") != "shared":
@@ -99,11 +115,14 @@ def verdict(h: dict) -> dict:
         if all(isinstance(v, (int, float)) for v in vals):
             margin = vals[0] - vals[1] - vals[2]
     return {"verdict": "PASS" if not why else "FAIL", "why": why, "info_margin_mib_rounded": margin,
-            "prefill_graph": pg, "max_seqs": e.get("max_seqs"), "kv_pool": e.get("kv_pool")}
+            "prefill_graph": pg, "max_seqs": e.get("max_seqs"), "kv_pool": e.get("kv_pool"),
+            "model": (h or {}).get("model"), "max_tokens_per_seq": e.get("max_tokens_per_seq"),
+            "int4_expert_layers": il, "moe_layers": ml, "int4_attn_projections": ia}
 
 
 def _health(**over):
-    h = {"engine": {"max_seqs": 64, "kv_pool": "shared",
+    h = {"model": MODEL, "levers": {"moe_layers": 48, "int4_expert_layers": 48, "int4_attn_projections": 192},
+         "engine": {"max_seqs": 64, "max_tokens_per_seq": 4096, "kv_pool": "shared",
                     "kv_pool_sizing": {"pool_rows": 9768, "claim_all_rows": 16448, "derivation": {"candidates": [
                         {"max_seqs": 64, "fits": True, "pool_rows": 9768,
                          "prefill_graph_headroom_bytes": 1139802112}]}}},
@@ -151,6 +170,16 @@ def self_test() -> int:
         ("replays a bool", _health(prefill_graph__replays=True), "FAIL"),
         ("rounded margin short is information, not a verdict", _health(prefill_graph__free_after_mib=744), "PASS"),
         ("MiB fields missing is information, not a verdict", _health(prefill_graph__free_after_mib=KeyError), "PASS"),
+        ("wrong model", _health(model="ibm-granite/granite-3.1-3b-a800m-instruct"), "FAIL"),
+        ("model missing", _health(model=KeyError), "FAIL"),
+        ("2048 tokens a slot", _health(engine__max_tokens_per_seq=2048), "FAIL"),
+        ("max_tokens_per_seq missing", _health(engine__max_tokens_per_seq=KeyError), "FAIL"),
+        ("bf16 experts (no int4 store)", _health(levers__int4_expert_layers=0), "FAIL"),
+        ("int4 experts on part of the stack", _health(levers__int4_expert_layers=47), "FAIL"),
+        ("moe_layers missing", _health(levers__moe_layers=KeyError), "FAIL"),
+        ("bf16 attention (no Int4Linear)", _health(levers__int4_attn_projections=0), "FAIL"),
+        ("int4 attention count missing", _health(levers__int4_attn_projections=KeyError), "FAIL"),
+        ("no levers record", _health(levers=KeyError), "FAIL"),
         ("empty health", {}, "FAIL"),
     ]
     fails = 0
