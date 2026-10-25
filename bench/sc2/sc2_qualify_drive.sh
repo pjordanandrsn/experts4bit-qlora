@@ -4,6 +4,8 @@
 #   17 / 18  a host fault, READ and failed (the launcher's power-cap / host-floor codes: it excludes the machine);
 #   25       probe_error: a record missing or unreadable, a HARNESS fault that voids the run and never excludes;
 #   9        the burn's setup (apt / venv / torch download) failed: a harness fault, not a card verdict.
+#   24       the lane driver exited 0 without THIS run's SC1_RUN_NONCE, SC1_SUCCESS.<nonce> and SC1_EXIT_CODE.<nonce> = 0
+#            (SC2f Amendment 8): a malformed record, a harness fault, never a PASS.
 # Before any install, on the rented card:
 #   1. nvidia-smi enforced.power.limit (with power.limit and power.max_limit, recorded) must be 575 W, compared as a
 #      float (bench/sc2/sc2_qualify.py power): READ at another limit 17, unreadable 25;

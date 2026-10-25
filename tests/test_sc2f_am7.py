@@ -186,8 +186,10 @@ def _tree(tmp_path, drive_rc=0):
     (t / "bench" / "sc1" / "sc1_drive.sh").write_text(
         '#!/bin/bash\necho DRIVE_CALLED >> "$DRIVE_LOG"\nmkdir -p "$E4B_RENT_RUN_DIR/sc1"\n'
         '[ -n "$PROOF_W" ] && printf "power.limit,clocks.max.sm %s W, 3105 MHz\\n" "$PROOF_W" > "$E4B_RENT_RUN_DIR/sc1/forensics.txt"\n'
-        'echo nn > "$E4B_RENT_RUN_DIR/sc1/SC1_RUN_NONCE"; echo "${BOX_RC:-0}" > "$E4B_RENT_RUN_DIR/sc1/SC1_EXIT_CODE.nn"\n'
-        '[ "${NO_MARKER:-0}" = 1 ] || [ "${BOX_RC:-0}" != 0 ] || : > "$E4B_RENT_RUN_DIR/sc1/SC1_SUCCESS.nn"\n'
+        '[ "${NO_NONCE:-0}" = 1 ] || echo nn > "$E4B_RENT_RUN_DIR/sc1/SC1_RUN_NONCE"\n'
+        '[ "${EXIT_FILE-0}" = MISSING ] || echo "${EXIT_FILE-0}" > "$E4B_RENT_RUN_DIR/sc1/SC1_EXIT_CODE.nn"\n'
+        '[ "${NO_MARKER:-0}" = 1 ] || : > "$E4B_RENT_RUN_DIR/sc1/SC1_SUCCESS.nn"\n'
+        '[ "${PLANT_EMPTY:-0}" = 1 ] && { : > "$E4B_RENT_RUN_DIR/sc1/SC1_SUCCESS."; echo 0 > "$E4B_RENT_RUN_DIR/sc1/SC1_EXIT_CODE."; }\n'
         f'exit {drive_rc}\n')
     return t
 
@@ -224,7 +226,8 @@ def _sampler(n=30, mask=CLEAN, bad_tail=None):
 
 
 def _wrap(tmp_path, power="575.00 W, 575.00 W, 600.00 W", burn_rc=0, burn_refusal="", drive_rc=0, prove="1",
-          proof_w="575.00", host_facts=575.0, sampler=None, box="N", no_marker=False, box_rc=0):
+          proof_w="575.00", host_facts=575.0, sampler=None, box="N", no_marker=False, exit_file="0", no_nonce=False,
+          plant_empty=False):
     sampler = _sampler() if sampler is None else sampler
     t, b = _tree(tmp_path, drive_rc), _stubs(tmp_path, power, burn_rc, burn_refusal, None if sampler == "MISSING" else sampler)
     run = tmp_path / "run"
@@ -235,7 +238,8 @@ def _wrap(tmp_path, power="575.00 W, 575.00 W, 600.00 W", burn_rc=0, burn_refusa
            "E4B_RENT_SSH_OPTS": "-o X=1", "E4B_RENT_RUN_DIR": str(run), "E4B_RENT_RUN_ID": "sc2f-prove-11",
            "E4B_RENT_DEADLINE_EPOCH": "9999999999", "E4B_RENT_INSTANCE_ID": "1", "SC1_BOX": box, "SC1_PROVE": prove,
            "DRIVE_LOG": str(tmp_path / "drive.log"), "PROOF_W": proof_w or "", "NO_MARKER": "1" if no_marker else "0",
-           "BOX_RC": str(box_rc)}
+           "EXIT_FILE": exit_file, "NO_NONCE": "1" if no_nonce else "0",
+           "PLANT_EMPTY": "1" if plant_empty else "0"}
     out = subprocess.run(["bash", str(t / "bench" / "sc2" / "sc2_qualify_drive.sh")], capture_output=True, text=True, env=env)
     return out, (tmp_path / "drive.log").exists(), run
 
@@ -332,9 +336,21 @@ def test_a_driver_exit_0_without_the_success_marker_is_never_a_pass(tmp_path, pr
     assert (run / "qualify" / "run_judge.json").exists()            # the sampler is still fetched and judged, for the record
 
 
-def test_a_driver_exit_0_over_a_nonzero_box_code_is_never_a_pass(tmp_path):
-    out, _, _ = _wrap(tmp_path, box_rc=23)
-    assert out.returncode == 24, out.stdout + out.stderr
+@pytest.mark.parametrize("case,kw", [("marker present, exit file reads 23", {"exit_file": "23"}),
+                                     ("marker present, exit file missing", {"exit_file": "MISSING"}),
+                                     ("marker present, exit file not a number", {"exit_file": "x"}),
+                                     ("marker present, no SC1_RUN_NONCE", {"no_nonce": True}),
+                                     ("no SC1_RUN_NONCE, but files named SC1_SUCCESS. and SC1_EXIT_CODE. (0) exist",
+                                      {"no_nonce": True, "plant_empty": True})])
+def test_each_clause_of_the_marker_check_binds_alone(tmp_path, case, kw):
+    """One clause at a time: each of the nonce, the marker and the exit file reading 0 is required on its own."""
+    out, _, _ = _wrap(tmp_path, **kw)
+    assert out.returncode == 24, (case, out.stdout + out.stderr)
+
+
+def test_the_complete_record_is_a_clean_run(tmp_path):
+    out, _, _ = _wrap(tmp_path)
+    assert out.returncode == 0, out.stdout + out.stderr
 
 
 def test_the_wrapper_refuses_boxes_outside_sc2f_h_i(tmp_path):

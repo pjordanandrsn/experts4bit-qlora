@@ -687,9 +687,12 @@ G3 kit fixed in e4b#2137. Amendment 7's `bench/sc2/sc2_qualify_drive.sh` read th
 
 SC2h (Amendment 5) and SC2i (Amendment 4) take this with Amendment 7, by reference.
 
-**Evidence.** `tests/test_sc2f_am7.py`:
+**Evidence.** `tests/test_sc2f_am7.py`, each clause alone:
 - a driver exit 0 without the marker reads rc 24, on a proof and on a reading;
-- a driver exit 0 over a box exit file reading 23 reads rc 24;
-- a mutant that disables the check fails both tests.
+- with the marker present, an exit file reading 23, a missing exit file, a non-numeric one, or no `SC1_RUN_NONCE` each
+  read 24. So does no `SC1_RUN_NONCE` beside files literally named `SC1_SUCCESS.` and `SC1_EXIT_CODE.`, the one record the
+  nonce clause alone refuses;
+- the complete record reads 0;
+- a mutant that drops any one of the three clauses fails at least one of these tests.
 
 **Unchanged:** everything else Amendment 7 registered.
