@@ -3883,7 +3883,7 @@ origins, and a fresh bytecode prefix.
   summary's, and its entry module among the imports (`experts4bit_qlora`, `nf4_qlora`, `unsloth`, `unsloth_zoo`);
 - POS80_ARM_ENV empty, and POS80_KNOB_ENV naming no knob bar the harness's own;
 - versions.txt's two PyPI t212 lines;
-- one passing CARD_CLOCK burn line at 2700 MHz and min_clean 1.0;
+- one passing CARD_CLOCK burn line at 2700 MHz, min_clean 0.95, with hard_bits_every_sample true;
 - the SINGLE_THREAD line >= 15;
 - the host CPU.
 

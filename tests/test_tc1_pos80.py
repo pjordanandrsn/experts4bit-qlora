@@ -90,6 +90,19 @@ def test_the_pins_agree_across_the_kit_the_reducer_the_template_and_the_registra
     assert int(_run_const("POS80_CLOCK_FLOOR")) == RED.POS80_CLOCK_FLOOR == 2700
 
 
+def test_the_registrations_burn_and_draw_numbers_are_the_codes():
+    """The PREREG is the contract: its box-fact burn line, its host-floor text and its per-draw rule carry the reducer's and the box's own
+    numbers, so text and code cannot drift (a stale min_clean 1.0 survived one review)."""
+    m = re.search(r"one passing CARD_CLOCK burn line at (\d+) MHz, min_clean ([0-9.]+), with hard_bits_every_sample true", A80)
+    assert m, "the box-fact burn line"
+    assert (int(m.group(1)), float(m.group(2))) == (RED.POS80_CLOCK_FLOOR, RED.POS80_BURN_MIN_CLEAN)
+    assert float(re.search(r"--min-clean ([0-9.]+)", _cut(r"card_clock\.py burn .*?\n")).group(1)) == RED.POS80_BURN_MIN_CLEAN
+    assert f"SwPowerCap 0x4 is clear on **>= {round(RED.POS80_BURN_MIN_CLEAN * 100)} %** of busy samples" in A80       # the host-floor text
+    assert f">= {int(RED.POS80_DRAW_MIN_CLEAN * 100)} % of busy samples" in A80                      # the per-draw floor
+    for stale in ("min_clean 1.0", "20..22", "steps 3..5", "profile_warm 3"):
+        assert stale not in A80, stale
+
+
 def test_the_three_staged_helpers_are_pinned_by_digest_in_the_reducer_and_the_registration():
     got = {"release_proof": _sha(TC1 / "release_proof.py"), "card_clock": _sha(REPO / "bench" / "common" / "card_clock.py"),
            "f15v2": _sha(TC1 / "f15v2.py")}
