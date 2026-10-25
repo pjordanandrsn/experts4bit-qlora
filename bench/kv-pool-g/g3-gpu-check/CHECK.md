@@ -1,0 +1,53 @@
+# G3 GPU check: does the shared server capture the prefill graph at 64 slots on Qwen3 int4?
+
+A correctness check, not a reading. sc2j-5090-1 (SC2j strike 2) started the shared KV pool's server at 64 slots on
+Qwen3-30B-A3B int4 on an RTX 5090, and its prefill graph refused for headroom: 724 MiB free after capture against the
+745 MiB its gate wanted. e4b#2087 (merge `fc1f630a`) makes `size_shared_pool` hold back the graph's runtime headroom
+with the same rule the gate applies (`serve_recipe.prefill_graph_headroom_bytes`). This check runs that server once on
+the card and reads, from the server's own state, whether the graph was captured and replayed.
+
+## The box
+
+One RTX 5090, launched with `tools/pod-launch.sh` on a 1.0 h guard. The driver (`g3check_drive.sh`) refuses unless the
+checkout is clean, HEAD is on `origin/main`, and HEAD carries `fc1f630a`. The box (`g3check_run.sh`):
+
+1. runs the canonical guard-fit check before any install (rc 17, not a strike);
+2. installs torch 2.8.0+cu128, e4b at HEAD and grouped-nf4-gemm at main's CI pin (`30adb1bf`), and runs a tripwire on
+   the installed commits and #2087's rule;
+3. records the card (`nvidia-smi` with the enforced power limit, and `bench/common/card_clock.py burn --floor 2700`).
+   This is recorded, not a gate;
+4. fetches Qwen3-30B-A3B at SC1's pin (`ad44e777`) and bakes the NF4 arena (`bench/p39/k8_bake.py`);
+5. starts one server with the env of SC2j box Q's shared arm (`bench/sc2/sc2j_box_q.sh` `q_server_start`):
+   - `E4B_PAGED_MAX_SEQS=auto`, `E4B_PAGED_KV_POOL=shared`, 4,096 tokens a slot;
+   - SC1's `SPEEDENV` and `ROUTEENV`, plus `E4B_PAGED_FUSE_QKV=1`;
+   - the prefill graph at its default, `auto`;
+6. sends six prompts of about 1,000 tokens (`g3check.py drive`), each answered and each longer than the graph's 512
+   tokens, so every first chunk is the graph's;
+7. reads `/health` and gives the verdict (`g3check.py verdict`).
+
+## PASS
+
+PASS needs every one of these, and a missing field is a FAIL:
+
+- `engine.max_seqs == 64` and `engine.kv_pool == "shared"`;
+- `engine.kv_pool_sizing.pool_rows < claim_all_rows`;
+- the derivation's fitting 64-slot candidate carries `prefill_graph_headroom_bytes > 0`;
+- `prefill_graph.requested == "auto"` and `prefill_graph.status == "on"`;
+- `prefill_graph.T == 512` and `prefill_graph.replays > 0`.
+
+"on" under "auto" is the capture evidence. `serve_paged` captures with
+`require_headroom=(cfg.prefill_graph == "auto")`. `PagedModelRunner.enable_prefill_graph` assigns
+`self._prefill_graph = pg` only after the gate
+`free_after_bytes >= prefill_graph_headroom_bytes(pool_bytes, bulk_flush_bytes)`, which compares unrounded bytes.
+`prefill_graph_stats` reports "on" only while that attribute is set. A refused graph reads FAIL. The rounded MiB
+margin is recorded as information only.
+
+`tests/test_g3_gpu_check.py` builds `/health` from the runtime's own functions on sc2j-5090-1's inputs: a captured
+graph reads PASS, while the box's refusal, a graph with no replays, a forced graph, claim-all, 32 slots and a sizing
+with no hold-back each read FAIL.
+
+## Cost
+
+The worst case is $1.72: a 1.0 h guard at $1.05/h, plus a 61 GB download at the $0.011/GB cap. That is under the
+$15 per-run rule, and the figure is posted before the create. Receipts are fetched with
+`rsync --no-links` before teardown (bench/common rule 8), and the receipt is committed to the store.
