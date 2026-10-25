@@ -13,12 +13,16 @@ with every ``E4B_*`` / ``GNF4_*`` variable cleared, what each serving lever reso
 - a source scan (``scan``): every ``E4B_*`` / ``GNF4_*`` environment read in the package with its default literal, and
   every such name the source mentions, so an inline default with no resolver, or a knob added later, is a lever too.
 
+``--set NAME=VALUE`` (SC2f Amendment 7) sets an ``E4B_*`` variable after the clearing, so an arm's resolved paths can
+be dumped (SC2f's ``off`` arm: ``E4B_FUSE_PREFILL_GLUE=0 E4B_PREFILL_LEAN_DISPATCH=0``). The prefill glue and the
+fusion knobs then resolve from the set value instead of the unset sentinel, and the env-reading routes read it as the
+server does. The dump records what it set (``env_set``), and ``diff`` refuses two dumps that set different values.
 A lever that a tree lacks, or whose resolver raises, records that fact as its value. ``diff A B`` compares two dumps
 and exits 1 naming every lever whose value differs or that exists in only one, unless ``--allow LEVER=reason`` names it. The
 lane's amendment names any lever it allows. Nothing here needs a GPU; the grouped-nf4-gemm installed beside the tree is
 recorded, and the two dumps must record the same one.
 
-    PYTHONPATH=<ref checkout>    python bench/sc2/sc2_defaults.py dump --out ref.json
+    PYTHONPATH=<ref checkout>    python bench/sc2/sc2_defaults.py dump --out ref.json [--set NAME=VALUE ...]
     PYTHONPATH=<launch checkout> python bench/sc2/sc2_defaults.py dump --out launch.json
     python bench/sc2/sc2_defaults.py diff ref.json launch.json [--allow LEVER=reason ...]
     python bench/sc2/sc2_defaults.py --self-test
@@ -100,9 +104,22 @@ def scan(pkg_dir) -> dict:
     return {"reads": {k: sorted(v) for k, v in sorted(reads.items())}, "names": sorted(names)}
 
 
-def dump() -> dict:
+def parse_set(items) -> dict:
+    """``--set NAME=VALUE`` -> ``{NAME: VALUE}``; only ``E4B_*`` names, each set once."""
+    out = {}
+    for it in items:
+        name, sep, value = str(it).partition("=")
+        if not sep or not name.startswith("E4B_") or name in out:
+            raise ValueError(f"--set needs a distinct E4B_NAME=VALUE, got {it!r}")
+        out[name] = value
+    return out
+
+
+def dump(env_set=None) -> dict:
+    env_set = dict(env_set or {})
     for k in [k for k in os.environ if k.startswith(("E4B_", "GNF4_"))]:
         del os.environ[k]
+    os.environ.update(env_set)
     import experts4bit_qlora as e
     from experts4bit_qlora import serve_paged as sp
     from experts4bit_qlora.engines import hot_residency as hr
@@ -112,10 +129,10 @@ def dump() -> dict:
         out[f"config.{f.name}"] = _jsonable(getattr(cfg, f.name))
     unset = getattr(sp, "FUSION_UNSET", "default")
     if hasattr(sp, "resolve_fusion_modes"):
-        modes, sources = sp.resolve_fusion_modes({k: unset for k in sp.FUSION_KNOBS}, MODEL_TYPE)
+        modes, sources = sp.resolve_fusion_modes({k: env_set.get(k, unset) for k in sp.FUSION_KNOBS}, MODEL_TYPE)
         for k in sorted(modes):
             out[f"fusion.{k}"] = [modes[k], sources.get(k)]
-    for name, args in (("resolve_prefill_glue", (unset, MODEL_TYPE)), ("resolve_attn_split_cap", (unset, MODEL_TYPE)),
+    for name, args in (("resolve_prefill_glue", (env_set.get("E4B_FUSE_PREFILL_GLUE", unset), MODEL_TYPE)), ("resolve_attn_split_cap", (unset, MODEL_TYPE)),
                        ("resolve_int8_head_bw", (unset, MODEL_TYPE, HEAD_SHAPE))):
         fn = getattr(sp, name, None)
         out[f"family.{name}"] = _call(fn, *args) if fn else "ABSENT"
@@ -141,7 +158,7 @@ def dump() -> dict:
     for name in src["names"]:
         out.setdefault(f"env.{name}", "NAMED")      # a name the source mentions without a direct read with a default
     return {"e4b_version": getattr(e, "__version__", None), "e4b_file": os.path.dirname(e.__file__),
-            "grouped_nf4_gemm": gnf4, "model_type": MODEL_TYPE, "levers": out}
+            "grouped_nf4_gemm": gnf4, "model_type": MODEL_TYPE, "env_set": env_set, "levers": out}
 
 
 def parse_allow(items) -> dict:
@@ -164,6 +181,8 @@ def diff(a: dict, b: dict, allow=()) -> dict:
     named = changed + only_a + only_b
     refused = [k for k in named if k not in allow]
     why = []
+    if (a.get("env_set") or {}) != (b.get("env_set") or {}):
+        why.append(f"the dumps set different variables: {a.get('env_set') or {}} vs {b.get('env_set') or {}}")
     if a.get("grouped_nf4_gemm") != b.get("grouped_nf4_gemm"):
         why.append(f"grouped-nf4-gemm differs: {a.get('grouped_nf4_gemm')} vs {b.get('grouped_nf4_gemm')}")
     return {"ok": not refused and not why, "refused": refused,
@@ -202,6 +221,11 @@ def self_test() -> int:
          and _raises(lambda: parse_allow(["config.prefill_every= "]))),
         ("a different kernels package refuses", not diff(base, other_gnf4)["ok"]),
         ("a raising resolver is a value", _call(lambda: 1 / 0).startswith("RAISES ZeroDivisionError")),
+        ("dumps that set different variables refuse", not diff(base, dict(same, env_set={"E4B_FUSE_PREFILL_GLUE": "0"}))["ok"]),
+        ("dumps that set the same variables compare", diff(dict(base, env_set={"E4B_X": "0"}),
+                                                           dict(same, env_set={"E4B_X": "0"}))["ok"]),
+        ("--set refuses a non-E4B name, a repeat or no value", _raises(lambda: parse_set(["GNF4_X=1"]))
+         and _raises(lambda: parse_set(["E4B_X=1", "E4B_X=0"])) and _raises(lambda: parse_set(["E4B_X"]))),
     ]
     bad = [n for n, ok in cases if not ok]
     print(f"sc2_defaults self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
@@ -214,6 +238,7 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd")
     d = sub.add_parser("dump")
     d.add_argument("--out", required=True)
+    d.add_argument("--set", action="append", default=[])
     c = sub.add_parser("diff")
     c.add_argument("ref")
     c.add_argument("launch")
@@ -222,7 +247,7 @@ def main(argv=None) -> int:
     if a.self_test:
         return self_test()
     if a.cmd == "dump":
-        rec = dump()
+        rec = dump(parse_set(a.set))
         with open(a.out, "w") as f:
             json.dump(rec, f, indent=1, sort_keys=True)
         print(f"SC2_DEFAULTS dumped {len(rec['levers'])} levers from e4b {rec['e4b_version']} at {rec['e4b_file']}")

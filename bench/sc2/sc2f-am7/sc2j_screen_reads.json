@@ -1,0 +1,336 @@
+{
+ "what": "SC2j's read-only RTX 5090 screens, 2026-10-23 15:12Z to 22:35Z: every read in the window, at 320 GB disk, each read's offers at or under $1.05/h (the launcher's hourly: GPU plus the 320 GB storage). Reconstructed from the screen loops' own printed lines.",
+ "formats": {
+  "all": "the loop printed every under-ceiling offer (20:43Z onward)",
+  "cheapest": "the loop printed only the cheapest offer, so a read with two or more under-ceiling offers lists one: a lower bound on presence (15:12Z to 20:39Z)"
+ },
+ "listed_power_w": {
+  "52780": 575.0,
+  "145701": 575.0,
+  "55337": 575.0,
+  "19317": 450.0,
+  "36213": 450.0,
+  "150147": 450.0,
+  "46990": 400.0
+ },
+ "listed_power_source": "the offers' gpu_max_power as the screens logged it (55337: the 22:30:21Z read)",
+ "reads": [
+  {
+   "at": "2026-10-23T15:12:02Z",
+   "format": "cheapest",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T15:17:03Z",
+   "format": "cheapest",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T15:22:03Z",
+   "format": "cheapest",
+   "under_ceiling": [
+    [
+     "19317",
+     "28256185"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T15:34:59Z",
+   "format": "cheapest",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T15:40:00Z",
+   "format": "cheapest",
+   "under_ceiling": [
+    [
+     "36213",
+     "56215256"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T15:45:01Z",
+   "format": "cheapest",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T15:50:01Z",
+   "format": "cheapest",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T15:55:02Z",
+   "format": "cheapest",
+   "under_ceiling": [
+    [
+     "150147",
+     "52126290"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T16:00:04Z",
+   "format": "cheapest",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T16:05:05Z",
+   "format": "cheapest",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T16:10:06Z",
+   "format": "cheapest",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T19:59:43Z",
+   "format": "cheapest",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T20:04:44Z",
+   "format": "cheapest",
+   "under_ceiling": [
+    [
+     "19317",
+     "28256185"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T20:09:45Z",
+   "format": "cheapest",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T20:14:46Z",
+   "format": "cheapest",
+   "under_ceiling": [
+    [
+     "46990",
+     "55608456"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T20:19:47Z",
+   "format": "cheapest",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T20:24:47Z",
+   "format": "cheapest",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T20:29:48Z",
+   "format": "cheapest",
+   "under_ceiling": [
+    [
+     "145701",
+     "54798137"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T20:34:50Z",
+   "format": "cheapest",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T20:39:51Z",
+   "format": "cheapest",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T20:43:04Z",
+   "format": "all",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T20:48:05Z",
+   "format": "all",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T20:53:05Z",
+   "format": "all",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T20:58:06Z",
+   "format": "all",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T21:03:07Z",
+   "format": "all",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T21:08:08Z",
+   "format": "all",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T21:13:09Z",
+   "format": "all",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T21:18:09Z",
+   "format": "all",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T21:23:10Z",
+   "format": "all",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T21:28:11Z",
+   "format": "all",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T21:33:11Z",
+   "format": "all",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T21:38:12Z",
+   "format": "all",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T21:43:13Z",
+   "format": "all",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T21:48:14Z",
+   "format": "all",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T22:10:18Z",
+   "format": "all",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T22:15:18Z",
+   "format": "all",
+   "under_ceiling": [
+    [
+     "145701",
+     "54798137"
+    ],
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T22:20:19Z",
+   "format": "all",
+   "under_ceiling": []
+  },
+  {
+   "at": "2026-10-23T22:25:20Z",
+   "format": "all",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T22:30:21Z",
+   "format": "all",
+   "under_ceiling": [
+    [
+     "52780",
+     "41075410"
+    ],
+    [
+     "55337",
+     "51088733"
+    ]
+   ]
+  },
+  {
+   "at": "2026-10-23T22:35:22Z",
+   "format": "all",
+   "under_ceiling": [
+    [
+     "46990",
+     "55608456"
+    ],
+    [
+     "52780",
+     "41075410"
+    ]
+   ]
+  }
+ ]
+}

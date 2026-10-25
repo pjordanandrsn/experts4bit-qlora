@@ -497,3 +497,178 @@ checks the registered `main` commit `ac7e6ed1`, which carries exactly exceptions
 `hold_diff` is `sc2j_box_q.sh` and `sc2j_quality.py`.
 
 **Unchanged:** everything else Amendment 5 registered; every constant, threshold and cost.
+
+### Amendment 7 (registered before any SC2f run): qualify-at-proof replaces the receipt bar, the release pair moves to e4b 0.58.1 and grouped-nf4-gemm 0.51.0, and a new screen deadline
+
+**Why.** Under the receipt bar (Amendment 2: clean runs ≥ 2, every recorded power limit 575 W, no host failure, no capped
+block), the SC2f screen ran to its deadline (2026-10-25T05:05Z) and saw none of the bar's machines listed: 502 reads, the
+fourth window in a row with no candidate. That screen logged only `offers_total` per read, so it cannot say which
+machines were listed. The bar asked for history the market does not offer. Amendment 7 qualifies the card that is
+actually rented, at its proof, and over every run; history only orders the list.
+
+**The basis window, recounted (and its limit).** The SC2f screen logged only `offers_total`, so the new gate is
+recomputed from the SC2j screens alone: 2026-10-23, 15:12Z to 22:35Z (7.4 h, 40 reads; the record is
+`bench/sc2/sc2f-am7/sc2j_screen_reads.json`). The loops logged every under-ceiling offer from 20:43Z on; before that
+they logged only the cheapest offer, so presence there is a lower bound. Prices are the launcher's hourly at 320 GB
+(GPU plus storage).
+- **Presence:** an offer listing 575 W under the $1.05/h ceiling in 16 of 40 reads (any under-ceiling offer in 21);
+  52780 in 15; 145701 in 2; 55337, 36213 and 150147 in 1 each; 19317 and 46990 in 2 each.
+- **Stability, the rule admission binds on** (an offer, by id, in 3 consecutive reads): 52780 in **6 of 40** reads
+  (15 %); **every other machine in 0**. Without 52780 the window shows **no** admissible read: 0 %, not the 5 %
+  presence of 145701.
+- **Listed power** (the offers' `gpu_max_power`, an upper bound, never the gate): 52780, 145701 and 55337 list
+  575 W; 19317, 36213 and 150147 list 450 W; 46990 lists 400 W. An earlier reading of this window took 55337's
+  listed power as unknown; its one logged offer lists 575 W.
+
+**(a) Qualify-at-proof** (`bench/sc2/sc2_qualify_drive.sh`, the launcher's `--command` for every SC2f box; the
+admission and the checks in `bench/sc2/sc2_qualify.py`). It replaces the receipt bar of Amendment 2.
+
+- **Admission** (`sc2_qualify.py admit`, which reads the receipt store; the code and this text are the same rule). The
+  walk is **open**; prior clean runs only order it. In order:
+  1. host continuity (Amendment 3): SC2h, then SC2i, put the earlier lanes' PROVED host first;
+  2. **52780, then 145701** (ruled first, from the recount);
+  3. **any other machine whose offers list 575 W**, by prior clean runs descending (the launcher's receipt ranking,
+     passed as `--clean-runs`; a machine absent from it has 0), then machine id;
+  4. machines whose listed power is unknown, in the same order, **last**.
+
+  A machine whose offers list any other power is never admitted. Excluded throughout: 13828 (clock-bound) and 37367
+  (a 400 W cap in its clocks); 26157 until a create there succeeds. The launcher's own power exclusions apply at
+  create; a refusal before a create costs nothing and consumes no attempt (X2).
+- **The listing filters**: an offer on the machine at or under **$1.05/h, where the price is the launcher's
+  `vast_provider.hourly(offer)` at 320 GB disk (GPU plus the ordered storage, the figure `--usd-per-hour` binds;
+  download is billed apart and counted in the worst case)**, with at least 320 GB of disk, present by offer id in
+  each of the last 3 consecutive reads, re-read with an exact filter seconds before the launch. The screen writes that
+  figure as `usd_h` and the offers' `gpu_max_power` as `listed_power_w` in each read it hands to `admit`.
+- **Exit codes, three ways.** A record that was READ and failed is a host fault: rc 17 (power) or 18 (host floor),
+  the launcher's host-limited codes, so it excludes the machine from its next draws; never a strike. A record that is
+  missing or unreadable is probe_error, a **harness** fault: rc 25, which voids the run and never excludes the machine.
+  A failed setup of the burn (apt, venv, the torch download) is rc 9, a harness fault too.
+- **On the card, before any install:**
+  - `nvidia-smi` `enforced.power.limit` must be 575 W, parsed to a float and compared numerically (`575.00 W` passes).
+    Read at another limit (`574.99 W`), or two GPUs: rc 17. Unreadable (`[N/A]`, no row): rc 25. `power.limit` and
+    `power.max_limit` are recorded beside it;
+  - `bench/common/card_clock.py burn --floor 2700`: a busy SM median ≥ 2700 MHz, no hard reason bit on any sample,
+    and SwPowerCap clear on ≥ 95 % of busy samples. Its own refusal field decides: `below_floor` is rc 18,
+    `probe_error` is rc 25. **The burn's torch** is torch 2.8.0+cu128, a pip download into a throwaway venv (the image
+    ships no torch): about 3 GB and a few minutes, counted in each attempt's cost below. It is not the arms' torch,
+    which `sc1_run.sh` installs itself, so the burn qualifies the **card** only.
+- **Over every run, proof and reading: "no capped block"** (as ruled 2026-10-25). Caps can arise mid-run, from heat or
+  a host power policy. So a controller-side sampler, outside the staged kit (the HOLD is untouched), starts on the
+  box before `sc1_drive.sh`: `nvidia-smi --query-gpu=timestamp,clocks.sm,clocks_event_reasons.active,power.draw
+  --format=csv -lms 1000`. It is stopped and fetched after the run. After a clean run (the driver exits 0) it is
+  judged by `card_clock.py`'s rule over the whole timed run: no hard reason bit on any sample, idle ones included, and
+  SwPowerCap clear on ≥ 95 % of the **busy** samples (SM above card_clock's 1000 MHz), so idle install and download
+  time cannot dilute the share; the busy SM median is recorded, not ruled. Read and failed: rc 18. Missing or
+  unreadable (no header, fewer than 10 readable rows, more than 5 % unreadable, or fewer than 10 busy samples, a
+  sampler that never saw the load): rc 25. An SC1 box's `box.json` carries no per-block timestamps, so there is no
+  per-block judgment.
+- **After a clean proof**, also the proof's own host records, both always passed: `forensics.txt`'s `power.limit` and
+  the launcher's `host_facts.json` `gpu_power_limit_w` must each read 575 W. A record read at another limit is rc 18;
+  a record missing, unreadable, or without its field is rc 25. (The launcher writes `host_facts.json` right after the
+  pre-flight and never fails a run for it, so an unread probe there voids a clean proof as a harness fault.)
+- **A run that did not finish clean** keeps its own exit code: the lane's rules classify it, and its records are
+  fetched and judged for the record only, never read as a host fault.
+- **A reading refused** by any of these is a host fault, not a strike; it stops the lane's rentals and goes to the
+  maintainer.
+- Every record lands in `<run>/qualify/`, fetched by `rsync --no-links` (bench/common rule 8) before teardown, and is
+  committed with the run.
+
+**(b) Attempts and cost.**
+- **Every create consumes one of 3 proof attempts** (`sc2f-prove-11`, `-12`, `-13`), whatever its exit. That includes
+  a qualify refusal, a harness rc 25, and a failed burn setup (rc 9): a flaky package mirror can burn attempts, each
+  costing well under the bound below. The walk never revisits a host it has created on, unless that host's proof
+  PROVED: it is then the lane's host, and only it is admitted for the reading and any re-run. Three creates and no
+  proof PROVED: the lane **parks**.
+- Worst case, at $1.05/h plus downloads at ≤ $0.011/GB:
+  - a proof attempt (guard 1.0 h): $1.05 + ~$0.10 (Granite) + ~$0.03 (the burn's torch) = **$1.18**. A refusal or
+    a setup failure costs less: the create, the burn and teardown, about 15 minutes, ~$0.30;
+  - the reading (guard 3.5 h): $3.68 + ~$0.73 + ~$0.03 = **$4.44**;
+  - the lane: 3 × $1.18 + 2 × $4.44 (the reading and one re-run) = **$12.42**. Each run is under the standing $15
+    single-run tier. The worst is posted on the bus before the first create.
+
+**(c) The screen and its deadline.**
+- A read-only screen applies the admission above at $0.
+- **The deadline is 72 h**, counted from Amendment 7's merge or from the G3 GPU check's PASS (below), whichever is
+  later.
+- Sized on the stability recount. In the basis window only 52780 ever passed (6 of 40 reads); without it, no read
+  did. So the window gives no evidence that any other machine passes within 72 h. The open walk is what can change
+  that: any new 575 W listing is admissible. The deadline is a time box, and parking is a likely outcome if 52780
+  does not relist stably.
+- If no proof qualifies a host by the deadline, SC2f, SC2h and SC2i **park**, with no further change to the bar. That
+  window's market data is the record.
+
+**(d) The release pair moves: e4b 0.58.1 and grouped-nf4-gemm 0.51.0.** This changes the system under test. Nothing
+was read on the old pair, so nothing is lost and no reading crosses releases.
+- **e4b.** The stack under test is `v0.58.1`'s commit, `605d21e67958fa94d5e73fc3a95ffcb5c8eae02d`. The launch command
+  sets `E4B_SHA` to it in full; `sc2_kit_hold.py`'s STACK gate and `verdict-stack` now name it (was `36cdd2d4`).
+  `v0.58.1` contains e4b#2087 (the G3 prefill-headroom change).
+- **grouped-nf4-gemm.** `v0.51.0`, commit `30adb1bfa76f95f9ce4a4c29734b8f36de907eca` (tag object `245d8bd4`), e4b
+  CI's pin, installed from git as before. `sc1_run.sh` moves boxes N, O and P to it. **Box Q stays at `v0.50.0`**: it
+  is SC2j's registered pin, SC2j stopped at two strikes on that stack, and a re-read of SC2j is its own registration.
+  Moving Q here would change a stopped lane's kit with no lane to read it.
+- **What moved under the arms** (36cdd2d4 → 605d21e6, from `bench/sc2/sc2_defaults.py` CPU dumps of both trees beside
+  the same grouped-nf4-gemm 0.51.0, for `qwen3_moe`; recorded in `bench/sc2/sc2f-am7/`, with each arm's dump: `on`
+  with nothing set, `off` with `--set E4B_FUSE_PREFILL_GLUE=0 --set E4B_PREFILL_LEAN_DISPATCH=0`):
+  - `config.int8_head_rows`: `1` → `default`. P232's K2b default: the int8 lm_head's 2..8-row calls go to K37 on
+    qwen3_moe at Qwen3-30B-A3B's head shape, when the head is on and speculation is off. Not one of P130's knobs; **it
+    applies to both arms alike**;
+  - `E4B_NF4_SMALLM_BW`: the read's `'0'` default literal is gone. Lever B's per-family default covers Mixtral only, so
+    on qwen3_moe it stays off. The NF4 collapse is not on this lane's int4 expert path anyway. Not one of P130's knobs;
+    **both arms alike**;
+  - new levers at 0.58.1, each off or empty by default and unset in both arms: `attn_split_fixed` (None),
+    `merged_arena` (False, `E4B_PAGED_MERGED_ARENA` `'0'`), `E4B_DENSE_LT_PIN` (K1, opt-in), `E4B_TRAIN_DETERMINISTIC`
+    and `E4B_TRAIN_DET_GATHER` (training only), and `kv_pool_resolution` / `kv_pool_rows` (G3's sizing record; only
+    under `E4B_PAGED_KV_POOL=shared`, while the default and both arms are claim-all). **Both arms alike**;
+  - **P130's two knobs: neither default moved.** The `on`/`off` contrast is identical in both trees and is exactly
+    the two knobs: `prefill_glue` `1` (default-allowlisted) against `0` (explicit), and `_prefill_lean_dispatch_env`
+    `auto` against `0`. So `on` against `off` still reads P130's two prefill defaults, as registered.
+  - **e4b#2087 moves neither arm's path.** The runtime prefill-graph gate's arithmetic is unchanged: free memory after
+    capture ≥ the graph's pool plus the bulk flush, now computed by `serve_recipe.prefill_graph_headroom_bytes`. The
+    sizing change applies only under `E4B_PAGED_KV_POOL=shared`, and box N's servers are claim-all at an explicit 64
+    slots.
+- **The at-launch mechanical check** (Amendment 3, kept). Before the create, the controller dumps the defaults of
+  the stack the box installs (a checkout of `605d21e6`) and of `v0.58.1`, beside grouped-nf4-gemm 0.51.0. Both
+  trees are the tag's commit, so the diff must be empty: no `--allow` is registered. Both dumps and the diff are
+  committed with the run. The kit checkout (the launch commit) may be a later `main` commit, but its package tree
+  is never installed (`E4B_SHA` is explicit), so it is not the subject of this check. Its tree, and its diff against
+  `v0.58.1`'s, are recorded with the run, as Amendment 4 registered.
+- **The kit hold: HOLD exception 3.** HOLD keeps its byte identity with `7b8f1f69`, plus Amendment 6's two
+  exceptions, plus exactly one more: `sc1_run.sh` carries the two declared grouped-nf4-gemm lines (boxes N and O, and
+  box P apart from box Q), each once, and nothing else in it differs. This exception is **required**, not just
+  tolerated: a launch commit whose `sc1_run.sh` still equals the hold's would install v0.50.0, so it refuses (the
+  registered commits before this amendment now refuse for that alone). At this amendment's tree the check reads OK.
+  `hold_diff` is `sc1_run.sh`, `sc2j_box_q.sh` and `sc2j_quality.py`.
+- The tripwire is unchanged: rc 9 unless both of P130's defaults hold.
+
+**(e) Order, and the other two lanes.**
+- **The G3 GPU check (e4b#2133) must PASS before SC2f's first proof creates.** SC2f now reads at a release that
+  contains #2087, so that check's PASS is the proof that the default rests on: the shared server's prefill graph
+  captured and replayed at 64 slots on Qwen3 int4, read from the server's own state. A G3 FAIL holds SC2f, SC2h and SC2i
+  until #2087's fix is re-proven, and that time does not count toward the 72 h deadline.
+- SC2h (Amendment 5) and SC2i (Amendment 4) take this gate and this release pair. SC2h reads SC2f's committed verdict,
+  so the three lanes sit on the **same** pair (e4b 0.58.1, grouped-nf4-gemm 0.51.0). If one lane later moves alone, its
+  cross-lane read is VOID.
+
+**Evidence.**
+- `sc2_qualify.py --self-test` (51 cases) covers:
+  - the open walk's tiers, a machine that appears mid-screen (admitted on its third read, not before), the order by
+    clean runs then id, unknown listed power last, another listed power never admitted;
+  - the exclusions, attempt accounting, PARK, continuity, and stability by offer id;
+  - the power parse's three ways, the post-proof judge's three ways (missing `host_facts.json` is UNREAD, 450 W is
+    REFUSE, 575 W is PASS), and the run sampler's (a hard bit, on a busy or an idle sample; SwPowerCap at 5 % and
+    6 % of busy samples; half the run idle with SwPowerCap on 10 % of busy samples; GpuIdle; fewer than 10 busy
+    samples; missing, no header, too few rows, too many unreadable rows).
+- `tests/test_sc2f_am7.py` adds (with a planted symlink in the fetched records refused, rc 25, bench/common rule 8):
+  - the admission from a fixture receipt store;
+  - the post-proof judge on sc2j-prove-2's own `host_facts.json`;
+  - the wrapper on a stubbed box, proofs and readings alike, for each exit code;
+  - the stability recount from the window's record;
+  - the default-dump records' stated changes.
+- `sc2_kit_hold.py --self-test` (70 cases) refuses each violation of exception 3: the move absent, only one line
+  moved, box Q moved too, another byte, a line twice, and the old stack.
+- `sc2_defaults.py --self-test` (12 cases) covers `--set`.
+
+**Unchanged:** the arms, both knobs, FLIPS (Amendment 1), the ladder, the knee block, the statistics, the predictions,
+the outcomes, the box, the proof and reading guards, the $0 shakedown, Amendment 5's DELTA, PIN and INERT gates and
+`verdict-stack` (now naming `605d21e6`), and Amendment 6's two exceptions. Run ids: `sc2f-prove-11` to `-13` for the
+three attempts, and `sc2f-5090-1` onward.

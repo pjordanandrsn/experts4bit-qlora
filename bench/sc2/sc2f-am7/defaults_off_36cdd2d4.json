@@ -1,0 +1,547 @@
+{
+ "e4b_commit": "36cdd2d4e031e8365ab52e495c40cd79043edd49",
+ "e4b_file": "<checkout of 36cdd2d4>/experts4bit_qlora",
+ "e4b_version": "0.57.0",
+ "env_set": {
+  "E4B_FUSE_PREFILL_GLUE": "0",
+  "E4B_PREFILL_LEAN_DISPATCH": "0"
+ },
+ "grouped_nf4_gemm": "0.51.0",
+ "levers": {
+  "config.adapter": "",
+  "config.adapter_accept_base_mismatch": "frozenset()",
+  "config.adapter_accept_unverified_base": "frozenset()",
+  "config.adapter_allow_unverified_arena": false,
+  "config.adapter_id": "",
+  "config.arena": "",
+  "config.attn_split_cap": "default",
+  "config.buckets": [
+   1,
+   2,
+   4,
+   8,
+   16
+  ],
+  "config.buckets_requested": "default",
+  "config.bulk_kv": true,
+  "config.calib": "",
+  "config.chunk_tokens": 512,
+  "config.decode_lookahead": false,
+  "config.dense_gemv_bw": "0",
+  "config.device": "cuda",
+  "config.dram_gb": 6.0,
+  "config.eos_ids": [],
+  "config.fuse_qkv": true,
+  "config.fusion_modes": {
+   "E4B_FUSE_ROUTER_EPI": "default",
+   "E4B_FUSE_T1_GLUE": "default",
+   "E4B_FUSE_T1_GLUE_R2": "default",
+   "E4B_PAGED_FUSE_QKV": "default"
+  },
+  "config.graphs": true,
+  "config.host": "127.0.0.1",
+  "config.hot_rows": 64,
+  "config.int8_head_bw": "default",
+  "config.int8_head_rows": 1,
+  "config.kv_groups": "auto",
+  "config.kv_pool": "claim-all",
+  "config.last_logits": false,
+  "config.loaded_chunk_tokens": 0,
+  "config.max_prefill_tokens": 0,
+  "config.max_queue": 0,
+  "config.max_seqs": 16,
+  "config.max_seqs_requested": "auto",
+  "config.max_seqs_resolution": {},
+  "config.max_tokens_cap": 0,
+  "config.max_tokens_per_seq": 4096,
+  "config.model": "",
+  "config.placement": "all-vram",
+  "config.port": 8778,
+  "config.prefill_every": 1,
+  "config.prefill_glue": "0",
+  "config.prefill_graph": "auto",
+  "config.revision": "",
+  "config.served_names": [],
+  "config.spec": "off",
+  "config.spec_head": "",
+  "config.spec_k": 0,
+  "config.step_trace_path": "",
+  "config.token": "",
+  "config.torch_threads": 8,
+  "config.trace_path": "",
+  "config.vram_gb": 1.2,
+  "env.E4B_ABSMAX_DQ": [
+   "''",
+   "'0'"
+  ],
+  "env.E4B_ADAPTERS": [
+   "''"
+  ],
+  "env.E4B_ARENA_POISON": [
+   "''"
+  ],
+  "env.E4B_ATTN_INT4_SMALLM": [
+   "'auto'"
+  ],
+  "env.E4B_ATTN_INT4_WIDE": [
+   "'auto'"
+  ],
+  "env.E4B_ATTN_SPLIT_CAP": [
+   "''"
+  ],
+  "env.E4B_BATCHED_KV_WRITE": [
+   "'1'"
+  ],
+  "env.E4B_BATCHED_PAD_WASTE_LIMIT": [
+   "'4.0'"
+  ],
+  "env.E4B_CALIB_LAYERS_PER_PASS": [
+   "None"
+  ],
+  "env.E4B_CALIB_NSEQ": [
+   "'32'"
+  ],
+  "env.E4B_CALIB_SOURCE": [
+   "'c4'"
+  ],
+  "env.E4B_CHUNKED_EVAL_LOSS": [
+   "''"
+  ],
+  "env.E4B_CHUNKED_LM_LOSS": [
+   "''"
+  ],
+  "env.E4B_CKPT_OFFLOAD": [
+   "''"
+  ],
+  "env.E4B_COMBINE_CHUNK": [
+   "''"
+  ],
+  "env.E4B_DECODE_FASTPATH": [
+   "'1'"
+  ],
+  "env.E4B_DENSE_GEMV_BW": [
+   "'0'"
+  ],
+  "env.E4B_DENSE_MLP_LORA_FUSE": [
+   "''"
+  ],
+  "env.E4B_EMPTY_CACHE": [
+   "'1'"
+  ],
+  "env.E4B_EXPERT_PROFILE": [
+   "None"
+  ],
+  "env.E4B_FUSED_KV_APPEND": [
+   "None"
+  ],
+  "env.E4B_FUSED_RMSNORM": [
+   "''",
+   "'1'"
+  ],
+  "env.E4B_FUSED_ROPE": [
+   "'1'"
+  ],
+  "env.E4B_FUSE_COMBINE": [
+   "'1'"
+  ],
+  "env.E4B_FUSE_PREFILL_GLUE": [
+   "''",
+   "None"
+  ],
+  "env.E4B_FUSE_ROUTER_EPI": "NAMED",
+  "env.E4B_FUSE_SWIGLU": [
+   "'1'"
+  ],
+  "env.E4B_FUSE_T1_GLUE": "NAMED",
+  "env.E4B_FUSE_T1_GLUE_R2": [
+   "None"
+  ],
+  "env.E4B_GPTOSS_EXPERT_LORA": [
+   "'0'"
+  ],
+  "env.E4B_GROUPING": [
+   "''"
+  ],
+  "env.E4B_HOST": [
+   "'127.0.0.1'"
+  ],
+  "env.E4B_HOT_PER_LAYER": [
+   "'0'"
+  ],
+  "env.E4B_HOT_PROFILE": [
+   "''"
+  ],
+  "env.E4B_INFER_GEMV": [
+   "'1'"
+  ],
+  "env.E4B_INT4_ARTIFACT_DIR": [
+   "None"
+  ],
+  "env.E4B_INT4_ASSIGNMENT": [
+   "None"
+  ],
+  "env.E4B_INT4_DECODE_A16": [
+   "'0'"
+  ],
+  "env.E4B_INT4_DUMP_ALLOW_UNKNOWN_REVISION": [
+   "'0'"
+  ],
+  "env.E4B_INT4_DUMP_ARTIFACT_DIR": [
+   "None"
+  ],
+  "env.E4B_INT4_EXPECTED_FINGERPRINT": [
+   "None"
+  ],
+  "env.E4B_INT4_GPTQ_DAMP": [
+   "'0.01'"
+  ],
+  "env.E4B_INT4_GPTQ_DEVICE": [
+   "'cpu'",
+   "None"
+  ],
+  "env.E4B_INT4_GROUPED_SMALLM": [
+   "'auto'"
+  ],
+  "env.E4B_INT4_HESSIAN_BUDGET_GB": [
+   "'24'",
+   "None"
+  ],
+  "env.E4B_INT4_KEEP_NF4": [
+   "'0'"
+  ],
+  "env.E4B_INT4_LEAN_GLUE": [
+   "'auto'"
+  ],
+  "env.E4B_INT4_PREFILL": [
+   "''",
+   "'auto'"
+  ],
+  "env.E4B_INT4_TILE_PROGRAMS": [
+   "'auto'"
+  ],
+  "env.E4B_INT4_WIDE_TILES": [
+   "'auto'"
+  ],
+  "env.E4B_INT8_HEAD_BW": [
+   "''"
+  ],
+  "env.E4B_INT8_HEAD_ROWS": [
+   "''"
+  ],
+  "env.E4B_K19_PREFILL_BIG_M": [
+   "''"
+  ],
+  "env.E4B_K25_LUT": [
+   "''"
+  ],
+  "env.E4B_K25_PLAN": [
+   "''"
+  ],
+  "env.E4B_KV_STEP_SELECT": [
+   "'1'"
+  ],
+  "env.E4B_K_SLOTS": [
+   "'0'"
+  ],
+  "env.E4B_LOAD_SYNC_DEBUG": [
+   "'0'"
+  ],
+  "env.E4B_MAX_INPUT_TOKENS": [
+   "'2048'"
+  ],
+  "env.E4B_MAX_NEW_TOKENS": [
+   "'256'"
+  ],
+  "env.E4B_MODEL_ID": "NAMED",
+  "env.E4B_MOE_KEEP_LAYERS": [
+   "''"
+  ],
+  "env.E4B_MXFP4_GEMV": [
+   "'1'"
+  ],
+  "env.E4B_MXFP4_GROUPED_SMALLM": [
+   "'auto'"
+  ],
+  "env.E4B_NF4_GROUPED_SMALLM": [
+   "'auto'"
+  ],
+  "env.E4B_NF4_SMALLM_BW": [
+   "''",
+   "'0'"
+  ],
+  "env.E4B_NF4_T1_DEVICE_GROUPING": [
+   "'0'"
+  ],
+  "env.E4B_OFFLOAD_ARENA": [
+   "'0'"
+  ],
+  "env.E4B_OFFLOAD_PIN_SLAB": [
+   "'0'"
+  ],
+  "env.E4B_OFFLOAD_STATS": [
+   "'0'"
+  ],
+  "env.E4B_PAGED_ADAPTER": [
+   "''"
+  ],
+  "env.E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH": "NAMED",
+  "env.E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE": [
+   "''"
+  ],
+  "env.E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA": [
+   "'0'"
+  ],
+  "env.E4B_PAGED_ARENA": [
+   "''"
+  ],
+  "env.E4B_PAGED_BUCKETS": [
+   "''"
+  ],
+  "env.E4B_PAGED_BULK_KV": [
+   "'1'"
+  ],
+  "env.E4B_PAGED_CALIB": [
+   "''"
+  ],
+  "env.E4B_PAGED_CHUNK_TOKENS": [
+   "'512'"
+  ],
+  "env.E4B_PAGED_DECODE_LOOKAHEAD": [
+   "'0'"
+  ],
+  "env.E4B_PAGED_DEVICE": [
+   "'cuda'"
+  ],
+  "env.E4B_PAGED_DRAM_GB": [
+   "'6.0'"
+  ],
+  "env.E4B_PAGED_EOS_IDS": [
+   "''"
+  ],
+  "env.E4B_PAGED_FUSE_QKV": [
+   "None"
+  ],
+  "env.E4B_PAGED_GRAPHS": [
+   "'auto'"
+  ],
+  "env.E4B_PAGED_HOT_ROWS": [
+   "'64'"
+  ],
+  "env.E4B_PAGED_KV_GROUPS": [
+   "'auto'"
+  ],
+  "env.E4B_PAGED_KV_POOL": [
+   "''"
+  ],
+  "env.E4B_PAGED_LAST_LOGITS": [
+   "'0'"
+  ],
+  "env.E4B_PAGED_LOADED_CHUNK_TOKENS": [
+   "'0'"
+  ],
+  "env.E4B_PAGED_MAX_PREFILL_TOKENS": [
+   "'0'"
+  ],
+  "env.E4B_PAGED_MAX_QUEUE": [
+   "'0'"
+  ],
+  "env.E4B_PAGED_MAX_SEQS": [
+   "''"
+  ],
+  "env.E4B_PAGED_MAX_TOKENS": [
+   "'0'"
+  ],
+  "env.E4B_PAGED_MAX_TOKENS_PER_SEQ": [
+   "'4096'"
+  ],
+  "env.E4B_PAGED_MODEL": [
+   "''"
+  ],
+  "env.E4B_PAGED_PLACEMENT": [
+   "'all-vram'"
+  ],
+  "env.E4B_PAGED_PREFILL_ATTN": [
+   "''",
+   "'flash'"
+  ],
+  "env.E4B_PAGED_PREFILL_EVERY": [
+   "'1'"
+  ],
+  "env.E4B_PAGED_PREFILL_GRAPH": [
+   "'auto'"
+  ],
+  "env.E4B_PAGED_REVISION": [
+   "''"
+  ],
+  "env.E4B_PAGED_SERVED_NAME": [
+   "''"
+  ],
+  "env.E4B_PAGED_SPEC": [
+   "''"
+  ],
+  "env.E4B_PAGED_SPEC_HEAD": [
+   "''"
+  ],
+  "env.E4B_PAGED_SPEC_K": [
+   "''"
+  ],
+  "env.E4B_PAGED_STEP_TRACE": [
+   "''"
+  ],
+  "env.E4B_PAGED_TORCH_THREADS": [
+   "'8'"
+  ],
+  "env.E4B_PAGED_TRACE": [
+   "''"
+  ],
+  "env.E4B_PAGED_VRAM_GB": [
+   "'1.2'"
+  ],
+  "env.E4B_PIPELINED_TRAFFIC": [
+   "'0'"
+  ],
+  "env.E4B_PORT": [
+   "'8777'",
+   "'8778'"
+  ],
+  "env.E4B_PREFILL_LEAN_DISPATCH": [
+   "''"
+  ],
+  "env.E4B_PROFILE_PHASE": [
+   "'train'"
+  ],
+  "env.E4B_QUEUE_MAX": [
+   "'2'"
+  ],
+  "env.E4B_RECEIPTS_PATH": [
+   "''"
+  ],
+  "env.E4B_REFERENCE_EXPERT_ORDER": [
+   "''"
+  ],
+  "env.E4B_REQUEST_TIMEOUT_S": [
+   "'600'"
+  ],
+  "env.E4B_RESIDENCY": [
+   "''"
+  ],
+  "env.E4B_ROUTER_EPI_CAST": [
+   "''"
+  ],
+  "env.E4B_SERVE_ATTN_INT4": [
+   "'0'"
+  ],
+  "env.E4B_SERVE_ATTN_INT4_ARTIFACT": [
+   "None"
+  ],
+  "env.E4B_SERVE_ATTN_INT4_CALIB": [
+   "'0'"
+  ],
+  "env.E4B_SERVE_ATTN_INT4_DUMP": [
+   "None"
+  ],
+  "env.E4B_SERVE_ATTN_INT4_FINGERPRINT": [
+   "None"
+  ],
+  "env.E4B_SERVE_ATTN_INT8": [
+   "None"
+  ],
+  "env.E4B_SERVE_DENSE_INT4_CALIB": [
+   "'0'"
+  ],
+  "env.E4B_SERVE_EXP_INT4": [
+   "'0'"
+  ],
+  "env.E4B_SERVE_EXP_INT4_CALIB": [
+   "'0'"
+  ],
+  "env.E4B_SERVE_LMHEAD_INT4_CALIB": [
+   "'0'"
+  ],
+  "env.E4B_TOKEN": [
+   "''"
+  ],
+  "env.E4B_TRAIN_FUSE_QKV": [
+   "'1'"
+  ],
+  "env.E4B_TRITON_PREBIND": [
+   "'1'"
+  ],
+  "env.E4B_TRUST_REMOTE_CODE": [
+   "'0'"
+  ],
+  "env.E4B_VRAM_FRACTION": [
+   "'0'"
+  ],
+  "env.E4B_WARMUP_TOKENS": [
+   "'8'"
+  ],
+  "env.GNF4_GEMV_BW": [
+   "None"
+  ],
+  "family.resolve_attn_split_cap": [
+   16,
+   "default-allowlisted"
+  ],
+  "family.resolve_int8_head_bw": [
+   "1",
+   "default-allowlisted"
+  ],
+  "family.resolve_prefill_glue": [
+   "0",
+   "explicit"
+  ],
+  "fusion.E4B_FUSE_ROUTER_EPI": [
+   "auto",
+   "default-allowlisted"
+  ],
+  "fusion.E4B_FUSE_T1_GLUE": [
+   "auto",
+   "default-allowlisted"
+  ],
+  "fusion.E4B_FUSE_T1_GLUE_R2": [
+   "auto",
+   "default-allowlisted"
+  ],
+  "fusion.E4B_PAGED_FUSE_QKV": [
+   "auto",
+   "default-allowlisted"
+  ],
+  "route._int4_prefill_mode_env": "loop",
+  "route._k19_mode_env": "auto",
+  "route._k19_prefill_big_m_env": 0,
+  "route._k21_mode_env": "auto",
+  "route._k25_lut_env": "prmt",
+  "route._k25_mode_env": "auto",
+  "route._lean_glue_mode_env": "auto",
+  "route._nf4_t1_device_grouping_env": false,
+  "route._prefill_lean_dispatch_env": "0",
+  "route._tile_programs_env": "auto",
+  "route._wide_tiles_mode_env": "auto",
+  "route.resolve_k25_lut": {
+   "env": null,
+   "lut": "prmt",
+   "source": "default-allowlisted",
+   "why": null
+  },
+  "route.resolve_k25_plan": {
+   "dn": {
+    "block_n": 128,
+    "kc": 128,
+    "stages": 3,
+    "warps": 8
+   },
+   "env": null,
+   "gu": {
+    "block_n": 64,
+    "kc": 256,
+    "stages": 2,
+    "warps": 4
+   },
+   "plan": "c1",
+   "source": "default-allowlisted",
+   "why": null
+  }
+ },
+ "model_type": "qwen3_moe"
+}

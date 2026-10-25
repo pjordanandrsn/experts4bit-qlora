@@ -1,0 +1,45 @@
+{
+    "allowed": {},
+    "changed": {
+        "config.int8_head_rows": [
+            1,
+            "default"
+        ],
+        "env.E4B_NF4_SMALLM_BW": [
+            [
+                "''",
+                "'0'"
+            ],
+            [
+                "''"
+            ]
+        ]
+    },
+    "ok": false,
+    "only_launch": [
+        "config.attn_split_fixed",
+        "config.kv_pool_resolution",
+        "config.kv_pool_rows",
+        "config.merged_arena",
+        "env.E4B_ATTN_SPLIT_FIXED",
+        "env.E4B_DENSE_LT_PIN",
+        "env.E4B_PAGED_MERGED_ARENA",
+        "env.E4B_TRAIN_DETERMINISTIC",
+        "env.E4B_TRAIN_DET_GATHER"
+    ],
+    "only_ref": [],
+    "refused": [
+        "config.int8_head_rows",
+        "env.E4B_NF4_SMALLM_BW",
+        "config.attn_split_fixed",
+        "config.kv_pool_resolution",
+        "config.kv_pool_rows",
+        "config.merged_arena",
+        "env.E4B_ATTN_SPLIT_FIXED",
+        "env.E4B_DENSE_LT_PIN",
+        "env.E4B_PAGED_MERGED_ARENA",
+        "env.E4B_TRAIN_DETERMINISTIC",
+        "env.E4B_TRAIN_DET_GATHER"
+    ],
+    "why": []
+}
