@@ -32,20 +32,23 @@ library's fused path.
 - **Every other knob of both libraries is set explicitly** to the value the comparison is about, and recorded:
   `UNSLOTH_MOE_NF4_AUTO_MAX_ROWS=128`, `UNSLOTH_MOE_NF4_AUTOTUNE=0` (fixed tiles, line 316), `UNSLOTH_MOE_GROUPED_TRITON=auto`.
   Every other `UNSLOTH_*` key the three zoo modules read (found by scanning their source, `check_env` in
-  `bench/common/unsloth_moe_counter.py`) is unset, and every grouped-nf4-gemm and e4b knob is at its default except
-  `GNF4_TRAIN_GEMM`.
+  `bench/common/unsloth_moe_counter.py`) is unset.
+- **e4b's frozen absmax is double-quantized, explicitly:** `E4B_ABSMAX_DQ=1` on both e4b arms (`enable_fast_train` then REQUIRES
+  the compression and raises on a refusal, `engines/fast.py:878-880`). That is the nested form Unsloth's loader builds
+  (`bnb_4bit_use_double_quant=True`), and the one the premise compares. `FAST_TRAIN_STATS["absmax_dq"]` is recorded per load. Every
+  other grouped-nf4-gemm and e4b knob is at its default except `GNF4_TRAIN_GEMM`.
 
 ## What is trained: LoRA on the routed experts, rank 8, on both sides
 
 **Why not attention-only LoRA.** Released e4b fuses the frozen expert GEMM in training **only when the experts carry LoRA**:
-- `enable_fast_train` patches `ExpertsLoRA` wrappers only (`experts4bit_qlora/engines/fast.py:925-958`);
+- `enable_fast_train` patches `ExpertsLoRA` wrappers only (`experts4bit_qlora/engines/fast.py:909-962`);
 - the inference patch on a bare `ExpertsNbit` falls back to the reference forward whenever grad is enabled and the hidden states
-  require grad (`fast.py:213-223`), which holds at every expert layer once an adapter sits upstream.
+  require grad (`fast.py:214-228`), which holds at every expert layer once an adapter sits upstream.
 
 With attention-only LoRA, e4b's E_F and E_A would both time the reference dequant path, while Unsloth's #1935 hook sits on the base
 GEMM whether or not the experts carry adapters (moe_utils.py:5303-5322; `_base_is_recomputable`, 943-965, needs only a frozen
 `Params4bit`). That asymmetry is stated in the results as an e4b property, and a fused frozen-base training forward for LoRA-less
-experts is recorded as a candidate e4b feature (unscheduled, the project's own issue tracker).
+experts is recorded as a candidate e4b feature (unscheduled; e4b#2136).
 
 **The adapter set, identical on both sides** (the matched set of TC2, at rank 8):
 - the routed experts' `gate_up_proj` and `down_proj` in all 40 layers, and attention `q_proj, k_proj, v_proj, o_proj` (UT4) where
@@ -72,7 +75,7 @@ A point that runs out of memory at rank 8 is reported OOM (TC1's verdict), never
   Qwen extractor qwen3_moe.py:50-79, registered on `Qwen3_5MoeExperts` at qwen3_5_moe.py:46-47).
 - **The shakedown ASSERTS** equal trainable-parameter counts per projection and per layer, equal adapter shapes per expert, the same
   scaling, and the same matched A bytes per slot on both sides.
-- **The layout check with a non-zero B.** PEFT stores B rank-major (`get_delta_weight` reads it as `[out, r, E]`, 2550), and
+- **The layout check with a non-zero B.** PEFT stores B rank-major (`get_delta_weight` reads it as `[out, r, E]`, 2554), and
   Unsloth re-reads it for its grouped GEMM through its own layout resolver. B starts at zero, so neither training nor the A bytes can
   show a mismatch. The shakedown therefore sets, on one layer, every expert's B to a fixed seeded non-zero value (the test's own,
   written into each side's storage in that side's layout), and asserts that the per-expert delta `scaling * B[e] @ A[e]`
