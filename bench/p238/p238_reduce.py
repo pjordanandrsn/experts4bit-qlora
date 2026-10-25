@@ -33,7 +33,7 @@ TORCH_PREFIX = "2.12.1"
 CLOCK_FLOOR_MHZ, SWPC_CLEAR = 2700, 0.95
 DENSE_AUTO_MAX_GROUPS = 16                           # gnf4 0.51.0 nf4_route: auto on sm_120 is dense at 1..16 present groups
 UNSLOTH_PINS = {"UNSLOTH_MOE_NF4_AUTO_MAX_ROWS": "128", "UNSLOTH_MOE_NF4_AUTOTUNE": "0", "UNSLOTH_MOE_GROUPED_TRITON": "auto",
-                "UNSLOTH_MOE_FUSED_ROUTER": "0"}
+                "UNSLOTH_MOE_FUSED_ROUTER": "0", "UNSLOTH_ENABLE_LOGGING": "1"}
 NF4_MODE = {"U0": "0", "U1": "1", "UA": "auto"}
 DEVICE_MS_METHOD = "at_source"                       # amendment 81's marker value; the kit's test pins it to 81's merged constant
 WITHIN_STEP0, WITHIN_HELD = 1e-3, 0.01

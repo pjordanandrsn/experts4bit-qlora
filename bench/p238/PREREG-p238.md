@@ -32,7 +32,9 @@ library's fused path.
 - **Every other knob of both libraries is set explicitly** to the value the comparison is about, and recorded:
   `UNSLOTH_MOE_NF4_AUTO_MAX_ROWS=128`, `UNSLOTH_MOE_NF4_AUTOTUNE=0` (fixed tiles, line 316), `UNSLOTH_MOE_GROUPED_TRITON=auto`,
   and `UNSLOTH_MOE_FUSED_ROUTER=0` (its shipped default: opt-in, `moe_router_triton.py:69`; it switches the router inside the timed
-  step). No other `UNSLOTH_*` key may be SET in an Unsloth arm's environment: `check_env` (`bench/common/unsloth_moe_counter.py`)
+  step), and `UNSLOTH_ENABLE_LOGGING=1` (TC1's run scripts set it so tc1_arm records the loader's MoE banner lines; it changes no
+  computation, and it is the same on all three Unsloth arms). tc1_arm itself sets no other `UNSLOTH_*` key for these arms (no
+  `--unsloth-moe-backend`, no speed tilt: `apply_unsloth_knobs`). No other `UNSLOTH_*` key may be SET in an Unsloth arm's environment: `check_env` (`bench/common/unsloth_moe_counter.py`)
   refuses any set key that is not registered at its value, and holds the registered names to a scan of every source file of the
   installed unsloth and unsloth_zoo packages (the per-module counts are in the receipt). The env dump proves each pin.
 - **Gradient checkpointing, explicit on both sides:** the Unsloth arms pass `--grad-ckpt unsloth` (the shipped default, made explicit:
@@ -193,7 +195,9 @@ are cited by source line in the kit.
 TC1's harness, `bench/tc1/tc1_arm.py`, through the generic observe-only hook (`TC1_ARM_HOOK`, its own reviewed PR):
 - `post_load(args, model)` installs `UnslothMoeCounter.patch_loaded(experts)` on the loaded expert modules (the zoo's compile-cache
   copy of moe_utils can appear during the load) and the grouped-nf4-gemm route wrapper;
-- `step_edge(i)` snapshots at every optimizer-step boundary and once after the last step;
+- `step_edge(i)` snapshots at every optimizer-step boundary and once after the last step. Edge 0 precedes the first train-mode
+  forward (the counter's structural count refuses a training pass outside a marked step), and the edges are 0..60, closing steps
+  0..59;
 - `record()` writes P238's engagement records into the receipt.
 
 The hook observes only: every wrapper it installs returns the wrapped function's output unchanged (a mutant per wrapper), and its
