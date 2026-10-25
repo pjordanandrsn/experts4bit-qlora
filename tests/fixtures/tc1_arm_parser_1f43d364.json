@@ -1,0 +1,1100 @@
+[
+ {
+  "action": "_HelpAction",
+  "choices": null,
+  "const": null,
+  "default": "==SUPPRESS==",
+  "dest": "help",
+  "help": "show this help message and exit",
+  "nargs": 0,
+  "option_strings": [
+   "-h",
+   "--help"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreTrueAction",
+  "choices": null,
+  "const": true,
+  "default": false,
+  "dest": "prepare",
+  "help": null,
+  "nargs": 0,
+  "option_strings": [
+   "--prepare"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreTrueAction",
+  "choices": null,
+  "const": true,
+  "default": false,
+  "dest": "selftest",
+  "help": "T8: CPU, tiny synthetic model, both branches, mocked kernels; + T10 detector dry-runs (#434)",
+  "nargs": 0,
+  "option_strings": [
+   "--selftest"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": [
+   "e4b",
+   "unsloth",
+   "hf",
+   "axolotl"
+  ],
+  "const": null,
+  "default": "e4b",
+  "dest": "framework",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--framework"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": [
+   "reference",
+   "fused",
+   "batched",
+   "attn_only",
+   "unsloth",
+   "hf",
+   "axolotl"
+  ],
+  "const": null,
+  "default": "fused",
+  "dest": "arm",
+  "help": "P56: `batched` is enable_batched_train -- e4b's KERNEL-FREE group-sorted path. It computes the same function as `reference` with the same arithmetic REORDERING as `fused`, but through torch + bitsandbytes rather than grouped-nf4-gemm, so a parity pair against `reference` separates a kernel defect from a trajectory floor.",
+  "nargs": null,
+  "option_strings": [
+   "--arm"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": [
+   "clinical",
+   "alpaca"
+  ],
+  "const": null,
+  "default": "clinical",
+  "dest": "template",
+  "help": "T12: the prompt template the tokens file is built with (--prepare)",
+  "nargs": null,
+  "option_strings": [
+   "--template"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": [
+   0,
+   1
+  ],
+  "const": null,
+  "default": 0,
+  "dest": "pack",
+  "help": "TC1 amendment 39 (--prepare): 1 = packed rows of exactly --seq tokens, EOS between examples, from the registered text extended in its own order (needs --pack-src); 0 (default) = one example per row, the tokens file byte-identical to before",
+  "nargs": null,
+  "option_strings": [
+   "--pack"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "pack_src",
+  "help": "TC1 amendment 39 (--prepare --pack 1): tp4_alpaca.py's source file (alpaca_data_cleaned.json at its pinned sha)",
+  "nargs": null,
+  "option_strings": [
+   "--pack-src"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "pack_min_rows",
+  "help": "TC1 amendment 39 (--prepare --pack 1): refuse (exit 13) with fewer packed train rows than this (tc1_run.sh passes steps x micro-batch x accum)",
+  "nargs": null,
+  "option_strings": [
+   "--pack-min-rows"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 1,
+  "dest": "micro_batch",
+  "help": "T13: rows per micro-batch (right-padded, masked, -100 labels on pads); 1 = tp2 byte-for-byte",
+  "nargs": null,
+  "option_strings": [
+   "--micro-batch"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": [
+   "adamw_torch",
+   "adamw_8bit"
+  ],
+  "const": null,
+  "default": "adamw_torch",
+  "dest": "optim",
+  "help": "T14: the same optimizer call in every arm",
+  "nargs": null,
+  "option_strings": [
+   "--optim"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0.01,
+  "dest": "weight_decay",
+  "help": "T14: tp2 kept torch's default 0.01; the notebooks use 0.001",
+  "nargs": null,
+  "option_strings": [
+   "--weight-decay"
+  ],
+  "required": false,
+  "type": "float"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": [
+   "constant",
+   "linear"
+  ],
+  "const": null,
+  "default": "constant",
+  "dest": "lr_schedule",
+  "help": "T14: linear = transformers' linear-with-warmup formula",
+  "nargs": null,
+  "option_strings": [
+   "--lr-schedule"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "warmup_steps",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--warmup-steps"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj",
+  "dest": "unsloth_targets",
+  "help": "T15: Unsloth get_peft_model target_modules (comma list; the notebooks' seven)",
+  "nargs": null,
+  "option_strings": [
+   "--unsloth-targets"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": [
+   "default",
+   "grouped_mm",
+   "unsloth_triton",
+   "native_torch"
+  ],
+  "const": null,
+  "default": "default",
+  "dest": "unsloth_moe_backend",
+  "help": "P2-1 (TC1): sets UNSLOTH_MOE_BACKEND in this process before `import unsloth` (select_moe_backend(), moe_utils.py:1061-1085); default = leave the loader's own choice, recorded after load",
+  "nargs": null,
+  "option_strings": [
+   "--unsloth-moe-backend"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "unsloth_speed_tilt",
+  "help": "P2-1 (TC1): 1 = UNSLOTH_MOE_RECOMPUTE=0 UNSLOTH_MOE_GC_REPLAY_PIN=1 (recorded)",
+  "nargs": null,
+  "option_strings": [
+   "--unsloth-speed-tilt"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": [
+   "off",
+   "default"
+  ],
+  "const": null,
+  "default": "off",
+  "dest": "unsloth_double_quant",
+  "help": "P2-1 (TC1): off = pass double-quant OFF through a from_pretrained parameter the signature names (read at runtime), else the loader's default; the loaded expert Params4bit's quant_state.nested is recorded either way",
+  "nargs": null,
+  "option_strings": [
+   "--unsloth-double-quant"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "axolotl_best",
+  "help": "P2-2 (TC1): 1 = plugins [KernelsPlugin], expert_backend scattermoe, moe_bnb_fast true",
+  "nargs": null,
+  "option_strings": [
+   "--axolotl-best"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": [
+   "on",
+   "off",
+   "experts",
+   "lora"
+  ],
+  "const": null,
+  "default": "on",
+  "dest": "axolotl_kernels",
+  "help": "#1767: off = PEFT's reference forward (no KernelsPlugin / scattermoe, lora_*_kernel false, experts eager); experts = scattermoe with the LoRA kernels off (needs --axolotl-best 1); lora = the LoRA kernels on eager experts (needs --axolotl-best 0)",
+  "nargs": null,
+  "option_strings": [
+   "--axolotl-kernels"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "rescore_adapter",
+  "help": "#1767: no training; score this saved PEFT adapter directory (model.save_pretrained) on the held-out rows: the zero adapter, then the adapter",
+  "nargs": null,
+  "option_strings": [
+   "--rescore-adapter"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "axolotl_dataset",
+  "help": "P2-2 (TC1): the registered Alpaca subset file named in the axolotl config's `datasets` (validation needs one; nothing reads it here)",
+  "nargs": null,
+  "option_strings": [
+   "--axolotl-dataset"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 1,
+  "dest": "hf_double_quant",
+  "help": "phase 3 (TC1): the HF arm's bnb_4bit_use_double_quant (default 1, matching e4b's double-quantised ATTENTION Params4bit; experts are not quantised on this arm); recorded as hf_double_quant",
+  "nargs": null,
+  "option_strings": [
+   "--hf-double-quant"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": "default",
+  "dest": "hf_experts_implementation",
+  "help": "J [F22] (TC1): the HF arm's transformers experts implementation passed to from_pretrained (default = the library's own choice, recorded); the t214 row asks for grouped_mm; TC2 T26: passed only if the installed transformers accepts the kwarg (a TypeError naming it reloads without it, accepted=False recorded), and what dispatched is recorded",
+  "nargs": null,
+  "option_strings": [
+   "--hf-experts-implementation"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 1,
+  "dest": "unsloth_load_in_4bit",
+  "help": "TC2 T23: FastLanguageModel.from_pretrained(load_in_4bit=...); 0 = the 16-bit load (gpt-oss: the zoo keeps the MXFP4 expert stacks packed and trains LoRA through its fused MXFP4 grouped GEMM -- UPSTREAM-NOTES); the double-quant kwarg is then not passed; recorded as unsloth_load_in_4bit",
+  "nargs": null,
+  "option_strings": [
+   "--unsloth-load-in-4bit"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "unsloth_target_parameters",
+  "help": "TC2 T24: PEFT target_parameters named EXPLICITLY on get_peft_model (comma list, e.g. mlp.experts.gate_up_proj,mlp.experts.down_proj beside q/k/v/o in --unsloth-targets); passed only when get_peft_model's signature names it (read at runtime), else the arm refuses; recorded as unsloth_target_parameters",
+  "nargs": null,
+  "option_strings": [
+   "--unsloth-target-parameters"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "hf_offload",
+  "help": "TC3 (arm 8, hf_peft_m_offload): 1 = device_map='auto' under max_memory {0: '<GPU GiB - margin>GiB', 'cpu': '<host RAM GiB>GiB'} so accelerate spills what does not fit (the bf16 expert stacks) to host RAM; model.hf_device_map is summarised on the receipt; a non-OOM exception in the loop is a refused row with the exception text",
+  "nargs": null,
+  "option_strings": [
+   "--hf-offload"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 2,
+  "dest": "hf_offload_gpu_margin_gib",
+  "help": "TC3: the GiB kept free under the GPU cap of --hf-offload (the draft's GPU_GB-2)",
+  "nargs": null,
+  "option_strings": [
+   "--hf-offload-gpu-margin-gib"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 1,
+  "dest": "hf_offload_fp32_cpu",
+  "help": "TC3: BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=...) on the offload arm -- the switch transformers' own ValueError names for a 4-bit device_map with CPU entries (quantizer_bnb_4bit.py:70-80; the CPU-resident modules stay unquantised); recorded under hf_offload",
+  "nargs": null,
+  "option_strings": [
+   "--hf-offload-fp32-cpu"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "axolotl_layer_offload",
+  "help": "TC3 (arm 9, ckpt_axolotl_m_layeroffload): 1 = layer_offloading: true in the config dict (utils/schemas/config.py:653) and the LayerOffloadManager + _LayerOffloadContext the trainer mixin would run, driven by this harness around every micro-batch; recorded under axolotl_layer_offload",
+  "nargs": null,
+  "option_strings": [
+   "--axolotl-layer-offload"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "axolotl_zero3",
+  "help": "TC3 (arm 10, ckpt_axolotl_m_zero3): 1 = the DeepSpeed ZeRO-3 parameter-offload arm WITHOUT quantize_moe_experts -- a refused row naming why it cannot be driven outside axolotl's trainer (the engine is the Trainer's); the config it would have used is recorded, nothing is faked",
+  "nargs": null,
+  "option_strings": [
+   "--axolotl-zero3"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": [
+   "fp32",
+   "native"
+  ],
+  "const": null,
+  "default": "fp32",
+  "dest": "adapter_dtype",
+  "help": "T19 (TC1): fp32 = cast EVERY framework's trainable adapters to fp32 after construction (e4b included; tp4 cast only the non-e4b arms); native = leave them as the loader built them (e4b: bf16 expert adapters -- the `shipped` arm)",
+  "nargs": null,
+  "option_strings": [
+   "--adapter-dtype"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": "native",
+  "dest": "lora_init",
+  "help": "T20 (TC1): native = each framework's own init; matched:<seed> = overwrite every LoRA A with the registered per-slot deterministic tensor (U(-1/sqrt(fan_in), 1/sqrt(fan_in)) from sha256(seed|layer|kind|expert)) and assert every B zero; the receipt's matched_init.complete says whether every slot was mapped",
+  "nargs": null,
+  "option_strings": [
+   "--lora-init"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "tag",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--tag"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "hp1_export",
+  "help": "HP1: after the step-N eval write the canonical fp32 adapter (canonical_<fam>_<tag>.safetensors) to this directory and record the training-base digest (receipt `hp1`); unset = nothing written, the receipt's `hp1` is null",
+  "nargs": null,
+  "option_strings": [
+   "--hp1-export"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "hp1_export_base",
+  "help": "HP1: with --hp1-export, also write the frozen base AS STORED (framework-neutral packed NF4 per slot, base_<framework>_<fam>/) for the one evaluator; one run per framework is enough (the digest proves every other run trained on the same bytes)",
+  "nargs": null,
+  "option_strings": [
+   "--hp1-export-base"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "hbd_record",
+  "help": "HBD (bench/hbd/PREREG-hbd.md): with --hp1-export, write the stored-state digest, the slot structure and the libbitsandbytes files mapped into this process to PATH, after the export",
+  "nargs": null,
+  "option_strings": [
+   "--hbd-record"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": "qwen3",
+  "dest": "fam",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--fam"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": "Qwen/Qwen3-30B-A3B",
+  "dest": "model",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--model"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "dest": "revision",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--revision"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 60,
+  "dest": "steps",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--steps"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 10,
+  "dest": "log_every",
+  "help": "T17 (P43): print a step line every N optimizer steps (default 10 = tp4 as run; 1 = every step)",
+  "nargs": null,
+  "option_strings": [
+   "--log-every"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "profile_steps",
+  "help": "P45: wrap this many optimizer steps (after --profile-warm) in torch.profiler (CPU+CUDA) and write <receipt>_profile.json: device-busy fraction, launches/step, CPU self time by op family; 0 = off (the timed number is never taken from profiled steps)",
+  "nargs": null,
+  "option_strings": [
+   "--profile-steps"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 3,
+  "dest": "profile_warm",
+  "help": "P45: steps to run before the profiler starts",
+  "nargs": null,
+  "option_strings": [
+   "--profile-warm"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "microbatch_timing",
+  "help": "T17 (P43): time every micro-batch (a cuda sync per micro-batch) and record microbatch_ms per step; 0 = tp4 as run",
+  "nargs": null,
+  "option_strings": [
+   "--microbatch-timing"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 512,
+  "dest": "seq",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--seq"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 4,
+  "dest": "accum",
+  "help": "T5: micro-batches (batch 1 each) per optimizer step (P40: 4)",
+  "nargs": null,
+  "option_strings": [
+   "--accum"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 1,
+  "dest": "autocast",
+  "help": "T5: torch.autocast bf16 around forward+loss (P40: bf16 autocast)",
+  "nargs": null,
+  "option_strings": [
+   "--autocast"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "offload",
+  "help": "e4b: expert offload to pinned host RAM (tp1: Mixtral only)",
+  "nargs": null,
+  "option_strings": [
+   "--offload"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "data",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--data"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "data_sha",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--data-sha"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "tokens",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--tokens"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "tokens_sha",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--tokens-sha"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 48,
+  "dest": "eval_n",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--eval-n"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 20,
+  "dest": "eval_every",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--eval-every"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 8,
+  "dest": "r",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--r"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 16,
+  "dest": "alpha",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--alpha"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0.0002,
+  "dest": "lr",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--lr"
+  ],
+  "required": false,
+  "type": "float"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "seed",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--seed"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "order_seed",
+  "help": "HP1: permute the train rows with random.Random(S) before the fixed (i*accum+j) layout (receipt `order`: seed, n_rows, order_sha); unset = today's fixed order, byte-identical, and no `order` key. --seed alone moves only the init",
+  "nargs": null,
+  "option_strings": [
+   "--order-seed"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 1,
+  "dest": "dgrad",
+  "help": "P56: enable_fast_train(dgrad=...) on the `fused` arm. 1 (default, every tp1-tp4 row to date) routes the BACKWARD through grouped-nf4-gemm's single-launch dgrad kernel; 0 keeps its per-expert decode loop, which decodes with the same oracle the reference uses and is EXACT. The pair separates the forward fusion's error from the backward kernel's.",
+  "nargs": null,
+  "option_strings": [
+   "--dgrad"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "attn_4bit",
+  "help": "e4b: quantize_attention_projections_4bit before the attention LoRA (U4)",
+  "nargs": null,
+  "option_strings": [
+   "--attn-4bit"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "frozen_4bit",
+  "help": "e4b: quantize_frozen_linears_4bit after the attention conversion -- the other frozen dense projections in NF4 (Qwen3.6's linear attention and shared experts; routers and lm_head kept). Default from TRAIN_FROZEN_4BIT, which TC1_E4B_ENV hands to e4b arms only",
+  "nargs": null,
+  "option_strings": [
+   "--frozen-4bit"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "absmax_dq",
+  "help": "e4b: compress_expert_absmax_ -- the frozen expert absmax stored double-quantized (bitsandbytes' nested statistics), after the attention conversion and before the LoRA wrap; resident arms only. Default 1 iff E4B_ABSMAX_DQ=1 is in this arm's environment, so TC1_E4B_ENV reaches the e4b arms only",
+  "nargs": null,
+  "option_strings": [
+   "--absmax-dq"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "mem_census",
+  "help": "TC1 amendment 23: 1 = the memory census on this arm (any framework): PyTorch's allocator history from the arm's start (ring of 1,000,000 events, python stacks), snapshotted and reduced ON THE BOX whenever the run's max allocated grows; the static census by class at the end of setup and of training; receipt `mem_census` (an exception in the census is recorded as mem_census.error and the arm goes on). It slows the step: no speed is read from such an arm",
+  "nargs": null,
+  "option_strings": [
+   "--mem-census"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "phase_peaks",
+  "help": "TC1 amendment 56: 1 = record the peak allocated per phase (setup / eval / train) in `peak_vram_gb_phases`, resetting the allocator's max at each boundary; `peak_vram_gb` stays the run's max. Refused with --mem-census 1",
+  "nargs": null,
+  "option_strings": [
+   "--phase-peaks"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": [
+   "unsloth",
+   "hf"
+  ],
+  "const": null,
+  "default": "unsloth",
+  "dest": "grad_ckpt",
+  "help": "Unsloth: use_gradient_checkpointing mode (U1)",
+  "nargs": null,
+  "option_strings": [
+   "--grad-ckpt"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": [
+   "FastLanguageModel",
+   "FastModel"
+  ],
+  "const": null,
+  "default": "FastLanguageModel",
+  "dest": "unsloth_loader",
+  "help": "T4: P38's loader; FastModel is an amendment",
+  "nargs": null,
+  "option_strings": [
+   "--unsloth-loader"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "expect_trainable",
+  "help": "T6: the family's e4b trainable count; a mismatch is recorded",
+  "nargs": null,
+  "option_strings": [
+   "--expect-trainable"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "prereg",
+  "help": "REQUIRED for a real run: the governing pre-registration path written into every receipt and stub (P41: p41/P41-PREREG.md). No default \u2014 a receipt must never cite a pre-registration the run did not pass",
+  "nargs": null,
+  "option_strings": [
+   "--prereg"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": 0,
+  "dest": "no_sampler",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--no-sampler"
+  ],
+  "required": false,
+  "type": "int"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "phase_budget_s",
+  "help": "#548: refuse the arm (status phase_alarm, exit 16) while still inside a prologue phase once the whole prologue passes this many seconds. Default: TC1_PHASE_BUDGET_S, else 0.35 x TC1_ARM_ALARM_S (what tc1_run.sh gave perl's alarm), else off. phase_seconds is recorded either way",
+  "nargs": null,
+  "option_strings": [
+   "--phase-budget-s"
+  ],
+  "required": false,
+  "type": "float"
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": null,
+  "dest": "note",
+  "help": "TC1b: a free-text provenance note recorded verbatim in the receipt (and in any stub) -- e.g. how an anchor arm differs from the lane it anchors to (the p38 Unsloth arm in venv-unsloth: cu130 torch 2.12.1 + grouped_mm, where tp4 ran the t28 venv with the loader-default backend)",
+  "nargs": null,
+  "option_strings": [
+   "--note"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": "/root/tc1",
+  "dest": "out",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--out"
+  ],
+  "required": false,
+  "type": null
+ },
+ {
+  "action": "_StoreAction",
+  "choices": null,
+  "const": null,
+  "default": "/root/tc1/adapters",
+  "dest": "adapter_dir",
+  "help": null,
+  "nargs": null,
+  "option_strings": [
+   "--adapter-dir"
+  ],
+  "required": false,
+  "type": null
+ }
+]
