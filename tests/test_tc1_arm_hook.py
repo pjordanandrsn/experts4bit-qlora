@@ -334,6 +334,22 @@ def test_every_phase_is_named_in_a_trace_and_timed(tmp_path, monkeypatch):
     assert "seconds" in arm.arm_hook_receipt(h, None)
 
 
+def test_each_phases_seconds_accumulate_its_own_time(tmp_path):
+    """The seconds are the phase's own wall time, summed over its calls (so a reducer can see the edge time inside window_wall_s): a
+    step_edge sleeping 10 ms, called five times, records at least 45 ms; record() is timed on its own; the receipt carries one seconds
+    key per defined phase."""
+    import time as _time
+    arm = _load_arm()
+    hook = types.SimpleNamespace(step_edge=lambda i: _time.sleep(0.01), record=lambda: {"ok": True})
+    h = {"obj": hook, "phases": ["step_edge", "record"], "calls": {"step_edge": 0, "record": 0}, "seconds": {"step_edge": 0.0, "record": 0.0},
+         "a": _args(tmp_path), "spec": "m:f", "file": "m.py", "sha256": "0" * 64}
+    for i in range(5):
+        arm.arm_hook_call(h, "step_edge", i)
+    rec = arm.arm_hook_receipt(h, arm.arm_hook_call(h, "record"))
+    assert rec["seconds"]["step_edge"] >= 0.045 and rec["calls"] == {"step_edge": 5, "record": 1}, rec
+    assert set(rec["seconds"]) == {"step_edge", "record"} and rec["seconds"]["record"] < rec["seconds"]["step_edge"], rec
+
+
 def test_no_hook_set_loads_nothing(tmp_path, monkeypatch):
     arm = _load_arm()
     monkeypatch.delenv(arm.ARM_HOOK_ENV, raising=False)
