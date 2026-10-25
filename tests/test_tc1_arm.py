@@ -1610,10 +1610,12 @@ def test_load_e4b_compresses_after_attn4_and_before_the_lora_wrap(monkeypatch):
     assert arm.c1_control(model, h)["detects"]
 
 
-def test_frozen_base_probe_reads_an_offloaded_stack_from_its_home():
+def test_frozen_base_probe_reads_an_offloaded_stack_from_its_home(monkeypatch):
     """Under e4b's expert offload the base holds 0-element placeholders between forwards, and T21 used to record
     `experts: IndexError ...` and probe q_proj alone. It now reads the handle's home copy of layer 0 / expert 0, staged to the
-    handle's device and dequantised there: the same bf16 bytes as the resident probe, with a control that detects its flip."""
+    handle's device and dequantised there: the same bf16 bytes as the resident probe, with a control that detects its flip. Only
+    expert 0's rows are staged: every dequant call the offloaded probe makes is handed a packed AND an absmax of one expert, while
+    the home copy holds them all (an unsliced absmax dequantises the same bytes, so only its shape can show it)."""
     pytest.importorskip("bitsandbytes")
     import torch
 
@@ -1628,13 +1630,31 @@ def test_frozen_base_probe_reads_an_offloaded_stack_from_its_home():
     if dev == "cuda":
         for m in lora:
             torch.nn.Module.to(m, dev)
+    full = []
+    real_r = type(lora[0].base)._dequantize_expert
+
+    def recording_r(self, packed, absmax, *a, **k):
+        full.append((int(packed.shape[0]), int(absmax.shape[0])))
+        return real_r(self, packed, absmax, *a, **k)
+    monkeypatch.setattr(type(lora[0].base), "_dequantize_expert", recording_r)
     resident = arm.frozen_base_probe(model, "e4b")
+    monkeypatch.undo()
     assert not resident["errors"] and resident["experts_offloaded"] is False, resident
+    assert any(p > 1 and m > 1 for p, m in full), full                    # resident: the whole stack, so the recorder can tell
     for m in lora:
         enable_expert_offload(m, dev, pin=False)
     base = lora[0].base
     assert base.gate_up_proj.numel() == 0 and base.down_absmax.numel() == 0          # evicted: placeholders only
+    seen = []
+    real = type(base)._dequantize_expert
+
+    def recording(self, packed, absmax, *a, **k):
+        seen.append((int(packed.shape[0]), int(absmax.shape[0])))
+        return real(self, packed, absmax, *a, **k)
+    monkeypatch.setattr(type(base), "_dequantize_expert", recording)
     off = arm.frozen_base_probe(model, "e4b")
+    monkeypatch.undo()
+    assert seen and all(s == (1, 1) for s in seen), seen                             # one expert's packed rows and absmax rows
     assert not off["errors"] and off["experts_offloaded"] is True and off["control_detects_flip"] is True, off
     for k in ("gate_up", "down"):
         r, o = resident["slots"][k], off["slots"][k]
