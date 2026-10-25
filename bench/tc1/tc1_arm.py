@@ -4512,9 +4512,14 @@ def run_arm(a, load_fn, sampler=True):
                 lm_step(model, [dict(kw, input_ids=ids, labels=labels) for ids, kw, labels, _ in mbs], [1.0 / a.accum] * a.accum)
             opt.zero_grad(set_to_none=True)
             cuda_sync()
+            guard_s, guard_peak = round(time.perf_counter() - g0, 3), peak_gb()
+            # The guard's peak is the first call's own (M live layer-major graphs plus one stock forward's transient), which no step
+            # and no stock arm holds: it is recorded here, and the allocator's max is reset so peak_vram_gb stays the STEPS' max on
+            # every arm (as setup and eval0 stay out of it, tc1_arm.py's #1290 note)
+            reset_peak()
             lm_rec = {"given": int(a.layer_major), "engine": "experts4bit_qlora.engines.layer_major.layer_major_step",
                       "weights": f"1/{a.accum} per micro-batch (the stock loop's loss / accum)",
-                      "guard": {"s": round(time.perf_counter() - g0, 3), "microbatches": a.accum, "where": "before the timed window"}}
+                      "guard": {"s": guard_s, "peak_vram_gb": guard_peak, "microbatches": a.accum, "where": "before the timed window"}}
 
     losses, step_ms, tokens_per_step, tokens_padded_per_step, lr_per_step, kcalls = [], [], [], [], [], []
     mb_padded_len, dyn = [], {}                                        # [F19] padded length per micro-batch; [F16] dynamo snapshots
@@ -6475,18 +6480,34 @@ def _selftest_harness_extension(a, d):
         for k in (ARM_HOOK_ENV, ARM_HOOK_SHA_ENV):
             os.environ.pop(k, None)
 
-        calls = []
+        calls, order = [], []
+        real_reset, real_peak = globals()["reset_peak"], globals()["peak_gb"]
+
+        def _reset():
+            order.append("reset_peak")
+            return real_reset()
+
+        def _peak():
+            order.append("peak_gb")
+            return real_peak()
 
         def _counting_engine():
             def step(model, batches, weights):
+                order.append("engine")
                 calls.append((len(batches), list(weights), bool(model.training)))
                 losses = [model(**b).loss for b in batches]
                 sum(w * loss for w, loss in zip(weights, losses)).backward()
                 return [loss.detach() for loss in losses]
             return step
         globals()["layer_major_engine"] = _counting_engine
+        globals()["reset_peak"], globals()["peak_gb"] = _reset, _peak
         a.layer_major, a.tag = 1, "fused_attn4_ext_lm"
         lm = run_arm(a, _selftest_load_e4b, sampler=False)
+        # the guard's peak is read and the allocator's max reset BEFORE the first step: peak_vram_gb is the steps' max, the guard's own
+        # peak is recorded apart (guard -> peak read -> reset -> step 1)
+        g = order.index("engine")
+        assert order[g:g + 4] == ["engine", "peak_gb", "reset_peak", "engine"], order[:g + 6]
+        assert "peak_vram_gb" in lm["layer_major"]["guard"], lm["layer_major"]
         assert len(calls) == a.steps + 1 and all(c == (a.accum, [1.0 / a.accum] * a.accum, True) for c in calls), calls[:2]
         assert lm["tokens_per_step"] == base["tokens_per_step"] and lm["microbatch_padded_len"] == base["microbatch_padded_len"]
         assert lm["losses"][0] == base["losses"][0], (lm["losses"][0], base["losses"][0])
@@ -6497,6 +6518,8 @@ def _selftest_harness_extension(a, d):
                               "max_rel": max(abs(x - y) / max(1.0, abs(y)) for x, y in zip(lm["losses"], base["losses"]))}
     finally:
         globals()["layer_major_engine"] = real_engine
+        if "real_reset" in locals():
+            globals()["reset_peak"], globals()["peak_gb"] = real_reset, real_peak
         a.layer_major = 0
         for k, v in saved_env.items():
             if v is None:
