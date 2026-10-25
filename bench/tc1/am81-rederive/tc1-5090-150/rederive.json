@@ -1,0 +1,184 @@
+{
+ "receipt": "tc1-5090-150",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3fqkv3_e4b_fused_attn4_m_q0.json": {
+   "recorded_ms": 5375.0,
+   "kernels_only_ms": 5193.4,
+   "annotation_ms": 181.6,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 181.62
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv3_e4b_fused_attn4_m_q0_d2.json": {
+   "recorded_ms": 5358.4,
+   "kernels_only_ms": 5182.3,
+   "annotation_ms": 176.1,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 176.064
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv3_e4b_fused_attn4_m_q1.json": {
+   "recorded_ms": 5308.8,
+   "kernels_only_ms": 5123.8,
+   "annotation_ms": 185.0,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 185.038
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv3_e4b_fused_attn4_m_q1_d2.json": {
+   "recorded_ms": 5296.7,
+   "kernels_only_ms": 5126.2,
+   "annotation_ms": 170.5,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 170.537
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv3_e4b_fused_attn4_shipped_q0.json": {
+   "recorded_ms": 3997.2,
+   "kernels_only_ms": 3837.3,
+   "annotation_ms": 159.9,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 159.894
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv3_e4b_fused_attn4_shipped_q0_d2.json": {
+   "recorded_ms": 4000.9,
+   "kernels_only_ms": 3843.7,
+   "annotation_ms": 157.2,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 157.238
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv3_e4b_fused_attn4_shipped_q1.json": {
+   "recorded_ms": 3937.9,
+   "kernels_only_ms": 3779.3,
+   "annotation_ms": 158.6,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 158.634
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv3_e4b_fused_attn4_shipped_q1_d2.json": {
+   "recorded_ms": 3965.4,
+   "kernels_only_ms": 3779.8,
+   "annotation_ms": 185.6,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 185.622
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-| e4b/fused_attn4_shipped_q0 | VALID | 3.231 | 1332.4 | 0.412 | 75833 | 0 | 23.321 | 1.95917 / 0.7554 |",
+  "-| e4b/fused_attn4_shipped_q1 | VALID | 2.809 | 1312.6 | 0.467 | 64761 | 48 | 23.344 | 1.94684 / 0.75533 |",
+  "-| e4b/fused_attn4_m_q0 | VALID | 3.319 | 1791.7 | 0.540 | 79614 | 0 | 26.495 | 1.95917 / 0.75857 |",
+  "-| e4b/fused_attn4_m_q1 | VALID | 3.012 | 1769.6 | 0.588 | 68524 | 48 | 26.500 | 1.94684 / 0.7602 |",
+  "-| e4b/fused_attn4_m_q1_d2 | VALID | 2.998 | 1765.6 | 0.589 | 68518 | 48 | 26.500 | 1.94684 / 0.75533 |",
+  "-| e4b/fused_attn4_m_q0_d2 | VALID | 3.313 | 1786.1 | 0.539 | 79572 | 0 | 26.495 | 1.95917 / 0.75333 |",
+  "-| e4b/fused_attn4_shipped_q1_d2 | VALID | 2.831 | 1321.8 | 0.467 | 64761 | 48 | 23.344 | 1.94684 / 0.75644 |",
+  "-| e4b/fused_attn4_shipped_q0_d2 | VALID | 3.153 | 1333.6 | 0.423 | 75833 | 0 | 23.321 | 1.95917 / 0.75494 |",
+  "+| e4b/fused_attn4_shipped_q0 | VALID | 3.231 | 1279.1 | 0.396 | 75833 | 0 | 23.321 | 1.95917 / 0.7554 |",
+  "+| e4b/fused_attn4_shipped_q1 | VALID | 2.809 | 1259.8 | 0.448 | 64761 | 48 | 23.344 | 1.94684 / 0.75533 |",
+  "+| e4b/fused_attn4_m_q0 | VALID | 3.319 | 1731.1 | 0.522 | 79614 | 0 | 26.495 | 1.95917 / 0.75857 |",
+  "+| e4b/fused_attn4_m_q1 | VALID | 3.012 | 1707.9 | 0.567 | 68524 | 48 | 26.500 | 1.94684 / 0.7602 |",
+  "+| e4b/fused_attn4_m_q1_d2 | VALID | 2.998 | 1708.7 | 0.570 | 68518 | 48 | 26.500 | 1.94684 / 0.75533 |",
+  "+| e4b/fused_attn4_m_q0_d2 | VALID | 3.313 | 1727.4 | 0.521 | 79572 | 0 | 26.495 | 1.95917 / 0.75333 |",
+  "+| e4b/fused_attn4_shipped_q1_d2 | VALID | 2.831 | 1259.9 | 0.445 | 64761 | 48 | 23.344 | 1.94684 / 0.75644 |",
+  "+| e4b/fused_attn4_shipped_q0_d2 | VALID | 3.153 | 1281.2 | 0.406 | 75833 | 0 | 23.321 | 1.95917 / 0.75494 |",
+  "-| PREMISE | qwen3fqkv3 | **HELD** | matched q0 busy_t 0.539 vs <= 0.85 |",
+  "+| PREMISE | qwen3fqkv3 | **HELD** | matched q0 busy_t 0.521 vs <= 0.85 |",
+  "-| DEVICE | qwen3fqkv3 | **REPORTED** | m: device 1788.9 -> 1767.6 ms = 0.988, peak 26.495 -> 26.5 GB; shipped: device 1333.0 -> 1317.2 ms = 0.988, peak 23.321 -> 23.344 GB |",
+  "+| DEVICE | qwen3fqkv3 | **REPORTED** | m: device 1729.3 -> 1708.3 ms = 0.988, peak 26.495 -> 26.5 GB; shipped: device 1280.2 -> 1259.8 ms = 0.984, peak 23.321 -> 23.344 GB |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [],
+ "unparsed": [
+  "| DEVICE | qwen3fqkv3 | **REPORTED** | m: device 1729.3 -> 1708.3 ms = 0.988, peak 26.495 -> 26.5 GB; shipped: device 1280.2 -> 1259.8 ms = 0.984, peak 23.321 -> 23.344 GB |"
+ ],
+ "reworded": [],
+ "share": 0.0468,
+ "corrected_results_sha256": "3daccda1493314cfa5b0166dae3f4c8943e84d7f9ab7d7f7d4bbd6e3231586f5",
+ "path": "bench/p129/receipts/tc1-5090-150",
+ "reducer_sha256": "083b18833ab833a1064452a38d5ded9e8f00131693e759a598b0791a0f957739"
+}

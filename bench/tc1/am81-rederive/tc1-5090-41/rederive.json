@@ -1,0 +1,85 @@
+{
+ "receipt": "tc1-5090-41",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3prof945_e4b_fused_attn4_m_prof.json": {
+   "recorded_ms": 7886.1,
+   "kernels_only_ms": 7791.7,
+   "annotation_ms": 94.4,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 94.37
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3prof945_e4b_fused_attn4_m_prof_legacy.json": {
+   "recorded_ms": 7895.6,
+   "kernels_only_ms": 7800.7,
+   "annotation_ms": 94.9,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 94.865
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3prof945_e4b_fused_attn4_shipped_prof.json": {
+   "recorded_ms": 6146.5,
+   "kernels_only_ms": 6072.6,
+   "annotation_ms": 73.9,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 73.863
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-| fused_attn4_shipped_prof | **VALID** | 2.207 | 0.830 | 133898 | 733073 | {\"autograd\": 0.1858, \"fused_kernel\": 0.0287, \"matmul\": 0.076, \"memcpy\": 0.2042, \"norm_act\": 0.1733, \"optimizer\": 0.0054, \"other\": 0.286, \"routing\": 0.0405} |",
+  "-| fused_attn4_m_prof | **VALID** | 3.119 | 0.740 | 136969 | 750409 | {\"autograd\": 0.168, \"fused_kernel\": 0.0217, \"matmul\": 0.2438, \"memcpy\": 0.09, \"norm_act\": 0.1706, \"optimizer\": 0.0058, \"other\": 0.2656, \"routing\": 0.0346} |",
+  "-| fused_attn4_m_prof_legacy | **VALID** | 3.924 | 0.595 | 140809 | 753087 | {\"autograd\": 0.1279, \"fused_kernel\": 0.0168, \"matmul\": 0.199, \"memcpy\": 0.0481, \"norm_act\": 0.1297, \"optimizer\": 0.0045, \"other\": 0.4453, \"routing\": 0.0286} |",
+  "+| fused_attn4_shipped_prof | **VALID** | 2.207 | 0.820 | 133898 | 733073 | {\"autograd\": 0.1858, \"fused_kernel\": 0.0287, \"matmul\": 0.076, \"memcpy\": 0.2042, \"norm_act\": 0.1733, \"optimizer\": 0.0054, \"other\": 0.286, \"routing\": 0.0405} |",
+  "+| fused_attn4_m_prof | **VALID** | 3.119 | 0.731 | 136969 | 750409 | {\"autograd\": 0.168, \"fused_kernel\": 0.0217, \"matmul\": 0.2438, \"memcpy\": 0.09, \"norm_act\": 0.1706, \"optimizer\": 0.0058, \"other\": 0.2656, \"routing\": 0.0346} |",
+  "+| fused_attn4_m_prof_legacy | **VALID** | 3.924 | 0.588 | 140809 | 753087 | {\"autograd\": 0.1279, \"fused_kernel\": 0.0168, \"matmul\": 0.199, \"memcpy\": 0.0481, \"norm_act\": 0.1297, \"optimizer\": 0.0045, \"other\": 0.4453, \"routing\": 0.0286} |",
+  "-| P19 | qwen3prof945 | **HELD** | device busy fraction matched new 0.740 vs legacy 0.595 (+0.145; >= +0.05 predicted); device events/step 136969 vs 140809; CPU ops/step 750409 vs 753087 |",
+  "+| P19 | qwen3prof945 | **HELD** | device busy fraction matched new 0.731 vs legacy 0.588 (+0.143; >= +0.05 predicted); device events/step 136969 vs 140809; CPU ops/step 750409 vs 753087 |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [],
+ "unparsed": [
+  "| fused_attn4_shipped_prof | **VALID** | 2.207 | 0.820 | 133898 | 733073 | {\"autograd\": 0.1858, \"fused_kernel\": 0.0287, \"matmul\": 0.076, \"memcpy\": 0.2042, \"norm_act\": 0.1733, \"optimizer\": 0.0054, \"other\": 0.286, \"routing\": 0.0405} |",
+  "| fused_attn4_m_prof | **VALID** | 3.119 | 0.731 | 136969 | 750409 | {\"autograd\": 0.168, \"fused_kernel\": 0.0217, \"matmul\": 0.2438, \"memcpy\": 0.09, \"norm_act\": 0.1706, \"optimizer\": 0.0058, \"other\": 0.2656, \"routing\": 0.0346} |",
+  "| fused_attn4_m_prof_legacy | **VALID** | 3.924 | 0.588 | 140809 | 753087 | {\"autograd\": 0.1279, \"fused_kernel\": 0.0168, \"matmul\": 0.199, \"memcpy\": 0.0481, \"norm_act\": 0.1297, \"optimizer\": 0.0045, \"other\": 0.4453, \"routing\": 0.0286} |",
+  "| P19 | qwen3prof945 | **HELD** | device busy fraction matched new 0.731 vs legacy 0.588 (+0.143; >= +0.05 predicted); device events/step 136969 vs 140809; CPU ops/step 750409 vs 753087 |"
+ ],
+ "reworded": [],
+ "share": 0.012,
+ "corrected_results_sha256": "5d6e5f708af66af0b613db73dadcc67519677b7cddd7044060d0868b99a63d79",
+ "path": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-41",
+ "reducer_sha256": "2963210099b93fdc09344e2190e68323b4d7f8e9287399ec7b96b6853b9aeb79"
+}
