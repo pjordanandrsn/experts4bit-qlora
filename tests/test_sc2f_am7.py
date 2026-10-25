@@ -305,6 +305,22 @@ def test_a_failed_run_keeps_its_own_code(tmp_path):
     assert (run / "qualify" / "run_judge.json").exists()            # judged for the record only
 
 
+def test_a_symlink_in_the_fetched_records_is_refused_before_any_read(tmp_path):
+    """bench/common rule 8: the box plants a link among its qualify records; the fetch keeps it (a stub rsync that
+    copies links), and the wrapper refuses with the harness code before reading anything."""
+    t, b = _tree(tmp_path), _stubs(tmp_path, "575.00 W, 575.00 W, 600.00 W", 0, "", _sampler())
+    (b / "rsync").write_text(f'#!/bin/bash\nfor a in "$@"; do last=$a; done\nmkdir -p "$last"; cp {tmp_path}/box/q/* "$last" 2>/dev/null; '
+                             'ln -sf /etc/hosts "$last/card_clock.json"; exit 0\n')
+    os.chmod(b / "rsync", 0o755)
+    run = tmp_path / "run"
+    run.mkdir()
+    env = {"PATH": f"{b}:{os.environ['PATH']}", "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "x",
+           "E4B_RENT_RUN_DIR": str(run), "E4B_RENT_RUN_ID": "r", "E4B_RENT_DEADLINE_EPOCH": "9999999999",
+           "E4B_RENT_INSTANCE_ID": "1", "SC1_BOX": "N", "DRIVE_LOG": str(tmp_path / "drive.log"), "PROOF_W": "575.00"}
+    out = subprocess.run(["bash", str(t / "bench" / "sc2" / "sc2_qualify_drive.sh")], capture_output=True, text=True, env=env)
+    assert out.returncode == 25 and "symlink" in out.stdout and not (tmp_path / "drive.log").exists(), out.stdout + out.stderr
+
+
 def test_the_wrapper_refuses_boxes_outside_sc2f_h_i(tmp_path):
     out, drove, _ = _wrap(tmp_path, box="Q")
     assert out.returncode == 78 and not drove

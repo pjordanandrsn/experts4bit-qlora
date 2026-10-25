@@ -658,7 +658,7 @@ was read on the old pair, so nothing is lost and no reading crosses releases.
     REFUSE, 575 W is PASS), and the run sampler's (a hard bit, on a busy or an idle sample; SwPowerCap at 5 % and
     6 % of busy samples; half the run idle with SwPowerCap on 10 % of busy samples; GpuIdle; fewer than 10 busy
     samples; missing, no header, too few rows, too many unreadable rows).
-- `tests/test_sc2f_am7.py` adds:
+- `tests/test_sc2f_am7.py` adds (with a planted symlink in the fetched records refused, rc 25, bench/common rule 8):
   - the admission from a fixture receipt store;
   - the post-proof judge on sc2j-prove-2's own `host_facts.json`;
   - the wrapper on a stubbed box, proofs and readings alike, for each exit code;

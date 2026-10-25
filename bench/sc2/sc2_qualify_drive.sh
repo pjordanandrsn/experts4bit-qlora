@@ -38,11 +38,12 @@ if [ "${SC2Q_DRIVE_DRYRUN:-0}" = "1" ]; then
   echo "DRYRUN power -> $QD/power.csv ; burn: stage card_clock.py -> root@$HOST:$QW, venv + torch 2.8.0+cu128, burn --floor 2700 ; then SC1_BOX=$SC1_BOX bash bench/sc1/sc1_drive.sh ; judge-proof if SC1_PROVE=1"; exit 0
 fi
 fetch_q(){ rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "root@$HOST:$QW/" "$QD/box/" > /dev/null 2>&1 || true
-  [ -z "$(find "$QD" -type l | head -1)" ] || { say "refusing: a symlink in the fetched qualify records (bench/common rule 8)"; exit 22; }; }
+  find "$QD" -type l -print -quit | grep -q . && { say "refusing: a symlink in the fetched qualify records (bench/common rule 8): rc 25, a harness fault"; exit 25; }; return 0; }
 
 # 1. the enforced power limit, before anything is installed
 $SSH "nvidia-smi --query-gpu=enforced.power.limit,power.limit,power.max_limit --format=csv,noheader" > "$QD/power.csv" 2> "$QD/power.err" \
   || { say "nvidia-smi did not answer: $(head -c 200 "$QD/power.err")"; exit 10; }
+find "$QD" -type l -print -quit | grep -q . && { say "refusing: a symlink in the qualify records (bench/common rule 8): rc 25, a harness fault"; exit 25; }
 python3 "$Q" power --csv "$QD/power.csv" --out "$QD/power.json"; rc=$?
 [ "$rc" = 25 ] && { say "the power read was unreadable: probe_error (rc 25, a harness fault; the machine is not excluded)"; exit 25; }
 [ "$rc" = 0 ] || { say "QUALIFY REFUSED: enforced power limit (rc 17, a host fault, not a strike)"; exit 17; }
