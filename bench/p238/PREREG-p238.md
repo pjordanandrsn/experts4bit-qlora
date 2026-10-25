@@ -342,7 +342,7 @@ attention-only training (except the stated e4b property), other ranks, other mod
 - **Then the reading:** `p238-5090-1`, its one rerun `p238-5090-2`; retry ids `p238-5090-r1` to `r3` for a box that does not start.
   - **The split rule:** the reading's fit is 44 x the shakedown's measured per-load wall (40 step loads and 4 op processes) plus the op timing, plus a 25 % headroom.
     If that exceeds the 8 h guard, or its worst cost exceeds USD 15, the reading is SPLIT across two boxes **by draw, never by arm**
-    (`p238-5090-1a` draw 1 with its two op processes, `p238-5090-1b` draw 2 with its two), the card floor checked on each box. The split is decided
+    (`p238-5090-1a` draw 1 with its two op processes, `p238-5090-1b` draw 2 with its two; the rerun likewise `p238-5090-2a` / `2b`), the card floor checked on each box. The split is decided
     from the shakedown's receipt and stated before the reading launches.
 - A box is started at its `STARTED` marker (after the refusals and the pre-install fit). Two strikes end the lane. The runner's exit
   codes follow P236's table (13, 15, 16, 18 host refusals before `STARTED`; 41 fit; 9, 10, 28, 78, 130 halts; 27 VOID).

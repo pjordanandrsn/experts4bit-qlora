@@ -407,3 +407,32 @@ def test_an_unsloth_row_reads_and_each_piece_removed_voids(monkeypatch, tmp_path
 def test_a_fused_dx_that_never_launched_voids_the_row(monkeypatch, tmp_path, arm):
     R, row, table, census = _unsloth_row(monkeypatch, tmp_path, arm, drop_dx_step=17)
     assert any("launches" in w for w in R.row_faults(row, table, census))
+
+
+# -- p238_schedule.py and p238_drive.sh -----------------------------------------------------------------------------------------------
+SCH = _load("p238_schedule", "bench/p238/p238_schedule.py")
+
+
+def test_the_schedule_is_44_processes_with_each_points_draws_a_palindrome():
+    s = SCH.schedule()
+    assert [r["index"] for r in s] == list(range(1, 45))
+    assert sum(r["kind"] == "op" for r in s) == 4 and sum(r["kind"] == "step" for r in s) == 40
+    assert [r["framework"] for r in s if r["kind"] == "op"] == ["e4b", "unsloth", "unsloth", "e4b"]
+    for pt in SCH.POINTS:
+        d1 = [r["arm"] for r in s if r["point"] == pt and r["draw"] == 1]
+        d2 = [r["arm"] for r in s if r["point"] == pt and r["draw"] == 2]
+        assert d1 == list(SCH.ARMS) and d2 == list(reversed(SCH.ARMS))
+    steps1 = [r["point"] for r in s if r["kind"] == "step" and r["draw"] == 1]
+    steps2 = [r["point"] for r in s if r["kind"] == "step" and r["draw"] == 2]
+    assert steps1[::5] == list(SCH.POINTS) and steps2[::5] == list(reversed(SCH.POINTS))
+
+
+def test_the_driver_parses_and_refuses_unregistered_ids(tmp_path):
+    import subprocess
+    drive = ROOT / "bench" / "p238" / "p238_drive.sh"
+    assert subprocess.run(["bash", "-n", str(drive)]).returncode == 0
+    env = {**os.environ, "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-q", "E4B_RENT_RUN_DIR": str(tmp_path),
+           "E4B_RENT_DEADLINE_EPOCH": "1"}
+    for rid in ("p238-5090-3", "p238-shake-2", "p238-5090-1c", "p236-5090-1", ""):
+        r = subprocess.run(["bash", str(drive)], env={**env, "E4B_RENT_RUN_ID": rid}, capture_output=True, text=True)
+        assert r.returncode == 78, (rid, r.stdout, r.stderr)
