@@ -40,7 +40,7 @@
   "collective_rpc": "LLM.collective_rpc(method | callable) (entrypoints/llm.py:567-598); cloudpickle only with VLLM_ALLOW_INSECURE_SERIALIZATION=1 (v1/serial_utils.py:214-231)",
   "engagement_log_lines": "MoE: \"Using 'MARLIN' WNA16 MoE backend.\" (fused_moe/oracle/int_wna16.py:255-256, info_once at :282/:325) + 'Using MarlinExperts' (:436); linear: 'Using MarlinLinearKernel for AutoGPTQLinearMethod' (layers/quantization/auto_gptq.py:352-354); graphs: tqdm desc 'Capturing CUDA graphs (decode|mixed prefill-decode, MODE)' (v1/worker/gpu_model_runner.py:7005) + 'Graph capturing finished in N secs, took X GiB' (:6930); attention: 'Using FLASH_ATTN backend.' (platforms/cuda.py:478); KV: 'Available KV cache memory: X GiB' (v1/worker/gpu_worker.py:641); runner: 'Using V2 Model Runner' (gpu_worker.py:441)"
  },
- "vast_instance_id": "53918541",
+ "vast_instance_id": "instance-redacted-e47a4f55",
  "host_pid": 156392,
  "env": {
   "VLLM_LOGGING_LEVEL": "INFO",

@@ -3,3 +3,10 @@
 # sha256, then the file's path within this run's receipt.
 0324d5927aaa6d793da6810d04f46ac468ae3ea18ec7f27df84da0cf63f3a31c  p152/INSTANCE_ID
 01495f020ff942351c1c877f13c1294d4d5d11c0e76beed3263e73e0ad554e71  teardown-proof.json
+# Originals of files this receipt carries with rented-hardware identifiers replaced by keyed tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p152/receipts/p152-5090-1/forensics.txt at 605d21e67958
+dc2eb455634417c846f54c36a838e5a552e1bae25bd000b678cdcadb76f2fdc3  forensics.txt
+# same bytes: bench/p152/receipts/p152-5090-1/outer.log at 605d21e67958
+32516a209170054ecae3146edb025f0fbfbcb1dd208beae2e5f2faa35060c7c3  outer.log

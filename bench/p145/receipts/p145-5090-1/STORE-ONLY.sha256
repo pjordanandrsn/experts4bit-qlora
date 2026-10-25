@@ -14,3 +14,12 @@ efb1deb27eff084d16f8a716a231535a7ec5380a2f9f8a2bbe1c51e206c37c59  receipts/exper
 647514d2aeca87389ff64c8185c46f353c712d070fa008f9c5c9697994e2cd1e  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/run_census_e4b_b16_node.log
 a240e8e174fcccfd40524eb249309fd2a89d33a9b712c08f01e0c7f63cf5b322  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/run_census_e4b_b1_graph.log
 26107ecfb2709e4d497c25e04d35b10648507e0f2a9b08394dd37b25618a16be  receipts/experts4bit-qlora/2026-10-18/p145-5090-1/p145/logs/run_census_e4b_b1_node.log
+# Originals of files this receipt carries with rented-hardware identifiers replaced by keyed tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p145/receipts/p145-5090-1/forensics.txt at 605d21e67958
+4b7713bc38551293ea08389181fabc9c7bb420a0e54760a288fa92fe7fe521dd  forensics.txt
+# same bytes: bench/p145/receipts/p145-5090-1/outer.log at 605d21e67958
+99a1d919a95b03a85af0eed246b094ae898f903435c2928389508addab1f7318  outer.log
+# same bytes: bench/p145/receipts/p145-5090-1/teardown-proof.json at 605d21e67958
+9cebc1bbb3c390784f2d6a08e6c82476849aa368d0ead967750adc32c6b53cee  teardown-proof.json

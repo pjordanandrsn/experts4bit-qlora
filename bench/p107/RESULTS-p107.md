@@ -84,7 +84,7 @@ commit). Code under test: `E4B_PAGED_PREFILL_ATTN` (#963). Receipts: `bench/p107
 |---|---|---:|---|
 | `p107-5090-1` | REFUSED by the launcher: an exclusion receipt failed on `stuck loading`, which it does not accept (my list) | $0 | `1e4be8f` |
 | `p107-5090-2` | REFUSED by the launcher: single bandwidth refusals do not name a machine (my list) | $0 | `5594556` |
-| `p107-5090-3` | OK, **`DEFAULT=flash`**, 2026-10-03T13:13:50Z → 13:32:29Z, instance 54015502 destroyed and absent | $0.1634 | `1aba741` |
+| `p107-5090-3` | OK, **`DEFAULT=flash`**, 2026-10-03T13:13:50Z → 13:32:29Z, instance redacted-3c0a2f74 destroyed and absent | $0.1634 | `1aba741` |
 
 - **Lane total: $0.1634** (ceiling $1.50).
 - The first two attempts rented nothing. The third used P102's exclusion list after checking it against the

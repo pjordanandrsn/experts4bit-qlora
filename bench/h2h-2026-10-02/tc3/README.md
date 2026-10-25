@@ -9,8 +9,8 @@ complete 24 GB box with `--tc1-dir` pointed at TC1's resident box (`tc1-5090-16`
 
 | box | token | host | cost |
 |---|---|---|---|
-| `tc3-4090-1` | `qwen3frontier` (24 GB, first draw) | RTX 4090, instance 53804549, AMD EPYC 7B13, driver 595.84 — the pre-amendment-2 harness: its e4b offload rows refused themselves in the C1 hasher | $0.28 |
-| `tc3-4090-8` | `qwen3frontier` (24 GB, the complete box) | RTX 4090, instance 53830054, AMD EPYC 7642, driver 595.58.03 | $0.75 |
+| `tc3-4090-1` | `qwen3frontier` (24 GB, first draw) | RTX 4090, instance redacted-7ed1dc90, AMD EPYC 7B13, driver 595.84 — the pre-amendment-2 harness: its e4b offload rows refused themselves in the C1 hasher | $0.28 |
+| `tc3-4090-8` | `qwen3frontier` (24 GB, the complete box) | RTX 4090, instance redacted-443b7915, AMD EPYC 7642, driver 595.58.03 | $0.75 |
 | `local-20261002T042928Z` | `qwen3frontier12` (12 GB, hand run) | the owned RTX A2000 12 GB in a container (Xeon W-1250, 6 cores, driver 575.64; the card shared with on-demand sidecars holding 1.37 GB at start), e4b at `516c87c` (amendment 2); the HF arm re-run once under amendment 5 (10:18–10:31Z) | $0 |
 
 Between `tc3-4090-1` and `-8` six draws of the verified-secure RTX 4090 pool were refused at pre-flight or by the box itself (two slow links at

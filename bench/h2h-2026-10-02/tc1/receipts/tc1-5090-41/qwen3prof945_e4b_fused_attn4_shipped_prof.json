@@ -103,7 +103,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-1988d9ef-19d0-36d8-6639-210c4347c852",
+   "uuid": "GPU-redacted-21ef5b80",
    "pci.bus_id": "00000000:02:00.0",
    "pcie.link.gen.current": "1",
    "pcie.link.gen.max": "5",
@@ -117,7 +117,7 @@
    "cpu": "Intel(R) Core(TM) Ultra 9 285K",
    "cpu_threads": 24,
    "host_mem_gib": 188.1,
-   "vast_instance_id": "54000851",
+   "vast_instance_id": "instance-redacted-a8753848",
    "container_host": "831bb798366a"
   },
   "anchor_json": null,

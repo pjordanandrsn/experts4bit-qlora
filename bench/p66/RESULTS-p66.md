@@ -26,7 +26,7 @@ named beside it.
 - **Lane total:** $0.5285 against the $2 ceiling. Every rental's teardown is proven.
 - **Box.** One RTX 5090 (32,607 MiB, driver 580.95.05, 600 W, 3,135 MHz, 170 SMs; PCIe gen 4 × 16 — `nvidia-smi` read
   gen 1 *current* at the pre-run forensics, the idle link state) on an AMD EPYC 7C13 (256 CPUs, 2 NUMA nodes, 818 GB
-  RAM; cgroup 377 GB, 49 cores). Vast verified/secure instance 52436541. 8-stream egress 224.0 MB/s.
+  RAM; cgroup 377 GB, 49 cores). Vast verified/secure instance redacted-ed79e7f1. 8-stream egress 224.0 MB/s.
   - Calibration (`bench/calibrate.py`): device triad 1,568.3 GB/s; link H2D 23.07 / D2H 28.65 GB/s; NVMe sequential
     5.69 GB/s.
   - Unit host costs: aten launch 6.42 µs, Triton launch 13.17 µs, idle `cudaStreamSynchronize` 4.57 µs, `.item()`

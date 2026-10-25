@@ -2,7 +2,7 @@
 
 Pre-registration: [DQ6-PREREG.md](DQ6-PREREG.md) (DQ4's capacity read on a 24 GB RTX 4090). Work item: #1083.
 
-**Scope:** one RTX 4090 with 24 GB (Vast machine 51610, instance 54498479; AMD EPYC 7742; PCIe gen 4 x16; driver 580.95.05), e4b
+**Scope:** one RTX 4090 with 24 GB (Vast machine 51610, instance redacted-01969d6e; AMD EPYC 7742; PCIe gen 4 x16; driver 580.95.05), e4b
 `1f4f639b`, adertha `7566b18a`, DQ3's subject and DQ4's recipe.
 
 ## Verdict — `dq6-4090-1`, 2026-10-06: **CAP_REAL**, G = **4.75** (graded configuration c_def)

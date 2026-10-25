@@ -21,7 +21,7 @@ python(vllm) 3.11.13
 llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
 SC1_TRIPWIRE exl3 {"exllamav3": "1.5.3", "torch": "2.8.0+cu128", "torch_cuda": "12.8", "triton": "3.4.0", "driver": "580.95.05, NVIDIA GeForce RTX 5090", "device": "NVIDIA GeForce RTX 5090", "capability": [12, 0], "torch_arch_list": ["sm_70", "sm_75", "sm_80", "sm_86", "sm_90", "sm_100", "sm_120"],
 ```
-box: GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-7af44365-bd9e-461a-7d00-5a5ac4fbbd9a) | NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-7af44365-bd9e-461a-7d00-5a5ac4fbbd9a, 12.0, 1, 16, 4, 16 | power.limit,clocks.max.sm 600.00 W, 3210 MHz | Vendor ID:                               AuthenticAMD | Model name:                              AMD EPYC 7663 56-Core Processor | nproc 224 | cgroup cpu.max 3071999 100000  memory.max 294412877824 | loadavg 10.65 10.68 10.62 10/4001 633 | total        used        free      shared  buff/cache   available | Mem:             755          50         451         
+box: GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-redacted-38ca9a67) | NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-redacted-38ca9a67, 12.0, 1, 16, 4, 16 | power.limit,clocks.max.sm 600.00 W, 3210 MHz | Vendor ID:                               AuthenticAMD | Model name:                              AMD EPYC 7663 56-Core Processor | nproc 224 | cgroup cpu.max 3071999 100000  memory.max 294412877824 | loadavg 10.65 10.68 10.62 10/4001 633 | total        used        free      shared  buff/cache   available | Mem:             755          50         451         
 
 ## 1. Arms (speed verdict per draw, VOID reason = the pre-registered engagement rule that failed)
 | engine | arm | B | draw | verdict | tok/s | ms/step | why / note |

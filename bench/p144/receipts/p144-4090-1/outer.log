@@ -1,6 +1,6 @@
 KNOBS run=p144-4090-1 e4b=a9d140d88c296596ecda63e1e97dba5c7d04b23e gnf4=6b7c2e7474d20c8843814dd46dad6cfc3d94b440 model=mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 gpu_class=4090 min_disk_gb=150 min_ram_gb=98 dry=0
 CUDA_PROBE ok torch=2.8.0+cu128 cc=8.9 sms=128
-NVIDIA GeForce RTX 4090, 24564 MiB, 615.71.09, GPU-0723794d-b692-3327-dd05-e256993f5d81, 8.9, 4, 16
+NVIDIA GeForce RTX 4090, 24564 MiB, 615.71.09, GPU-redacted-cf05ec7d, 8.9, 4, 16
 CPU(s):                          256
 Vendor ID:                       AuthenticAMD
 Model name:                      AMD EPYC 7B13 64-Core Processor

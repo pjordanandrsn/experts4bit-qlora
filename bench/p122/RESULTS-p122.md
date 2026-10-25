@@ -23,7 +23,7 @@ The premise held: the builder's frozen kernels are 9.1 % of the eager step.
 
 ## The reading (`p122-5090-1`)
 
-**Host:** one RTX 5090 (sm_120, driver 595.71.05) on an AMD EPYC 7C13 (256 threads), Vast instance 54913207. Its GPU
+**Host:** one RTX 5090 (sm_120, driver 595.71.05) on an AMD EPYC 7C13 (256 threads), Vast instance redacted-0e1ddc59. Its GPU
 UUID is the one P120's and P121's readings ran on (P121's forensics record its 450 W power limit). The cross-run table
 comparison below is therefore on the same board, though it is still not a within-box ratio.
 

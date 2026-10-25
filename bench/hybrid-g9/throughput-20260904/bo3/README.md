@@ -1,6 +1,6 @@
 # Build-out validation lane bo3 — 2026-09-04, one RTX 5090
 
-**Box:** Vast.ai instance 49817195, RTX 5090 (sm_120) on an AMD EPYC 9755 host (see
+**Box:** Vast.ai instance redacted-35155879, RTX 5090 (sm_120) on an AMD EPYC 9755 host (see
 [`forensics.txt`](forensics.txt)); transformers 5.16.1, torch 2.8 (`pytorch/pytorch:2.8.0-cuda12.8`).
 **Protocol:** the Qwen3-30B campaign's — per family an NF4 bake of the released checkpoint, then arms
 under `bench/hybrid-g9/step_decomp.py`: K8 teacher-forced NLL (2048 steps, wikitext, sha-matched windows,

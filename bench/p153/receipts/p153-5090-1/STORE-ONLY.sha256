@@ -16,3 +16,8 @@ ed176e559c890376da531b5031ea707020f709d4f596f5d191f7354127815936  p153/logs/prom
 2248e484382ce493a3be9202f93042fcae92cd75cc129e38a331abc0f9389f7f  p153/logs/sane_off.log
 4b95d5bebbd2d234caf9b9440a81e14e65fd5eb44e1ede85827e7bb7b5bc5577  p153/logs/sane_on.log
 4d52fe2b9bd22d46988c5ff8accebae9af2345ae7be2697911fac9c1259786f9  teardown-proof.json
+# Originals of files this receipt carries with rented-hardware identifiers replaced by keyed tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p153/receipts/p153-5090-1/forensics.txt at 605d21e67958
+5371c78a8bfe31db71caa02a75fea89bb5d17917a81f81fdae9dd8ec2670422b  forensics.txt

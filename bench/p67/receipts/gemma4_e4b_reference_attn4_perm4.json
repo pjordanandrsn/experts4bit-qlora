@@ -78,7 +78,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-410f2ec3-a11a-7262-d019-99ba772e7c4e",
+   "uuid": "GPU-redacted-04f15f76",
    "pci.bus_id": "00000000:A1:00.0",
    "pcie.link.gen.current": "4",
    "pcie.link.gen.max": "4",
@@ -92,7 +92,7 @@
    "cpu": "AMD EPYC 7302 16-Core Processor",
    "cpu_threads": 64,
    "host_mem_gib": 503.7,
-   "vast_instance_id": "52449460",
+   "vast_instance_id": "instance-redacted-7b6b3eb3",
    "container_host": "ba15a6aa9460"
   },
   "anchor_json": null,

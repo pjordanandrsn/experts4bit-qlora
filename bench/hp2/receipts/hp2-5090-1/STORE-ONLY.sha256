@@ -5,3 +5,22 @@
 caae21b193951028626ded4c066bb23f645014ce71c6ef2546bb977112e5100c  tc1/logs/fetch_qwen3hp2.log
 917370e74d76771423559a1548f16c42b30d4ffabfcfef792b3307ccb2cd1442  tc1/logs/run_qwen3hp2_unsloth_hp2cal_unsloth_s3407.log
 16addc0321ab2475949d56a1a48c8f313eeafc3067f648279d3b9df76d886c98  tc1/logs/run_qwen3hp2shake_unsloth_hp1shake_unsloth.log
+# Originals of files this receipt carries with rented-hardware identifiers replaced by keyed tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/hp2/receipts/hp2-5090-1/box.json at 605d21e67958
+837be45af6dfcf6ab180e4cb5741061d8fc70be7f2395c923ddfb1697a487fe1  box.json
+# same bytes: bench/hp2/receipts/hp2-5090-1/forensics.txt at 605d21e67958
+826c0807371a1c8c0fa540cddafa55c46f4ec2b2165e62c9383bb2736e34eb3f  forensics.txt
+# same bytes: bench/hp2/receipts/hp2-5090-1/outer.log at 605d21e67958
+d524abfb77feb58f01cf8d1ce88e26b607c49e37978252edace316050748e15f  outer.log
+# same bytes: bench/hp2/receipts/hp2-5090-1/qwen3hp2_e4b_hp2cal_e4b_k00_s3407.json at 605d21e67958
+bffcbdf574bfe1175f038cfd0aa394c95664b0cb43fa926eaf47348689d9fc60  qwen3hp2_e4b_hp2cal_e4b_k00_s3407.json
+# same bytes: bench/hp2/receipts/hp2-5090-1/qwen3hp2_unsloth_hp2cal_unsloth_s3407.json at 605d21e67958
+d74f11af65e5c6597b7a8064d855b083dd8c14e9129abda8e50d00a9358a00cf  qwen3hp2_unsloth_hp2cal_unsloth_s3407.json
+# same bytes: bench/hp2/receipts/hp2-5090-1/qwen3hp2shake_e4b_hp1shake_e4b.json at 605d21e67958
+d2c2c75e143f3208887ef6df0a2bcd19cad91dfcc9a314d5228eb84d5554054c  qwen3hp2shake_e4b_hp1shake_e4b.json
+# same bytes: bench/hp2/receipts/hp2-5090-1/qwen3hp2shake_unsloth_hp1shake_unsloth.json at 605d21e67958
+2d73f8a4662e37c00ca1593e90c9478367a6ad32d53b39f0e880890402bba530  qwen3hp2shake_unsloth_hp1shake_unsloth.json
+# same bytes: bench/hp2/receipts/hp2-5090-1/summary.txt at 605d21e67958
+711dba125c1c7ccfd1b5b8b065a5e1679c0fc118040797f0af5cc439767929d8  summary.txt

@@ -1,6 +1,6 @@
 # RESULTS — SV1: current-stack decode census + dot-pad×F2 composition
 
-Adjudicated 2026-08-26. Box: instance 48709950 (post-F2 anchor
+Adjudicated 2026-08-26. Box: instance redacted-e66f5134 (post-F2 anchor
 7.25 ms). Receipts in `receipts-sv1/`.
 
 ## Composition cert: PARTIAL (K6-B frame) — knob stays opt-in

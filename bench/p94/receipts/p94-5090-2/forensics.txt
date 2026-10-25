@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 575.57.08, GPU-7a6634c6-2afe-863b-7f96-d00691343cdc, 12.0
+NVIDIA GeForce RTX 5090, 32607 MiB, 575.57.08, GPU-redacted-0aec5706, 12.0
 power.limit,clocks.max.sm 600.00 W, 3105 MHz
 Vendor ID:                               AuthenticAMD
 Model name:                              AMD Ryzen 9 7950X 16-Core Processor

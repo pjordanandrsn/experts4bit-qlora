@@ -14,7 +14,7 @@ that JSON.
 | run | what | outcome | cost | receipt (adertha-receipts) |
 |---|---|---|---|---|
 | `p63-prove-1` | the proving rental: attach, `nvidia-smi`, receipt, ledger, teardown | OK, RTX 5090, driver 580.95.05 | $0.0115 | `9904ceb` |
-| **`p63-5090-1`** | **the reading**, same e4b commit `75c83bd`, nothing merged between | **rc 0**, instance 52340702 | **$0.2881** | `33a7a0d` |
+| **`p63-5090-1`** | **the reading**, same e4b commit `75c83bd`, nothing merged between | **rc 0**, instance redacted-1852d574 | **$0.2881** | `33a7a0d` |
 
 - **Lane total:** $0.2996, against a $1.50 ceiling. Teardown is proven for both runs ([`receipts/teardown-proof.json`](receipts/teardown-proof.json)).
 - **Box.** One RTX 5090 (sm_120, 170 SMs, driver 595.71.05) on an AMD EPYC 7352 with 125 GiB RAM. Its power limit was **475 W**. That does not matter here, because this lane measures arithmetic, not speed.

@@ -18,7 +18,7 @@ BUDGET = 0.05
 # bo6c's box, for the STOP-1 drift read only. These are that box's NF4 reference, not a target.
 BO6C_NF4 = {"wikitext": 6.419839734124139, "c4val1": 16.497028406390328}
 BO6C_SPLIT = (11512, 776)
-# P39's box 1b (2026-09-10, instance 50509727, e4b 0.35.3 @e0cfb4889634) recorded this for the same
+# P39's box 1b (2026-09-10, instance redacted-9fee6af0, e4b 0.35.3 @e0cfb4889634) recorded this for the same
 # streamed 64k recipe: receipts .../2026-09-10/p39-box1b-5/p39/box1_out/FINGERPRINT. Quoted here so the
 # cross-box comparison is mechanical rather than a claim in prose.
 P39_FINGERPRINT = "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42"

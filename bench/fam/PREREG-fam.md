@@ -265,7 +265,7 @@ The references and the arenas stay on the box.
 
 ## Amendment 1 (2026-10-08, after `fam-prove-1`, before any reading)
 
-**What the proof read.** `fam-prove-1` ran on one RTX 5090 on an AMD EPYC 7C13 host: Vast instance 54917126, launched
+**What the proof read.** `fam-prove-1` ran on one RTX 5090 on an AMD EPYC 7C13 host: Vast instance redacted-39cfc8f1, launched
 2026-10-08T21:48:57Z, lane done 22:17:44Z, $0.423. It VOIDed on census, as registered: the router epilogue licensed 27
 of Granite's 32 routers (`failed_probe: 5` in the build log's fusion report, ON_epi and ON_auto alike).
 - **Everything else held on the real card:** OFF's census zero, no int4 store, decode-attention calls, decode-shaped
@@ -314,7 +314,7 @@ family refused.
 
 ## Amendment 2 (2026-10-09, after `fam-qw36-1`, before Qwen3.6's rerun)
 
-**What VOIDed.** `fam-qw36-1` ran on one RTX 5090 on an AMD EPYC 7763 host: Vast instance 54930776, launched
+**What VOIDed.** `fam-qw36-1` ran on one RTX 5090 on an AMD EPYC 7763 host: Vast instance redacted-ce0df48c, launched
 2026-10-08T23:33:38Z, torn down 2026-10-09T00:37:40Z, $1.639. Its OFF process scored wikitext at shape 1 (sets A,
 B and C), then died building the first shape-12 runner. e4b's `LinearStatePool.ensure_slots` refused: "the
 linear-state pool has 17 slots and a captured decode graph holds its tensors' addresses; growing it to 28 ...". No

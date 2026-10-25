@@ -1,9 +1,9 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3nativebest200; e4b 7c31b8887275517e1d65398c3cef89f9d324a634 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-36 instance 53971676 deadline 1791022040; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3nativebest200; e4b 7c31b8887275517e1d65398c3cef89f9d324a634 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-36 instance redacted-f93188c1 deadline 1791022040; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=12 (physical cores) box_class=RTX 5090
 [2026-10-03T05:38:24Z] tc1/boxA: driver 595.71.05: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 595.71.05 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-1038a52e-6a90-bf2d-1206-1f2e831e76d9, 500.00 W, 3105 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-redacted-6dc26652, 500.00 W, 3105 MHz
 CPU(s):                                  24
 Model name:                              AMD Ryzen 9 3900X 12-Core Processor
 MemTotal:       131810204 kB
@@ -98,7 +98,7 @@ QWEN3NATIVEBEST200 DONE
 | P14 | qwen3nativebest200 | **UNTESTED** | e4b draws fused_attn4_shipped_200 VOID / fused_attn4_shipped_200_d2 VOID: two VALID draws a side are registered |
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3nativebest200; e4b 7c31b8887275517e1d65398c3cef89f9d324a634 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-36 instance 53971676 deadline 1791022040; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3nativebest200; e4b 7c31b8887275517e1d65398c3cef89f9d324a634 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-36 instance redacted-f93188c1 deadline 1791022040; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=12 (physical cores) box_class=RTX 5090
 DRIVER 595.71.05 cu130_ok=1
 DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb

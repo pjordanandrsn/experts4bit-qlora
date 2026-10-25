@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 610.57.04, GPU-324c4806-62cd-d0b9-3803-0139fa529d9c, 575.00 W, 3090 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 610.57.04, GPU-redacted-a79155ec, 575.00 W, 3090 MHz
 CPU(s):                                  64
 Model name:                              AMD Eng Sample: 100-000000897-03
 MemTotal:       263621836 kB

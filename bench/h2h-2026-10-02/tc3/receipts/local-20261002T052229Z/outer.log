@@ -4,7 +4,7 @@ BOX A families: qwen3frontier12; e4b 516c87c0aa4253ed8ac6a683ee96fad69be58ba8 gn
 OMP_NUM_THREADS=6 (physical cores) box_class=RTX A2000
 [2026-10-02T05:22:29Z] tc1/boxA: driver 575.64.05: cu130 wheels need driver >= 580; host has 575.64.05 -- venv-unsloth (cu130) and venv-axolotl are NOT built; their arms are refused rows
 DRIVER 575.64.05 cu130_ok=0
-NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, GPU-01aa94f1-4004-9932-0b37-2051081a2a9d, 70.00 W, 2100 MHz
+NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, GPU-redacted-43b31b12, 70.00 W, 2100 MHz
 CPU(s):                               12
 Model name:                           Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
 MemTotal:       131757372 kB

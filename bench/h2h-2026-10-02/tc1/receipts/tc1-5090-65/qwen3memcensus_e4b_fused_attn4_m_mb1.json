@@ -106,7 +106,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-dde56602-7c7b-26f1-4e39-4e37817c97d7",
+   "uuid": "GPU-redacted-fe0b18b3",
    "pci.bus_id": "00000000:81:00.0",
    "pcie.link.gen.current": "1",
    "pcie.link.gen.max": "5",
@@ -120,7 +120,7 @@
    "cpu": "AMD EPYC 9454P 48-Core Emb Processor",
    "cpu_threads": 96,
    "host_mem_gib": 503.3,
-   "vast_instance_id": "54195008",
+   "vast_instance_id": "instance-redacted-d65d9419",
    "container_host": "16b54e775e08"
   },
   "anchor_json": null,

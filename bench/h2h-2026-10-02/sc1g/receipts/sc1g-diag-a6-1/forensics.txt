@@ -1,5 +1,5 @@
-GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-e09e7f6e-26fa-331c-d2d7-c286651008f5)
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-e09e7f6e-26fa-331c-d2d7-c286651008f5, 12.0, 4, 16, 4, 16
+GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-redacted-59cc580a)
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-redacted-59cc580a, 12.0, 4, 16, 4, 16
 power.limit,clocks.max.sm 600.00 W, 3135 MHz
 Vendor ID:                               AuthenticAMD
 Model name:                              AMD EPYC 7K62 48-Core Processor

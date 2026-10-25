@@ -1,6 +1,6 @@
 KNOBS model=allenai/OLMoE-1B-7B-0924 rev=6d84c48581ece794365f2b8e9cfb043c68ade9c5 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=A2000 min_disk_gb=50 calib_nseq=8 hessian_budget_gb=2 build_ppl_steps=64 build_via=step_decomp rows=4 skip_install=1
 REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
-NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, GPU-01aa94f1-4004-9932-0b37-2051081a2a9d
+NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, GPU-redacted-43b31b12
 power.limit,clocks.max.sm 70.00 W, 2100 MHz
 Model name:                           Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
                total        used        free      shared  buff/cache   available

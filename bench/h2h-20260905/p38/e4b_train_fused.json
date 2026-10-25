@@ -35,7 +35,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-a3575b56-527d-91e3-dc1d-623b49165706",
+   "uuid": "GPU-redacted-20c6bb07",
    "pci.bus_id": "00000000:01:00.0",
    "pcie.link.gen.current": "5",
    "pcie.link.gen.max": "5",
@@ -49,7 +49,7 @@
    "cpu": "Intel(R) Core(TM) i9-14900K",
    "cpu_threads": 32,
    "host_mem_gib": 188.6,
-   "vast_instance_id": "49975389",
+   "vast_instance_id": "instance-redacted-3572efe8",
    "container_host": "de4069ec5db6"
   },
   "anchor_json": null,

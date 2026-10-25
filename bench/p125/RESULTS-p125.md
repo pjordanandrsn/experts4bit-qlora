@@ -151,7 +151,7 @@ paired arms served the same weights.
 
 ### The reading (`p125-5090-2`)
 
-**Host:** one RTX 5090 (sm_120, driver 595.91.07, **power limit 470 W**, 32607 MiB), Vast instance 54971795, 24-thread
+**Host:** one RTX 5090 (sm_120, driver 595.91.07, **power limit 470 W**, 32607 MiB), Vast instance redacted-644679e6, 24-thread
 host.
 
 **Cost:** $0.968, 76 minutes from launch to teardown (05:35:19–06:51Z).

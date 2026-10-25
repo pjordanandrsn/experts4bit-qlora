@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 
 MODEL = "Qwen/Qwen3-30B-A3B"
-HW = ("RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52066091, AMD EPYC); the 5090 class carries "
+HW = ("RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance redacted-6924548d, AMD EPYC); the 5090 class carries "
       "~8.5% inter-box dispersion, so only same-box ratios are quoted")
 COND_COMMON = ("P42's census protocol (bench/p39/step_decomp.py): 512-token prompt, 128 generated, graph loop, 127 (B=1) / 70 (B=16) "
                "timed steps, fp8 paged KV, placement all-vram, --amort off; RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated "

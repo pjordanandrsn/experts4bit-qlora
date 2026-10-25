@@ -1,6 +1,6 @@
 # `fam-speed-1`: the router epilogue's speed on Qwen3.6-35B-A3B at one row (Amendment 4's reading)
 
-One RTX 5090 (cc 12.0, driver 580.126.09) on an AMD EPYC 7713 host (128 CPUs): Vast instance 54968853, launched
+One RTX 5090 (cc 12.0, driver 580.126.09) on an AMD EPYC 7713 host (128 CPUs): Vast instance redacted-92f857b2, launched
 2026-10-09T05:08:24Z, torn down 05:20:40Z. Cost $0.632. Code: e4b `48cfccaa` (Amendment 4's merge, #1436),
 grouped-nf4-gemm 0.43.0 (`6ee2e10`).
 

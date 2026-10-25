@@ -1,4 +1,4 @@
-instance 48735368 (vast, RTX 5090, ~$0.47/hr class), rented 2026-08-26
+instance redacted-14266d2f (vast, RTX 5090, ~$0.47/hr class), rented 2026-08-26
 00:45 CDT, destroyed 2026-08-26 ~01:50 CDT (verified by-id null AND
 list 0). NUMA gate G0: 73.3% of triad -> PROCEED. triad 1569.4 GB/s,
 h2d 28.36 / d2h 28.29 GB/s, NVMe seq 7.41 GB/s (o_direct). Anchor

@@ -11,7 +11,7 @@ at the end of this file. -->
 
 Adjudicated 2026-08-26 by `tr2_verdict.py` (amended A/A gate,
 self-tests green) on `receipts-tr2/tr2_report.json`. Box: RTX 5090 +
-EPYC 9654, instance 48709950 (serving anchor probe 7.25 ms — the
+EPYC 9654, instance redacted-e66f5134 (serving anchor probe 7.25 ms — the
 post-F2 class). Recipe as registered: the TR1 subject verbatim,
 TOKEN_BUDGET pinned 1024.
 

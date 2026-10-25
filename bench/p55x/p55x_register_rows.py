@@ -140,7 +140,7 @@ def build(run: Path, *, date: str, receipt_dir: str) -> list[dict]:
         "package": "experts4bit-qlora", "area": "serve",
         "claim": (f"The streamed 64k pack reproduces BYTE-for-byte across boxes and across a release "
                   f"boundary: this build's pack_fingerprint {fp} equals the one lane P39 recorded on "
-                  f"2026-09-10 on a different rented 5090 (instance 50509727) under e4b 0.35.3, where this "
+                  f"2026-09-10 on a different rented 5090 (instance redacted-9fee6af0) under e4b 0.35.3, where this "
                   f"ran under 0.36.4. P37's divergence (11522/766) is therefore an outlier, not the rule."),
         "value": 1.0, "unit": "identical pack_fingerprint across two boxes and two e4b releases",
         "model": MODEL, "hardware": HW,

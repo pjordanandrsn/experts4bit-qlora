@@ -1,6 +1,6 @@
 # `fam-mixtral-prove-1`: Mixtral's own proof, first attempt (NOT PROVED: out of GPU memory)
 
-One RTX 5090 (cc 12.0, driver 595.71.05) on an Intel Xeon E5-2699 v3 host (72 CPUs): Vast instance 55040837,
+One RTX 5090 (cc 12.0, driver 595.71.05) on an Intel Xeon E5-2699 v3 host (72 CPUs): Vast instance redacted-2404104a,
 launched 2026-10-09T14:51:19Z, torn down 15:31:22Z. Cost $1.115. Code: e4b `f0f8e2d7` (Amendment 5's merge, #1457),
 grouped-nf4-gemm 0.43.0 (`6ee2e10`).
 

@@ -1,7 +1,7 @@
 # `p148-5090-2`: the dense bf16 decode GEMVs microbench (D1_GO+D2_GO)
 
 One RTX 5090 (cc 12.0, 170 SMs, driver 575.64.03, a **400 W** power limit) on an AMD Ryzen Threadripper PRO 7975WX
-host (64 CPUs): Vast instance 56682743 on machine 40521, 2026-10-19T06:18:28Z to 06:21:57Z. Cost $0.025. Code: e4b
+host (64 CPUs): Vast instance redacted-c6acf51a on machine 40521, 2026-10-19T06:18:28Z to 06:21:57Z. Cost $0.025. Code: e4b
 `caf5a28c` (the registration's merge, #1796), grouped-nf4-gemm 0.47.1 (`38b30888`); torch 2.8.0+cu128, triton 3.4.0.
 No model. [`p148-5090-1`](../p148-5090-1/README.md) was refused at create ($0), so this read ran under the registered
 pre-create spare.

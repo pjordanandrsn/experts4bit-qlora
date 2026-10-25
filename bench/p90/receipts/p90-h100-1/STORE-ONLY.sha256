@@ -4,3 +4,10 @@
 # Kept in the private receipt store, not committed here: the *.log ignore rule; carries carriage returns.
 fd47f6999ef8d44125a7472433121cfb733d63a5c73077cff58fcfe1e13d1f09  logs/kl_off.log
 fe4a8019a7b5fa93fb07a6616b9a3954826ce05df6f112dda503210aa20f2949  logs/kl_on.log
+# Originals of files this receipt carries with rented-hardware identifiers replaced by keyed tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p90/receipts/p90-h100-1/forensics.txt at 605d21e67958
+0bef96995e177122f419d5c9be0fdb1b873e5ae5beca212ab5c8befb21beb868  forensics.txt
+# same bytes: bench/p90/receipts/p90-h100-1/teardown-proof.json at 605d21e67958
+65526ff308d51fcd649549a68e2a7d24a38e87358a3bcf90ab78ad049806407a  teardown-proof.json

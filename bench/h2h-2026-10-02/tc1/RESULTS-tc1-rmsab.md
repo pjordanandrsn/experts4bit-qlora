@@ -1,6 +1,6 @@
 # TC1 amendment 15 read (#945): e4b's fused training RMSNorm makes the step 4–8 % faster on a 5090, held-out unchanged — P24, P25 and P26 HELD
 
-**Box:** `tc1-5090-45` (instance 54018669, AMD EPYC 7663, RTX 5090, driver 580.95.05, $0.39; receipts in
+**Box:** `tc1-5090-45` (instance redacted-e5aba8ce, AMD EPYC 7663, RTX 5090, driver 580.95.05, $0.39; receipts in
 [`receipts/tc1-5090-45/`](receipts/tc1-5090-45/)). The code was e4b `aba67ea` (#961, #965) and grouped-nf4-gemm `00929a4` (#442, the cost
 tile rule as default). Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 15. (`tc1-5090-44`, the first
 launch, ended HARNESS_ERROR at $0.0004 before its command ran: the guard's Vast auth probe got one HTTP 429. adertha-agents#138 now

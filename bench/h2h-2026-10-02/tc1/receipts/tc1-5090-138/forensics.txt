@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-494cdfeb-50c8-6125-8057-47b0bd8d9c74, 575.00 W, 3090 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-redacted-30300270, 575.00 W, 3090 MHz
 CPU(s):                                  96
 Model name:                              AMD EPYC 7K62 48-Core Processor
 MemTotal:       527994556 kB

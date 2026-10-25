@@ -1,6 +1,6 @@
 # Build-out validation lane bo5 — 2026-09-04, one RTX 5090: the second text and the optimisation pass
 
-**Box:** Vast.ai instance 49841214, RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host (see
+**Box:** Vast.ai instance redacted-d07636f1, RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host (see
 [`forensics.txt`](forensics.txt)); transformers 5.16.1, bitsandbytes 0.50.1 (the lane script's pins).
 **When:** 2026-09-04 08:5x–12:33Z. Per [`logs/outer.log`](logs/outer.log): install 09:17:25Z, first arm
 09:19Z, phase bo5 `TP_DONE` 11:11:35Z, bo5b `TP2_DONE` 11:57:05Z, bo5c `TP3_DONE` 12:32:06Z.

@@ -6,7 +6,7 @@
   "complete": true,
   "started_at": "2026-10-08T23:04:20Z",
   "finished_at": "2026-10-08T23:12:43Z",
-  "instance_id": "54926784",
+  "instance_id": "instance-redacted-f14e5717",
   "cost_usd": {
     "actual": 0.097,
     "estimated": 2.8
@@ -15,7 +15,7 @@
     "at": "2026-10-08T23:12:43Z",
     "complete": true,
     "evidence": "{\"destroy\": {\"at\": \"2026-10-08T23:12:42Z\", \"http\": 200, \"instance_id\": \"54926784\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": [\"54927731\"]}",
-    "instance_id": "54926784",
+    "instance_id": "instance-redacted-f14e5717",
     "method": "vast-destroy",
     "reason": "completion"
   },

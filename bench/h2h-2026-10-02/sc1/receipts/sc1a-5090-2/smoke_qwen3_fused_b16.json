@@ -73,7 +73,7 @@
  },
  "pack_fingerprint": null,
  "fusion_set": "fused q/k/v WITH the env-gated folds (fuse_qkv applies them itself; the registered set)",
- "vast_instance_id": "53918541",
+ "vast_instance_id": "instance-redacted-e47a4f55",
  "mode": "smoke",
  "status": "ok",
  "e4b_version": "0.40.0",

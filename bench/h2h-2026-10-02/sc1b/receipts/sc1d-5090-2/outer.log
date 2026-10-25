@@ -1,5 +1,5 @@
 KNOBS box=D e4b=77469c19d15a983607efbeec198dc227604112cb gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=0
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-1005bc9b-09da-8d2e-750d-538c74d1c107, 12.0, 1, 16, 4, 16
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-redacted-ba7173cf, 12.0, 1, 16, 4, 16
 power.limit,clocks.max.sm 400.00 W, 3090 MHz
 Vendor ID:                               AuthenticAMD
 Model name:                              AMD EPYC 7C13 64-Core Processor

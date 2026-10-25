@@ -1,6 +1,6 @@
 # `fam-prove-1`: the proving rental (not a reading)
 
-One RTX 5090 (cc 12.0, driver 595.71.05) on an AMD EPYC 7C13 host: Vast instance 54917126, launched
+One RTX 5090 (cc 12.0, driver 595.71.05) on an AMD EPYC 7C13 host: Vast instance redacted-39cfc8f1, launched
 2026-10-08T21:48:57Z, lane done 22:17:44Z, torn down 22:17:45Z. Cost $0.423. Code: e4b `9629874f` (the #1380 merge),
 grouped-nf4-gemm 0.43.0 (`6ee2e10`), torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0. Granite-3.1-3b-a800m at
 32 teacher-forced positions, every cell.

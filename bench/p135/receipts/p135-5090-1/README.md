@@ -1,6 +1,6 @@
 # `p135-5090-1`: the first attempt (HARNESS_ERROR at the premise; strike 1)
 
-One RTX 5090 (cc 12.0, driver 595.71.05) on an Intel Xeon Gold 6240 host (36 CPUs): Vast instance 56533924, launched
+One RTX 5090 (cc 12.0, driver 595.71.05) on an Intel Xeon Gold 6240 host (36 CPUs): Vast instance redacted-12702c3e, launched
 2026-10-18T09:54:48Z, torn down 09:58:05Z. Cost $0.038. Code: e4b `7a3e048f` (the registration's merge, #1732),
 grouped-nf4-gemm 0.45.0 (`724ccc45`).
 

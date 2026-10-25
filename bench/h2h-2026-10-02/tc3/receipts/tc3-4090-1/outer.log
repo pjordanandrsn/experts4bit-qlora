@@ -1,10 +1,10 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
 FIXTURE frontier (TC3): the field recipe, matched init, fp32 adapters on a memory-frontier box (class 4090); levers: e4b --offload 1, hf --hf-offload 1 (device_map auto + max_memory), axolotl --axolotl-layer-offload 1 / --axolotl-zero3 1; local_box=0 snapshot=<fetched>
-BOX A families: qwen3frontier; e4b ff1af2dca1ad03814db5513d586aadf5cd6adba2 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc3-4090-1 instance 53804549 deadline 1790933719; prereg tc1/TC3-PREREG.md
+BOX A families: qwen3frontier; e4b ff1af2dca1ad03814db5513d586aadf5cd6adba2 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc3-4090-1 instance redacted-7ed1dc90 deadline 1790933719; prereg tc1/TC3-PREREG.md
 OMP_NUM_THREADS=64 (physical cores) box_class=RTX 4090
 [2026-10-02T04:38:10Z] tc1/boxA: driver 595.84: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 595.84 cu130_ok=1
-NVIDIA GeForce RTX 4090, 24564 MiB, 595.84, GPU-956b55e4-9619-e56b-e05b-1c184db23446, 450.00 W, 3105 MHz
+NVIDIA GeForce RTX 4090, 24564 MiB, 595.84, GPU-redacted-c0b51584, 450.00 W, 3105 MHz
 CPU(s):                                  128
 Model name:                              AMD EPYC 7B13 64-Core Processor
 MemTotal:       527974204 kB
@@ -131,7 +131,7 @@ QWEN3FRONTIER DONE
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
 FIXTURE frontier (TC3): the field recipe, matched init, fp32 adapters on a memory-frontier box (class 4090); levers: e4b --offload 1, hf --hf-offload 1 (device_map auto + max_memory), axolotl --axolotl-layer-offload 1 / --axolotl-zero3 1; local_box=0 snapshot=<fetched>
-BOX A families: qwen3frontier; e4b ff1af2dca1ad03814db5513d586aadf5cd6adba2 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc3-4090-1 instance 53804549 deadline 1790933719; prereg tc1/TC3-PREREG.md
+BOX A families: qwen3frontier; e4b ff1af2dca1ad03814db5513d586aadf5cd6adba2 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc3-4090-1 instance redacted-7ed1dc90 deadline 1790933719; prereg tc1/TC3-PREREG.md
 OMP_NUM_THREADS=64 (physical cores) box_class=RTX 4090
 DRIVER 595.84 cu130_ok=1
 AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType

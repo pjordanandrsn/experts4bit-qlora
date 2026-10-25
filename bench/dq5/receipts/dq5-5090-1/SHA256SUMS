@@ -20,4 +20,4 @@ c232545a287a9ae89e0de71536c861bf71b7ca3e6dbd3a95a41718ad8338a224  ./logs/reduce_
 dfd3bafe49dae3999967f94d3c6e232cf72b04f9ce1a9541995ef8dca5d1eeea  ./logs/tripwire.log
 7ef437f4f88e0974e93debe39b1a112cdaca444b863eff8f332860d9863d9043  ./logs/vram_probe.log
 7a78539c0f77b401b024aa52185e9328fac6ece1fae1b9924912a88485cf6075  ./summary.txt
-12c3f747295036d48bdc17da8618eea43ec4dbd02e7df9e466c22a807ce982f5  ./teardown-proof.json
+5045cb3b0bf2e5bd672f901fbfb3e92552a466928bf61e8fdb13ff08185fe7f8  ./teardown-proof.json

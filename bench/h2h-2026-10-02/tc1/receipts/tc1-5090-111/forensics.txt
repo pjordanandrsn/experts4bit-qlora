@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-1baa5616-9f2b-8087-48c7-4aea735d7f39, 600.00 W, 3210 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-redacted-5eb14cca, 600.00 W, 3210 MHz
 CPU(s):                                  48
 Model name:                              AMD Ryzen Threadripper PRO 7965WX 24-Cores
 MemTotal:       263402624 kB

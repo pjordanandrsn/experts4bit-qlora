@@ -1,0 +1,11 @@
+# Files of this receipt kept only in the private receipt store, byte-exact: sha256, then the path
+# within this receipt.
+# Originals of files this receipt carries with rented-hardware identifiers replaced by keyed tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/vsplit/receipts/vsplit-5090-3/card.json at 605d21e67958
+f5f358aac8e75f38a3c36704d0b3082dd0e2941f904cc49781571a640b76766c  card.json
+# same bytes: bench/vsplit/receipts/vsplit-5090-3/forensics.txt at 605d21e67958
+cc3c8537877b4cc760ff41da00ec1c0edf93054ee68abe6a77ee1c57b8391ba4  forensics.txt
+# same bytes: bench/vsplit/receipts/vsplit-5090-3/summary.txt at 605d21e67958
+4cc387aa0e24619e328d00e771eddfdfd27c092e6e965f4d85616f817e9832c1  summary.txt

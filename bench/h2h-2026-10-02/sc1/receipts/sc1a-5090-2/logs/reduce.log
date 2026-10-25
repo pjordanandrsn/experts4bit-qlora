@@ -20,7 +20,7 @@ gpu NVIDIA GeForce RTX 5090
 nvidia-smi 580.95.05, NVIDIA GeForce RTX 5090, 32607 MiB, 600.00 W, 3210 MHz
 python(vllm) 3.11.13
 ```
-box: GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-5f46ba71-1679-f4de-6f90-b53c5dbaf4d3) | NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-5f46ba71-1679-f4de-6f90-b53c5dbaf4d3, 12.0, 1, 16, 4, 16 | power.limit,clocks.max.sm 600.00 W, 3210 MHz | Vendor ID:                               AuthenticAMD | Model name:                              AMD EPYC 7663 56-Core Processor | nproc 224 | cgroup cpu.max 3071999 100000  memory.max 294412877824 | loadavg 4.46 9.38 11.28 5/3916 633 | total        used        free      shared  buff/cache   available | Mem:             755          44         510           0
+box: GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-redacted-ac8918fd) | NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-redacted-ac8918fd, 12.0, 1, 16, 4, 16 | power.limit,clocks.max.sm 600.00 W, 3210 MHz | Vendor ID:                               AuthenticAMD | Model name:                              AMD EPYC 7663 56-Core Processor | nproc 224 | cgroup cpu.max 3071999 100000  memory.max 294412877824 | loadavg 4.46 9.38 11.28 5/3916 633 | total        used        free      shared  buff/cache   available | Mem:             755          44         510           0
 
 ## 1. Arms (speed verdict per draw, VOID reason = the pre-registered engagement rule that failed)
 | engine | arm | B | draw | verdict | tok/s | ms/step | why / note |

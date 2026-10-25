@@ -3,7 +3,7 @@
 Registered in `bench/sv1/SV1-PREREG.md` (#1153) before the box; work item #1152.
 
 **The run.**
-- One RTX 5090: Vast instance 54316730, driver 595.84, AMD EPYC 7B13.
+- One RTX 5090: Vast instance redacted-9c12d18f, driver 595.84, AMD EPYC 7B13.
 - **$1.496**; teardown proven (destroy HTTP 200, instance absent from the list after).
 - experts4bit-qlora `547599b` (#1153's head, 0.48.0) with grouped-nf4-gemm 0.41.0 (`dc8f94a`), torch 2.8.0+cu128.
 - Arenas baked on the box: OLMoE in 47 s, Qwen3-30B-A3B (16.3 GB) in 260 s.

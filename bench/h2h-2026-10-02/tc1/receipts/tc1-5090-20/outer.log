@@ -1,9 +1,9 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3axolotl; e4b 09b0f6a6586d755dccad3550f68ae1b2e57773ad gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-20 instance 53812706 deadline 1790930871; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3axolotl; e4b 09b0f6a6586d755dccad3550f68ae1b2e57773ad gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-20 instance redacted-7a7f26e8 deadline 1790930871; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=56 (physical cores) box_class=RTX 5090
 [2026-10-02T05:53:28Z] tc1/boxA: driver 595.71.05: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 595.71.05 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-c67fd823-e3ff-6375-1f96-c710b71ab383, 575.00 W, 3135 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-redacted-97fcef3c, 575.00 W, 3135 MHz
 CPU(s):                                  112
 Model name:                              AMD EPYC 7663 56-Core Processor
 MemTotal:       263686464 kB
@@ -99,7 +99,7 @@ QWEN3AXOLOTL DONE
 | P10 | qwen3 | **UNTESTED** | no receipts |
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3axolotl; e4b 09b0f6a6586d755dccad3550f68ae1b2e57773ad gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-20 instance 53812706 deadline 1790930871; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3axolotl; e4b 09b0f6a6586d755dccad3550f68ae1b2e57773ad gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-20 instance redacted-7a7f26e8 deadline 1790930871; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=56 (physical cores) box_class=RTX 5090
 DRIVER 595.71.05 cu130_ok=1
 DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb

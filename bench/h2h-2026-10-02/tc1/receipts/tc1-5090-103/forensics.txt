@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 590.48.01, GPU-064cc20b-68e5-468e-d0fd-b969a6c67e86, 575.00 W, 3105 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 590.48.01, GPU-redacted-f0c3ccd4, 575.00 W, 3105 MHz
 CPU(s):                                  128
 Model name:                              AMD Ryzen Threadripper 3990X 64-Core Processor
 MemTotal:       263750200 kB

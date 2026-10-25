@@ -8,7 +8,7 @@ data, with the results known. Per #1243's "What this file licenses", these readi
 reducer and **license no change** in this package or in the planner. The dated timeline is in `SV5-PREREG.md`.
 
 **The run.**
-- One RTX 4090 (sm_89): Vast instance 54433406 on machine 149142 (the same machine as `sv4-4090-1`). Driver 595.84,
+- One RTX 4090 (sm_89): Vast instance redacted-edd022fb on machine 149142 (the same machine as `sv4-4090-1`). Driver 595.84,
   Intel i9-10980XE, 125 GB RAM, 320 GB disk.
 - **$0.128**; teardown proven (instance gone).
 - experts4bit-qlora `f49006f5` (#1243's first commit, 0.48.0; not on main), grouped-nf4-gemm 0.41.0 (`dc8f94a`),

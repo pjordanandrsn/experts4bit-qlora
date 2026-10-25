@@ -39,7 +39,7 @@ rule for pre-flight refusals, which measure nothing.
 
 ## The reading (`p124-5090-4`)
 
-**Host:** one RTX 5090 (sm_120, driver 595.84) on an AMD EPYC 7B13 (256 threads), Vast instance 54950831.
+**Host:** one RTX 5090 (sm_120, driver 595.84) on an AMD EPYC 7B13 (256 threads), Vast instance redacted-67112ae1.
 
 **Cost:** $0.787. Teardown proven at 02:47:07Z.
 
@@ -131,7 +131,7 @@ deterministic):
 
 ## Attempt 1 (`p124-5090-1`): NOISY (decides nothing; kept as the amendment's evidence)
 
-**Host:** one RTX 5090 (sm_120, driver 595.91.07) on an AMD EPYC 7763 (256 threads), Vast instance 54939679.
+**Host:** one RTX 5090 (sm_120, driver 595.91.07) on an AMD EPYC 7763 (256 threads), Vast instance redacted-b65ac130.
 
 **Cost:** $1.003, $0.655 of it the 62.9 GB fetch. Teardown proven at 01:07:58Z.
 

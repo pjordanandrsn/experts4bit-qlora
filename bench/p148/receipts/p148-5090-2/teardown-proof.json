@@ -3,6 +3,6 @@
   "reason": "completion",
   "evidence": "{\"destroy\": {\"at\": \"2026-10-19T06:21:56Z\", \"http\": 200, \"instance_id\": \"56682743\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": []}",
   "complete": true,
-  "instance_id": "56682743",
+  "instance_id": "instance-redacted-c6acf51a",
   "at": "2026-10-19T06:21:56Z"
 }

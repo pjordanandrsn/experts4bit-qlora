@@ -147,7 +147,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-064cc20b-68e5-468e-d0fd-b969a6c67e86",
+   "uuid": "GPU-redacted-f0c3ccd4",
    "pci.bus_id": "00000000:4C:00.0",
    "pcie.link.gen.current": "2",
    "pcie.link.gen.max": "4",
@@ -161,7 +161,7 @@
    "cpu": "AMD Ryzen Threadripper 3990X 64-Core Processor",
    "cpu_threads": 128,
    "host_mem_gib": 251.5,
-   "vast_instance_id": "54449986",
+   "vast_instance_id": "instance-redacted-c36ed4b9",
    "container_host": "c2644294b965"
   },
   "anchor_json": null,

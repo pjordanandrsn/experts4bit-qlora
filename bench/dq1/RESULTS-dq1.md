@@ -6,7 +6,7 @@ Pre-registration: [DQ1-PREREG.md](DQ1-PREREG.md). Work item: #1083.
 
 | | |
 |---|---|
-| box | RTX 5090 (driver 595.71.05, PCIe gen max 4, width 16), AMD EPYC 7C13, Vast verified-secure, instance 54242398 |
+| box | RTX 5090 (driver 595.71.05, PCIe gen max 4, width 16), AMD EPYC 7C13, Vast verified-secure, instance redacted-0b071d35 |
 | software | torch 2.8.0+cu128, CUDA 12.8, triton 3.4, bitsandbytes 0.50.2, grouped-nf4-gemm 0.39.0 `a5edec87` (tripwire) |
 | launch | e4b `5ed6ba45` (#1084's merge), adertha `abb8b907`, `bench/tc1/tc1_drive.sh` + `dq1_run.sh` |
 | cost / wall | $0.067 actual (receipt `cost_usd.actual`); allocation 03:05:19Z → destroy 03:11:00Z; census ≈ 3 min |

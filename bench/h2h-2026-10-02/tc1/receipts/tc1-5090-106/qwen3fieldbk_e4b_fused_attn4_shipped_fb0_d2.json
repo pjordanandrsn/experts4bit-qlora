@@ -147,7 +147,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-9728d444-d85e-e57f-e278-db8027f309be",
+   "uuid": "GPU-redacted-b433cebe",
    "pci.bus_id": "00000000:C3:00.0",
    "pcie.link.gen.current": "2",
    "pcie.link.gen.max": "4",
@@ -161,7 +161,7 @@
    "cpu": "Intel(R) Xeon(R) Platinum 8347C CPU @ 2.10GHz",
    "cpu_threads": 72,
    "host_mem_gib": 251.3,
-   "vast_instance_id": "54460139",
+   "vast_instance_id": "instance-redacted-08941841",
    "container_host": "75e93dc939ca"
   },
   "anchor_json": null,

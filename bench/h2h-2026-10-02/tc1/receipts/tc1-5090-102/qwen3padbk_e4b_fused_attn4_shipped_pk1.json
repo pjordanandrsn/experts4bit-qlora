@@ -127,7 +127,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-4317bd77-064e-9ba3-0fd2-0b70602592f7",
+   "uuid": "GPU-redacted-fcb12f5a",
    "pci.bus_id": "00000000:65:00.0",
    "pcie.link.gen.current": "2",
    "pcie.link.gen.max": "3",
@@ -141,7 +141,7 @@
    "cpu": "Intel(R) Xeon(R) W-2145 CPU @ 3.70GHz",
    "cpu_threads": 16,
    "host_mem_gib": 125.5,
-   "vast_instance_id": "54437423",
+   "vast_instance_id": "instance-redacted-6149d94a",
    "container_host": "e80889b4a2de"
   },
   "anchor_json": null,

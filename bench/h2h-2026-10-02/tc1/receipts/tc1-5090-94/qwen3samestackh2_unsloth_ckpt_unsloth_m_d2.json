@@ -174,7 +174,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-4454abfd-89c7-bd6e-517c-bd9f4f379a4f",
+   "uuid": "GPU-redacted-071ddf03",
    "pci.bus_id": "00000000:01:00.0",
    "pcie.link.gen.current": "2",
    "pcie.link.gen.max": "4",
@@ -188,7 +188,7 @@
    "cpu": "AMD EPYC 7K62 48-Core Processor",
    "cpu_threads": 96,
    "host_mem_gib": 503.5,
-   "vast_instance_id": "54328898",
+   "vast_instance_id": "instance-redacted-79fb8493",
    "container_host": "c8845f0930e7"
   },
   "anchor_json": null,

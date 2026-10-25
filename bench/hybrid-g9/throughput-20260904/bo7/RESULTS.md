@@ -72,7 +72,7 @@ Ratios are to `nf4` on this box (NF4 experts, bf16 attention, no folds (this lan
 Instrument (Mixtral-8x7B-Instruct, from the B=1 receipts' `mech` tallies, counted at warmup + graph capture): decode-attention compute path {"f32": 0, "fp8": 128}; NF4 GEMV dispatch `all` none (int4 / MXFP4 path), `folds` {'scalar': 128, 'scalar_splitk': 128}, `lic` none (int4 / MXFP4 path), `nf4` {'scalar': 128, 'scalar_splitk': 128}.
 
 ### Licensed best per family -- the three axes (rule 3)
-Ratio = the family's own NF4 arm on this box; tok/s = rental-measured on this box (one RTX 5090, driver 595.84, on an AMD EPYC 7Q83 host, Vast.ai instance 49916675); the anchor-class projection is `159.2 tok/s x the B=1 ratio` and exists ONLY for Qwen3-30B-A3B at B=1 (the anchor class was never certified: 12 refusals) -- every other cell says so.
+Ratio = the family's own NF4 arm on this box; tok/s = rental-measured on this box (one RTX 5090, driver 595.84, on an AMD EPYC 7Q83 host, Vast.ai instance redacted-7122c32f); the anchor-class projection is `159.2 tok/s x the B=1 ratio` and exists ONLY for Qwen3-30B-A3B at B=1 (the anchor class was never certified: 12 refusals) -- every other cell says so.
 | family | licensed configuration | licence basis (register) | ×NF4 (B=1) | B=1 tok/s (this box) | anchor-class projection (B=1) | ×NF4 (B=16) | B=16 tok/s (this box) | anchor (B=16) |
 |---|---|---|---|---|---|---|---|---|
 | Granite-3.1-3B-A800M | `r12epi` -- NF4 experts + round-1 + round-2 (rotary-only) folds + router epilogue | K8 verdict: +0.019 ppl wikitext, pass (`e4b.serve.buildout.granite.b1.5090.2026-09-04`) | 1.341 | 304.9 | no anchor projection (no anchor-class measurement exists for this family) | 1.160 | 1836.8 | no anchor projection (B=16 has no anchor-class measurement) |
@@ -106,7 +106,7 @@ console line. Every receipt carries `fuse_qkv: false` and `recompiles_in_window:
 - **Granite-3.1-3B-A800M — the licensed stack `r12epi` (NF4 experts + round-1/2 folds with the rotary-only fold + router
   epilogue) is ×1.341 at B=1 (4.40 → 3.28 ms, 304.9 tok/s) and ×1.160 at B=16 (1583.2 → 1836.8 tok/s) over NF4 on this
   box.** The register's K8 verdict for that stack is +0.019 ppl on wikitext, pass (bo3). Beside it, with their boxes and
-  never divided into these: bo3 259.1 / 1689.6 on instance 49817195 and bo5 294.1 / 1736.1 on 49841214, both EPYC 9755
+  never divided into these: bo3 259.1 / 1689.6 on instance redacted-35155879 and bo5 294.1 / 1736.1 on 49841214, both EPYC 9755
   hosts. The two int4-expert arms are measured and refused: RTN `int4_r12epi` ×2.146 / ×2.094 (+0.063 ppl, FAIL;
   retracted in #381) and calibrated `calibexp_r12epi` ×2.157 / ×2.093 (c4val1 +0.387 ppl, FAIL, bo5). The calibrated
   pack is speed-identical to RTN (2.04 vs 2.05 ms; 3313.8 vs 3315.0 tok/s), as it must be — same kernel, same bytes,
@@ -158,7 +158,7 @@ console line. Every receipt carries `fuse_qkv: false` and `recompiles_in_window:
   #344 fault (bake 05:44–05:57Z). The register's quoted best, `int4_r1epi` (bo3's `stack`: RTN int4 experts + round-1 fold
   + epilogue), reads ×1.705 at B=1 (7.25 ms = 137.9 tok/s) and ×1.697 at B=16 (1037.4) — measured, no quality verdict
   (its claim text says "licensed configuration", its notes "NO quality instrument"; the census reads the notes); beside,
-  its box only: bo3's 121.1 / 962.8 (×1.69 / ×1.68) on instance 49817195 — the same shape, cited, not divided.
+  its box only: bo3's 121.1 / 962.8 (×1.69 / ×1.68) on instance redacted-35155879 — the same shape, cited, not divided.
   Calibrated int4 attention on top of `r1epi` (`calattn_r1epi`, 115 projections) reads ×1.398 / ×1.120 — ×1.092 at B=1
   over `r1epi` and ×1.013 at B=16 — measured, no quality verdict (an unreadable K8 on this family). Round 2 refuses by
   design on this family and was not run. Instrument: decode-attention compute `fp8` (120), NF4 GEMV dispatch scalar (240).

@@ -3,7 +3,7 @@
 ## 250 tok/s stays OPEN, through exactly one door.
 
 Measured 2026-08-26 under PREREG-sv2-device-census. Receipts in
-`receipts-sv2/` (instance 48735368: RTX 5090, gnf4 `1384feb` + e4b
+`receipts-sv2/` (instance redacted-14266d2f: RTX 5090, gnf4 `1384feb` + e4b
 `d5e530f`; destroyed, vast zero, by-id and list both checked).
 
 ```

@@ -1,5 +1,5 @@
 MODE full
-NVIDIA GeForce RTX 5090, 32607 MiB, 32110 MiB, 580.95.05, GPU-d321d32d-c03d-b266-a033-cddcb4447116
+NVIDIA GeForce RTX 5090, 32607 MiB, 32110 MiB, 580.95.05, GPU-redacted-766eb200
 power,clock,pcie gen cur,max,width cur,max: 600.00 W, 3135 MHz, 1, 4, 16, 16
 CPU(s):                                  256
 Model name:                              AMD EPYC 7C13 64-Core Processor

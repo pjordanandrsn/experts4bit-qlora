@@ -22,7 +22,7 @@ Code under test:
 
 ## The reading (`p135-5090-2`)
 
-**Host:** one RTX 5090 (sm_120, driver 580.95.05) on an AMD EPYC 7742 (128 CPUs, 251 GiB RAM), Vast instance 56547516.
+**Host:** one RTX 5090 (sm_120, driver 580.95.05) on an AMD EPYC 7742 (128 CPUs, 251 GiB RAM), Vast instance redacted-6331693d.
 **Cost:** $1.159. Teardown proven at 12:20:22Z.
 
 **Timeline:** the lane started 11:59:51Z; the premise passed (35, none skipped) at 12:02:15Z; the fetch ran until

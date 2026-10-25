@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-6d59522f-af97-d57b-8cbf-894bd0399fb6
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-redacted-7dcfc498
 power.limit,clocks.max.sm 450.00 W, 3120 MHz
 Model name:                              Intel(R) Xeon(R) Platinum 8347C CPU @ 2.10GHz
                total        used        free      shared  buff/cache   available

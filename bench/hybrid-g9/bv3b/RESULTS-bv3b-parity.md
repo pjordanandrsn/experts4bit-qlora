@@ -2,7 +2,7 @@
 
 Adjudicated 2026-08-26 by `bv3b_verdict.py` (amended degeneracy
 handling, self-tests green) on `receipts-bv3b/bv3v2_report.json`.
-Boxes: parity + floor on instance 48728047 (anchor 7.27 ms); the v2
+Boxes: parity + floor on instance redacted-d2807b1f (anchor 7.27 ms); the v2
 wall arms on the same box.
 
 ## VERDICT: PASS — the batched graph loop ships

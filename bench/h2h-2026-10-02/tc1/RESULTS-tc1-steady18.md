@@ -8,8 +8,8 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
 
 | box | machine | host | how the machine was chosen | cost |
 |---|---|---|---|---|
-| `tc1-5090-47` (amendment 17) | 142284, **the same as -46** | AMD EPYC 7663, instance 54037643 | launcher preference off; 142284 was still the cheapest RTX 5090 | $0.98 |
-| `tc1-5090-48` (amendment 18) | **150527** | AMD EPYC 7C13, instance 54051454, driver 580.95.05 | 142284 left out by evidence: `avoid_vast_machine_receipts` cites -46's receipt (adertha-agents#139); the receipt records the exclusion | $1.23 |
+| `tc1-5090-47` (amendment 17) | 142284, **the same as -46** | AMD EPYC 7663, instance redacted-4ff9376b | launcher preference off; 142284 was still the cheapest RTX 5090 | $0.98 |
+| `tc1-5090-48` (amendment 18) | **150527** | AMD EPYC 7C13, instance redacted-672a4432, driver 580.95.05 | 142284 left out by evidence: `avoid_vast_machine_receipts` cites -46's receipt (the control plane's issue #139); the receipt records the exclusion | $1.23 |
 
 ## Readings, steps 101..200 (s/step, late-window medians)
 

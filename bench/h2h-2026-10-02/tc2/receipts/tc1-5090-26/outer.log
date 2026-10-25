@@ -1,10 +1,10 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
 FIXTURE tc2 (TC2-PREREG-draft): small (box A: granite olmoe gptoss): steps=60 eval_every=20 eval_n=48; big (box B: qwen3_5 mixtral): the field recipe (steps=20 eval_every=20 eval_n=8)
-BOX B families: tc2mixtral; e4b 0933d4e20b3adff6fea9c4f9ac0e5c37d25b338e gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-26 instance 53859501 deadline 1790966302; prereg tc1/TC2-PREREG.md
+BOX B families: tc2mixtral; e4b 0933d4e20b3adff6fea9c4f9ac0e5c37d25b338e gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-26 instance redacted-dbf26df9 deadline 1790966302; prereg tc1/TC2-PREREG.md
 OMP_NUM_THREADS=128 (physical cores) box_class=RTX 5090
 [2026-10-02T12:39:18Z] tc1/boxB: driver 595.71.05: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 595.71.05 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-cbe76186-6871-73c3-f406-8319105d58e5, 450.00 W, 3090 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-redacted-98ad5dbc, 450.00 W, 3090 MHz
 CPU(s):                                  256
 Model name:                              AMD EPYC 7C13 64-Core Processor
 MemTotal:       1056596464 kB
@@ -117,7 +117,7 @@ MIXTRAL DONE
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
 FIXTURE tc2 (TC2-PREREG-draft): small (box A: granite olmoe gptoss): steps=60 eval_every=20 eval_n=48; big (box B: qwen3_5 mixtral): the field recipe (steps=20 eval_every=20 eval_n=8)
-BOX B families: tc2mixtral; e4b 0933d4e20b3adff6fea9c4f9ac0e5c37d25b338e gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-26 instance 53859501 deadline 1790966302; prereg tc1/TC2-PREREG.md
+BOX B families: tc2mixtral; e4b 0933d4e20b3adff6fea9c4f9ac0e5c37d25b338e gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-26 instance redacted-dbf26df9 deadline 1790966302; prereg tc1/TC2-PREREG.md
 OMP_NUM_THREADS=128 (physical cores) box_class=RTX 5090
 DRIVER 595.71.05 cu130_ok=1
 AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType

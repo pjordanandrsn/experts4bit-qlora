@@ -1,6 +1,6 @@
 # tp2 — training-side parity vs Unsloth, six MoE families, one RTX 5090 (2026-09-05/06)
 
-Receipts of lane **tp2 / pre-registration P40** (`P40-PREREG.md`, verbatim): e4b (0.35.1 wheel + grouped-nf4-gemm 0.30.2) vs Unsloth 2026.9.2, per family, one box (Vast instance 50005568, RTX 5090 32 GB, Ryzen 7 5700X3D, box class pcie-full/launch-fast), one fixture (the sha-pinned clinical set tokenised per family, seq 512, r 8, α 16, lr 1e-4, accum 1, N = 60 steps, held-out every 20).
+Receipts of lane **tp2 / pre-registration P40** (`P40-PREREG.md`, verbatim): e4b (0.35.1 wheel + grouped-nf4-gemm 0.30.2) vs Unsloth 2026.9.2, per family, one box (Vast instance redacted-62413474, RTX 5090 32 GB, Ryzen 7 5700X3D, box class pcie-full/launch-fast), one fixture (the sha-pinned clinical set tokenised per family, seq 512, r 8, α 16, lr 1e-4, accum 1, N = 60 steps, held-out every 20).
 
 - `RESULTS-tp2.md` — the reducer's report (statuses, validity, positions, quality readings, P1–P7 scored mechanically). `RESULTS.txt` is its plain-text twin.
 - `<family>_<framework>_<arm>.json` — one receipt per attempt (status vocabulary OK / REFUSED / OOM / INSTALL_FAILED / LOAD_FAULT / HARNESS_ERROR / ALARM / NOT_RUN; every attempt is a row).

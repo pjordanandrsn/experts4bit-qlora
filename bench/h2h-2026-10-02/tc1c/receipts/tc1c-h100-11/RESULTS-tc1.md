@@ -43,7 +43,7 @@ deepspeed(axolotl) None
 {
  "box": "A",
  "run_id": "tc1c-h100-11",
- "instance_id": "54150922",
+ "instance_id": "instance-redacted-bf4b7afc",
  "gpu": "NVIDIA H100 NVL",
  "driver": "595.71.05",
  "cpu": "AMD EPYC 9534 64-Core Processor",

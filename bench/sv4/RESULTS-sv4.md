@@ -4,7 +4,7 @@ Registered in `bench/sv4/SV4-PREREG.md` (#1239) before the box; work item #1236 
 owner-approved $50).
 
 **The run.**
-- One RTX 4090 (sm_89): Vast instance 54428318, driver 595.84, Intel i9-10980XE, 125 GB RAM, 320 GB disk.
+- One RTX 4090 (sm_89): Vast instance redacted-8935b3da, driver 595.84, Intel i9-10980XE, 125 GB RAM, 320 GB disk.
 - **$0.153**; teardown proven (destroy HTTP 200, instance absent from the list after).
 - experts4bit-qlora `e80b04a` (#1239's head, 0.48.0, including #1228/#1229/#1233), grouped-nf4-gemm 0.41.0 (`dc8f94a`),
   torch 2.8.0+cu128, transformers 5.18.0.

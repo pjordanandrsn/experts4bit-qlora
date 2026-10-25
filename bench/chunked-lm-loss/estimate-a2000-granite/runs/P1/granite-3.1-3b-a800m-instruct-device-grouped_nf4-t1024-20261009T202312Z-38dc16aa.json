@@ -155,7 +155,7 @@
     3,
     16
    ],
-   "uuid": "GPU-01aa94f1-4004-9932-0b37-2051081a2a9d"
+   "uuid": "GPU-redacted-43b31b12"
   },
   "gpus": 1,
   "platform": "Linux x86_64",
@@ -380,7 +380,7 @@
      3,
      16
     ],
-    "uuid": "GPU-01aa94f1-4004-9932-0b37-2051081a2a9d"
+    "uuid": "GPU-redacted-43b31b12"
    },
    "gpus": 1,
    "platform": "Linux x86_64",

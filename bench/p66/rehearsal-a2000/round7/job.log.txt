@@ -4,7 +4,7 @@ NVIDIA RTX A2000 12GB, 1374 MiB, 10531 MiB
 prove rc=0 seconds=73 exit=0 proved=P66_PROVED.d7c6449810f72b34b09c1f346da1b561f46882064cd9aaa7c13a8e7e39155fb2 success=P66_SUCCESS.d7c6449810f72b34b09c1f346da1b561f46882064cd9aaa7c13a8e7e39155fb2
 OVERRIDE P66_REHEARSAL_CLASS=A2000 -- this run is a REHEARSAL, not a reading
 OVERRIDE P66_REHEARSAL_QWEN_SNAPSHOT=/models/OLMoE-1B-7B-0924 -- this run is a REHEARSAL, not a reading
-NVIDIA RTX A2000 12GB, 12282 MiB, 10531 MiB, 575.64.05, GPU-01aa94f1-4004-9932-0b37-2051081a2a9d
+NVIDIA RTX A2000 12GB, 12282 MiB, 10531 MiB, 575.64.05, GPU-redacted-43b31b12
 power,clock,pcie gen cur,max,width cur,max: 70.00 W, 2100 MHz, 1, 3, 8, 16
 CPU(s):                               12
 Model name:                           Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz

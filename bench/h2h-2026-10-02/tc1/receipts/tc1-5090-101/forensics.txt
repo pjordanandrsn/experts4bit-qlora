@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 580.65.06, GPU-9b450bc6-57b2-af9c-afba-a0459634ffbb, 600.00 W, 3105 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.65.06, GPU-redacted-5af9c8f5, 600.00 W, 3105 MHz
 CPU(s):                               32
 Model name:                           AMD Ryzen 9 7950X 16-Core Processor
 MemTotal:       130979720 kB

@@ -1,6 +1,6 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=48 autocast=0
 FIXTURE anchor: template=clinical steps=60 seq=512 micro_batch=1 accum=1 r=8 alpha=16 lr=1e-4 wd=0.01 sched=constant optim=adamw_torch seed=0
-BOX C families: gemma4; e4b cd2716decf77f0c7d0e81b7e58dbe5dd5345cc29 gnf4 9206352f7c49d76432824f7ce8872f0b285f2a4e; run p67-gemma4-floor-1 instance 52449460 deadline 1790278126
+BOX C families: gemma4; e4b cd2716decf77f0c7d0e81b7e58dbe5dd5345cc29 gnf4 9206352f7c49d76432824f7ce8872f0b285f2a4e; run p67-gemma4-floor-1 instance redacted-7b6b3eb3 deadline 1790278126
 AMENDMENT-CLASS (P38 amendment 2): torchao removed from venv-unsloth after the tripwire failed on ScalingType
 DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
 PIN OK gemma4 staged=4d7ae4984b7db7de8f8457170b3f1a419ee76d52 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)

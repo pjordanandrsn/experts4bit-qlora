@@ -94,7 +94,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-c655fe82-312f-65e6-b949-3e225f1ec587",
+   "uuid": "GPU-redacted-984585d1",
    "pci.bus_id": "00000000:41:00.0",
    "pcie.link.gen.current": "2",
    "pcie.link.gen.max": "4",
@@ -108,7 +108,7 @@
    "cpu": "AMD Ryzen Threadripper PRO 3975WX 32-Cores",
    "cpu_threads": 64,
    "host_mem_gib": 251.5,
-   "vast_instance_id": "53773622",
+   "vast_instance_id": "instance-redacted-cdb10c1d",
    "container_host": "ad355743cef9"
   },
   "anchor_json": null,

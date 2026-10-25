@@ -1,6 +1,6 @@
 # `p141-5090-2`: K33 at Mixtral-8x7B's expert shapes, the reading
 
-One RTX 5090 (cc 12.0, 170 SMs, driver 595.71.05) on an Intel Xeon Gold 6240 host (36 CPUs): Vast instance 56580839,
+One RTX 5090 (cc 12.0, 170 SMs, driver 595.71.05) on an Intel Xeon Gold 6240 host (36 CPUs): Vast instance redacted-5f98a49b,
 launched 2026-10-18T16:15:06Z, torn down 17:13:24Z. Cost $0.999. Code: e4b `d2bf9f64` (the registration's merge, #1754),
 grouped-nf4-gemm 0.46.1 (`70bc03cb`); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2.
 

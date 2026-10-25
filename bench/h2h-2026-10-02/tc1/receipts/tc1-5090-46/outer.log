@@ -1,9 +1,9 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3nativebest200; e4b e5859e995db0e6614bf6f4128263cafea922608a gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-46 instance 54024744 deadline 1791054481; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3nativebest200; e4b e5859e995db0e6614bf6f4128263cafea922608a gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-46 instance redacted-0adaa90e deadline 1791054481; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=112 (physical cores) box_class=RTX 5090
 [2026-10-03T14:39:16Z] tc1/boxA: driver 580.95.05: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 580.95.05 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-7af44365-bd9e-461a-7d00-5a5ac4fbbd9a, 600.00 W, 3210 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-redacted-38ca9a67, 600.00 W, 3210 MHz
 CPU(s):                                  224
 Model name:                              AMD EPYC 7663 56-Core Processor
 MemTotal:       792385364 kB
@@ -98,7 +98,7 @@ QWEN3NATIVEBEST200 DONE
 | P14 | qwen3nativebest200 | **UNTESTED** | e4b draws fused_attn4_shipped_200 VOID / fused_attn4_shipped_200_d2 VOID: two VALID draws a side are registered |
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3nativebest200; e4b e5859e995db0e6614bf6f4128263cafea922608a gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-46 instance 54024744 deadline 1791054481; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3nativebest200; e4b e5859e995db0e6614bf6f4128263cafea922608a gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-46 instance redacted-0adaa90e deadline 1791054481; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=112 (physical cores) box_class=RTX 5090
 DRIVER 580.95.05 cu130_ok=1
 DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb

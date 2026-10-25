@@ -1,5 +1,5 @@
 KNOBS box=J e4b=1825cf02c24496090af4263f13c839e89f7f6bc2 gnf4=dc8f94abfd868f149178623f6eb403dc8b892b02 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=0
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-e09e7f6e-26fa-331c-d2d7-c286651008f5, 12.0, 4, 16, 4, 16
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-redacted-59cc580a, 12.0, 4, 16, 4, 16
 power.limit,clocks.max.sm 600.00 W, 3135 MHz
 Vendor ID:                               AuthenticAMD
 Model name:                              AMD EPYC 7K62 48-Core Processor

@@ -103,7 +103,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-3ac82132-b928-547f-6616-3284eb216566",
+   "uuid": "GPU-redacted-ac8f45fe",
    "pci.bus_id": "00000000:01:00.0",
    "pcie.link.gen.current": "1",
    "pcie.link.gen.max": "5",
@@ -117,7 +117,7 @@
    "cpu": "AMD Ryzen 9 9950X3D 16-Core Processor",
    "cpu_threads": 32,
    "host_mem_gib": 123.2,
-   "vast_instance_id": "54075633",
+   "vast_instance_id": "instance-redacted-c79ce6d8",
    "container_host": "43bf9be57d0f"
   },
   "anchor_json": null,

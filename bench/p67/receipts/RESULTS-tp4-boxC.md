@@ -24,7 +24,7 @@ moe_backend native_torch
 {
  "box": "C",
  "run_id": "p67-gemma4-floor-1",
- "instance_id": "52449460",
+ "instance_id": "instance-redacted-7b6b3eb3",
  "gpu": "NVIDIA GeForce RTX 5090",
  "driver": "580.105.08",
  "cpu": "AMD EPYC 7302 16-Core Processor",

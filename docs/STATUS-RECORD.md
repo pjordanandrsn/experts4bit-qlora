@@ -1020,7 +1020,7 @@ is compared across lanes.
 table in its [`RESULTS.md`](../bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md)).**
 Speed only, under the **shipped** code (0.35.0 + 0.30.0 at their `main`,
 hook v6 at its 16k default), all six families on one rented RTX 5090 (EPYC
-7Q83 host, instance 49916675), 48 arms at B=1 and B=16, every ratio to
+7Q83 host, instance redacted-7122c32f), 48 arms at B=1 and B=16, every ratio to
 that family's own NF4 arm on that box and every licence label copied from
 this register — bo7 licenses nothing, and no bo3/bo5/bo6 number is divided
 into a bo7 number. Every ratio below is vs e4b's own NF4 control on the same

@@ -7,8 +7,8 @@ tokens per family, validity predicates, verdicts, two draws for a quoted positio
 
 | box | token | host (Vast verified-secure) | families | cost |
 |---|---|---|---|---|
-| `tc1-5090-17` | `tc2small` (N = 60, 48 held-out rows every 20 steps) | instance 53800083, AMD EPYC 9755, driver 580.119.02 | granite, olmoe, gptoss | $0.90 |
-| `tc1-5090-22` (box B) | `tc2big` (the field recipe, N = 20) | instance 53828163, machine 117847 — **stopped by its host at 11:41Z** with the run's receipts unfetched (below) | qwen3_5, mixtral | $2.42 (`tc1-5090-18` and `-21` before it failed pre-flight on one dead machine, $0.03) |
+| `tc1-5090-17` | `tc2small` (N = 60, 48 held-out rows every 20 steps) | instance redacted-9ef2590b, AMD EPYC 9755, driver 580.119.02 | granite, olmoe, gptoss | $0.90 |
+| `tc1-5090-22` (box B) | `tc2big` (the field recipe, N = 20) | instance redacted-ca11a1c9, machine 117847 — **stopped by its host at 11:41Z** with the run's receipts unfetched (below) | qwen3_5, mixtral | $2.42 (`tc1-5090-18` and `-21` before it failed pre-flight on one dead machine, $0.03) |
 
 ## What the small families say
 
@@ -74,7 +74,7 @@ launcher's own rules (`tc1-5090-23`: an 8 h guard over the 6 h teardown cap; `-2
 moved above the lane's $0.54/h, with or without the RAM floor), and the boxes ran as `tc1-5090-27` (Qwen3.6, below) and `tc1-5090-26`
 (Mixtral, below) at the $0.69/h ceiling box B itself had run at — the lane's budget line says $0.54/h, and the receipts say $0.69/h.
 
-## Box B re-run, Qwen3.6-35B-A3B (`tc1-5090-27`: instance 53859323, AMD EPYC 7663, driver 580.95.05, $0.54 actual)
+## Box B re-run, Qwen3.6-35B-A3B (`tc1-5090-27`: instance redacted-1b718736, AMD EPYC 7663, driver 580.95.05, $0.54 actual)
 
 40 layers, 256 routed experts, 20,520 adapter slots: the matched set is **926,187,520** trainable parameters (fp32 adapters, one per-slot init,
 TC1's rules). Register `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02` and its `.shipped-labelled` row.
@@ -123,7 +123,7 @@ base model each trains from therefore differs by 0.05 nats at step 0 (e4b's is c
 for about 1.6 GB of the resident footprint gap above. By step 20 the two reach 0.683 and 0.687 / 0.690. That e4b leaves this family's
 linear-attention and shared-expert projections in bf16 is an e4b coverage gap worth closing, recorded here, not a comparison.
 
-## Box B re-run, Mixtral-8x7B-Instruct-v0.1 (`tc1-5090-26`, TC2 amendment 2's token on a host with 1 TB of RAM: instance 53859501, AMD EPYC 7C13, 1.06 TB RAM, driver 595.71.05)
+## Box B re-run, Mixtral-8x7B-Instruct-v0.1 (`tc1-5090-26`, TC2 amendment 2's token on a host with 1 TB of RAM: instance redacted-dbf26df9, AMD EPYC 7C13, 1.06 TB RAM, driver 595.71.05)
 
 > **Correction (2026-10-02, TC2 amendment 5): this section's Unsloth readings are retired.** The 76–89-minute compile phase, the 6.2 / 7.0
 > s/step, the 12 % draw spread and the peak were produced by this harness's engagement counters inside Unsloth's compiled Mixtral MoE block:
@@ -190,7 +190,7 @@ nats under e4b's, COMPARABLE, just outside the equivalence band.
 
 ## Both big families with e4b RESIDENT (`tc1-5090-53`, TC2 amendment 6, $3.03 invoiced)
 
-One RTX 5090 (Vast instance 54140024, AMD EPYC 7C13, 1.06 TB RAM, driver 595.71.05), token `tc2resident`, e4b `4ea0b48` (the amendment's merge),
+One RTX 5090 (Vast instance redacted-7eb615aa, AMD EPYC 7C13, 1.06 TB RAM, driver 595.71.05), token `tc2resident`, e4b `4ea0b48` (the amendment's merge),
 grouped-nf4-gemm `34a0881`. Every e4b arm ran with `--offload 0`, after TC1 amendments 10–15 and the memory changes since 2026-10-02
 (the lean LoRA delta on by default; the combine saving bf16, not fp32). Vast invoiced $3.03: GPU $0.98, storage $0.19, and $1.87 for
 179 GB of checkpoint download. Receipts: [`receipts/tc1-5090-53/`](receipts/tc1-5090-53/).
@@ -352,7 +352,7 @@ Pre-registration: [`../../tc1/TC2-PREREG.md`](../../tc1/TC2-PREREG.md), amendmen
 
 ## TC2 amendment 9 (2026-10-05): on one stack e4b is faster on Mixtral too, 1.144
 
-Pre-registration: [`../../tc1/TC2-PREREG.md`](../../tc1/TC2-PREREG.md), amendment 9. One RTX 5090 (`tc1-5090-84`, instance 54277905, AMD
+Pre-registration: [`../../tc1/TC2-PREREG.md`](../../tc1/TC2-PREREG.md), amendment 9. One RTX 5090 (`tc1-5090-84`, instance redacted-13491a7c, AMD
 EPYC 7B13, Vast machine 145701, $1.59): TC1 amendment 25's same-stack family on Mixtral-8x7B-Instruct at TC2's pin and field recipe,
 resident, e4b `63400e1` at default settings (grouped-nf4-gemm `9622144`, `auto` on the dense route, the prebound launches on, the absmax
 fp32), 60 steps, no reference arm, load-gated draws (none voided). Receipts: [`receipts/tc1-5090-84/`](receipts/tc1-5090-84/); read:

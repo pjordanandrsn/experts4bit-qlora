@@ -283,7 +283,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-1038a52e-6a90-bf2d-1206-1f2e831e76d9",
+   "uuid": "GPU-redacted-6dc26652",
    "pci.bus_id": "00000000:06:00.0",
    "pcie.link.gen.current": "1",
    "pcie.link.gen.max": "4",
@@ -297,7 +297,7 @@
    "cpu": "AMD Ryzen 9 3900X 12-Core Processor",
    "cpu_threads": 24,
    "host_mem_gib": 125.7,
-   "vast_instance_id": "53971676",
+   "vast_instance_id": "instance-redacted-f93188c1",
    "container_host": "81ee38e87ac8"
   },
   "anchor_json": null,

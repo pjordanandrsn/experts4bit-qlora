@@ -158,7 +158,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-510954e5-9be6-d0e5-1b06-8dadb24ec201",
+   "uuid": "GPU-redacted-b0645591",
    "pci.bus_id": "00000000:06:00.0",
    "pcie.link.gen.current": "5",
    "pcie.link.gen.max": "5",
@@ -172,7 +172,7 @@
    "cpu": "AMD EPYC 9755 128-Core Processor",
    "cpu_threads": 48,
    "host_mem_gib": 108.1,
-   "vast_instance_id": "54599380",
+   "vast_instance_id": "instance-redacted-4f3456d6",
    "container_host": "6944be7830aa"
   },
   "anchor_json": null,

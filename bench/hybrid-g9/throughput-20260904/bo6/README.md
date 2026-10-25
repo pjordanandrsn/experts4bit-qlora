@@ -1,6 +1,6 @@
 # Build-out validation lane bo6 (+ bo6b, bo6c) — 2026-09-04/05, one RTX 5090: close the gap, not the gate
 
-**Box:** Vast.ai instance 49861751, RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper
+**Box:** Vast.ai instance redacted-0483a6df, RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper
 PRO 7975WX host (64 CPUs, 251 GB, container cgroup `memory.max` 183,093,952,512 B = 170 GiB — see
 [`forensics.txt`](forensics.txt)); torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0. No
 memory-bandwidth probe ran on this box.

@@ -32,3 +32,10 @@ fa7b278cc3c6eafb05000ce9a1361e02438ad6fb4570c2e9df8f29a194abc341  INSTANCE_ID
 # Kept in the private receipt store, not committed here (reason not recorded).
 04439723509df7648fee5c35d524ec4f2377929d2034eb6ca6d6deaf3eb24c54  P98_RUN_NONCE
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  TP_DONE.208dcd08325dce141c0857df7df06f5980beb728caf9fb558f2cdc657fd1e3ed
+# Originals of files this receipt carries with rented-hardware identifiers replaced by keyed tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p98/receipts/p98-5090-2/forensics.txt at 605d21e67958
+8907433c029fb5290ae6d59ba9983d45fd4141d88f55fa9d934cb0097ddb3c39  forensics.txt
+# same bytes: bench/p98/receipts/p98-5090-2/teardown-proof.json at 605d21e67958
+e1f2aaf045c85ed38e256b1f0897f22be7068b992994f7fe5ee66d2914bc6766  teardown-proof.json

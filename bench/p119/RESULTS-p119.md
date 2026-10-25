@@ -16,7 +16,7 @@ both prefill brackets ran in their mode (ON was not refused); every bracket saw 
 
 ## The reading (`p119-5090-1`)
 
-**Host:** one RTX 5090 (sm_120, driver 595.71.05) on an AMD EPYC 7C13 (256 threads, 1,007 GiB RAM), Vast instance 54864544.
+**Host:** one RTX 5090 (sm_120, driver 595.71.05) on an AMD EPYC 7C13 (256 threads, 1,007 GiB RAM), Vast instance redacted-6e199fa8.
 **Cost:** $0.827. Teardown proven at 15:04:53Z.
 
 **Timeline:** install and tripwire from 14:51:12Z; premise 7 passed, none skipped (14:52:15Z); fetch until 14:59:36Z;

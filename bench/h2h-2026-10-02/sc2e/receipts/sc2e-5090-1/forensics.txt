@@ -1,5 +1,5 @@
-GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-3457797a-ff60-9c3c-5861-1f237f367867)
-NVIDIA GeForce RTX 5090, 32607 MiB, 610.43.02, GPU-3457797a-ff60-9c3c-5861-1f237f367867, 12.0, 4, 16, 4, 16
+GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-redacted-476c59f1)
+NVIDIA GeForce RTX 5090, 32607 MiB, 610.43.02, GPU-redacted-476c59f1, 12.0, 4, 16, 4, 16
 power.limit,clocks.max.sm 575.00 W, 3105 MHz
 Vendor ID:                               AuthenticAMD
 Model name:                              AMD EPYC 7352 24-Core Processor

@@ -4,7 +4,7 @@ Registered in `bench/sv3/SV3-PREREG.md` (#1225) before the box; work item #1224 
 owner-approved $50).
 
 **The run.**
-- One RTX 5090: Vast instance 54421432, driver 580.178.04, AMD Ryzen 9 7900, 125 GB RAM, 320 GB disk.
+- One RTX 5090: Vast instance redacted-d190b11b, driver 580.178.04, AMD Ryzen 9 7900, 125 GB RAM, 320 GB disk.
 - **$0.514**; teardown proven (destroy HTTP 200, instance absent from the list after).
 - experts4bit-qlora `c500651` (#1225's head, 0.48.0, including #1219), grouped-nf4-gemm 0.41.0 (`dc8f94a`),
   torch 2.8.0+cu128, transformers 5.18.0.

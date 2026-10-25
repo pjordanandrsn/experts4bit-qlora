@@ -1,0 +1,33 @@
+# Files of this receipt kept only in the private receipt store, byte-exact: sha256, then the path
+# within this receipt.
+# Originals of files this receipt carries with rented-hardware identifiers replaced by keyed tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p129/receipts/tc1-5090-150/RESULTS-tc1.md at 605d21e67958
+51cd503e42c48c479b005dcbdfa3e986e97e7fae59d6404e890c6c8c601b1fe4  RESULTS-tc1.md
+# same bytes: bench/p129/receipts/tc1-5090-150/RESULTS.txt at 605d21e67958
+51cd503e42c48c479b005dcbdfa3e986e97e7fae59d6404e890c6c8c601b1fe4  RESULTS.txt
+# same bytes: bench/p129/receipts/tc1-5090-150/box.json at 605d21e67958
+4be3e10021d0641f3281bf8625ecb884d7141dd46d83ddc56bbdbd3c7f266128  box.json
+# same bytes: bench/p129/receipts/tc1-5090-150/forensics.txt at 605d21e67958
+0d8b79b285e7fa1ed8e4e3f0de9f7427147c45e7dab22d6bd5a88f5b32b8589f  forensics.txt
+# same bytes: bench/p129/receipts/tc1-5090-150/outer.log at 605d21e67958
+b5a003bc376e6c9a87357e6561404c81f8fa67adea4a252ddce95929babac011  outer.log
+# same bytes: bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_m_q0.json at 605d21e67958
+bd54befdd6d53be24da23e153351a24644a33b8fb1db437ca0c5c1da1152ee32  qwen3fqkv3_e4b_fused_attn4_m_q0.json
+# same bytes: bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_m_q0_d2.json at 605d21e67958
+80fe06fe4bcbd4e3babdc137132dd9b0bcc9b0255fd671e755659547ededfa18  qwen3fqkv3_e4b_fused_attn4_m_q0_d2.json
+# same bytes: bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_m_q1.json at 605d21e67958
+dcefae8e3dd715da74805aedf7c8fb0cfa6e2edcfe82c2f912fa90213ad2e906  qwen3fqkv3_e4b_fused_attn4_m_q1.json
+# same bytes: bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_m_q1_d2.json at 605d21e67958
+239f7b748e1b7f22a29a50617fbc78af956dfc618acda0da5565274edd0ca8ee  qwen3fqkv3_e4b_fused_attn4_m_q1_d2.json
+# same bytes: bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_shipped_q0.json at 605d21e67958
+851cb9cadb2e3f3f2ce3131f7529257b14834dc557d1c75905ee975f8545da18  qwen3fqkv3_e4b_fused_attn4_shipped_q0.json
+# same bytes: bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_shipped_q0_d2.json at 605d21e67958
+0c88710790e70169d69dc7929ec3de5d1200f6d0f6c8cc883e326d0dccfb0fe0  qwen3fqkv3_e4b_fused_attn4_shipped_q0_d2.json
+# same bytes: bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_shipped_q1.json at 605d21e67958
+d601d955583ed8b6c995aaea4781c62a5be161ca4af988dda80a5dd316983274  qwen3fqkv3_e4b_fused_attn4_shipped_q1.json
+# same bytes: bench/p129/receipts/tc1-5090-150/qwen3fqkv3_e4b_fused_attn4_shipped_q1_d2.json at 605d21e67958
+bcd003845e5a99ef59f8fe6c50700c30203a1da35c036f79597c364de3f71b2c  qwen3fqkv3_e4b_fused_attn4_shipped_q1_d2.json
+# same bytes: bench/p129/receipts/tc1-5090-150/summary.txt at 605d21e67958
+e35bdb04b2f2acc041e6518c804001518a8170ed90377d606304f74bb045bcd8  summary.txt

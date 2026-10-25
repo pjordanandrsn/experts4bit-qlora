@@ -23,7 +23,7 @@ Code under test:
 ## The reading (`p121-5090-1`)
 
 **Host:** one RTX 5090 (sm_120, 170 SMs, driver 595.71.05, **450 W** power limit, 3,090 MHz) on an AMD EPYC 7C13 (256
-threads, 1,007 GiB RAM), Vast instance 54908429. The 450 W limit is below SC2e's 575 W board; only ratios within this
+threads, 1,007 GiB RAM), Vast instance redacted-cdc48389. The 450 W limit is below SC2e's 575 W board; only ratios within this
 box are read.
 
 **Cost:** $1.056. Teardown proven at 21:07:55Z.

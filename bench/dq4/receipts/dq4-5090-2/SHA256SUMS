@@ -33,4 +33,4 @@ d496a2aa6f3ceb66ab1c573965c1dca4a56475c594bd63201b82d40003083c37  ./logs/tripwir
 1e7ad7bb055573c283d8ccfab55c6a0c7d7f607cc1042ce09aebcb239b0e11ab  ./s_def_R_ladder.json
 bdebe5aee40b0f6b9505ab924e151037153961b0e36f8ef600a8353a9356fbd7  ./s_def_S_ladder.json
 ba0c75757295c19afa1fd81344ec0a1b9def711b775100a3135d86853dc6d891  ./summary.txt
-aa5557cb97cec09d6e9522ebe21fe40765577d2bf4ed98586e70d25dbffbbb88  ./teardown-proof.json
+cf634a35cc6d5e6137a769d818c2d51b2db0ee00be8ce144d86b0274c8519557  ./teardown-proof.json

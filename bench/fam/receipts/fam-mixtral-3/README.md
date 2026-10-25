@@ -1,6 +1,6 @@
 # `fam-mixtral-3`: Mixtral's reading, first attempt (VOID: a serving regression on main)
 
-One RTX 5090 (cc 12.0, driver 595.84) on an AMD EPYC 9454 host (96 CPUs): Vast instance 55076206, launched
+One RTX 5090 (cc 12.0, driver 595.84) on an AMD EPYC 9454 host (96 CPUs): Vast instance redacted-0bebd6df, launched
 2026-10-09T18:53:29Z, torn down 19:15:17Z. Cost $0.87. Code: e4b `4b9954f5` (Amendment 8's merge, #1479),
 grouped-nf4-gemm 0.43.0 (`6ee2e10`).
 

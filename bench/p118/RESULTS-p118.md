@@ -25,7 +25,7 @@ captured, device grouping was on, and the four fusion knobs were at `0` in every
 ## The reading (`p118-5090-2`)
 
 **Host:** one RTX 5090 (sm_120, driver 595.84, 575 W, 170 SMs) on an AMD EPYC 7B13 host (256 threads, ~2 TB RAM),
-320 GB free. It was Vast instance 54804559. **Cost:** $0.914, 37 minutes from launch to teardown.
+320 GB free. It was Vast instance redacted-0c5e576e. **Cost:** $0.914, 37 minutes from launch to teardown.
 
 **Timeline (the box's own log, UTC):**
 - the premise passed by 08:01:49: 16 + 18 passed, none skipped;

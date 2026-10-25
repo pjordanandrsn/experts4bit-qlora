@@ -130,7 +130,7 @@
   "min_new_tokens": "= max_new_tokens",
   "greedy": true
  },
- "vast_instance_id": "53955591",
+ "vast_instance_id": "instance-redacted-8cf5c595",
  "load_s": null,
  "server_startup_s": 54,
  "load_note": "the server is started by server.sh before the arm; its startup (load + Marlin JIT + graph capture + warmup) is server_startup_s",

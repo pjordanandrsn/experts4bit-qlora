@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.58.03, GPU-9728d444-d85e-e57f-e278-db8027f309be, 12.0
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.58.03, GPU-redacted-b433cebe, 12.0
 power.limit,clocks.max.sm 400.00 W, 3210 MHz
 Vendor ID:                               GenuineIntel
 Model name:                              Intel(R) Xeon(R) Platinum 8347C CPU @ 2.10GHz
