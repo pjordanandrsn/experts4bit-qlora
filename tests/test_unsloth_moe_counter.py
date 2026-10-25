@@ -13,6 +13,7 @@ what the counter depends on in the release-proven wheel (sha256 db8c283b...; the
 No real kernel runs here; the real binding check (the expected fused launch count) is the lane's, on the box.
 """
 import functools
+import importlib.machinery
 import importlib.util
 import os
 import sys
@@ -186,12 +187,22 @@ def _lora_rank_pad_needed(inputs, first_weight):           # 2997-3011: a paddin
     return not _triton_grouped_mm_wanted(inputs, first_weight)
 
 
-def forward_moe_backend(x, base, lora_a, lora_b):
+def forward_native(x, base, lora_a, lora_b):               # forward_native_grouped_mm, 5244-
     _lora_rank_pad_needed(x, lora_a)
     with torch.no_grad():
         y = _grouped_mm_with_backward_fix(x, base, None)     # the dequant path's recompute forward (1100): no backward node
     h = _grouped_mm_with_backward_fix(x, lora_a, None)
     return y + _grouped_mm_with_backward_fix(h, lora_b, None)
+
+
+def forward_moe_backend(self, x, base, lora_a, lora_b):    # 2051-2112: the bnb 4-bit hand-off first, by ABSOLUTE import
+    try:
+        from unsloth_zoo.temporary_patches.moe_utils_bnb4bit import _moe_uses_bnb4bit_expert_weights, forward_moe_backend_bnb4bit
+    except ImportError:
+        _moe_uses_bnb4bit_expert_weights = forward_moe_backend_bnb4bit = None
+    if _moe_uses_bnb4bit_expert_weights is not None and _moe_uses_bnb4bit_expert_weights(self):
+        return forward_moe_backend_bnb4bit(self, x, base, lora_a, lora_b)
+    return forward_native(x, base, lora_a, lora_b)
 
 
 _CACHE = None
@@ -214,21 +225,41 @@ class _Zoo(tuple):
     """(mg, nf, fwd), with the moe_utils stand-in and the test's tmp dir as attributes."""
 
 
+def _package(name, root):
+    """A stand-in package with a real source directory, so the counter's whole-package scan (find_spec) reads its files."""
+    mod = types.ModuleType(name)
+    mod.__path__ = [str(root)]
+    mod.__spec__ = importlib.machinery.ModuleSpec(name, None, is_package=True)
+    mod.__spec__.submodule_search_locations = [str(root)]
+    return mod
+
+
 @pytest.fixture
 def zoo(monkeypatch, tmp_path):
+    for k in [k for k in os.environ if k.startswith("UNSLOTH_")]:  # the arm's environment starts with no UNSLOTH_* key
+        monkeypatch.delenv(k)
     monkeypatch.setenv("UNSLOTH_MOE_NF4_FUSED", "1")
-    for k in ("UNSLOTH_MOE_NF4_AUTO_MAX_ROWS", "UNSLOTH_MOE_GROUPED_TRITON", "UNSLOTH_DISABLE_MOE_TRITON", "UNSLOTH_MOE_NF4_AUTOTUNE"):
-        monkeypatch.delenv(k, raising=False)
     pkg, tp, mg, nf, fwd = _fake_zoo()
-    (tmp_path / "fp16.py").write_text('os.environ.get("UNSLOTH_GPTOSS_FP16_GEMM")\n', encoding="utf-8")
-    (tmp_path / "nf4.py").write_text('os.environ.get("UNSLOTH_MOE_NF4_FUSED", "0")\nos.environ.get("UNSLOTH_MOE_NF4_AUTO_MAX_ROWS")\n'
-                                     'os.environ.get("UNSLOTH_MOE_NF4_AUTOTUNE", "0")\n', encoding="utf-8")
-    mg.__file__, nf.__file__ = str(tmp_path / "fp16.py"), str(tmp_path / "nf4.py")
-    mu = _module_from_source(C.MOE_UTILS, FAKE_MOE_UTILS, tmp_path / "moe_utils.py")
-    for name, mod in (("unsloth_zoo", pkg), ("unsloth_zoo.temporary_patches", tp), (C.FP16, mg), (C.NF4, nf), (C.MOE_UTILS, mu)):
+    zroot, uroot = tmp_path / "pkgs" / "unsloth_zoo", tmp_path / "pkgs" / "unsloth"
+    tdir = zroot / "temporary_patches"
+    tdir.mkdir(parents=True)
+    uroot.mkdir(parents=True)
+    (zroot / "__init__.py").write_text("", encoding="utf-8")
+    (tdir / "moe_grouped_fp16.py").write_text('os.environ.get("UNSLOTH_GPTOSS_FP16_GEMM")\n', encoding="utf-8")
+    (tdir / "moe_nf4_grouped.py").write_text('os.environ.get("UNSLOTH_MOE_NF4_FUSED", "0")\nos.environ.get("UNSLOTH_MOE_NF4_AUTO_MAX_ROWS")\n'
+                                             'os.environ.get("UNSLOTH_MOE_NF4_AUTOTUNE", "0")\n', encoding="utf-8")
+    (tdir / "moe_router_triton.py").write_text('_ON = os.environ.get("UNSLOTH_MOE_FUSED_ROUTER", "1") == "1"\n', encoding="utf-8")
+    (uroot / "__init__.py").write_text('if "UNSLOTH_COMPILE_DISABLE" in os.environ: pass\n', encoding="utf-8")
+    mg.__file__, nf.__file__ = str(tdir / "moe_grouped_fp16.py"), str(tdir / "moe_nf4_grouped.py")
+    mu = _module_from_source(C.MOE_UTILS, FAKE_MOE_UTILS, tdir / "moe_utils.py")
+    pkg, tp = _package("unsloth_zoo", zroot), _package("unsloth_zoo.temporary_patches", tdir)
+    for name, mod in (("unsloth_zoo", pkg), ("unsloth_zoo.temporary_patches", tp), (C.FP16, mg), (C.NF4, nf), (C.MOE_UTILS, mu),
+                      ("unsloth", _package("unsloth", uroot))):
         monkeypatch.setitem(sys.modules, name, mod)
+    monkeypatch.delitem(sys.modules, "unsloth_zoo.temporary_patches.moe_utils_bnb4bit", raising=False)
+    monkeypatch.delitem(sys.modules, "unsloth_zoo.temporary_patches.moe_utils_fp8", raising=False)
     z = _Zoo((mg, nf, fwd))
-    z.mu, z.tmp = mu, tmp_path
+    z.mu, z.tmp, z.mp = mu, tdir, monkeypatch
     return z
 
 
@@ -473,8 +504,10 @@ def test_an_unreadable_auto_predicate_reads_unread_and_voids(zoo, monkeypatch):
     assert not C.check_auto(s)[0]
 
 
-# -- the per-call dispatch: moe_utils' own predicate, in every module object that can serve the forward -------
+# -- the per-call dispatch: moe_utils' own predicate, attributed to the expert-module pass it ran in -------------------------------
 E_BASE, R = 64, 16
+CKPT = ("none", "nonreentrant", "reentrant", "unsloth")       # the four checkpoint shapes (forwards / under grad / dX per step):
+#                                                              none 1/1/1, HF non-reentrant 2/2/1, reentrant 2/1/1, Unsloth's 2/1/1
 
 
 def _stacks(base_rows=8):
@@ -493,164 +526,303 @@ def _backward_as_the_library_would(mg, n_gx, n_dw):
         mg.generic_grouped_wgrad(torch.ones(2, 3), torch.ones(2, 2), None, 1)
 
 
-def test_dispatch_on_the_package_module_and_the_implied_counts(zoo):
-    mg, nf, fwd = zoo
-    mu = zoo.mu
-    c = C.UnslothMoeCounter().install()
-    mu.get_forward_moe_backend()(*_stacks())
-    _backward_as_the_library_would(mg, 2, 2)
-    s = c.snapshot()
-    assert s["served"][0]["is_package"] and s["dispatch_served"] == {"package": {"gemm": 3, "probe": 1}}
-    assert s["dispatch"] == {"probe:lora:triton": 1, "gemm:many:triton": 1, "gemm:lora:triton": 2}
-    assert C.implied_generic(s) == {"generic_gemm": 5, "generic_wgrad": 2}           # 3 forwards + 2 gx; 2 LoRA dW
-    assert C.check_dispatch(s, base_must_be_triton=True) == (True, "")
-    assert any(k.endswith(":many") and v == 2048 for k, v in s["limits"].items())    # the resolved limit is recorded
-
-
-def test_a_cache_copy_serving_the_forward_is_counted(zoo):
-    mg, nf, fwd = zoo
-    mu = zoo.mu
-    mu._CACHE = _module_from_source("unsloth_cached_moe_utils", FAKE_MOE_UTILS, zoo.tmp / "cached_moe_utils.py")
-    c = C.UnslothMoeCounter().install()
-    mu.get_forward_moe_backend()(*_stacks())
-    _backward_as_the_library_would(mg, 2, 2)
-    s = c.snapshot()
-    assert s["served"][0]["is_package"] is False and s["served"][0]["module"] == "unsloth_cached_moe_utils"
-    assert s["dispatch_served"] == {"copy1": {"gemm": 3, "probe": 1}}
-    assert C.check_dispatch(s) == (True, "")
-
-
-def test_mutant_a_cache_copy_appearing_after_install_is_missed_and_voids(zoo):
-    mg, nf, fwd = zoo
-    mu = zoo.mu
-    c = C.UnslothMoeCounter().install()                           # the package served at install
-    mu._CACHE = _module_from_source("unsloth_cached_moe_utils", FAKE_MOE_UTILS, zoo.tmp / "late_cache.py")
-    mu.get_forward_moe_backend()(*_stacks())                      # now served by an unpatched copy
-    s = c.snapshot()
-    ok, why = C.check_dispatch(s)
-    assert not ok and "no decision counted through the serving module" in why
-
-
-# -- patch_loaded: the forward the LOADED experts run, read off the model after its load --------------------------
-def _experts(forward, name="Qwen3_5MoeExperts", n=3):
-    """n expert modules whose class forward is ``forward``, as patch_function binds the zoo's answer (qwen3_5_moe.py:53-60)."""
+def _experts(forward, name="Qwen3_5MoeExperts", n=1, nf4=False):
+    """n expert modules whose class forward is ``forward`` (as patch_function binds it, qwen3_5_moe.py:53-60); ``nf4`` marks their
+    stacks bnb 4-bit for the hand-off predicate stand-in."""
     cls = type(name, (torch.nn.Module,), {"forward": forward})
-    return [cls() for _ in range(n)]
+    mods = [cls() for _ in range(n)]
+    for m in mods:
+        m.nf4 = nf4
+    return mods
 
 
 def _copy(zoo, name):
     return _module_from_source("unsloth_cached_moe_utils", FAKE_MOE_UTILS, zoo.tmp / f"{name}.py")
 
 
-def test_patch_loaded_serves_the_cache_copy_that_appeared_during_the_load(zoo):
+def _bnb4bit(zoo):
+    """moe_utils_bnb4bit: the library's own predicate, and a hand-off whose RELATIVE import reaches the PACKAGE moe_utils
+    (moe_utils_bnb4bit.py:367-376), never the compile-cache copy."""
+    b = types.ModuleType("unsloth_zoo.temporary_patches.moe_utils_bnb4bit")
+    b.__package__ = "unsloth_zoo.temporary_patches"
+
+    def _moe_uses_bnb4bit_expert_weights(self):
+        return bool(getattr(self, "nf4", False))
+
+    def forward_moe_backend_bnb4bit(self, x, base, lora_a, lora_b):
+        return sys.modules[f"{b.__package__}.moe_utils"].forward_native(x, base, lora_a, lora_b)
+
+    b._moe_uses_bnb4bit_expert_weights, b.forward_moe_backend_bnb4bit = _moe_uses_bnb4bit_expert_weights, forward_moe_backend_bnb4bit
+    zoo.mp.setitem(sys.modules, b.__name__, b)
+    return b
+
+
+def _step(c, mg, module, i, ckpt="unsloth", args=None, mb=1):
+    """One optimizer step through ``module`` under a checkpoint shape, then the backward the library would run: per micro-batch, the
+    Triton gx of the two LoRA GEMMs (inputs that require grad) and their two dW. The base GEMM runs under no_grad (1100)."""
+    args = args or _stacks()
+    c.mark_step(i)
+    for _ in range(mb):
+        if ckpt == "none":
+            module(*args)
+        elif ckpt == "nonreentrant":                              # both passes under grad; only the original is backwarded
+            module(*args)
+            module(*args)
+        else:                                                     # reentrant / Unsloth: no-grad first, then the replay under grad
+            with torch.no_grad():
+                module(*args)
+            module(*args)
+        _backward_as_the_library_would(mg, 2, 2)
+
+
+def test_dispatch_on_the_package_module_and_the_structural_counts(zoo):
     mg, nf, fwd = zoo
     mu = zoo.mu
-    c = C.UnslothMoeCounter().install()                           # post_import: the package serves
-    mu._CACHE = _copy(zoo, "load_time_cache")                     # the load creates the cache copy ...
-    experts = _experts(mu.get_forward_moe_backend())              # ... and the zoo binds its forward into the class
-    c.patch_loaded(experts)                                       # post_load
-    type(experts[0]).forward(*_stacks())
-    _backward_as_the_library_would(mg, 2, 2)
+    ex = _experts(mu.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    _step(c, mg, ex, 0, "none")
+    c.mark_step(1)
+    s, st = c.snapshot(), c.structural(1, 1)
+    assert s["served"][0]["is_package"] and s["dispatch_served"] == {"package": {"gemm": 3, "probe": 1}}
+    assert s["dispatch"] == {"probe:lora:triton": 1, "gemm:many:triton": 1, "gemm:lora:triton": 2}
+    assert st["faults"] == [] and st["expected"] == {"dx_nf4": 0, "gx": 2, "wgrad": 2}
+    assert C.implied_generic(s, st) == {"generic_gemm": 5, "generic_wgrad": 2}            # 3 forwards + 2 gx; 2 LoRA dW
+    assert C.check_dispatch(s, st, base_must_be_triton=True) == (True, "")
+    assert any(k.endswith(":many") and v == 2048 for k, v in s["limits"].items())
+
+
+@pytest.mark.parametrize("ckpt", CKPT)
+def test_the_structural_count_reads_right_under_every_checkpoint_shape(zoo, ckpt):
+    mg, nf, fwd = zoo
+    ex = _experts(zoo.mu.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    for i in range(3):
+        _step(c, mg, ex, i, ckpt)
+    c.mark_step(3)
+    s, st = c.snapshot(), c.structural(1, 3)
+    assert st["faults"] == [] and st["expected"]["gx"] == 6 and st["expected"]["wgrad"] == 6
+    assert C.check_dispatch(s, st) == (True, "")
+    # the under-grad split agrees only where each under-grad pass is backwarded once
+    assert st["split"]["agrees"] is (ckpt != "nonreentrant")
+
+
+def test_mutant_the_under_grad_rule_double_counts_under_hf_non_reentrant(zoo):
+    """The old rule (forwards + the backward gx of every Triton call made under grad) expects 2x the real gx there."""
+    mg, nf, fwd = zoo
+    ex = _experts(zoo.mu.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    _step(c, mg, ex, 0, "nonreentrant")
+    c.mark_step(1)
     s = c.snapshot()
-    assert [(x["tag"], x["source"], x["is_package"]) for x in s["served"]] == [("copy1", "loaded", False)]
-    assert s["expert_forwards"] == {f"{__name__}.Qwen3_5MoeExperts": [
-        {"forward": "unsloth_cached_moe_utils.forward_moe_backend", "globals_module": "unsloth_cached_moe_utils", "unwrapped": 0,
-         "modules": 3}]}
-    assert C.check_dispatch(s, base_must_be_triton=True) == (True, "")
+    fwd_triton = sum(v for k, v in s["dispatch"].items() if k.startswith("gemm:") and k.endswith(":triton"))
+    old = fwd_triton + s["dispatch_grad"]["triton_grad_input"]
+    assert old != s["counts"]["generic_gemm"] == C.implied_generic(s, c.structural(1, 1))["generic_gemm"]
 
 
-@pytest.mark.parametrize("passed", [True, False])
-def test_mutant_experts_on_a_forward_other_than_the_fresh_answer_count_only_when_passed(zoo, passed):
-    """The model's experts hold a forward from a cache copy that is no longer get_forward_moe_backend()'s answer (a later reload
-    replaced it). Read off the model, it is counted; left to the fresh call, the decisions run unwrapped and the arm VOIDs."""
+def test_micro_batches_multiply_the_backward(zoo):
+    mg, nf, fwd = zoo
+    ex = _experts(zoo.mu.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    _step(c, mg, ex, 0, "unsloth", mb=4)
+    c.mark_step(1)
+    st = c.structural(4, 1)
+    assert st["expected"]["gx"] == 8 and C.check_dispatch(c.snapshot(), st) == (True, "")
+    assert C.check_dispatch(c.snapshot(), c.structural(1, 1))[0] is False     # a lane that understates its micro-batches VOIDs
+
+
+def test_passes_that_decide_differently_inside_one_step_void(zoo):
+    mg, nf, fwd = zoo
+    ex = _experts(zoo.mu.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    c.mark_step(0)
+    with torch.no_grad():
+        ex(*_stacks(base_rows=8))
+    ex(*_stacks(base_rows=2048 * E_BASE + 1))                     # the replay at another shape: the base GEMM decides torch
+    c.mark_step(1)
+    st = c.structural(1, 1)
+    assert st["faults"] and "decided differently" in st["faults"][0]
+    assert C.check_dispatch(c.snapshot(), st)[0] is False
+
+
+def test_an_eval_pass_is_not_a_training_pass(zoo):
+    mg, nf, fwd = zoo
+    ex = _experts(zoo.mu.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    _step(c, mg, ex, 0, "unsloth")
+    ex.eval()
+    ex(*_stacks(base_rows=4))                                     # tc1_arm's eval_loss: eval mode, grad on, another shape
+    ex.train()
+    c.mark_step(1)
+    s, st = c.snapshot(), c.structural(1, 1)
+    assert st["faults"] == [] and C.check_dispatch(s, st) == (True, "")
+
+
+def test_a_step_with_no_training_pass_and_a_pass_outside_every_step_void(zoo):
+    mg, nf, fwd = zoo
+    ex = _experts(zoo.mu.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    ex(*_stacks())                                                # before the first mark
+    c.mark_step(0)
+    c.mark_step(1)
+    st = c.structural(1, 1)
+    assert any("outside a marked step" in f for f in st["faults"]) and any("ran no training pass" in f for f in st["faults"])
+
+
+def test_no_structure_fails_closed(zoo):
+    mg, nf, fwd = zoo
+    s = C.UnslothMoeCounter().install().snapshot()
+    assert C.implied_generic(s, None) is None
+    ok, why = C.check_dispatch(s, None)
+    assert not ok and "no structural count" in why
+    assert C.UnslothMoeCounter().install().structural(1, 1)["faults"]          # nothing tracked
+
+
+def test_a_cache_copy_serving_the_forward_is_counted(zoo):
+    mg, nf, fwd = zoo
+    copy = _copy(zoo, "cached_moe_utils")
+    ex = _experts(copy.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    _step(c, mg, ex, 0)
+    c.mark_step(1)
+    s = c.snapshot()
+    assert s["served"][0]["is_package"] is False and s["served"][0]["module"] == "unsloth_cached_moe_utils"
+    assert s["dispatch_served"]["copy1"]["gemm"] == 6
+    assert C.check_dispatch(s, c.structural(1, 1)) == (True, "")
+
+
+def test_mutant_a_cache_copy_appearing_after_install_without_patch_loaded_voids(zoo):
     mg, nf, fwd = zoo
     mu = zoo.mu
-    stale = _copy(zoo, "stale_cache")
-    experts = _experts(stale.forward_moe_backend)
-    mu._CACHE = _copy(zoo, "current_cache")                       # the fresh answer is now a DIFFERENT module object
-    c = C.UnslothMoeCounter().install()
-    if passed:
-        c.patch_loaded(experts)
-    type(experts[0]).forward(*_stacks())
-    _backward_as_the_library_would(mg, 2, 2)
-    s = c.snapshot()
-    assert s["served_fresh"]["file"].endswith("current_cache.py")
-    ok, why = C.check_dispatch(s)
-    if passed:
-        assert ok, why
-        assert s["served"][0]["file"].endswith("stale_cache.py")
-    else:
-        assert not ok and "no decision counted through the serving module" in why
+    c = C.UnslothMoeCounter().install()                           # the package served at install; nothing tracked
+    mu._CACHE = _copy(zoo, "late_cache")
+    ex = _experts(mu.get_forward_moe_backend())[0]
+    ex(*_stacks())
+    ok, why = C.check_dispatch(c.snapshot(), c.structural(1, 1))
+    assert not ok and "no decision counted through the serving module" in why
 
 
-def test_a_mixed_model_records_each_forward_and_every_served_object_must_decide(zoo):
+# -- bnb 4-bit experts are served by the PACKAGE moe_utils, whatever object their class forward came from ----------------------------
+@pytest.mark.parametrize("name", ["Qwen3_5MoeExperts", "Qwen3MoeExperts"])
+def test_bnb4bit_experts_on_the_copys_forward_are_served_by_the_package(zoo, name):
     mg, nf, fwd = zoo
-    mu = zoo.mu
-    copy = _copy(zoo, "cache_a")
-    a, b = _experts(copy.forward_moe_backend, "ExpertsA", 2), _experts(mu.forward_moe_backend, "ExpertsB", 1)
-    c = C.UnslothMoeCounter().install().patch_loaded(a + b)
-    type(a[0]).forward(*_stacks())
+    _bnb4bit(zoo)
+    copy = _copy(zoo, "cache_b")
+    ex = _experts(copy.forward_moe_backend, name=name, n=2, nf4=True)
+    c = C.UnslothMoeCounter().install().patch_loaded(ex)
+    _step(c, mg, ex[0], 0)
+    _step(c, mg, ex[1], 0)
+    c.mark_step(1)
     s = c.snapshot()
-    assert {k.rsplit(".", 1)[1]: [x["modules"] for x in v] for k, v in s["expert_forwards"].items()} == {"ExpertsA": [2], "ExpertsB": [1]}
-    ok, why = C.check_dispatch(s)                                 # B's forward never ran
-    assert not ok and "no decision counted through the serving module (package" in why
-    type(b[0]).forward(*_stacks())
-    _backward_as_the_library_would(mg, 4, 4)
-    assert C.check_dispatch(c.snapshot()) == (True, "")
+    assert [(x["tag"], x["source"]) for x in s["served"]] == [("package", "bnb4bit")]
+    assert s["expert_forwards"][f"{__name__}.{name}"][0]["rule"] == "bnb4bit"
+    assert set(s["dispatch_served"]) == {"package"}
+    assert C.check_dispatch(s, c.structural(1, 1)) == (True, "")
+
+
+@pytest.mark.parametrize("name", ["Qwen3_5MoeExperts", "Qwen3MoeExperts"])
+def test_mutant_without_the_bnb4bit_rule_the_nf4_experts_void(zoo, name):
+    mg, nf, fwd = zoo
+    _bnb4bit(zoo)
+    zoo.mp.setattr(C, "HANDOFF", ())                              # the rule dropped: serve by the class forward only
+    copy = _copy(zoo, "cache_m")
+    ex = _experts(copy.forward_moe_backend, name=name, nf4=True)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    _step(c, mg, ex, 0)
+    c.mark_step(1)
+    ok, why = C.check_dispatch(c.snapshot(), c.structural(1, 1))
+    assert not ok and "no decision counted through the serving module (copy1" in why and "serves no forward" in why
+
+
+def test_a_16bit_stack_on_the_copy_still_requires_the_copys_decisions(zoo):
+    mg, nf, fwd = zoo
+    _bnb4bit(zoo)
+    copy = _copy(zoo, "cache_16")
+    ex = _experts(copy.forward_moe_backend, nf4=False)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    _step(c, mg, ex, 0)
+    c.mark_step(1)
+    s = c.snapshot()
+    assert [(x["tag"], x["source"]) for x in s["served"]] == [("copy1", "loaded")]
+    assert C.check_dispatch(s, c.structural(1, 1)) == (True, "")
+
+
+def test_a_mixed_model_one_bnb4bit_type_and_one_16bit_type(zoo):
+    mg, nf, fwd = zoo
+    _bnb4bit(zoo)
+    copy = _copy(zoo, "cache_mix")
+    a = _experts(copy.forward_moe_backend, name="ExpertsNF4", nf4=True)[0]
+    b = _experts(copy.forward_moe_backend, name="ExpertsBF16", nf4=False)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([a, b])
+    _step(c, mg, a, 0)
+    ok, why = C.check_dispatch(c.snapshot(), c.structural(1, 1))
+    assert not ok                                                 # b never ran: no decision through the copy, no pass for b
+    _step(c, mg, b, 0)
+    c.mark_step(1)
+    s = c.snapshot()
+    assert {(x["tag"], x["source"]) for x in s["served"]} == {("package", "bnb4bit"), ("copy1", "loaded")}
+    assert {e["rule"] for v in s["expert_forwards"].values() for e in v} == {"bnb4bit", "dispatcher"}
+    assert C.check_dispatch(s, c.structural(1, 1)) == (True, "")
 
 
 def test_mutant_experts_left_on_the_original_forward_void(zoo):
-    """patch_function refused (can_safely_patch) and the transformers forward runs: its globals hold no predicate."""
     mg, nf, fwd = zoo
 
     def original_forward(self, hidden_states):
         return hidden_states
 
-    c = C.UnslothMoeCounter().install().patch_loaded(_experts(original_forward))
+    c = C.UnslothMoeCounter().install().patch_loaded(_experts(original_forward, n=3))
     s = c.snapshot()
     assert s["expert_forwards"][f"{__name__}.Qwen3_5MoeExperts"][0]["globals_module"] is None
-    ok, why = C.check_dispatch(s)
+    ok, why = C.check_dispatch(s, c.structural(1, 1))
     assert not ok and "no _triton_grouped_mm_wanted in its globals (3 modules)" in why
 
 
 def test_a_wrapped_forward_unwraps_to_the_predicates_globals(zoo):
     mg, nf, fwd = zoo
-    mu = zoo.mu
-    inner = mu.forward_moe_backend
+    inner = zoo.mu.forward_moe_backend
 
     @functools.wraps(inner)
     def decorated(*args, **kwargs):                               # a decorator or compile carrier defined elsewhere
         return inner(*args, **kwargs)
 
-    assert C.DISPATCH not in decorated.__globals__                 # the carrier's own globals hold no predicate
-    c = C.UnslothMoeCounter().install().patch_loaded(_experts(decorated, n=1))
+    assert C.DISPATCH not in decorated.__globals__
+    c = C.UnslothMoeCounter().install().patch_loaded(_experts(decorated))
     s = c.snapshot()
     assert s["expert_forwards"][f"{__name__}.Qwen3_5MoeExperts"][0]["unwrapped"] == 1
     assert [x["tag"] for x in s["served"]] == ["package"]
 
 
-def test_the_dispatch_wrapper_observes_and_never_changes_the_decision(zoo):
+def test_the_wrappers_and_hooks_observe_and_never_change_anything(zoo):
     mg, nf, fwd = zoo
     mu = zoo.mu
     copy = _copy(zoo, "cache_eq")
-    c = C.UnslothMoeCounter().install().patch_loaded(_experts(copy.forward_moe_backend))
-    x, base, la, lb = _stacks()
+    ex = _experts(copy.forward_moe_backend)[0]
+    args = _stacks()
+    want = ex(*args)                                              # before install: the plain call
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    assert torch.equal(ex(*args), want)                           # the hooks pass inputs and output through
+    x, base, la, lb = args
     huge = torch.ones(2048 * E_BASE + 1, 48)
     for g in (vars(mu), vars(copy)):
         wrapped = g[C.DISPATCH]
         assert wrapped is not wrapped.__wrapped__
-        for args in ((x, base), (x, la), (huge, base), (x, torch.ones(4, 4))):
-            assert wrapped(*args) == wrapped.__wrapped__(*args)
+        for a in ((x, base), (x, la), (huge, base), (x, torch.ones(4, 4))):
+            assert wrapped(*a) == wrapped.__wrapped__(*a)
     c.uninstall()
     assert not hasattr(vars(mu)[C.DISPATCH], "__wrapped__") and not hasattr(vars(copy)[C.DISPATCH], "__wrapped__")
+    n = len(c.passes)
+    ex(*args)
+    assert len(c.passes) == n                                     # uninstall removed the hooks
 
 
 def test_mutant_a_lora_call_deciding_torch_voids(zoo):
     mg, nf, fwd = zoo
     zoo.mu._FORCE_LORA_TORCH = True
-    c = C.UnslothMoeCounter().install()
-    zoo.mu.get_forward_moe_backend()(*_stacks())
-    ok, why = C.check_dispatch(c.snapshot())
+    ex = _experts(zoo.mu.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    _step(c, mg, ex, 0)
+    c.mark_step(1)
+    ok, why = C.check_dispatch(c.snapshot(), c.structural(1, 1))
     assert not ok and "LoRA-class GEMMs decided torch" in why
 
 
@@ -661,97 +833,127 @@ def test_mutant_a_triton_decided_call_that_falls_back_eager_voids(zoo):
         raise RuntimeError("self-check")
 
     mg._self_check_generic = failing_self_check                   # triton_grouped_available is now False (821-830)
-    c = C.UnslothMoeCounter().install()
-    zoo.mu.get_forward_moe_backend()(*_stacks())
-    ok, why = C.check_dispatch(c.snapshot())
+    ex = _experts(zoo.mu.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    c.mark_step(0)
+    ex(*_stacks())
+    c.mark_step(1)
+    ok, why = C.check_dispatch(c.snapshot(), c.structural(1, 1))
     assert not ok and "fallback moved by 3" in why
 
 
-def test_mutant_backward_off_the_triton_branch_voids_by_the_implied_count(zoo):
+def test_mutant_backward_off_the_triton_branch_voids_by_the_structural_count(zoo):
     mg, nf, fwd = zoo
-    c = C.UnslothMoeCounter().install()
-    zoo.mu.get_forward_moe_backend()(*_stacks())
+    ex = _experts(zoo.mu.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    c.mark_step(0)
+    with torch.no_grad():
+        ex(*_stacks())
+    ex(*_stacks())
     _backward_as_the_library_would(mg, 0, 2)                      # create_graph: gx went eager (642-645), not generic
-    ok, why = C.check_dispatch(c.snapshot())
-    assert not ok and "generic_gemm: wrapper 3 != 5 the decisions imply" in why
+    c.mark_step(1)
+    ok, why = C.check_dispatch(c.snapshot(), c.structural(1, 1))
+    assert not ok and "generic_gemm: wrapper 6 != 8 the decisions imply" in why
 
 
 def test_the_sm120_guard_voids_a_base_gemm_that_decided_torch(zoo):
     mg, nf, fwd = zoo
-    c = C.UnslothMoeCounter().install()
-    x, base, la, lb = _stacks(base_rows=2048 * E_BASE + 1)        # one row past "many"'s 2048 x E
-    zoo.mu.get_forward_moe_backend()(x, base, la, lb)
-    _backward_as_the_library_would(mg, 2, 2)
-    s = c.snapshot()
-    assert s["dispatch"]["gemm:many:torch"] == 1
-    assert C.check_dispatch(s) == (True, "")                      # a mixed lane (P237's sm_89) registers this
-    ok, why = C.check_dispatch(s, base_must_be_triton=True)
-    assert not ok and "1 base GEMMs decided torch" in why
+    ex = _experts(zoo.mu.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    _step(c, mg, ex, 0, args=_stacks(base_rows=2048 * E_BASE + 1))   # one row past "many"'s 2048 x E
+    c.mark_step(1)
+    s, st = c.snapshot(), c.structural(1, 1)
+    assert s["dispatch"]["gemm:many:torch"] == 2
+    assert C.check_dispatch(s, st) == (True, "")                 # a mixed lane (P237's sm_89) registers this
+    ok, why = C.check_dispatch(s, st, base_must_be_triton=True)
+    assert not ok and "2 base GEMMs decided torch" in why
 
 
-def test_a_checkpointed_double_forward_is_counted_twice(zoo):
+# -- the NF4 dX, by structure --------------------------------------------------------------------------------------------------------
+def _nf4_expert(fwd):
+    """An expert module whose forward is the NF4 caller (moe_utils_expert_forward): one maybe_nf4_grouped_mm per pass."""
+    return _experts(lambda self, x: fwd(x, W, LORA))[0]
+
+
+@pytest.mark.parametrize("ckpt", CKPT)
+def test_expected_launches_are_fused_calls_plus_the_structural_dx(zoo, ckpt):
     mg, nf, fwd = zoo
-    c = C.UnslothMoeCounter().install()
-    for _ in range(2):                                            # the forward, then its recompute under checkpointing
-        zoo.mu.get_forward_moe_backend()(*_stacks())
-    _backward_as_the_library_would(mg, 4, 4)
-    s = c.snapshot()
-    assert s["dispatch"]["gemm:lora:triton"] == 4 and C.check_dispatch(s) == (True, "")
-
-
-def test_check_env_scans_the_library_source_not_a_prefix(zoo, monkeypatch):
-    mg, nf, fwd = zoo
-    pins = {"UNSLOTH_MOE_NF4_FUSED": "1", "UNSLOTH_MOE_GROUPED_TRITON": "auto"}
-    monkeypatch.setenv("UNSLOTH_MOE_GROUPED_TRITON", "auto")
-    s = C.UnslothMoeCounter().install().snapshot()
-    assert {"UNSLOTH_DISABLE_MOE_TRITON", "UNSLOTH_MOE_GROUPED_TRITON", "UNSLOTH_GPTOSS_FP16_GEMM"} <= set(s["env_keys"])
-    assert C.check_env(s, dict(os.environ), pins) == (True, "")
-    monkeypatch.setenv("UNSLOTH_DISABLE_MOE_TRITON", "1")          # ambient, and not UNSLOTH_MOE_*: a prefix test misses it
-    ok, why = C.check_env(s, dict(os.environ), pins)
-    assert not ok and "ambient UNSLOTH_DISABLE_MOE_TRITON='1'" in why
-    monkeypatch.delenv("UNSLOTH_DISABLE_MOE_TRITON")
-    ok, why = C.check_env(s, dict(os.environ), {**pins, "UNSLOTH_MOE_TYPO": "1"})
-    assert not ok and "registered UNSLOTH_MOE_TYPO is not a key the library reads" in why
-
-
-def test_an_unscanned_library_fails_check_env(zoo, monkeypatch):
-    mg, nf, fwd = zoo
-    zoo.mu.__file__ = str(zoo.tmp / "missing.py")
-    s = C.UnslothMoeCounter().install().snapshot()
-    assert s["env_unscanned"] and not C.check_env(s, dict(os.environ), {})[0]
-
-
-def test_expected_launches_count_a_dx_only_for_fused_calls_under_grad(zoo):
-    """Training (grad on, input requiring grad) gets a dX launch per fused call; an eval or a checkpoint's no-grad first pass gets
-    none. expected_launches = fused calls + fused calls under grad, for any checkpointing pattern."""
-    mg, nf, fwd = zoo
-    c = C.UnslothMoeCounter().install()
+    ex = _nf4_expert(fwd)
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
     xg = X.clone().requires_grad_(True)
-    for _ in range(2):
-        with torch.no_grad():
-            fwd(X, W, LORA)                                       # the checkpoint's first pass: no dX
-        fwd(xg, W, LORA)                                          # the recompute under grad ...
-        nf.nf4_dx(torch.ones(4, 3), W)                            # ... and its dX in backward
-    with torch.no_grad():
-        fwd(xg, W, LORA)                                          # an eval forward: grad off, no dX
-    s = c.snapshot()
-    assert s["counts"]["nf4_fused_calls"] == 5 and s["counts"]["nf4_fused_calls_grad"] == 2
-    assert C.expected_launches(s) == 7 == s["library_delta"]["nf4"]["launches"]
-    assert C.check_fused(s, C.expected_launches(s)) == (True, "")
+    for i in range(2):
+        c.mark_step(i)
+        if ckpt == "none":
+            ex(xg)
+        elif ckpt == "nonreentrant":
+            ex(xg)
+            ex(xg)
+        else:
+            with torch.no_grad():
+                ex(xg)
+            ex(xg)
+        nf.nf4_dx(torch.ones(4, 3), W)                            # the one backward: one dX launch inside the op
+    ex.eval()
+    ex(xg)                                                        # an eval forward: a fused launch, no dX
+    ex.train()
+    c.mark_step(2)
+    s, st = c.snapshot(), c.structural(1, 2)
+    assert st["faults"] == [] and st["expected"]["dx_nf4"] == 2
+    assert C.expected_launches(s, st) == s["library_delta"]["nf4"]["launches"]
+    assert C.check_fused(s, C.expected_launches(s, st)) == (True, "")
+    # MUTANT: the under-grad rule (fused calls + fused calls under grad) counts a dX for the grad-on eval forward (tc1_arm's
+    # eval_loss runs with grad on), and twice per step under HF non-reentrant; the structural rule reads right in all four
+    under = s["counts"]["nf4_fused_calls"] + s["counts"]["nf4_fused_calls_grad"]
+    assert under != s["library_delta"]["nf4"]["launches"]
 
 
 def test_mutant_a_dx_that_ran_outside_the_op_voids_the_launch_equality(zoo):
     mg, nf, fwd = zoo
-    c = C.UnslothMoeCounter().install()
-    fwd(X.clone().requires_grad_(True), W, LORA)                  # under grad: the counter expects a dX launch ...
+    ex = _nf4_expert(fwd)
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    c.mark_step(0)
+    ex(X.clone().requires_grad_(True))                            # one training pass: the structure expects one dX launch ...
+    c.mark_step(1)
     s = c.snapshot()                                              # ... that never ran in the op (e.g. an eager dX)
-    ok, why = C.check_fused(s, C.expected_launches(s))
+    ok, why = C.check_fused(s, C.expected_launches(s, c.structural(1, 1)))
     assert not ok and "launches 1 != expected 2" in why
 
 
-def test_expected_launches_reads_unread_when_the_mode_was_unread(zoo, monkeypatch):
+def test_expected_launches_read_unread_without_structure_or_with_an_unread_mode(zoo):
     mg, nf, fwd = zoo
     c = C.UnslothMoeCounter().install()
+    assert C.expected_launches(c.snapshot(), None) is None
+    assert C.expected_launches(c.snapshot(), {"faults": ["x"], "expected": {"dx_nf4": 0}}) is None
     c.counts["nf4_mode_unread"] = 1
-    assert C.expected_launches(c.snapshot()) is None
-    assert C.check_fused(c.snapshot(), None)[0] is False
+    assert C.expected_launches(c.snapshot(), {"faults": [], "expected": {"dx_nf4": 0}}) is None
+
+
+# -- the environment: every module of the installed packages, and every SET key registered ---------------------------------------
+def test_check_env_scans_every_module_of_both_packages(zoo, monkeypatch):
+    mg, nf, fwd = zoo
+    pins = {"UNSLOTH_MOE_NF4_FUSED": "1", "UNSLOTH_MOE_GROUPED_TRITON": "auto", "UNSLOTH_MOE_FUSED_ROUTER": "1"}
+    for k, v in pins.items():
+        monkeypatch.setenv(k, v)
+    s = C.UnslothMoeCounter().install().snapshot()
+    assert {"UNSLOTH_MOE_FUSED_ROUTER", "UNSLOTH_COMPILE_DISABLE", "UNSLOTH_DISABLE_MOE_TRITON", "UNSLOTH_GPTOSS_FP16_GEMM"} <= set(s["env_keys"])
+    assert s["env_counts"]["unsloth_zoo/temporary_patches/moe_router_triton.py"] == 1 and s["env_counts"]["unsloth/__init__.py"] == 1
+    assert C.check_env(s, dict(os.environ), pins) == (True, "")
+    monkeypatch.setenv("UNSLOTH_MOE_FUSED_ROUTER", "0")           # a router switch outside the old three-module list
+    ok, why = C.check_env(s, dict(os.environ), pins)
+    assert not ok and "UNSLOTH_MOE_FUSED_ROUTER='0' (registered '1')" in why
+    monkeypatch.setenv("UNSLOTH_MOE_FUSED_ROUTER", "1")
+    monkeypatch.setenv("UNSLOTH_DISABLE_MOE_TRITON", "1")         # ambient, scanned
+    assert "ambient UNSLOTH_DISABLE_MOE_TRITON='1'" in C.check_env(s, dict(os.environ), pins)[1]
+    monkeypatch.delenv("UNSLOTH_DISABLE_MOE_TRITON")
+    monkeypatch.setenv("UNSLOTH_NOT_IN_ANY_FILE", "1")            # ambient and read by nothing we scanned: still VOID
+    assert "ambient UNSLOTH_NOT_IN_ANY_FILE='1'" in C.check_env(s, dict(os.environ), pins)[1]
+    monkeypatch.delenv("UNSLOTH_NOT_IN_ANY_FILE")
+    ok, why = C.check_env(s, dict(os.environ), {**pins, "UNSLOTH_MOE_TYPO": "1"})
+    assert not ok and "registered UNSLOTH_MOE_TYPO is not a key the library reads" in why
+
+
+def test_an_unscanned_package_fails_check_env(zoo, monkeypatch):
+    mg, nf, fwd = zoo
+    monkeypatch.setitem(sys.modules, "unsloth", types.ModuleType("unsloth"))   # no spec: the package cannot be located
+    s = C.UnslothMoeCounter().install().snapshot()
+    assert s["env_unscanned"] and not C.check_env(s, dict(os.environ), {})[0]

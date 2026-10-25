@@ -8,7 +8,9 @@ unsloth_zoo 2026.10.8. Lanes that time Unsloth's MoE training import it, so they
   - the NF4-fused grouped GEMM (unsloth-zoo#1935, `maybe_nf4_grouped_mm`), fused or declined;
   - the library's own counters (`GENERIC_CALLS`, `NF4_FUSED_STATS`) as deltas.
 - **What binds:** a fused arm binds on `NF4_FUSED_STATS.launches` equal to `expected_launches`, exact: a forward launch per
-  fused call plus a dX launch per fused call made under grad (counted per call), for mode 1 and auto and any checkpointing. That one
+  fused call plus the dX launches BY STRUCTURE (each expert module backwarded once per micro-batch per step), which holds under
+  every checkpointer; the per-call "under grad" split is kept as information only (HF non-reentrant runs two passes under grad
+  and backwards one). That one
   equality catches the silent declines (a shape mismatch, a `FAILED_SHAPES` entry) and the failed-launch fallback. An unfused
   arm binds on zero launches and zero calls.
 - **The auto arm:** declining above the row cap is its design, so its expected count admits only the calls the library's own
@@ -16,16 +18,20 @@ unsloth_zoo 2026.10.8. Lanes that time Unsloth's MoE training import it, so they
 - **The per-call dispatch:** it records Triton-or-torch for every grouped expert GEMM, from the library's own predicate. The
   predicate is wrapped in the package moe_utils at install and, by `patch_loaded(experts)` after the model load, in the module
   object behind the forward each LOADED expert module runs: the zoo binds the forward at patch time, and the compile-cache copy
-  can appear during the load. It records each serving object, each expert type's distinct forwards with their module counts (so
-  a mixed model shows) and the resolved per-class limits. `check_dispatch` VOIDs when:
+  can appear during the load. Experts the library hands off by its own predicates (bnb 4-bit, then fp8) are served by the
+  package moe_utils, since those modules import it relatively. It records each serving object, each expert type's distinct
+  forwards and rule with their module counts (so a mixed model shows), the resolved per-class limits, and attributes every
+  decision to the expert-module forward it ran in. `check_dispatch` VOIDs when:
   - a serving object decided no GEMM, a GEMM was decided through an object that serves no forward, or a loaded expert's forward
     holds no predicate;
   - a LoRA-class GEMM decided torch;
   - a Triton-decided call fell back eager;
-  - the generic counts differ from the counts the decisions imply (`implied_generic`);
+  - the generic counts differ from the counts the decisions imply (`implied_generic`: the Triton forwards plus the structural
+    backward), or one module's training passes inside a step decided differently;
   - optionally, for a lane whose sweep sits inside every limit, a base GEMM decided torch.
-- **The environment:** `check_env` scans the three library modules' source for every `UNSLOTH_*` key they read. Each one is
-  unset or at the arm's registered pin; a prefix test would miss `UNSLOTH_DISABLE_MOE_TRITON` and others.
+- **The environment:** `check_env` refuses any `UNSLOTH_*` key set in the arm's environment that is not registered at its
+  value; registered names are held to a scan of every source file of the installed unsloth and unsloth_zoo packages, with the
+  count per module recorded (the router switch `UNSLOTH_MOE_FUSED_ROUTER` sits outside the three modules a list would name).
   Wrapper counts bind only beside a counterpart that counts per call even when Python does not run.
 - **Tests** (`tests/test_unsloth_moe_counter.py`), on CPU stand-ins at the real module paths:
   - a VOID for each silent decline and for a failed launch;
@@ -40,6 +46,12 @@ unsloth_zoo 2026.10.8. Lanes that time Unsloth's MoE training import it, so they
     passed and VOID when not; a mixed model records each forward and VOIDs until every one decides; experts left on the original
     forward VOID; a decorated forward unwraps; the wrapper returns the predicate's own answer and uninstall restores it; a LoRA
     call deciding torch, an eager fallback, a backward off the Triton branch and (with the guard) a base GEMM deciding torch
-    each VOID; a checkpointed double forward is counted twice; an ambient `UNSLOTH_DISABLE_MOE_TRITON=1` and an unscanned library each fail
-    `check_env`;
+    each VOID;
+  - the structural count reads right under all four checkpoint shapes (none, HF non-reentrant, reentrant, Unsloth's), and the
+    under-grad rule fails under non-reentrant as a mutant; micro-batches multiply the backward; passes that disagree inside a
+    step, a step with no training pass, and a pass outside every step each VOID; an eval pass is not a training pass;
+  - bnb 4-bit experts on the copy's forward are served by the package (qwen3_5_moe and qwen3_moe stand-ins), and VOID without
+    the rule; a 16-bit stack still needs the copy's decisions; a mixed model needs both;
+  - the env scan reaches a module no list named; an ambient router switch, an ambient key no file reads and an unscanned
+    package each fail `check_env`;
   - absent targets, an absent library and an unreadable auto predicate, which read unread, never pass.

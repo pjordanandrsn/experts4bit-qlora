@@ -20,10 +20,11 @@ What it counts, in the release-proven unsloth_zoo 2026.10.8 (wheel sha256 db8c28
   the call decodes eagerly, uncounted) is the compile-safe counter; ``calls`` (546) and ``fallbacks`` (531) count only in eager mode.
 
 What binds, and what doesn't:
-- A fused arm binds on ``NF4_FUSED_STATS.launches`` == :func:`expected_launches`, exact: one forward launch per fused call, plus one
-  dX launch per fused call made under grad with an input that requires grad (``nf4_fused_calls_grad``; the custom op's backward is
-  dX only). That holds for mode 1 and auto and for any checkpointing pattern (an eval or a checkpoint's no-grad first pass adds no
-  dX). That equality catches the silent paths: a shape mismatch (moe_nf4_grouped.py:534-537) and a
+- A fused arm binds on ``NF4_FUSED_STATS.launches`` == :func:`expected_launches`, exact: one forward launch per fused call (recompute
+  and evals included), plus the dX launches BY STRUCTURE (:meth:`UnslothMoeCounter.structural`: every expert module is backwarded
+  once per micro-batch per step; the custom op's backward is dX only). Never from "fused calls under grad": HF non-reentrant
+  checkpointing runs both passes under grad and backwards one, and an eval runs with grad on and backwards none (that split,
+  ``nf4_fused_calls_grad``, is kept as information). That equality catches the silent paths: a shape mismatch (moe_nf4_grouped.py:534-537) and a
   ``FAILED_SHAPES`` entry (538-542), which return None with no counter, and the failed-launch decrement (275), whose eager decode is
   uncounted.
 - ``auto`` declining above its row cap (523) is that arm's DESIGN, not a fault. So the expected count of an auto arm admits only the
@@ -33,9 +34,9 @@ What binds, and what doesn't:
   and every call for ``1``; the lane's own count from its routed rows must agree (:func:`check_equal`). At a fixed op-level shape
   every call has the same rows, so auto is all-or-none (rows = tokens x 8 for top-8: fused at <= 4,096 tokens, 0 launches above).
 - A ``UNSLOTH_MOE_NF4_FUSED=0`` arm binds on ``launches == 0`` and ``calls == 0``.
-- Every Unsloth MoE knob an arm depends on is set explicitly to its registered value, and :func:`check_env` refuses any other value
-  or any unregistered ``UNSLOTH_MOE_*`` key in the arm's environment (an ambient ``UNSLOTH_MOE_NF4_AUTO_MAX_ROWS`` moves auto's cap;
-  ``UNSLOTH_MOE_NF4_AUTOTUNE=1`` retunes tiles per shape, line 316).
+- Every Unsloth knob an arm depends on is set explicitly to its registered value, and :func:`check_env` refuses any other value
+  and any unregistered ``UNSLOTH_*`` key SET in the arm's environment (an ambient ``UNSLOTH_MOE_NF4_AUTO_MAX_ROWS`` moves auto's cap;
+  ``UNSLOTH_MOE_NF4_AUTOTUNE=1`` retunes tiles per shape, line 316; ``UNSLOTH_MOE_FUSED_ROUTER`` switches the router in the step).
 - The wrapper counts are binding only BESIDE a counterpart that runs per call even when Python doesn't: the profiler's kernel counts
   (F15 v2) or ``NF4_FUSED_STATS.launches``. The two are required equal (:func:`check_equal`). Why: a Python wrapper runs only when
   Python runs. Under ``torch.compile`` (dynamo, torch 2.14) the dict increments are replayed on every call, so the wrapper DOES count
@@ -55,19 +56,26 @@ The per-call Triton-or-torch dispatch (moe_utils.py:572 ``_triton_grouped_mm_wan
   PATCH TIME as the experts' class forward (qwen3_5_moe.py:53-60, qwen3_moe.py:84-85), and the cache copy can appear during the
   model load. So :func:`install` (before the load) patches the package module and the current answer, and
   :meth:`UnslothMoeCounter.patch_loaded` (after the load and the framework's patching, before the first forward) patches the globals
-  of the forward each LOADED expert module runs (``type(module).forward``) and serves from those. ``served`` records each serving
+  of the forward each LOADED expert module runs (``type(module).forward``) and serves from those. EXCEPT where the library hands the
+  module off: ``forward_moe_backend`` asks ``moe_utils_bnb4bit._moe_uses_bnb4bit_expert_weights`` and then the fp8 predicate
+  (moe_utils.py:2065-2087), and those modules import ``forward_native_grouped_mm`` RELATIVELY (moe_utils_bnb4bit.py:367-376), which
+  resolves to the PACKAGE moe_utils, never the copy. So each module's serving object is chosen by the library's own predicates, in its
+  own order: bnb 4-bit (P237's and P238's NF4 QLoRA) and fp8 experts are served by the package. ``served`` records each serving
   object (its tag, ``__name__``, ``__file__``, whether it is the package module); ``expert_forwards`` records each expert type's
   distinct forwards and how many modules hold each, so a mixed model shows; ``served_fresh`` (a fresh
   ``get_forward_moe_backend()`` call) is information only.
 - Each decision is recorded by site, class (the library's own ``_triton_grouped_mm_kind``) and outcome, with whether grad was enabled
-  and whether the input / weight required grad; the resolved limit per class (``_triton_grouped_mm_max_rows``) is recorded on first
-  sight. :func:`implied_generic` turns the decisions into the generic counts they imply (a Triton forward; its backward gx when
-  grad was on and the input required it; its LoRA dW when the weight required it), and :func:`check_dispatch` holds the wrapper
-  counts to them, with every LoRA-class call deciding Triton and the library's ``GENERIC_CALLS["fallback"]`` delta 0.
-- :func:`check_env` works by SOURCE SCAN: every ``UNSLOTH_*`` key the three modules read from the environment (moe_utils,
-  moe_grouped_fp16, moe_nf4_grouped; scanned at :func:`install` from their files) is unset or at its registered value. A prefix test
-  would miss ``UNSLOTH_DISABLE_MOE_TRITON``, ``UNSLOTH_MOE_BACKEND``, ``UNSLOTH_COMPILE_LOCATION`` and others. The policy is cached
-  on the environment at first use (521-533), so every pin is set before the zoo is imported.
+  and whether the input / weight required grad, and is ATTRIBUTED to the expert-module forward it ran in (forward pre/post hooks
+  ``patch_loaded`` puts on the passed modules; they return None) or to "outside" (the backward's own decisions, as the dequant
+  path's dX at 1110). The lane marks each optimizer step (:meth:`UnslothMoeCounter.mark_step`). The resolved limit per class
+  (``_triton_grouped_mm_max_rows``) is recorded on first sight. :meth:`UnslothMoeCounter.structural` gives the backward BY STRUCTURE
+  (each module backwarded once per micro-batch per step; its training passes in that step must agree, else VOID), and
+  :func:`implied_generic` adds it to the Triton forwards; :func:`check_dispatch` holds the wrapper counts to that, with every
+  LoRA-class call deciding Triton and the library's ``GENERIC_CALLS["fallback"]`` delta 0.
+- :func:`check_env` refuses any ``UNSLOTH_*`` key SET in the arm's environment that is not registered at exactly its value. The
+  registered names are held to a SOURCE SCAN of every file of the installed ``unsloth_zoo`` and ``unsloth`` packages (no hand-kept
+  module list: the module nobody named is the one that bites), with the count per module recorded. The policy is cached on the
+  environment at first use (521-533), so every pin is set before the zoo is imported.
 
 Standard library plus nothing else at import time; the target modules are imported only by :func:`install`.
 """
@@ -95,8 +103,13 @@ NF4_MODE_FN, NF4_AUTO_FN = "nf4_fused_mode", "nf4_auto_fused"
 MOE_UTILS = "unsloth_zoo.temporary_patches.moe_utils"
 DISPATCH, KIND_FN, LIMIT_FN, SERVER_FN = "_triton_grouped_mm_wanted", "_triton_grouped_mm_kind", "_triton_grouped_mm_max_rows", "get_forward_moe_backend"
 GEMM_SITE = "_grouped_mm_with_backward_fix"
-ENV_SOURCES = (MOE_UTILS, FP16, NF4)
-ENV_RE = re.compile(r"""(?:environ|getenv)[^\n]{0,20}?["'](UNSLOTH_[A-Z0-9_]+)["']""")
+#: the library's own hand-off predicates, in the order forward_moe_backend asks them (moe_utils.py:2065-2087): a module they claim is
+#: served by the module object their relative ``from .moe_utils import ...`` resolves to (moe_utils_bnb4bit.py:367-376), the PACKAGE
+HANDOFF = (("bnb4bit", "unsloth_zoo.temporary_patches.moe_utils_bnb4bit", "_moe_uses_bnb4bit_expert_weights"),
+           ("fp8", "unsloth_zoo.temporary_patches.moe_utils_fp8", "_moe_uses_fp8_expert_weights"))
+#: every source file of these installed packages is scanned for UNSLOTH_* names (no hand-kept module list)
+ENV_PACKAGES = ("unsloth_zoo", "unsloth")
+ENV_RE = re.compile(r"""["'](UNSLOTH_[A-Z0-9_]+)["']""")
 
 
 class UnslothMoeCounter:
@@ -121,6 +134,12 @@ class UnslothMoeCounter:
         self.env_keys = []
         self.env_unscanned = []
         self._saved_globals = []
+        self.env_by_module = {}              # package-relative path -> the UNSLOTH_* names its source quotes
+        self.passes = []                     # one record per expert-module forward (patch_loaded's hooks): decisions attributed
+        self.outside = []                    # decisions made outside any expert forward (the backward's own dX decisions)
+        self.n_modules = 0
+        self._step = None                    # set by mark_step (the tc1_arm hook's step_edge)
+        self._hooks = []
 
     # -- install / uninstall -------------------------------------------------------------------------------------------------
     def install(self):
@@ -178,44 +197,107 @@ class UnslothMoeCounter:
         except Exception as e:  # noqa: BLE001
             self.dispatch_absent.append(f"{MOE_UTILS}.{SERVER_FN}: {type(e).__name__}")
         if experts is None:                  # install() before the load: the fresh answer serves until patch_loaded replaces it
-            serving, source = ([fresh] if fresh is not None else []), "fresh"
+            serving = [(fresh, "fresh")] if fresh is not None else []
         else:
-            serving, source = self._expert_globals(experts), "loaded"
-            if not serving and not self.expert_forwards:
+            experts = list(experts)
+            serving = self._expert_globals(experts)
+            if not experts:
                 self.dispatch_absent.append("patch_loaded: no expert modules passed")
+            self._track_passes(experts)
         self.served = []
-        for g in serving:
+        for g, source in serving:
             tag = self._patch_globals(g, mu)
             if tag is not None and all(s["tag"] != tag for s in self.served):
                 self.served.append({"tag": tag, "module": g.get("__name__"), "file": g.get("__file__"), "is_package": g is vars(mu),
                                     "source": source})
 
+    def _rule(self, m):
+        """Which path serves this module's GEMM decisions, by the library's OWN hand-off predicates in its own order: "bnb4bit", "fp8",
+        else "dispatcher" (the class forward). A predicate that cannot be imported is skipped, as the library skips it (2066-2072)."""
+        for rule, mod, fn in HANDOFF:
+            try:
+                pred = getattr(importlib.import_module(mod), fn)
+            except (ImportError, AttributeError):
+                continue
+            if pred(m):
+                return rule
+        return "dispatcher"
+
     def _expert_globals(self, experts):
-        """The globals of each expert type's class forward, unwrapped through ``__wrapped__`` (a compiled or decorated forward) to the
-        first function whose globals hold the predicate. A forward with no such function (the patch was skipped and the original
-        transformers forward runs) is recorded as dispatch-absent."""
+        """[(globals, source)] serving the passed expert modules. A module a hand-off predicate claims is served by the package
+        moe_utils (its relative import); any other by its class forward, unwrapped through ``__wrapped__`` to the first function whose
+        globals hold the predicate. A forward with no such function is recorded as dispatch-absent. ``expert_forwards`` records each
+        expert type's distinct (forward, rule) with its module count."""
         self.expert_forwards = {}
-        by_fn, out = {}, []
+        groups, out = {}, []
         for m in experts:
             t = type(m)
             f = getattr(t, "forward", None)
-            by_fn.setdefault((f"{t.__module__}.{t.__qualname__}", id(f)), [f, 0])[1] += 1
-        for (tname, _), (f, n) in by_fn.items():
-            g, hop, cur = None, 0, f
-            while cur is not None and hop <= 8:
-                cg = getattr(getattr(cur, "__func__", cur), "__globals__", None)
-                if cg is not None and callable(cg.get(DISPATCH)):
-                    g = cg
-                    break
-                cur, hop = getattr(cur, "__wrapped__", None), hop + 1
+            try:
+                rule = self._rule(m)
+            except Exception as e:  # noqa: BLE001 -- the library would raise here too; recorded, and it VOIDs
+                rule = "unreadable"
+                self.dispatch_absent.append(f"{t.__qualname__}: the hand-off predicate raised {type(e).__name__}")
+            groups.setdefault((f"{t.__module__}.{t.__qualname__}", id(f), rule), [f, 0])[1] += 1
+        for (tname, _, rule), (f, n) in groups.items():
             name = f"{getattr(f, '__module__', '?')}.{getattr(f, '__qualname__', type(f).__name__)}"
-            self.expert_forwards.setdefault(tname, []).append({"forward": name, "globals_module": g.get("__name__") if g else None,
-                                                               "unwrapped": hop if g else None, "modules": n})
-            if g is None:
-                self.dispatch_absent.append(f"{tname}.forward ({name}): no {DISPATCH} in its globals ({n} modules)")
-            elif all(x is not g for x in out):
-                out.append(g)
+            g, hop = None, None
+            if rule in {r for r, _, _ in HANDOFF}:
+                mod = importlib.import_module(next(m_ for r, m_, _ in HANDOFF if r == rule))
+                g = vars(importlib.import_module(f"{mod.__package__}.moe_utils"))
+                if not callable(g.get(DISPATCH)):
+                    self.dispatch_absent.append(f"{tname} ({rule}): no {DISPATCH} in {mod.__package__}.moe_utils")
+                    g = None
+            elif rule == "dispatcher":
+                hop, cur = 0, f
+                while cur is not None and hop <= 8:
+                    cg = getattr(getattr(cur, "__func__", cur), "__globals__", None)
+                    if cg is not None and callable(cg.get(DISPATCH)):
+                        g = cg
+                        break
+                    cur, hop = getattr(cur, "__wrapped__", None), hop + 1
+                if g is None:
+                    self.dispatch_absent.append(f"{tname}.forward ({name}): no {DISPATCH} in its globals ({n} modules)")
+            self.expert_forwards.setdefault(tname, []).append({"forward": name, "rule": rule, "modules": n,
+                                                               "globals_module": g.get("__name__") if g else None,
+                                                               "unwrapped": hop if g is not None and rule == "dispatcher" else None})
+            if g is not None:
+                src = "loaded" if rule == "dispatcher" else rule
+                if all(x is not g for x, _ in out):
+                    out.append((g, src))
         return out
+
+    def _track_passes(self, experts):
+        """Forward pre/post hooks on each passed expert module (observe only: both return None; ``always_call`` so a raising forward
+        still closes its pass). Each forward opens a pass record; the wrappers attribute every decision to the innermost open pass."""
+        local, passes = self._local, self.passes
+        self.n_modules = len(experts)
+        for idx, m in enumerate(experts):
+            def pre(mod, inputs, _i=idx):
+                import torch
+                rec = {"m": _i, "grad": bool(torch.is_grad_enabled()), "training": bool(mod.training), "step": self._step,
+                       "gemm": [], "nf4": []}
+                if getattr(local, "stack", None) is None:
+                    local.stack = []
+                local.stack.append(rec)
+                passes.append(rec)
+                return None
+
+            def post(mod, inputs, output):
+                if getattr(local, "stack", None):
+                    local.stack.pop()
+                return None
+
+            self._hooks.append(m.register_forward_pre_hook(pre))
+            self._hooks.append(m.register_forward_hook(post, always_call=True))
+
+    def _current(self):
+        st = getattr(self._local, "stack", None)
+        return st[-1] if st else None
+
+    def mark_step(self, i):
+        """The boundary before optimizer step ``i`` (and once after the last, i = N): passes until the next mark belong to step i."""
+        self._step = int(i)
 
     def _patch_globals(self, g, mu):
         """Wrap the predicate in one module object's globals, once; returns its tag ("package", or "copyN" in patch order)."""
@@ -246,16 +328,23 @@ class UnslothMoeCounter:
             disp[key] = disp.get(key, 0) + 1
             by = served.setdefault(tag, {"gemm": 0, "probe": 0})
             by[site] += 1
-            if site == "gemm" and decided:
-                try:
-                    import torch
-                    on = torch.is_grad_enabled()
-                    if on and getattr(inputs, "requires_grad", False):
-                        grad["triton_grad_input"] += 1
-                    if on and kind == "lora" and getattr(weight, "requires_grad", False):
-                        grad["triton_grad_lora_weight"] += 1
-                except Exception:  # noqa: BLE001
-                    pass
+            gin = gw = False
+            try:
+                import torch
+                on = torch.is_grad_enabled()
+                gin = bool(on and getattr(inputs, "requires_grad", False))
+                gw = bool(on and kind == "lora" and getattr(weight, "requires_grad", False))
+            except Exception:  # noqa: BLE001
+                pass
+            if site == "gemm" and decided:   # the under-grad split: INFORMATION and a cross-check, never the binding count
+                grad["triton_grad_input"] += gin
+                grad["triton_grad_lora_weight"] += gw
+            cur = self._current()
+            entry = (site, kind, bool(decided), gin, gw)
+            if cur is not None:
+                cur["gemm"].append(entry)
+            else:
+                self.outside.append({"step": self._step, "entry": entry})
             try:
                 lk = f"{tag}:{inputs.device.index}:{kind}"
                 if lk not in limits:
@@ -268,13 +357,27 @@ class UnslothMoeCounter:
         return wrapper
 
     def _scan_env(self):
+        """Every source file of the installed ``unsloth_zoo`` and ``unsloth`` packages, located without importing them, scanned for
+        quoted ``UNSLOTH_*`` names. A closed module list misses the module nobody named (``UNSLOTH_MOE_FUSED_ROUTER`` in
+        moe_router_triton switches the router inside the timed step)."""
+        import importlib.util
+        import pathlib
         keys = set()
-        for mod in ENV_SOURCES:
+        for pkg in ENV_PACKAGES:
             try:
-                path = importlib.import_module(mod).__file__
-                keys |= set(ENV_RE.findall(open(path, encoding="utf-8", errors="replace").read()))
-            except Exception as e:  # noqa: BLE001 -- an unscanned module fails check_env
-                self.env_unscanned.append(f"{mod}: {type(e).__name__}")
+                spec = importlib.util.find_spec(pkg)
+                roots = list(spec.submodule_search_locations or [])
+                if not roots:
+                    raise ImportError("no package directory")
+            except Exception as e:  # noqa: BLE001 -- an unscanned package fails check_env
+                self.env_unscanned.append(f"{pkg}: {type(e).__name__}")
+                continue
+            for root in roots:
+                for path in sorted(pathlib.Path(root).rglob("*.py")):
+                    found = set(ENV_RE.findall(path.read_text(encoding="utf-8", errors="replace")))
+                    if found:
+                        self.env_by_module[f"{pkg}/{path.relative_to(root).as_posix()}"] = sorted(found)
+                    keys |= found
         self.env_keys = sorted(keys)
 
     def uninstall(self):
@@ -285,6 +388,8 @@ class UnslothMoeCounter:
             g, attr, fn = self._saved_globals.pop()
             g[attr] = fn
         self._patched.clear()
+        while self._hooks:
+            self._hooks.pop().remove()
 
     def _wrap(self, key, fn):
         counts, local = self.counts, self._local
@@ -297,7 +402,12 @@ class UnslothMoeCounter:
                 counts["nf4_maybe_calls"] += 1
                 counts["nf4_fused_calls" if out is not None else "nf4_declined"] += 1
                 if out is not None and _grad_call(args, kwargs):
-                    counts["nf4_fused_calls_grad"] += 1
+                    counts["nf4_fused_calls_grad"] += 1     # INFORMATION: the under-grad split, cross-checked, never binding
+                cur = self._current()
+                if cur is not None:
+                    cur["nf4"].append(out is not None)
+                elif out is not None:
+                    self.outside.append({"step": self._step, "nf4": True})
             elif getattr(local, "in_selfcheck", 0):
                 counts["selfcheck_" + key.split("_", 1)[1]] += 1
             else:
@@ -337,6 +447,54 @@ class UnslothMoeCounter:
         wrapper.__wrapped__ = fn
         return wrapper
 
+    # -- the structural backward count ---------------------------------------------------------------------------------------
+    def structural(self, micro_batches, n_steps):
+        """The backward launches a run implies, BY STRUCTURE, independent of the checkpointer: each optimizer step backwards every
+        expert module once per micro-batch. For each step 0..n_steps-1 and each tracked module, the TRAINING passes (``mod.training``;
+        evals run in eval mode) must agree on every GEMM decision (site, class, Triton/torch) and every NF4 fused/declined outcome:
+        decisions are shape-determined, so a disagreement VOIDs. A training pass under grad gives the backward: per micro-batch, one
+        NF4 dX per fused call (the custom op's backward is dX only), one generic gx per Triton GEMM whose input required grad, and one
+        LoRA dW per Triton LoRA GEMM whose weight required grad. Under HF non-reentrant checkpointing both passes run under grad and
+        only one is backwarded, so the per-call under-grad split would double those; it is kept as INFORMATION (``split``).
+
+        Returns {"expected": {"dx_nf4", "gx", "wgrad"}, "faults": [...], "split": {...}, "steps", "modules", "micro_batches"}."""
+        faults, exp = [], {"dx_nf4": 0, "gx": 0, "wgrad": 0}
+        if not self.n_modules:
+            faults.append("no expert module tracked (patch_loaded never saw the experts)")
+        by = {}
+        for p in self.passes:
+            if not p["training"]:
+                continue
+            s_ = p["step"]
+            if s_ is None or not 0 <= s_ < n_steps:
+                faults.append(f"a training pass of expert module {p['m']} outside a marked step (step {s_})")
+                continue
+            by.setdefault((s_, p["m"]), []).append(p)
+        gemm = lambda p: tuple(e[:3] for e in p["gemm"] if e[0] == "gemm")         # noqa: E731
+        for st in range(n_steps):
+            for m in range(self.n_modules):
+                T = by.get((st, m))
+                if not T:
+                    faults.append(f"step {st}: expert module {m} ran no training pass")
+                    continue
+                if len({(gemm(p), tuple(p["nf4"])) for p in T}) != 1:
+                    faults.append(f"step {st}: expert module {m}'s {len(T)} training passes decided differently")
+                    continue
+                G = [p for p in T if p["grad"]]
+                flags = {tuple(e[3:] for e in p["gemm"] if e[0] == "gemm") for p in G}
+                if not G or len(flags) != 1:
+                    faults.append(f"step {st}: expert module {m} has {len(G)} passes under grad with {len(flags)} grad patterns")
+                    continue
+                rep_ = G[0]
+                exp["dx_nf4"] += micro_batches * sum(rep_["nf4"])
+                exp["gx"] += micro_batches * sum(1 for e in rep_["gemm"] if e[0] == "gemm" and e[2] and e[3])
+                exp["wgrad"] += micro_batches * sum(1 for e in rep_["gemm"] if e[0] == "gemm" and e[2] and e[4])
+        split = {"gx_under_grad": self.dispatch_grad["triton_grad_input"], "wgrad_under_grad": self.dispatch_grad["triton_grad_lora_weight"],
+                 "dx_nf4_under_grad": self.counts["nf4_fused_calls_grad"]}
+        split["agrees"] = (split["gx_under_grad"], split["wgrad_under_grad"], split["dx_nf4_under_grad"]) == (exp["gx"], exp["wgrad"], exp["dx_nf4"])
+        return {"expected": exp, "faults": faults, "split": split, "steps": n_steps, "modules": self.n_modules,
+                "micro_batches": micro_batches}
+
     # -- reading -------------------------------------------------------------------------------------------------------------
     def _library(self):
         out = {}
@@ -360,7 +518,8 @@ class UnslothMoeCounter:
                 "dispatch_absent": list(self.dispatch_absent), "served": [dict(x) for x in self.served],
                 "served_fresh": self.served_fresh, "expert_forwards": {k: [dict(x) for x in v] for k, v in self.expert_forwards.items()},
                 "limits": dict(self.limits),
-                "env_keys": list(self.env_keys), "env_unscanned": list(self.env_unscanned)}
+                "env_keys": list(self.env_keys), "env_unscanned": list(self.env_unscanned),
+                "env_counts": {k: len(v) for k, v in self.env_by_module.items()}, "passes_n": len(self.passes)}
 
 
 def check_library(snap):
@@ -396,7 +555,7 @@ def check_equal(name, wrapper_count, counterpart_count, counterpart_name):
 
 def check_fused(snap, expected_launches):
     """(ok, why) for a fused arm (UNSLOTH_MOE_NF4_FUSED 1 / auto): NF4_FUSED_STATS.launches == the expected fused base GEMMs,
-    exact. The lane computes ``expected_launches`` from the arm's own expert-forward count (forward + dX per projection)."""
+    exact: ``expected_launches`` (the fused calls plus the dX launches by structure)."""
     n = snap["library_delta"].get("nf4")
     if n is None or expected_launches is None:
         return False, f"NF4_FUSED_STATS unreadable or no expected count (delta {n}, expected {expected_launches})"
@@ -417,25 +576,22 @@ def check_unfused(snap):
 
 
 def _grad_call(args, kwargs):
-    """Whether a fused call will get a dX in backward: grad on, and its input requires grad (the custom op's autograd backward is dX
-    only, moe_nf4_grouped.py:370-411)."""
+    """Whether a fused call ran with grad on and an input that requires grad: the under-grad split (INFORMATION only)."""
     try:
         import torch
         inputs = kwargs.get("inputs", args[0] if args else None)
         return bool(torch.is_grad_enabled() and getattr(inputs, "requires_grad", False))
-    except Exception:  # noqa: BLE001 -- unreadable reads as no dX; the launch equality then VOIDs a call that did launch one
+    except Exception:  # noqa: BLE001
         return False
 
 
-def expected_launches(snap):
-    """The fused launches the recorded calls imply: one forward launch per fused call (269), plus one dX launch in backward per
-    fused call made under grad with an input that requires grad. It holds for mode 1 and for auto (only admitted calls fuse), and
-    for any checkpointing pattern: a no-grad forward (an eval, or a checkpoint's first pass) adds no dX. None when the mode or the
-    predicate was unread."""
+def expected_launches(snap, structural):
+    """The fused launches a run implies: one forward launch per fused call, recompute and evals included (269), plus the structural
+    dX launches (:meth:`UnslothMoeCounter.structural`). None when the mode or predicate was unread, or the structure faulted."""
     c = snap["counts"]
-    if c["nf4_mode_unread"]:
+    if c["nf4_mode_unread"] or not structural or structural.get("faults"):
         return None
-    return c["nf4_fused_calls"] + c["nf4_fused_calls_grad"]
+    return c["nf4_fused_calls"] + structural["expected"]["dx_nf4"]
 
 
 def fused_calls_expected(snap, mode):
@@ -468,30 +624,32 @@ def check_auto(snap):
 
 
 def check_env(snap, environ, registered):
-    """(ok, why): every ``UNSLOTH_*`` key the three library modules read from the environment (scanned from their source at install)
-    is unset or at its registered value, and every registered key is one of them and set. ``registered`` maps key -> value: the
-    arm's explicit pins (the NF4 mode, AUTO_MAX_ROWS, AUTOTUNE, the grouped-Triton mode, ...)."""
-    keys = snap.get("env_keys") or []
+    """(ok, why): the arm's environment holds no UNSLOTH_* key it did not register. Every ``UNSLOTH_*`` key SET in ``environ`` is
+    registered at exactly its value, scanned or not (unset keys cost nothing); every registered key is set, and is a name the
+    installed packages' source quotes (the whole-package scan at install: a registered name nothing reads is a typo). ``registered``
+    maps key -> value: the arm's explicit pins."""
+    keys = set(snap.get("env_keys") or [])
     if snap.get("env_unscanned") or not keys:
         return False, f"the library's environment reads are unscanned ({snap.get('env_unscanned') or 'no keys found'})"
-    bad = [f"{k}={environ.get(k)!r} (registered {registered[k]!r})" if k in registered else f"ambient {k}={environ.get(k)!r}"
-           for k in keys if environ.get(k) is not None and environ.get(k) != registered.get(k)]
+    bad = [f"{k}={v!r} (registered {registered[k]!r})" if k in registered else f"ambient {k}={v!r}"
+           for k, v in sorted(environ.items()) if k.startswith("UNSLOTH_") and v != registered.get(k)]
     bad += [f"registered {k} is not a key the library reads" for k in registered if k not in keys]
-    bad += [f"registered {k}={v!r} is not set" for k, v in registered.items() if k in keys and environ.get(k) is None]
+    bad += [f"registered {k}={v!r} is not set" for k, v in registered.items() if environ.get(k) is None]
     return (not bad), ("arm environment: " + "; ".join(bad)) if bad else ""
 
 
-def implied_generic(snap):
-    """The generic GEMM and dW calls the recorded dispatch decisions imply: each Triton decision at the GEMM site is one forward
-    generic_grouped_mm; one taken with grad on and an input that required grad adds its backward gx (the Triton autograd's backward,
-    moe_utils.py:634-636, which asks no predicate); one on a LoRA-class weight that required grad adds its dW (generic_grouped_wgrad,
-    611-615). A decision under no_grad (the dequant path's recompute forward, and its own dX decision at 1110) adds no backward."""
+def implied_generic(snap, structural):
+    """The generic GEMM and dW calls the decisions imply: every Triton decision at the GEMM site is one forward ``generic_grouped_mm``
+    (inside any pass or outside one, as the dequant path's own dX decision at 1110 in backward); plus, BY STRUCTURE, the backward gx
+    and LoRA dW of :meth:`UnslothMoeCounter.structural`. None when the structure is missing or faulted."""
+    if not structural or structural.get("faults"):
+        return None
     d = snap["dispatch"]
     fwd = sum(v for k, v in d.items() if k.startswith("gemm:") and k.endswith(":triton"))
-    return {"generic_gemm": fwd + snap["dispatch_grad"]["triton_grad_input"], "generic_wgrad": snap["dispatch_grad"]["triton_grad_lora_weight"]}
+    return {"generic_gemm": fwd + structural["expected"]["gx"], "generic_wgrad": structural["expected"]["wgrad"]}
 
 
-def check_dispatch(snap, base_must_be_triton=False):
+def check_dispatch(snap, structural, base_must_be_triton=False):
     """(ok, why): the per-call dispatch is as the library decided it. Fails when:
     - the predicate could not be wrapped (or a loaded expert's forward holds none), or a serving module object counted no
       GEMM decision while generic calls ran, or a GEMM decision was counted through a module object that serves no forward;
@@ -530,8 +688,11 @@ def check_dispatch(snap, base_must_be_triton=False):
         why.append("GENERIC_CALLS unreadable")
     elif g.get("fallback"):
         why.append(f"GENERIC_CALLS fallback moved by {g.get('fallback')} (Triton-decided calls ran eager)")
-    imp = implied_generic(snap)
-    for k in ("generic_gemm", "generic_wgrad"):
-        if snap["counts"][k] != imp[k]:
-            why.append(f"{k}: wrapper {snap['counts'][k]} != {imp[k]} the decisions imply")
+    imp = implied_generic(snap, structural)
+    if imp is None:
+        why.append(f"no structural count ({(structural or {}).get('faults') or 'missing'})")
+    else:
+        for k in ("generic_gemm", "generic_wgrad"):
+            if snap["counts"][k] != imp[k]:
+                why.append(f"{k}: wrapper {snap['counts'][k]} != {imp[k]} the decisions imply")
     return (not why), "; ".join(why)
