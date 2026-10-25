@@ -12,6 +12,7 @@ what the counter depends on in the release-proven wheel (sha256 db8c283b...; the
   its cap (523) return None with no counter.
 No real kernel runs here; the real binding check (the expected fused launch count) is the lane's, on the box.
 """
+import functools
 import importlib.util
 import os
 import sys
@@ -472,7 +473,7 @@ def test_an_unreadable_auto_predicate_reads_unread_and_voids(zoo, monkeypatch):
     assert not C.check_auto(s)[0]
 
 
-# -- the per-call dispatch (09:34:36Z ruling): moe_utils' own predicate, in every module object that can serve the forward -------
+# -- the per-call dispatch: moe_utils' own predicate, in every module object that can serve the forward -------
 E_BASE, R = 64, 16
 
 
@@ -499,7 +500,7 @@ def test_dispatch_on_the_package_module_and_the_implied_counts(zoo):
     mu.get_forward_moe_backend()(*_stacks())
     _backward_as_the_library_would(mg, 2, 2)
     s = c.snapshot()
-    assert s["served"]["is_package"] and s["dispatch_served"] == {"package": 4}       # 3 GEMM decisions + 1 pad probe
+    assert s["served"][0]["is_package"] and s["dispatch_served"] == {"package": {"gemm": 3, "probe": 1}}
     assert s["dispatch"] == {"probe:lora:triton": 1, "gemm:many:triton": 1, "gemm:lora:triton": 2}
     assert C.implied_generic(s) == {"generic_gemm": 5, "generic_wgrad": 2}           # 3 forwards + 2 gx; 2 LoRA dW
     assert C.check_dispatch(s, base_must_be_triton=True) == (True, "")
@@ -514,8 +515,8 @@ def test_a_cache_copy_serving_the_forward_is_counted(zoo):
     mu.get_forward_moe_backend()(*_stacks())
     _backward_as_the_library_would(mg, 2, 2)
     s = c.snapshot()
-    assert s["served"]["is_package"] is False and s["served"]["module"] == "unsloth_cached_moe_utils"
-    assert s["dispatch_served"] == {"cache_copy": 4}
+    assert s["served"][0]["is_package"] is False and s["served"][0]["module"] == "unsloth_cached_moe_utils"
+    assert s["dispatch_served"] == {"copy1": {"gemm": 3, "probe": 1}}
     assert C.check_dispatch(s) == (True, "")
 
 
@@ -528,6 +529,120 @@ def test_mutant_a_cache_copy_appearing_after_install_is_missed_and_voids(zoo):
     s = c.snapshot()
     ok, why = C.check_dispatch(s)
     assert not ok and "no decision counted through the serving module" in why
+
+
+# -- patch_loaded: the forward the LOADED experts run, read off the model after its load --------------------------
+def _experts(forward, name="Qwen3_5MoeExperts", n=3):
+    """n expert modules whose class forward is ``forward``, as patch_function binds the zoo's answer (qwen3_5_moe.py:53-60)."""
+    cls = type(name, (torch.nn.Module,), {"forward": forward})
+    return [cls() for _ in range(n)]
+
+
+def _copy(zoo, name):
+    return _module_from_source("unsloth_cached_moe_utils", FAKE_MOE_UTILS, zoo.tmp / f"{name}.py")
+
+
+def test_patch_loaded_serves_the_cache_copy_that_appeared_during_the_load(zoo):
+    mg, nf, fwd = zoo
+    mu = zoo.mu
+    c = C.UnslothMoeCounter().install()                           # post_import: the package serves
+    mu._CACHE = _copy(zoo, "load_time_cache")                     # the load creates the cache copy ...
+    experts = _experts(mu.get_forward_moe_backend())              # ... and the zoo binds its forward into the class
+    c.patch_loaded(experts)                                       # post_load
+    type(experts[0]).forward(*_stacks())
+    _backward_as_the_library_would(mg, 2, 2)
+    s = c.snapshot()
+    assert [(x["tag"], x["source"], x["is_package"]) for x in s["served"]] == [("copy1", "loaded", False)]
+    assert s["expert_forwards"] == {f"{__name__}.Qwen3_5MoeExperts": [
+        {"forward": "unsloth_cached_moe_utils.forward_moe_backend", "globals_module": "unsloth_cached_moe_utils", "unwrapped": 0,
+         "modules": 3}]}
+    assert C.check_dispatch(s, base_must_be_triton=True) == (True, "")
+
+
+@pytest.mark.parametrize("passed", [True, False])
+def test_mutant_experts_on_a_forward_other_than_the_fresh_answer_count_only_when_passed(zoo, passed):
+    """The model's experts hold a forward from a cache copy that is no longer get_forward_moe_backend()'s answer (a later reload
+    replaced it). Read off the model, it is counted; left to the fresh call, the decisions run unwrapped and the arm VOIDs."""
+    mg, nf, fwd = zoo
+    mu = zoo.mu
+    stale = _copy(zoo, "stale_cache")
+    experts = _experts(stale.forward_moe_backend)
+    mu._CACHE = _copy(zoo, "current_cache")                       # the fresh answer is now a DIFFERENT module object
+    c = C.UnslothMoeCounter().install()
+    if passed:
+        c.patch_loaded(experts)
+    type(experts[0]).forward(*_stacks())
+    _backward_as_the_library_would(mg, 2, 2)
+    s = c.snapshot()
+    assert s["served_fresh"]["file"].endswith("current_cache.py")
+    ok, why = C.check_dispatch(s)
+    if passed:
+        assert ok, why
+        assert s["served"][0]["file"].endswith("stale_cache.py")
+    else:
+        assert not ok and "no decision counted through the serving module" in why
+
+
+def test_a_mixed_model_records_each_forward_and_every_served_object_must_decide(zoo):
+    mg, nf, fwd = zoo
+    mu = zoo.mu
+    copy = _copy(zoo, "cache_a")
+    a, b = _experts(copy.forward_moe_backend, "ExpertsA", 2), _experts(mu.forward_moe_backend, "ExpertsB", 1)
+    c = C.UnslothMoeCounter().install().patch_loaded(a + b)
+    type(a[0]).forward(*_stacks())
+    s = c.snapshot()
+    assert {k.rsplit(".", 1)[1]: [x["modules"] for x in v] for k, v in s["expert_forwards"].items()} == {"ExpertsA": [2], "ExpertsB": [1]}
+    ok, why = C.check_dispatch(s)                                 # B's forward never ran
+    assert not ok and "no decision counted through the serving module (package" in why
+    type(b[0]).forward(*_stacks())
+    _backward_as_the_library_would(mg, 4, 4)
+    assert C.check_dispatch(c.snapshot()) == (True, "")
+
+
+def test_mutant_experts_left_on_the_original_forward_void(zoo):
+    """patch_function refused (can_safely_patch) and the transformers forward runs: its globals hold no predicate."""
+    mg, nf, fwd = zoo
+
+    def original_forward(self, hidden_states):
+        return hidden_states
+
+    c = C.UnslothMoeCounter().install().patch_loaded(_experts(original_forward))
+    s = c.snapshot()
+    assert s["expert_forwards"][f"{__name__}.Qwen3_5MoeExperts"][0]["globals_module"] is None
+    ok, why = C.check_dispatch(s)
+    assert not ok and "no _triton_grouped_mm_wanted in its globals (3 modules)" in why
+
+
+def test_a_wrapped_forward_unwraps_to_the_predicates_globals(zoo):
+    mg, nf, fwd = zoo
+    mu = zoo.mu
+    inner = mu.forward_moe_backend
+
+    @functools.wraps(inner)
+    def decorated(*args, **kwargs):                               # a decorator or compile carrier defined elsewhere
+        return inner(*args, **kwargs)
+
+    assert C.DISPATCH not in decorated.__globals__                 # the carrier's own globals hold no predicate
+    c = C.UnslothMoeCounter().install().patch_loaded(_experts(decorated, n=1))
+    s = c.snapshot()
+    assert s["expert_forwards"][f"{__name__}.Qwen3_5MoeExperts"][0]["unwrapped"] == 1
+    assert [x["tag"] for x in s["served"]] == ["package"]
+
+
+def test_the_dispatch_wrapper_observes_and_never_changes_the_decision(zoo):
+    mg, nf, fwd = zoo
+    mu = zoo.mu
+    copy = _copy(zoo, "cache_eq")
+    c = C.UnslothMoeCounter().install().patch_loaded(_experts(copy.forward_moe_backend))
+    x, base, la, lb = _stacks()
+    huge = torch.ones(2048 * E_BASE + 1, 48)
+    for g in (vars(mu), vars(copy)):
+        wrapped = g[C.DISPATCH]
+        assert wrapped is not wrapped.__wrapped__
+        for args in ((x, base), (x, la), (huge, base), (x, torch.ones(4, 4))):
+            assert wrapped(*args) == wrapped.__wrapped__(*args)
+    c.uninstall()
+    assert not hasattr(vars(mu)[C.DISPATCH], "__wrapped__") and not hasattr(vars(copy)[C.DISPATCH], "__wrapped__")
 
 
 def test_mutant_a_lora_call_deciding_torch_voids(zoo):

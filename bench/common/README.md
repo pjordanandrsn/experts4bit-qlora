@@ -223,7 +223,7 @@ phase_start reduce reduce; python reduce.py ...;  phase_end reduce
 `unsloth_moe_counter.py` counts the expert GEMMs Unsloth's MoE QLoRA dispatches on both grouped paths of the release-proven
 unsloth_zoo 2026.10.8. Any lane that times Unsloth's MoE training imports it, so no two lanes count differently.
 
-- **Install it before the model's first forward.** It wraps `moe_grouped_fp16.generic_grouped_mm`, `generic_grouped_wgrad` and
+- **Install it before the model load, then `patch_loaded(experts)` after the load and before the first forward.** It wraps `moe_grouped_fp16.generic_grouped_mm`, `generic_grouped_wgrad` and
   `moe_nf4_grouped.maybe_nf4_grouped_mm` as module attributes, which every caller resolves at call time. The library's self-check
   calls are kept apart.
 - **Fused arm** (`UNSLOTH_MOE_NF4_FUSED` 1 or auto): it binds on `NF4_FUSED_STATS.launches` == the fused base GEMMs the lane
@@ -232,8 +232,10 @@ unsloth_zoo 2026.10.8. Any lane that times Unsloth's MoE training imports it, so
 - **Auto arm:** declining above the row cap is its design. Its expected count is the calls the library's own `nf4_auto_fused`
   predicate admits, evaluated per call (`fused_calls_expected`, `check_auto`).
 - **The per-call dispatch** (`check_dispatch`): every grouped expert GEMM's Triton-or-torch decision is recorded from the library's
-  own predicate, in the package module and the compile-cache copy that may serve the forward. LoRA-class calls must decide
-  Triton, the library's fallback count must not move, and the generic counts must equal what the decisions imply.
+  own predicate. `patch_loaded` wraps it in the module object behind the forward each loaded expert module runs
+  (`type(module).forward`), since the compile-cache copy can appear during the load, and records each expert type's distinct
+  forwards. Every serving object must decide the GEMMs, LoRA-class calls must decide Triton, the library's fallback count must
+  not move, and the generic counts must equal what the decisions imply.
 - **The arm's environment** (`check_env`): every `UNSLOTH_*` key the library modules read, found by scanning their source, is
   unset or at its registered pin.
 - **The library cross-check** (`check_library`) catches a caller that bypassed the wrapper.

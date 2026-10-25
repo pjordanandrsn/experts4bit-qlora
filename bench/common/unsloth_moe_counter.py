@@ -49,9 +49,14 @@ The per-call Triton-or-torch dispatch (moe_utils.py:572 ``_triton_grouped_mm_wan
 - Every grouped expert GEMM asks it at moe_utils.py:378 (``_grouped_mm_with_backward_fix``). ``_lora_rank_pad_needed`` (3004) asks it
   too, as a padding probe, not a GEMM; the wrapper tells the two apart by the calling function and counts only 378 as a decision.
 - It is a moe_utils GLOBAL, so it is NOT resolved by absolute import: ``get_forward_moe_backend`` (348-356) returns the compile-cache
-  copy's ``forward_moe_backend`` when one is present and current, and that copy calls its OWN global. :func:`install` therefore patches
-  the predicate in the package module AND in the globals of the function ``get_forward_moe_backend()`` returns, and records which
-  object served (``served``: its ``__name__``, ``__file__``, and whether it is the package module).
+  copy's ``forward_moe_backend`` when one is present and current, and that copy calls its OWN global. The zoo binds that answer AT
+  PATCH TIME as the experts' class forward (qwen3_5_moe.py:53-60, qwen3_moe.py:84-85), and the cache copy can appear during the
+  model load. So :func:`install` (before the load) patches the package module and the current answer, and
+  :meth:`UnslothMoeCounter.patch_loaded` (after the load and the framework's patching, before the first forward) patches the globals
+  of the forward each LOADED expert module runs (``type(module).forward``) and serves from those. ``served`` records each serving
+  object (its tag, ``__name__``, ``__file__``, whether it is the package module); ``expert_forwards`` records each expert type's
+  distinct forwards and how many modules hold each, so a mixed model shows; ``served_fresh`` (a fresh
+  ``get_forward_moe_backend()`` call) is information only.
 - Each decision is recorded by site, class (the library's own ``_triton_grouped_mm_kind``) and outcome, with whether grad was enabled
   and whether the input / weight required grad; the resolved limit per class (``_triton_grouped_mm_max_rows``) is recorded on first
   sight. :func:`implied_generic` turns the decisions into the generic counts they imply (a Triton forward; its backward gx when
@@ -93,7 +98,8 @@ ENV_RE = re.compile(r"""(?:environ|getenv)[^\n]{0,20}?["'](UNSLOTH_[A-Z0-9_]+)["
 
 
 class UnslothMoeCounter:
-    """Install once per process before the model's first forward; read :meth:`snapshot` at the window's edges."""
+    """:meth:`install` once per process before the model load; :meth:`patch_loaded` with the loaded expert modules after the load,
+    before the first forward; read :meth:`snapshot` at the window's edges."""
 
     def __init__(self):
         self.counts = dict.fromkeys(COUNTS, 0)
@@ -103,9 +109,12 @@ class UnslothMoeCounter:
         self._local = threading.local()
         self.dispatch = {}                   # "site:class:decision" -> calls
         self.dispatch_grad = {"triton_grad_input": 0, "triton_grad_lora_weight": 0}
-        self.dispatch_served = {}            # "package" / "cache_copy" -> decisions counted through that module object
+        self.dispatch_served = {}            # "package" / "copyN" -> {"gemm", "probe"}: decisions counted through that object
         self.dispatch_absent = []
-        self.served = None
+        self.served = []                     # the module objects whose forward the model runs (see patch_loaded)
+        self.served_fresh = None             # get_forward_moe_backend()'s answer at the last patch: information only
+        self.expert_forwards = {}            # expert type -> [{forward, globals_module, tag, modules}] (patch_loaded)
+        self._patched = {}                   # id(globals) -> (globals, tag); the dict is held so its id stays unique
         self.limits = {}
         self.env_keys = []
         self.env_unscanned = []
@@ -139,31 +148,86 @@ class UnslothMoeCounter:
         self._lib0 = self._library()
         return self
 
-    def _install_dispatch(self):
+    def patch_loaded(self, experts):
+        """After the model load and the framework's patching, before the first forward (the tc1_arm hook's post_load): patch the
+        predicate in the globals of the forward each loaded expert module runs (``type(module).forward``), and serve from THOSE
+        objects. The compile-cache copy of moe_utils can appear during the load, after :meth:`install`; the zoo binds
+        ``get_forward_moe_backend()``'s answer AT PATCH TIME as the experts' class forward (qwen3_5_moe.py:53-60 via
+        qwen3_moe.py:84-85), so the class attribute, not a fresh call, is the object the model runs. Records each expert type's
+        distinct forwards and how many modules hold each, so a mixed model shows. ``experts``: the lane's expert modules."""
+        self._install_dispatch(experts)
+        return self
+
+    def _install_dispatch(self, experts=None):
         try:
             mu = importlib.import_module(MOE_UTILS)
         except Exception as e:  # noqa: BLE001
             self.dispatch_absent.append(f"{MOE_UTILS}: import failed: {type(e).__name__}")
             return
-        globs = [("package", vars(mu))]
+        self._patch_globals(vars(mu), mu)
+        fresh = None
         try:
             fwd = getattr(mu, SERVER_FN)()
-            g = getattr(fwd, "__globals__", None)
-            if g is None:
+            fresh = getattr(fwd, "__globals__", None)
+            if fresh is None:
                 self.dispatch_absent.append(f"{SERVER_FN}() returned {type(fwd).__name__} without __globals__")
             else:
-                self.served = {"module": g.get("__name__"), "file": g.get("__file__"), "is_package": g is vars(mu)}
-                if g is not vars(mu):
-                    globs.append(("cache_copy", g))
+                self.served_fresh = {"module": fresh.get("__name__"), "file": fresh.get("__file__"), "is_package": fresh is vars(mu)}
         except Exception as e:  # noqa: BLE001
             self.dispatch_absent.append(f"{MOE_UTILS}.{SERVER_FN}: {type(e).__name__}")
-        for tag, g in globs:
-            fn = g.get(DISPATCH)
-            if not callable(fn):
-                self.dispatch_absent.append(f"{tag} {DISPATCH}: absent")
-                continue
-            self._saved_globals.append((g, DISPATCH, fn))
-            g[DISPATCH] = self._wrap_dispatch(tag, g, fn)
+        if experts is None:                  # install() before the load: the fresh answer serves until patch_loaded replaces it
+            serving, source = ([fresh] if fresh is not None else []), "fresh"
+        else:
+            serving, source = self._expert_globals(experts), "loaded"
+            if not serving and not self.expert_forwards:
+                self.dispatch_absent.append("patch_loaded: no expert modules passed")
+        self.served = []
+        for g in serving:
+            tag = self._patch_globals(g, mu)
+            if tag is not None and all(s["tag"] != tag for s in self.served):
+                self.served.append({"tag": tag, "module": g.get("__name__"), "file": g.get("__file__"), "is_package": g is vars(mu),
+                                    "source": source})
+
+    def _expert_globals(self, experts):
+        """The globals of each expert type's class forward, unwrapped through ``__wrapped__`` (a compiled or decorated forward) to the
+        first function whose globals hold the predicate. A forward with no such function (the patch was skipped and the original
+        transformers forward runs) is recorded as dispatch-absent."""
+        self.expert_forwards = {}
+        by_fn, out = {}, []
+        for m in experts:
+            t = type(m)
+            f = getattr(t, "forward", None)
+            by_fn.setdefault((f"{t.__module__}.{t.__qualname__}", id(f)), [f, 0])[1] += 1
+        for (tname, _), (f, n) in by_fn.items():
+            g, hop, cur = None, 0, f
+            while cur is not None and hop <= 8:
+                cg = getattr(getattr(cur, "__func__", cur), "__globals__", None)
+                if cg is not None and callable(cg.get(DISPATCH)):
+                    g = cg
+                    break
+                cur, hop = getattr(cur, "__wrapped__", None), hop + 1
+            name = f"{getattr(f, '__module__', '?')}.{getattr(f, '__qualname__', type(f).__name__)}"
+            self.expert_forwards.setdefault(tname, []).append({"forward": name, "globals_module": g.get("__name__") if g else None,
+                                                               "unwrapped": hop if g else None, "modules": n})
+            if g is None:
+                self.dispatch_absent.append(f"{tname}.forward ({name}): no {DISPATCH} in its globals ({n} modules)")
+            elif all(x is not g for x in out):
+                out.append(g)
+        return out
+
+    def _patch_globals(self, g, mu):
+        """Wrap the predicate in one module object's globals, once; returns its tag ("package", or "copyN" in patch order)."""
+        if id(g) in self._patched:
+            return self._patched[id(g)][1]
+        tag = "package" if g is vars(mu) else f"copy{sum(t != 'package' for _, t in self._patched.values()) + 1}"
+        fn = g.get(DISPATCH)
+        if not callable(fn):
+            self.dispatch_absent.append(f"{tag} {DISPATCH}: absent")
+            return None
+        self._patched[id(g)] = (g, tag)
+        self._saved_globals.append((g, DISPATCH, fn))
+        g[DISPATCH] = self._wrap_dispatch(tag, g, fn)
+        return tag
 
     def _wrap_dispatch(self, tag, g, fn):
         disp, grad, served, limits = self.dispatch, self.dispatch_grad, self.dispatch_served, self.limits
@@ -178,7 +242,8 @@ class UnslothMoeCounter:
                 kind = "unknown"
             key = f"{site}:{kind}:{'triton' if decided else 'torch'}"
             disp[key] = disp.get(key, 0) + 1
-            served[tag] = served.get(tag, 0) + 1
+            by = served.setdefault(tag, {"gemm": 0, "probe": 0})
+            by[site] += 1
             if site == "gemm" and decided:
                 try:
                     import torch
@@ -217,6 +282,7 @@ class UnslothMoeCounter:
         while self._saved_globals:
             g, attr, fn = self._saved_globals.pop()
             g[attr] = fn
+        self._patched.clear()
 
     def _wrap(self, key, fn):
         counts, local = self.counts, self._local
@@ -286,8 +352,10 @@ class UnslothMoeCounter:
             base = self._lib0.get(key)
             delta[key] = None if (now is None or base is None) else {k: now[k] - base.get(k, 0) for k in now}
         return {"counts": dict(self.counts), "library_delta": delta, "absent": list(self.absent),
-                "dispatch": dict(self.dispatch), "dispatch_grad": dict(self.dispatch_grad), "dispatch_served": dict(self.dispatch_served),
-                "dispatch_absent": list(self.dispatch_absent), "served": self.served, "limits": dict(self.limits),
+                "dispatch": dict(self.dispatch), "dispatch_grad": dict(self.dispatch_grad), "dispatch_served": {k: dict(v) for k, v in self.dispatch_served.items()},
+                "dispatch_absent": list(self.dispatch_absent), "served": [dict(x) for x in self.served],
+                "served_fresh": self.served_fresh, "expert_forwards": {k: [dict(x) for x in v] for k, v in self.expert_forwards.items()},
+                "limits": dict(self.limits),
                 "env_keys": list(self.env_keys), "env_unscanned": list(self.env_unscanned)}
 
 
@@ -399,7 +467,8 @@ def implied_generic(snap):
 
 def check_dispatch(snap, base_must_be_triton=False):
     """(ok, why): the per-call dispatch is as the library decided it. Fails when:
-    - the predicate could not be wrapped, or the serving module object counted no decision while generic calls ran;
+    - the predicate could not be wrapped (or a loaded expert's forward holds none), or a serving module object counted no
+      GEMM decision while generic calls ran, or a GEMM decision was counted through a module object that serves no forward;
     - any LoRA-class GEMM decided torch (the predicate returns False silently on a dtype, a tensor subclass or a dim);
     - any GEMM's class is unknown;
     - the library's GENERIC_CALLS["fallback"] moved (a Triton-decided call that ran eager, moe_utils.py:600 / 608);
@@ -408,12 +477,17 @@ def check_dispatch(snap, base_must_be_triton=False):
     why = []
     if snap["dispatch_absent"]:
         why.append(f"dispatch not wrapped: {snap['dispatch_absent']}")
-    served = snap.get("served") or {}
-    tag = "package" if served.get("is_package") else "cache_copy"
+    served = snap.get("served") or []
+    ran = snap["counts"]["generic_gemm"] or snap["dispatch"]
     if not served:
         why.append("the serving forward was not identified")
-    elif (snap["counts"]["generic_gemm"] or snap["dispatch"]) and not snap["dispatch_served"].get(tag):
-        why.append(f"no decision counted through the serving module ({tag}: {served.get('module')})")
+    elif ran:
+        for s in served:
+            if not snap["dispatch_served"].get(s["tag"], {}).get("gemm"):
+                why.append(f"no decision counted through the serving module ({s['tag']}: {s['module']})")
+        stray = {t: v["gemm"] for t, v in snap["dispatch_served"].items() if v.get("gemm") and t not in {s["tag"] for s in served}}
+        if stray:
+            why.append(f"GEMM decisions counted through a module object that serves no forward: {stray}")
     d = snap["dispatch"]
     lora_torch = d.get("gemm:lora:torch", 0)
     if lora_torch:
