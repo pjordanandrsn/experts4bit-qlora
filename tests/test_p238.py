@@ -576,3 +576,23 @@ def test_the_staged_pin_is_the_repos_bytes_and_the_drivers_list():
     assert staged == set(STAGED) | {"bench/p238/staged-p238.sha256"}
     run = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
     assert all(pathlib.Path(f).name in run for f in STAGED)        # the runner checks every staged file it is handed
+
+
+def test_tc1_arm_loads_the_p238_hook_by_its_staged_sha(monkeypatch, tmp_path):
+    """tc1_arm.py's own loader (e4b#2146) takes P238's hook at the sha the staged pin names, finds every phase, and refuses (10) any
+    other bytes: the runner's TC1_ARM_HOOK / TC1_ARM_HOOK_SHA256 seam, end to end on CPU."""
+    import hashlib
+    T = _load("tc1_arm_for_p238", "bench/tc1/tc1_arm.py")
+    monkeypatch.syspath_prepend(str(ROOT / "bench" / "p238"))
+    pin = dict(reversed(line.split()) for line in (ROOT / "bench" / "p238" / "staged-p238.sha256").read_text(encoding="utf-8").splitlines())
+    sha = hashlib.sha256((ROOT / "bench" / "p238" / "p238_hook.py").read_bytes()).hexdigest()
+    assert pin["p238_hook.py"] == sha
+    monkeypatch.setenv("TC1_ARM_HOOK", "p238_hook:make")
+    monkeypatch.setenv("TC1_ARM_HOOK_SHA256", sha)
+    a = T.build_parser().parse_args(["--out", str(tmp_path), "--tag", "p238_hook_seam"])
+    h = T.load_arm_hook(a)
+    assert h["phases"] == ["post_import", "post_load", "step_edge", "record"] and h["sha256"] == sha and h["file"] == "p238_hook.py"
+    monkeypatch.setenv("TC1_ARM_HOOK_SHA256", "0" * 64)
+    with pytest.raises(SystemExit) as e:
+        T.load_arm_hook(a)
+    assert e.value.code == 10
