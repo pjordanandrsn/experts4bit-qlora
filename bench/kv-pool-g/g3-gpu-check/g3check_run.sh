@@ -33,8 +33,9 @@ need_left(){ [ "$(left)" -ge "$1" ] || { say "DEADLINE: $2 needs ${1}s, $(left)s
 INSTALL_S=480; FETCH_BAKE_S=1380; INSTALL_TO_GATE_S=$((INSTALL_S + FETCH_BAKE_S)); NEED_SERVER=360; RESERVE=300
 FIT_HEADROOM_PCT=125   # the guard keeps 25 % headroom over the fit (cross-lane rule)
 FIT=$((INSTALL_TO_GATE_S + NEED_SERVER + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((G3C_DEADLINE_EPOCH - $(date +%s)))
-# rc 17: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
-[ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; finish 17; }
+# rc 41 (the cross-lane guard-fit code; 17 would read to the launcher as a power cap and exclude a healthy host): a
+# refusal before the install, not a strike; two consecutive headroom refusals count as one strike
+[ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; finish 41; }
 say "guard fit: ${LEFT}s left >= ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%)"
 # the CUDA devel image ships python3 without venv / ensurepip, git, cmake or rsync: bench/kv-pool-g/g3-smoke's list
 need=0; for t in git cmake curl rsync; do command -v $t > /dev/null 2>&1 || need=1; done

@@ -11,7 +11,7 @@ the card and reads, from the server's own state, whether the graph was captured 
 One RTX 5090, launched with `tools/pod-launch.sh` on a 1.0 h guard. The driver (`g3check_drive.sh`) refuses unless the
 checkout is clean, HEAD is on `origin/main`, and HEAD carries `fc1f630a`. The box (`g3check_run.sh`):
 
-1. runs the canonical guard-fit check before any install (rc 17, not a strike);
+1. runs the canonical guard-fit check before any install (rc 41, the cross-lane code, not a strike);
 2. installs torch 2.8.0+cu128, e4b at HEAD and grouped-nf4-gemm at main's CI pin (`30adb1bf`), and runs a tripwire on
    the installed commits and #2087's rule;
 3. records the card (`nvidia-smi` with the enforced power limit, and `bench/common/card_clock.py burn --floor 2700`).

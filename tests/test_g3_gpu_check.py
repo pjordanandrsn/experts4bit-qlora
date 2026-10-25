@@ -188,7 +188,8 @@ def test_the_guard_fit_check_precedes_every_install():
     fit = RUN.index('[ "$LEFT" -ge "$FIT_NEED" ] ||')
     for pat in ("apt-get install", "pipx(){", "-m venv", "pip install"):
         assert RUN.index(pat) > fit, pat
-    assert "finish 17" in RUN[fit:fit + 200] and "FIT_HEADROOM_PCT=125" in RUN
+    assert "finish 41" in RUN[fit:fit + 200] and "FIT_HEADROOM_PCT=125" in RUN
+    assert not re.search(r"finish 1[378]\b", RUN), "13, 17 and 18 are the launcher's host-limited codes: never this kit's"
     assert "two consecutive headroom refusals count as one strike" in RUN
 
 
