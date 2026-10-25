@@ -113,8 +113,47 @@ def test_a_profile_with_no_cuda_row_never_claims_the_kernels_only_method(tmp_pat
     cpu_only = [e for e in ev if e.device_type != torch.autograd.DeviceType.CUDA]
     s, out = _summarize(tmp_path, cpu_only)
     assert s["device_ms_method"] == "no_device_rows" and s["device_ms"] == 0.0 and s["user_annotation_ms"] == 0.0
-    with pytest.raises(F2.AnnotationError):
+    with pytest.raises(F2.AnnotationError, match="no_device_rows"):        # refused by its method, before any row is read
         F2.kernels_only_device_ms(out)
+
+
+RED = _load(REPO / "bench" / "tc1" / "tc1_reduce.py", "tc1_reduce_device_time")
+GUARD = 'if not n or dev is None or pr.get("device_ms_method") == "no_device_rows" or float(dev) <= 0.0:'
+
+
+def _cpu_only_cell(tmp_path):
+    ev, _ = _events()
+    s, _ = _summarize(tmp_path, [e for e in ev if e.device_type != torch.autograd.DeviceType.CUDA])
+    return {"profile": s, "s_per_step_median_11plus": 6.0}
+
+
+def test_the_reducer_reads_a_no_device_rows_cell_as_unread(tmp_path):
+    """A device figure built on a profile with no CUDA row is UNREAD (None) at every device_ms site of tc1_reduce, never 0 or inf: a
+    busy_t of 0 would pass a host-bound premise it never measured."""
+    r = _cpu_only_cell(tmp_path)
+    assert r["profile"]["device_ms_method"] == "no_device_rows"
+    assert RED._device_ms_per_step(r["profile"]) is None
+    assert RED._busy_vs_timed(r) is None
+    assert RED._cbk_device_ms(r) is None
+
+
+def test_the_reducer_still_reads_a_real_profile(tmp_path):
+    ev, prof = _events()
+    s, _ = _summarize(tmp_path, ev)
+    r = {"profile": s, "s_per_step_median_11plus": 6.0}
+    assert RED._device_ms_per_step(s) == pytest.approx(s["device_ms"] / 3)
+    assert RED._busy_vs_timed(r) == pytest.approx(s["device_ms"] / 3 / 6000.0)
+    assert RED._cbk_device_ms(r) == pytest.approx(s["device_ms"] / 3)
+
+
+def test_mutant_reading_a_missing_device_time_as_zero_is_caught(tmp_path):
+    """The reducer's old rule (device_ms or 0.0) restored in a copy of the helper: busy_t reads 0.0 on the CPU-only cell."""
+    src = inspect.getsource(RED._device_ms_per_step)
+    assert src.count(GUARD) == 1
+    ns = dict(vars(RED))
+    exec(compile(src.replace(GUARD, "if not n or dev is None:"), str(REPO / "bench" / "tc1" / "tc1_reduce.py"), "exec"), ns)
+    pr = _cpu_only_cell(tmp_path)["profile"]
+    assert ns["_device_ms_per_step"](pr) == 0.0                        # the mutant reads 0, which the real helper refuses
 
 
 def test_mutant_dropping_the_cuda_row_guard_is_caught(tmp_path):

@@ -3998,6 +3998,9 @@ P129's tc1-5090-146, -147 and -150):
   goes 0.884 -> 0.871 on tc1-5090-141, still GPU-bound, and 0.475 -> 0.460 on tc1-5090-139, still host-bound. The busy premises of
   P174/P175, P182 and P210/P211 move by at most 0.015 and stay inside their bars.
 - **Reworded:** only tc1-5090-110's two family lines, whose largest-first order changes as the optimizer's figure falls.
+- **A slightly negative optimizer share:** 55 of the 119 corrected cells carry an `optimizer` fraction just below 0 (down to
+  -1.5 ms). The recorded fraction is rounded to 4 dp, and the annotation's own ms is subtracted from it exactly, so the rounding can
+  take it a hair below zero. The family check reads the absolute ms, and conservation holds.
 
 - P203 stays FALSIFIED. The reducer compares Unsloth's corrected 11613.2 ms with amendment 66's all-CUDA constant 10152.2 and prints
   +14.4 %. Both sides kernels-only, against amendment 66's own corrected 10125.2, the gap is +14.7 %, as first read. Amendment 66's
