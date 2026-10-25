@@ -1,4 +1,4 @@
-"""TC1 amendment 81's register and quote moves (the maintainer's ruling (B), read against the register as it stood before the amendment).
+"""TC1 amendment 81's register and quote moves (the register schema's successor and notes rules, read against the register as it stood before the amendment).
 
 - 13 rows whose CLAIM quoted a moved device figure get a successor ``<id>.am81``. The predecessor changes in exactly two fields: status
   ``superseded`` and ``superseded_by``. Its claim, figures and evidence are byte-identical.

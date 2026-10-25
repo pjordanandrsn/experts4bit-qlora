@@ -23,7 +23,7 @@ That span covers the optimizer kernels, which are rows of their own (e4b#2129). 
 - ``device_by_family_fraction`` is RE-ATTRIBUTED EXACTLY: each annotation row's time comes out of ITS OWN family (the row's ``family``
   field in the profile, never re-classified) and every other family keeps its absolute ms. The new fractions are left unrounded, so the
   reducer's ``round(fraction * device_ms, 1)`` reproduces every other family's figure exactly. Every annotation row must sit in the
-  ``optimizer`` family: one that does not REFUSES the receipt (a ruling for the maintainer, never a wider rule here);
+  ``optimizer`` family: one that does not REFUSES the receipt (it needs a ruling, never a wider rule here);
 - ``memcpy_fraction_of_device`` = ``memcpy_ms`` over the new ``device_ms`` (memcpy rows are kernels, so their time is unchanged);
 - ``device_ms_method`` = ``kernels_only_rederived``.
 THE INPUT ASSERTION: both passes are assembled from the same bytes, and the corrected pass may differ from the recorded one ONLY in those
@@ -173,8 +173,8 @@ def corrected_profile(pr, full, f2):
                 for r in full["top_device"] if f2.ANNOTATION_RE.match(r["name"])]
     for r in ann_rows:
         if r["family"] != ANNOTATION_FAMILY:
-            raise Refused(f"the annotation row {r['name']!r} is in family {r['family']!r}, not {ANNOTATION_FAMILY!r}: a ruling for the "
-                          "maintainer, never re-attributed here")
+            raise Refused(f"the annotation row {r['name']!r} is in family {r['family']!r}, not {ANNOTATION_FAMILY!r}: it needs a "
+                          "ruling, never a re-attribution here")
     out = dict(pr)
     out["device_ms"] = new
     if pr.get("wall_ms"):

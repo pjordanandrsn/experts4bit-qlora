@@ -3957,8 +3957,8 @@ run's OWN reducer: the byte-exact `tc1_reduce.py` its box staged, from the priva
    - `device_ms` is recorded minus the annotation rows (`f15v2`: exactly one `Optimizer.step#` row, count == profiled steps);
    - `device_busy_fraction` is the new `device_ms` over the same wall;
    - `device_by_family_fraction` is re-attributed exactly. Each annotation row's ms comes out of its own `family` field, never
-     re-classified, and every other family keeps its absolute ms, unrounded. An annotation row outside `optimizer` REFUSES the receipt (a
-     ruling for the maintainer, never a wider rule);
+     re-classified, and every other family keeps its absolute ms, unrounded. An annotation row outside `optimizer` REFUSES the receipt (it
+     needs a ruling, never a wider rule);
    - `memcpy_fraction_of_device` is `memcpy_ms` over the new `device_ms`;
    - `device_ms_method` is `kernels_only_rederived`.
 3. **The input assertion.** The corrected pass may differ from the recorded one only in those five profile fields of profiled cells. Each
@@ -4016,7 +4016,7 @@ percent), with the run, a family token or the citing row's id within its paragra
 
 The table holds 16 register rows and 34 document lines. Each line was read by hand.
 
-**The register** (the maintainer's ruling (B), per `docs/claims-schema.md`):
+**The register** (`docs/claims-schema.md`'s successor and notes rules):
 - **13 rows** quote a moved figure in their claim. Each gets a successor `<id>.am81` with the kernels-only figures, its evidence
   (the receipt, then `bench/tc1/am81-rederive/<run>/rederive.json` and the report) and `supersedes`. Successors drop Vast machine
   ids. The predecessor changes only `status` (superseded) and `superseded_by`:

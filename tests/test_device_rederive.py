@@ -148,7 +148,7 @@ def test_a_cell_whose_device_ms_is_not_its_profiles_refuses(dr, tmp_path):
 
 @pytest.mark.parametrize("family", ["matmul", "nowhere"])
 def test_an_annotation_row_outside_the_optimizer_family_refuses(dr, tmp_path, family):
-    """Review ruling: an annotation row in any family but optimizer is a ruling for the maintainer, never re-attributed here."""
+    """An annotation row in any family but optimizer refuses the receipt: it needs a ruling, never a re-attribution here."""
     rc, red = _receipt(tmp_path, dr)
     p = rc / "tc1" / "arm_a_profile.json"
     d = json.loads(p.read_text())
@@ -341,7 +341,7 @@ def test_check_re_derives_a_persisted_run_from_its_copies_and_catches_a_tampered
 
 
 def test_mutant_correcting_in_place_refuses_and_persists_nothing(dr, tmp_path):
-    """review-desk's mutant: a correction that writes into the committed receipt. The guard refuses the run and nothing is written."""
+    """Mutant: a correction that writes into the committed receipt. The guard refuses the run and nothing is written."""
     real = dr.assemble
     calls = []
 
