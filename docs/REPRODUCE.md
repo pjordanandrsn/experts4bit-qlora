@@ -18,8 +18,8 @@ is filled in the next release. No older number fills either.
 | Piece | Against | At 0.58.0 | Before (claim, release) |
 |---|---|---|---|
 | grouped-nf4-gemm's decode GEMV, op level (M = 1, 2, 4, 8, 16 on Mixtral-8x7B, Qwen3-30B-A3B and OLMoE expert projections) | bitsandbytes 0.50.2 `matmul_4bit` | bitsandbytes faster at all 30 cells at the op level, eager (ratio 0.30–0.92). Results e4b#2127; registered as e4b#2116. | none: no earlier reading races bitsandbytes |
-| Training, TC1's field recipe (Qwen3-30B-A3B, seq 2048, micro-batch 2 x accum 4) | Unsloth 2026.10.8 | not read at 0.58.1. Both Unsloth draws failed TC1's standing engagement check (it counts torch-level grouped_mm calls, which read 0 under Unsloth 2026.10.8), so no ratio is quoted. Results e4b#2125; registered as e4b#2121. | Unsloth spends **1.924x** e4b's GPU time per step; 2.803x wall-clock on an EPYC 7713 (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`, e4b 0.49.0 vs Unsloth 2026.9.14) |
-| Training, packed 4,096-token rows | Unsloth | not read today (no lane registered it) | Unsloth spends **1.160x** e4b's GPU time per step; e4b's peak is 1.04 GB above Unsloth's (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`, `e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`, e4b 0.49.0) |
+| Training, TC1's field recipe (Qwen3-30B-A3B, seq 2048, micro-batch 2 x accum 4) | Unsloth 2026.10.8 | not read at 0.58.1. Both Unsloth draws failed TC1's standing engagement check (it counts torch-level grouped_mm calls, which read 0 under Unsloth 2026.10.8), so no ratio is quoted. Results e4b#2125; registered as e4b#2121. | Unsloth spends **1.953x** e4b's GPU time per step; 2.803x wall-clock on an EPYC 7713 (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio.am81`, e4b 0.49.0 vs Unsloth 2026.9.14) |
+| Training, packed 4,096-token rows | Unsloth | not read today (no lane registered it) | Unsloth spends **1.161x** e4b's GPU time per step; e4b's peak is 1.04 GB above Unsloth's (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio.am81`, `e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`, e4b 0.49.0) |
 | Training on a 24 GiB RTX 4090, TC1's field recipe | Unsloth, on the same card | not read today (its lane didn't register it) | **Unsloth fit resident and e4b as shipped did not:** Unsloth 24.219 GB peak at 10.032 s/step (`e4b.train.frontier.qwen3.4090-24gb.2026-10-02.unsloth-resident`, Unsloth 2026.9.14); e4b now fits with three opt-in levers, 586 MiB to spare, with no speed claimed (`e4b.train.4090-fit.field.4090.2026-10-24`, 0.58.0) |
 | Serving Qwen3-30B-A3B, decode rate at 1 and 16 requests (e4b's int4 stack) | vLLM | **vLLM ahead:** vLLM 0.32.0 / e4b 0.58.0 int4 **1.038** at 1 request and **1.203** at 16, both on one RTX 5090 (power limit 470 W; vLLM 0.30.0 on the same box: 1.031 / 1.187). Measured on a different box from the earlier figure, so the difference is not read as an e4b gain. Results e4b#2126; registered as e4b#2119. | **vLLM is ahead:** vLLM/e4b **1.087** at one request, **1.396** at sixteen (`e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22` and `.b16`, e4b 0.37.0 vs vLLM 0.30.0) |
 | Training Mixtral-8x7B, both frameworks on one stack | Unsloth | not read today (its lane didn't register it) | Unsloth/e4b **1.144** at the matched position (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-05.same-stack`, e4b 0.49.0); **Unsloth faster, 0.836**, with e4b at its defaults in the field image (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default`) |
@@ -79,7 +79,7 @@ defaults are not the run's settings. The controller reads a Hugging Face token f
 
 ### 2. Qwen3-30B-A3B against Unsloth, packed 4,096-token rows, with e4b's memory cost beside it
 
-- **Claim:** `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`. Unsloth spends **1.160×** e4b's GPU
+- **Claim:** `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio.am81`. Unsloth spends **1.161×** e4b's GPU
   time per profiled step (medians of two draws), both frameworks at their defaults on one stack (read 2026-10-08). The
   wall-clock ratio on that host was 1.472.
 - **Beside it, e4b's loss:** `e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`. At its defaults e4b's
@@ -99,8 +99,8 @@ defaults are not the run's settings. The controller reads a Hugging Face token f
 - **Hardware and cost:** one RTX 5090 and TC1's registered pre-flight floor: at least 320 GB disk, 98 GB host RAM and
   40 MB/s ([`TC1-PREREG.md`](../bench/tc1/TC1-PREREG.md), "Budget and stop rules"). The boxes had 251-504 GB RAM. $1.96
   (`tc1-5090-136`) and $1.34 (`tc1-5090-135`).
-- **The other recipe:** at TC1's field recipe (seq 2048, micro-batch 2 × accum 4) the device ratio read 1.924 (medians
-  of two draws; `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`), and a September primary pair on an
+- **The other recipe:** at TC1's field recipe (seq 2048, micro-batch 2 × accum 4) the device ratio read 1.953 (medians
+  of two draws; `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio.am81`), and a September primary pair on an
   older stack read 1.413 (a median of steps 11..60; `e4b.train.h2h.unsloth.qwen3.5090.2026-09-05`). Name the recipe when
   you quote one.
 

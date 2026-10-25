@@ -8002,7 +8002,7 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/"
       ],
-      "notes": "Both steps are host-bound on this card: the profiled matched arms read device-busy 0.480 (e4b; 141k device events, 753k CPU ops per step) vs 0.234 (Unsloth; 612k, 7.43M) -- the fused path records 4.3x fewer device events and 9.9x fewer CPU-side ops per step, which is where the gap is. The absolute s/step does NOT travel between 5090 hosts (the same e4b arm: 3.16 / 5.69 / 9.34 s on three hosts); the within-box ratio does (1.42-1.44). Unsloth's expert stacks are double-quantised (its loader exposes no knob) while e4b's are not; the attention projections are SAME-BYTES. e4b on the comparator's cu130 torch is 14 % faster per step (.e4b-t212) and is not the quoted side. Measured on the code BEFORE #945. The position after TC1 amendments 10-15: e4b.train.h2h.unsloth.qwen3.5090.2026-10-03 (1.997).",
+      "notes": "Both steps are host-bound on this card: the profiled matched arms read device-busy 0.480 (e4b; 141k device events, 753k CPU ops per step) vs 0.234 (Unsloth; 612k, 7.43M) -- the fused path records 4.3x fewer device events and 9.9x fewer CPU-side ops per step, which is where the gap is. The absolute s/step does NOT travel between 5090 hosts (the same e4b arm: 3.16 / 5.69 / 9.34 s on three hosts); the within-box ratio does (1.42-1.44). Unsloth's expert stacks are double-quantised (its loader exposes no knob) while e4b's are not; the attention projections are SAME-BYTES. e4b on the comparator's cu130 torch is 14 % faster per step (.e4b-t212) and is not the quoted side. Measured on the code BEFORE #945. The position after TC1 amendments 10-15: e4b.train.h2h.unsloth.qwen3.5090.2026-10-03 (1.997). TC1 amendment 81 (kernels-only device time, bench/tc1/am81-rederive/tc1-5090-16/): device-busy 0.473 (e4b) and 0.232 (Unsloth), where these notes say 0.480 and 0.234.",
       "supersedes": [
         "e4b.train.h2h.unsloth.qwen3.5090.2026-09-19"
       ],
@@ -8340,7 +8340,7 @@
       "hardware": "three rented RTX 5090 (sm_120) Vast.ai verified/secure hosts: instance-redacted-83bc413b (i9-13900), instance-redacted-3a751047 (Threadripper PRO 3975WX), instance-redacted-2950b23f (Xeon E5-2698 v4)",
       "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
       "measured_on": "2026-10-02",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/h2h-2026-10-02/tc1/README.md",
@@ -8356,7 +8356,42 @@
         "receipts/experts4bit-qlora/2026-10-02/tc1-5090-14/tc1/",
         "receipts/experts4bit-qlora/2026-10-01/tc1-5090-15/tc1/"
       ],
-      "notes": ""
+      "notes": "",
+      "superseded_by": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.host-variance.am81"
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.host-variance.am81",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1, 2026-10-02: the SAME e4b matched arm (same code, same pins, 0 recompiles, OMP_NUM_THREADS = physical cores) takes 3.162 s/step on an i9-13900 host, 5.692 on a Threadripper PRO 3975WX host and 9.336 on a Xeon E5-2698 v4 host -- three rented RTX 5090 boxes of the same card class; Unsloth's matched arm tracks it (4.505 / 8.171 / --). The profiled pair shows why: device-busy 0.473 (e4b) and 0.232 (Unsloth) -- both steps are host-launch-bound on this card. Absolute s/step is a property of the host; the within-box ratio (1.425 / 1.437) is the quotable number. No cross-box ratio is quoted anywhere in the bundle.",
+      "value": 2.95,
+      "unit": "ratio of the slowest to the fastest host's s/step for the same e4b arm (9.336 / 3.162) across three RTX 5090 hosts",
+      "hardware": "three rented RTX 5090 (sm_120) Vast.ai verified/secure hosts: instance-redacted-83bc413b (i9-13900), instance-redacted-3a751047 (Threadripper PRO 3975WX), instance-redacted-2950b23f (Xeon E5-2698 v4)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-14/RESULTS-tc1.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-15/RESULTS-tc1.md",
+        "bench/tc1/am81-rederive/tc1-5090-16/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/",
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-14/tc1/",
+        "receipts/experts4bit-qlora/2026-10-01/tc1-5090-15/tc1/"
+      ],
+      "notes": "TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1-5090-16/); e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.host-variance quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.host-variance"
+      ]
     },
     {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.curve-n200",
@@ -8564,7 +8599,7 @@
       "hardware": "RTX 5090 (sm_120; instance redacted-3a751047, Threadripper PRO 3975WX) and H100 NVL (sm_90; instance redacted-cb233151, EPYC 9534), rented Vast.ai verified/secure hosts; torch 2.12.1+cu130 for Unsloth on both",
       "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
       "measured_on": "2026-10-02",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/h2h-2026-10-02/tc1c/README.md",
@@ -8579,7 +8614,42 @@
         "receipts/experts4bit-qlora/2026-10-02/tc1c-h100-2/tc1/",
         "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/"
       ],
-      "notes": ""
+      "notes": "",
+      "superseded_by": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.dispatch-profile.am81"
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.dispatch-profile.am81",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1c with TC1, 2026-10-02: the profiled matched arms on the two cards. e4b fused_attn4_m_prof: RTX 5090 6.169 s/step, device-busy 0.473, 140,809 device events and 753,129 CPU-side ops per step; H100 NVL 4.306 s/step, 0.553, 139,181 events, 744,465 ops -- the same launch count on both cards. Unsloth ckpt_unsloth_prof (grouped_mm): RTX 5090 9.868 s/step, 0.232, 612,179 events, 7,430,931 ops; H100 NVL 2.828 s/step, 0.297, 81,780 events, 515,683 ops -- 7.5x fewer device events and 14x fewer CPU-side ops on Hopper. The grouped GEMM Unsloth's path routes through (torch 2.12.1+cu130) is one launch per call on sm_90 and many on sm_120; that is where the 5090's 1.437 and the H100's 0.621 come from. Descriptive: which torch code path sm_120 takes is not established here.",
+      "value": 7.49,
+      "unit": "ratio of Unsloth's device events per step on the RTX 5090 to the H100 NVL (612,179 / 81,780) for the same profiled matched arm; e4b's ratio is 1.01",
+      "hardware": "RTX 5090 (sm_120; instance redacted-3a751047, Threadripper PRO 3975WX) and H100 NVL (sm_90; instance redacted-cb233151, EPYC 9534), rented Vast.ai verified/secure hosts; torch 2.12.1+cu130 for Unsloth on both",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1c/README.md",
+        "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-2/RESULTS-tc1.md",
+        "bench/tc1/TC1C-PREREG.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/am81-rederive/tc1-5090-16/rederive.json",
+        "bench/tc1/am81-rederive/tc1c-h100-2/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1c-h100-2/tc1/",
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/"
+      ],
+      "notes": "TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1-5090-16/, bench/tc1/am81-rederive/tc1c-h100-2/); e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.dispatch-profile quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.dispatch-profile"
+      ]
     },
     {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported",
@@ -9961,7 +10031,7 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-04/tc1c-h100-3/tc1/"
       ],
-      "notes": "The current matched position against Unsloth on the H100 class; e4b.train.h2h.unsloth.qwen3.h100.2026-10-02 (0.621) stands for the code before #945. The profiled arms on this box: e4b device-busy 0.665 (was 0.562) at 97,851 device events and 619,192 CPU-side ops per step (was 139,181 / 744,465); Unsloth 0.305 at 81,780 / 515,750 -- e4b now spends ~2.4x Unsloth's device time per step, which is the remaining gap on sm_90. axolotl trained on this box (one VALID draw, axolotl/e4b 1.299, a reported row); HF + PEFT hit its alarm again."
+      "notes": "The current matched position against Unsloth on the H100 class; e4b.train.h2h.unsloth.qwen3.h100.2026-10-02 (0.621) stands for the code before #945. The profiled arms on this box: e4b device-busy 0.665 (was 0.562) at 97,851 device events and 619,192 CPU-side ops per step (was 139,181 / 744,465); Unsloth 0.305 at 81,780 / 515,750 -- e4b now spends ~2.4x Unsloth's device time per step, which is the remaining gap on sm_90. axolotl trained on this box (one VALID draw, axolotl/e4b 1.299, a reported row); HF + PEFT hit its alarm again. TC1 amendment 81 (kernels-only device time, bench/tc1/am81-rederive/tc1c-h100-3/): device-busy e4b 0.653 (was 0.665; the first box's 0.562 is 0.553, bench/tc1/am81-rederive/tc1c-h100-2/), Unsloth 0.294 (was 0.305)."
     },
     {
       "package": "experts4bit-qlora",
@@ -10033,7 +10103,7 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-04/tc1c-h100-4/tc1/"
       ],
-      "notes": "Against amendment 1 on the same machine e4b's step went 3.146 -> 2.343 s (x0.745), Unsloth's 2.571 -> 2.577. The profiled e4b arm: device-busy 0.659 at 68,452 device events and 455,685 CPU-side ops per step (amendment 1: 97,851 / 619,192); Unsloth 0.306 / 81,780 / 515,750 -- e4b still spends ~1.8x Unsloth's device time per step. The 5090 trade at 16-32 kept layers: e4b.train.moe-keep.qwen3.5090.2026-10-04."
+      "notes": "Against amendment 1 on the same machine e4b's step went 3.146 -> 2.343 s (x0.745), Unsloth's 2.571 -> 2.577. The profiled e4b arm: device-busy 0.659 at 68,452 device events and 455,685 CPU-side ops per step (amendment 1: 97,851 / 619,192); Unsloth 0.306 / 81,780 / 515,750 -- e4b still spends ~1.8x Unsloth's device time per step. The 5090 trade at 16-32 kept layers: e4b.train.moe-keep.qwen3.5090.2026-10-04. TC1 amendment 81 (kernels-only device time, bench/tc1/am81-rederive/tc1c-h100-4/): device-busy e4b 0.643 (was 0.659), Unsloth 0.294 (was 0.306)."
     },
     {
       "package": "experts4bit-qlora",
@@ -10088,7 +10158,7 @@
       "area": "train",
       "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
       "measured_on": "2026-10-04",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route-v2",
       "claim": "TC1c amendment 6, box R (tc1c-h100-9, one rented H100 NVL): with every e4b arm on grouped-nf4-gemm's grouped_mm route (GNF4_TRAIN_GEMM=grouped_mm) at #452's dequant kernel (bit-equal to #450's, ~8.5x faster), Unsloth/e4b reads 1.030 [1.016, 1.045] -- e4b 2.481 s/step against Unsloth's 2.557, e4b FASTER per step, against 0.664 with the old dequant (amendment 4) and the default-settings 0.817 (amendment 1). P18 HELD (band [0.90, 1.25]); the matched set EQUIVALENT (P20 HELD). The profiled e4b arm puts the dequant at 256 ms of device time per step (0.222 ms per call; was 2,178 ms at 1.89 ms) and dequant + grouped GEMMs at about 0.50 s against the fused kernels' 1.42 s; the step is now host-bound (device-busy 0.454). Amendment 4's default rule holds (P20, R >= 0.858, e4b held-out 0.8481 within 0.005 of amendment 1's 0.8521, a thin margin: two of four draw-against-draw pairings would miss it), so the route qualifies as grouped-nf4-gemm's sm_90 default (grouped-nf4-gemm#454). A LABELLED row until a default-settings box re-reads the H100 position on the release that carries that default.",
@@ -10105,7 +10175,38 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-04/tc1c-h100-9/tc1/"
       ],
-      "notes": "Vast invoiced $2.65. Draw-against-draw the e4b held-out differences from amendment 1 are 0.0026, 0.0028, 0.0053 and 0.0056; the rule reads two-draw means."
+      "notes": "Vast invoiced $2.65. Draw-against-draw the e4b held-out differences from amendment 1 are 0.0026, 0.0028, 0.0053 and 0.0056; the rule reads two-draw means.",
+      "superseded_by": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route-v2.am81"
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route-v2.am81",
+      "claim": "TC1c amendment 6, box R (tc1c-h100-9, one rented H100 NVL): with every e4b arm on grouped-nf4-gemm's grouped_mm route (GNF4_TRAIN_GEMM=grouped_mm) at #452's dequant kernel (bit-equal to #450's, ~8.5x faster), Unsloth/e4b reads 1.030 [1.016, 1.045] -- e4b 2.481 s/step against Unsloth's 2.557, e4b FASTER per step, against 0.664 with the old dequant (amendment 4) and the default-settings 0.817 (amendment 1). P18 HELD (band [0.90, 1.25]); the matched set EQUIVALENT (P20 HELD). The profiled e4b arm puts the dequant at 256 ms of device time per step (0.222 ms per call; was 2,178 ms at 1.89 ms) and dequant + grouped GEMMs at about 0.50 s against the fused kernels' 1.42 s; the step is now host-bound (device-busy 0.442). Amendment 4's default rule holds (P20, R >= 0.858, e4b held-out 0.8481 within 0.005 of amendment 1's 0.8521, a thin margin: two of four draw-against-draw pairings would miss it), so the route qualifies as grouped-nf4-gemm's sm_90 default (grouped-nf4-gemm#454). A LABELLED row until a default-settings box re-reads the H100 position on the release that carries that default.",
+      "value": 1.03,
+      "unit": "ratio s/step Unsloth/e4b with e4b on GNF4_TRAIN_GEMM=grouped_mm (medians of steps 11..20 over two draws each; < 1 = Unsloth faster); cross-draw interval [1.016, 1.045]",
+      "hardware": "H100 NVL (sm_90), one rented Vast.ai verified/secure host (tc1c-h100-9: instance redacted-5a0fe33b, AMD EPYC 9534, driver 595.71.05); e4b @ e775eff on torch 2.8.0+cu128, grouped-nf4-gemm @ 81706a9; Unsloth 2026.9.14 on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; matched work (642,514,944 trainable parameters, per-slot init matched:3407, fp32 adapters, the same tokens); token qwen3 with TC1_GPU_CLASS=\"H100 NVL\", HF and axolotl skipped; engagement read off route_ab (and keep_ab); validity, positions and equivalence by bench/tc1/tc1_reduce.py; TC1_E4B_ENV=\"GNF4_TRAIN_GEMM=grouped_mm\"",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1c/README.md",
+        "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-9/RESULTS-tc1.md",
+        "bench/tc1/TC1C-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/am81-rederive/tc1c-h100-9/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md",
+        "bench/tc1/TC1-PREREG.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1c-h100-9/tc1/"
+      ],
+      "notes": "Vast invoiced $2.65. Draw-against-draw the e4b held-out differences from amendment 1 are 0.0026, 0.0028, 0.0053 and 0.0056; the rule reads two-draw means. TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1c-h100-9/); e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route-v2 quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route-v2"
+      ]
     },
     {
       "package": "experts4bit-qlora",
@@ -11482,7 +11583,7 @@
       "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-110: instance redacted-5a5cdbaa, AMD Ryzen Threadripper PRO 3955WX, a 15-CPU quota, Vast machine 26157); e4b @ 3c8793f + grouped-nf4-gemm 0.42.0 @ 427a771 in venv-unsloth (torch 2.12.1+cu130, triton 3.7.1) and venv-e4b (torch 2.8.0+cu128, triton 3.4.0)",
       "conditions": "bench/tc1 token qwen3prof28 (TC1 amendment 53): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), the matched arm, sides q212 / q28 / q28k0 two draws each in A B C C B A order, --profile-steps 3 --profile-warm 3 (no per-micro-batch timing), TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, the per-expert loop a recorded route; validity (prof28_why), P135 / P136 against the timed step, and scoring by bench/tc1/tc1_reduce.py",
       "measured_on": "2026-10-06",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/h2h-2026-10-02/tc1/README.md",
@@ -11494,7 +11595,38 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-06/tc1-5090-110/tc1/"
       ],
-      "notes": "Vast invoiced $1.30."
+      "notes": "Vast invoiced $1.30.",
+      "superseded_by": "e4b.train.env-gap.torch28.profile.qwen3.5090.2026-10-06.am81"
+    },
+    {
+      "id": "e4b.train.env-gap.torch28.profile.qwen3.5090.2026-10-06.am81",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 53 (#835), one rented RTX 5090 (tc1-5090-110, AMD Ryzen Threadripper PRO 3955WX): e4b's matched arm (fp32 adapters, matched init) at its defaults on packed rows of 4,096 real tokens (micro-batch 1 x accum 4), 40 load-gated steps (every attempt first time), with the TC1 profile instrument on steps 3-5, in three environments, two draws each: venv-unsloth (torch 2.12.1, triton 3.7.1) and venv-e4b (torch 2.8.0, triton 3.4.0) with bucketed padding auto, and venv-e4b with the single block. Timed s/step 9.924 / 9.914 (torch 2.12) against 12.562 / 12.535 (torch 2.8): environment ratio 0.790 [0.789, 0.792] (P134 HELD, <= 0.92). Of the 2,630 ms per step torch 2.8 adds, 1,063 ms is device time (CUPTI), so 59.6 % is not (P135 HELD, >= 0.5). In torch 2.8 the buckets lower the device's share of the timed step from 0.961 to 0.846 (P136 HELD, a drop >= 0.03). Reported, not scored: the CPU family that grows most is matmul (+4,817 ms per profiled step, the next +22); aten::bmm makes ~26,750 calls a step in both torches (the single block 3,012), at about 86 us of self time per call in torch 2.12 and 268 us in torch 2.8, cuBLAS choosing the same fp32 kernel in both. Of the device time, 989 ms is grouped-nf4-gemm's Triton kernels (_gemm_nf4_grouped 1,995 -> 2,439 ms per step, _dgrad_nf4_grouped 1,038 -> 1,582), the same with the single block; torch and triton change together here, so the box does not split them.",
+      "value": 0.79,
+      "unit": "ratio s/step, e4b matched arm at its defaults, torch 2.12 over torch 2.8, packed 4,096-token rows (medians of steps 11..40 over two draws each); cross-draw interval [0.789, 0.792]; 59.6 % of the gap not device time",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-110: instance redacted-5a5cdbaa, AMD Ryzen Threadripper PRO 3955WX, a 15-CPU quota); e4b @ 3c8793f + grouped-nf4-gemm 0.42.0 @ 427a771 in venv-unsloth (torch 2.12.1+cu130, triton 3.7.1) and venv-e4b (torch 2.8.0+cu128, triton 3.4.0)",
+      "conditions": "bench/tc1 token qwen3prof28 (TC1 amendment 53): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), the matched arm, sides q212 / q28 / q28k0 two draws each in A B C C B A order, --profile-steps 3 --profile-warm 3 (no per-micro-batch timing), TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, the per-expert loop a recorded route; validity (prof28_why), P135 / P136 against the timed step, and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-06",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-prof28.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-110/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/am81-rederive/tc1-5090-110/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-06/tc1-5090-110/tc1/"
+      ],
+      "notes": "Vast invoiced $1.30. TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1-5090-110/); e4b.train.env-gap.torch28.profile.qwen3.5090.2026-10-06 quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.env-gap.torch28.profile.qwen3.5090.2026-10-06"
+      ]
     },
     {
       "id": "e4b.train.pad-ladder.torch28.qwen3.5090.2026-10-06",
@@ -11732,7 +11864,7 @@
       "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-125: instance redacted-416dfede, AMD Ryzen 9 9950X, a 30-CPU quota, Vast machine 153193); e4b @ 53b3fb3 + grouped-nf4-gemm @ 0e6bff3, torch 2.8.0+cu128",
       "conditions": "bench/tc1 token qwen3ckptoff28 (TC1 amendment 63): the field recipe, held-out every 20 over 8 rows, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_g0 / _g1 and fused_attn4_m_g0 / _g1 (+ _d2), --phase-peaks 1 and --profile-steps 3 --profile-warm 3; validity (ckptoff_why's field form at torch 2.8, a profile on every arm), the premise gate (g0 device busy vs the timed step <= 0.9) and scoring by bench/tc1/tc1_reduce.py",
       "measured_on": "2026-10-07",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/h2h-2026-10-02/tc1/README.md",
@@ -11744,7 +11876,38 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-07/tc1-5090-125/tc1/"
       ],
-      "notes": "Vast invoiced $1.48; the first draw (tc1-5090-124, $0.02) was refused at the CUDA host floor (code 18, driver 610.57)."
+      "notes": "Vast invoiced $1.48; the first draw (tc1-5090-124, $0.02) was refused at the CUDA host floor (code 18, driver 610.57).",
+      "superseded_by": "e4b.train.ckpt-offload.field-torch28.5090.2026-10-07.am81"
+    },
+    {
+      "id": "e4b.train.ckpt-offload.field-torch28.5090.2026-10-07.am81",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 63 (#835), one rented RTX 5090 (tc1-5090-125, AMD Ryzen 9 9950X): e4b's shipped and matched arms at TC1's field recipe in venv-e4b (torch 2.8.0, the field image's) at e4b's defaults otherwise, E4B_CKPT_OFFLOAD 0 against 1, two draws a side in ABBA order, every arm profiled, 60 load-gated steps (every attempt first time). The premise held (both g0 arms host-bound: device busy against the timed step 0.764 matched, 0.782 shipped, <= 0.9). The offload steps 0.994 [0.993, 0.995] (matched, P174 HELD, <= 1.01) and 0.985 [0.984, 0.987] (shipped, P175 HELD) of the default, held-out at N -0.0010 / +0.0004 (P176 HELD), and the matched training-phase peak falls 26.104 -> 25.923 GB (P177 HELD, >= 0.10 GB).",
+      "value": 0.985,
+      "unit": "ratio s/step, E4B_CKPT_OFFLOAD=1 over 0, Qwen3-30B-A3B shipped arm at the field recipe in torch 2.8 (medians of steps 11..60 over two draws each); matched 0.994; matched training-phase peak -0.181 GB",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-125: instance redacted-416dfede, AMD Ryzen 9 9950X, a 30-CPU quota); e4b @ 53b3fb3 + grouped-nf4-gemm @ 0e6bff3, torch 2.8.0+cu128",
+      "conditions": "bench/tc1 token qwen3ckptoff28 (TC1 amendment 63): the field recipe, held-out every 20 over 8 rows, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_g0 / _g1 and fused_attn4_m_g0 / _g1 (+ _d2), --phase-peaks 1 and --profile-steps 3 --profile-warm 3; validity (ckptoff_why's field form at torch 2.8, a profile on every arm), the premise gate (g0 device busy vs the timed step <= 0.9) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-ckptoff28.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-125/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/am81-rederive/tc1-5090-125/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/tc1-5090-125/tc1/"
+      ],
+      "notes": "Vast invoiced $1.48; the first draw (tc1-5090-124, $0.02) was refused at the CUDA host floor (code 18, driver 610.57). TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1-5090-125/); e4b.train.ckpt-offload.field-torch28.5090.2026-10-07 quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.ckpt-offload.field-torch28.5090.2026-10-07"
+      ]
     },
     {
       "id": "e4b.train.ckpt-flavour.default.5090.2026-10-07",
@@ -11757,7 +11920,7 @@
       "hardware": "RTX 5090 (sm_120), two rented Vast.ai verified/secure hosts (tc1-5090-129: instance redacted-1dc92782, AMD Ryzen 9 5900XT, a 30-CPU quota, torch 2.12.1+cu130; tc1-5090-128: instance redacted-535fc5c9, AMD EPYC 7K62, a 23-CPU quota, Vast machine 152440, torch 2.8.0+cu128); e4b @ 2b8c1d4 (packed) / 434db5f (field) + grouped-nf4-gemm @ 0e6bff3",
       "conditions": "bench/tc1 tokens qwen3ckptre4k (packed rows: TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, 40 load-gated steps) and qwen3ckptre28 (the field recipe in venv-e4b, 60 load-gated steps, --profile-steps 3 --profile-warm 3) (TC1 amendment 64): fused_attn4_m_* / fused_attn4_shipped_* r0 / rr / r1 (+ _d2), --phase-peaks 1; validity (ckptre_why in each regime's form, the checkpoint function each side names), P182's premise gate (r0 device busy vs the timed step <= 0.9) and scoring by bench/tc1/tc1_reduce.py",
       "measured_on": "2026-10-07",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/h2h-2026-10-02/tc1/README.md",
@@ -11772,7 +11935,41 @@
         "receipts/experts4bit-qlora/2026-10-07/tc1-5090-129/tc1/",
         "receipts/experts4bit-qlora/2026-10-07/tc1-5090-128/tc1/"
       ],
-      "notes": "Vast invoiced $1.00 (packed) and $1.47 (field, torch 2.8)."
+      "notes": "Vast invoiced $1.00 (packed) and $1.47 (field, torch 2.8).",
+      "superseded_by": "e4b.train.ckpt-flavour.default.5090.2026-10-07.am81"
+    },
+    {
+      "id": "e4b.train.ckpt-flavour.default.5090.2026-10-07.am81",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 64 (#835), two rented RTX 5090s: Hugging Face's checkpoint (E4B_CKPT_OFFLOAD=0), PyTorch's reentrant checkpoint alone (=reentrant) and the reentrant checkpoint with its inputs in pinned host memory (=1), two draws a side. Packed 4,096-token rows in torch 2.12.1, e4b's matched arm (tc1-5090-129, AMD Ryzen 9 5900XT): the reentrant checkpoint steps 0.980 [0.980, 0.981] of Hugging Face's (P178 HELD, <= 1.01) with the same training-phase peak, 26.581 GB (P179 HELD), held-out within 0.0004 (P181 HELD); the copies cost 1.023 [1.022, 1.024] of the reentrant step for a 0.74 GB lower peak (P180 FALSIFIED, <= 1.01). TC1's field recipe in torch 2.8.0, e4b's shipped arm, every arm profiled (tc1-5090-128, AMD EPYC 7K62, Hugging Face's checkpoint host-bound at device busy 0.389): the reentrant checkpoint steps 0.838 [0.825, 0.852] (P182 HELD, <= 1.00, premise met), held-out within 0.0039 (P183 HELD). By the amendment's rule the reentrant checkpoint becomes e4b's default checkpoint under enable_fast_train; the offload stays opt-in.",
+      "value": 0.838,
+      "unit": "ratio s/step, the reentrant checkpoint over Hugging Face's checkpoint, Qwen3-30B-A3B shipped arm at the field recipe in torch 2.8 (medians of steps 11..60 over two draws each); packed rows (matched arm, torch 2.12) 0.980; the offload's copies 1.023 of the reentrant step on packed rows",
+      "hardware": "RTX 5090 (sm_120), two rented Vast.ai verified/secure hosts (tc1-5090-129: instance redacted-1dc92782, AMD Ryzen 9 5900XT, a 30-CPU quota, torch 2.12.1+cu130; tc1-5090-128: instance redacted-535fc5c9, AMD EPYC 7K62, a 23-CPU quota, torch 2.8.0+cu128); e4b @ 2b8c1d4 (packed) / 434db5f (field) + grouped-nf4-gemm @ 0e6bff3",
+      "conditions": "bench/tc1 tokens qwen3ckptre4k (packed rows: TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, 40 load-gated steps) and qwen3ckptre28 (the field recipe in venv-e4b, 60 load-gated steps, --profile-steps 3 --profile-warm 3) (TC1 amendment 64): fused_attn4_m_* / fused_attn4_shipped_* r0 / rr / r1 (+ _d2), --phase-peaks 1; validity (ckptre_why in each regime's form, the checkpoint function each side names), P182's premise gate (r0 device busy vs the timed step <= 0.9) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-ckptre64-packed.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-ckptre64-field28.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-129/RESULTS-tc1.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-128/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/am81-rederive/tc1-5090-128/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/tc1-5090-129/tc1/",
+        "receipts/experts4bit-qlora/2026-10-07/tc1-5090-128/tc1/"
+      ],
+      "notes": "Vast invoiced $1.00 (packed) and $1.47 (field, torch 2.8). TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1-5090-128/); e4b.train.ckpt-flavour.default.5090.2026-10-07 quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.ckpt-flavour.default.5090.2026-10-07"
+      ]
     },
     {
       "id": "e4b.train.memory.packed-4k-train-census-defaults.5090.2026-10-07",
@@ -11860,7 +12057,7 @@
       "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-136: instance redacted-896c2bc2, an AMD engineering-sample CPU, a 30.7-CPU quota, Vast machine 13828); e4b @ 0b29952 + grouped-nf4-gemm @ 8944aa8, torch 2.12.1+cu130; Unsloth 2026.9.14",
       "conditions": "bench/tc1 token qwen3pos68 (TC1 amendment 68): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), held-out at 0 and 40, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_m_pd and Unsloth ckpt_unsloth_m_pv (grouped_mm), two draws each, --phase-peaks 1 and the profile instrument (3 warm + 3 profiled steps, before the timed window) on every arm; validity (pos68_why) and scoring by bench/tc1/tc1_reduce.py",
       "measured_on": "2026-10-08",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/h2h-2026-10-02/tc1/README.md",
@@ -11872,7 +12069,39 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-08/tc1-5090-136/tc1/"
       ],
-      "notes": "Vast invoiced $1.96."
+      "notes": "Vast invoiced $1.96.",
+      "superseded_by": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio.am81"
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio.am81",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 68 (#835), one rented RTX 5090 (tc1-5090-136, an AMD engineering-sample CPU): e4b's matched arm at its defaults against Unsloth 2026.9.14's matched arm on packed rows of 4,096 real tokens, both in venv-unsloth (torch 2.12.1), two draws each in ABBA order, every arm profiled, 40 load-gated steps. Unsloth's device time per profiled step is 1.161x e4b's (11613.2 / 10006.7 ms; P200 HELD, [1.06, 1.24]; amendment 66's host read 1.141, also kernels-only). Unsloth runs 7.09x e4b's CPU ops per step (P202 HELD, >= 5) and its GPU is busy for 0.780 of its timed step against e4b's 0.990 (P201 HELD, gap >= 0.08), so its wall time depends on the host far more than e4b's: s/step 14.886 against 10.111 here, a wall ratio of 1.472. Held-out at N within 0.0001 (P204 HELD). P203 FALSIFIED as registered: Unsloth's device time was 14.7 % above amendment 66's on that box, both kernels-only (11613.2 against 10125.2 ms; the registered reducer compares with amendment 66's all-CUDA constant 10152.2 and prints +14.4 %), but e4b's rose 12.8 % on the same card, so the bound tested the card.",
+      "value": 1.161,
+      "unit": "ratio, device ms per profiled step, Unsloth matched arm / e4b matched arm at its defaults, packed 4,096-token rows (medians of two draws); wall s/step ratio 1.472 on this host",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-136: instance redacted-896c2bc2, an AMD engineering-sample CPU, a 30.7-CPU quota); e4b @ 0b29952 + grouped-nf4-gemm @ 8944aa8, torch 2.12.1+cu130; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3pos68 (TC1 amendment 68): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), held-out at 0 and 40, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_m_pd and Unsloth ckpt_unsloth_m_pv (grouped_mm), two draws each, --phase-peaks 1 and the profile instrument (3 warm + 3 profiled steps, before the timed window) on every arm; validity (pos68_why) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos68.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-136/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/am81-rederive/tc1-5090-136/rederive.json",
+        "bench/tc1/am81-rederive/tc1-5090-133/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/tc1-5090-136/tc1/"
+      ],
+      "notes": "Vast invoiced $1.96. TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1-5090-136/, bench/tc1/am81-rederive/tc1-5090-133/); e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio"
+      ]
     },
     {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio",
@@ -11885,7 +12114,7 @@
       "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-137: instance redacted-7ca36758, AMD EPYC 7713); e4b @ 737f02f + grouped-nf4-gemm @ 8371c38, torch 2.12.1+cu130; Unsloth 2026.9.14",
       "conditions": "bench/tc1 token qwen3pos69 (TC1 amendment 69): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_m_fd and Unsloth ckpt_unsloth_m_fv, matched set (fp32 adapters, matched init), two draws each, the profile instrument (3 warm + 3 profiled steps, before the timed window) on every arm; validity (pos69_why: every e4b default present and unset) and scoring by bench/tc1/tc1_reduce.py",
       "measured_on": "2026-10-08",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/h2h-2026-10-02/tc1/README.md",
@@ -11897,7 +12126,38 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-08/tc1-5090-137/tc1/"
       ],
-      "notes": "Vast invoiced $2.12."
+      "notes": "Vast invoiced $2.12.",
+      "superseded_by": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio.am81"
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio.am81",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 69 (#835), one rented RTX 5090 (tc1-5090-137, AMD EPYC 7713): TC1's field recipe (alpaca, seq 2048, micro-batch 2 x accum 4) over 60 load-gated steps with both frameworks on one stack (venv-unsloth, torch 2.12.1), e4b's matched arm at every current default against Unsloth 2026.9.14's matched arm (grouped_mm), two draws each in ABBA order, every arm profiled. Unsloth's device time per profiled step is 1.953x e4b's (3203.2 / 1639.9 ms; P205 HELD, [1.7, 2.7]); s/step 9.780 against 3.489, a wall ratio of 2.803 on this host (P206 HELD, [2.3, 3.3]). Unsloth runs 14.09x e4b's CPU ops per step (P207 HELD, >= 8) and its GPU is busy for 0.328 of its timed step against e4b's 0.470, so the wall ratio is 1.435x the device ratio (P208 HELD, >= 1.05). Held-out at N 0.75643 against 0.75761 (P209 HELD, within 0.01). e4b peaks 26.16 GB against Unsloth's 24.27.",
+      "value": 1.953,
+      "unit": "ratio, device ms per profiled step, Unsloth matched arm / e4b matched arm at its defaults, TC1 field recipe (medians of two draws); wall s/step ratio 2.803 on this host",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-137: instance redacted-7ca36758, AMD EPYC 7713); e4b @ 737f02f + grouped-nf4-gemm @ 8371c38, torch 2.12.1+cu130; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3pos69 (TC1 amendment 69): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_m_fd and Unsloth ckpt_unsloth_m_fv, matched set (fp32 adapters, matched init), two draws each, the profile instrument (3 warm + 3 profiled steps, before the timed window) on every arm; validity (pos69_why: every e4b default present and unset) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos69.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-137/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/am81-rederive/tc1-5090-137/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/tc1-5090-137/tc1/"
+      ],
+      "notes": "Vast invoiced $2.12. TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1-5090-137/); e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio"
+      ]
     },
     {
       "id": "e4b.train.memory-census.field.5090.2026-10-22",
@@ -12015,7 +12275,7 @@
       "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-138: instance redacted-4395fe87, AMD EPYC 7K62, a 23-CPU quota, Vast machine 152440); e4b @ 822884d + grouped-nf4-gemm @ f8b4a0a, torch 2.12.1+cu130",
       "conditions": "bench/tc1 token qwen3sladder (TC1 amendment 70): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_l0 / _l1 and fused_attn4_m_l0 / _l1 (+ _d2), --phase-peaks 1 and the profile instrument on every arm; validity (sladder_why: e4b's field defaults, the single padded block serving every call, laddered calls on l1 and none on l0) and scoring by bench/tc1/tc1_reduce.py",
       "measured_on": "2026-10-08",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/h2h-2026-10-02/tc1/README.md",
@@ -12027,7 +12287,38 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-08/tc1-5090-138/tc1/"
       ],
-      "notes": "Vast invoiced $1.73; one shipped l1 draw was voided twice for host load and its last attempt stands."
+      "notes": "Vast invoiced $1.73; one shipped l1 draw was voided twice for host load and its last attempt stands.",
+      "superseded_by": "e4b.train.single-ladder.field.5090.2026-10-08.am81"
+    },
+    {
+      "id": "e4b.train.single-ladder.field.5090.2026-10-08.am81",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 70 (#835), one rented RTX 5090 (tc1-5090-138, AMD EPYC 7K62): grouped-nf4-gemm's opt-in single-block ladder (NF4_QLORA_SINGLE_LADDER=1, grouped-nf4-gemm#513) against the single padded block at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch 2.12.1), the shipped (bf16 adapters) and the matched (fp32 adapters) arm, two draws a side in ABBA order, every arm profiled. On this host-bound box (the matched l0's GPU busy 0.402 of its step) the matched arm steps 0.797 [0.789, 0.806] of its time (P210 HELD, <= 0.97): aten::bmm's CPU self time per call falls from 305.4 to 24.5 us (P212 HELD, <= 0.5x), device time rises 4.6 % (P213 HELD, <= 1.05) and the training peak 0.33 GB (26.16 to 26.50). The shipped arm steps 1.015 [1.006, 1.025] (P211 FALSIFIED, <= 0.97): its bmm already took about 28 us a call. Held-out unchanged (P214 HELD). By the rule the flag stays opt-in.",
+      "value": 0.797,
+      "unit": "ratio, s/step NF4_QLORA_SINGLE_LADDER=1 / =0, e4b matched arm (fp32 adapters) at TC1's field recipe (medians of two draws); shipped arm (bf16 adapters) 1.015",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-138: instance redacted-4395fe87, AMD EPYC 7K62, a 23-CPU quota); e4b @ 822884d + grouped-nf4-gemm @ f8b4a0a, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3sladder (TC1 amendment 70): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_l0 / _l1 and fused_attn4_m_l0 / _l1 (+ _d2), --phase-peaks 1 and the profile instrument on every arm; validity (sladder_why: e4b's field defaults, the single padded block serving every call, laddered calls on l1 and none on l0) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-sladder.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-138/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/am81-rederive/tc1-5090-138/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/tc1-5090-138/tc1/"
+      ],
+      "notes": "Vast invoiced $1.73; one shipped l1 draw was voided twice for host load and its last attempt stands. TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1-5090-138/); e4b.train.single-ladder.field.5090.2026-10-08 quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.single-ladder.field.5090.2026-10-08"
+      ]
     },
     {
       "id": "e4b.train.dense-executor.dq7.5090.2026-10-08",
@@ -12063,7 +12354,7 @@
       "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-139: instance redacted-1a1fbb07, AMD EPYC 7763, a 61-CPU quota, Vast machine 150670); e4b @ d0ae243 + grouped-nf4-gemm @ 3ce2ecd, torch 2.12.1+cu130",
       "conditions": "bench/tc1 token qwen3slauto (TC1 amendment 71): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_l0 / _la and fused_attn4_m_l0 / _la (+ _d2), --phase-peaks 1 and the profile instrument on every arm; validity (slauto_why: amendment 70's predicates, no laddered call on l0, laddered calls on the matched la and none on the shipped la) and scoring by bench/tc1/tc1_reduce.py",
       "measured_on": "2026-10-08",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/h2h-2026-10-02/tc1/README.md",
@@ -12075,7 +12366,38 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-08/tc1-5090-139/tc1/"
       ],
-      "notes": "Vast invoiced $2.751, with seven load-gate re-runs. Paired by draw (not quoted by the rule): shipped la / l0 0.997 in both draws, matched 0.876 and 0.813. The matched l0's GPU busy was 0.475 of its step (host-bound)."
+      "notes": "Vast invoiced $2.751, with seven load-gate re-runs. Paired by draw (not quoted by the rule): shipped la / l0 0.997 in both draws, matched 0.876 and 0.813. The matched l0's GPU busy was 0.475 of its step (host-bound).",
+      "superseded_by": "e4b.train.single-ladder-auto.field.5090.2026-10-08.am81"
+    },
+    {
+      "id": "e4b.train.single-ladder-auto.field.5090.2026-10-08.am81",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 71 (#835), one rented RTX 5090 (tc1-5090-139, AMD EPYC 7763): grouped-nf4-gemm's NF4_QLORA_SINGLE_LADDER=auto (grouped-nf4-gemm#514, the single-block ladder exactly when the adapters are fp32) against 0 at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch 2.12.1), the shipped (bf16 adapters) and the matched (fp32 adapters) arm, two draws a side in ABBA order, every arm profiled. auto laddered 49,152 calls on each matched draw and none on the shipped arm. Matched aten::bmm CPU self time per call 175.1 -> 21.1 us = 0.120 (P217 HELD, <= 0.5); device ms per profiled step 1.045 matched (<= 1.06) and 1.002 shipped (in [0.98, 1.02]) (P218 HELD); held-out unchanged (P219 HELD). P215 (matched s/step) and P216 (shipped s/step) UNTESTED: the host's load rose through the box (seven draws voided for load1 over 6.0, three second draws standing at 13.0-14.1) and three arms' two draws differed by 7.1-9.5 %, over the 5 % rule. By the rule auto stays opt-in; amendment 72 re-reads the box on a third host.",
+      "value": 0.12,
+      "unit": "ratio, aten::bmm CPU self time per call NF4_QLORA_SINGLE_LADDER=auto / =0, e4b matched arm (fp32 adapters), medians of two draws; the step-time ratios are UNTESTED",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-139: instance redacted-1a1fbb07, AMD EPYC 7763, a 61-CPU quota); e4b @ d0ae243 + grouped-nf4-gemm @ 3ce2ecd, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3slauto (TC1 amendment 71): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_l0 / _la and fused_attn4_m_l0 / _la (+ _d2), --phase-peaks 1 and the profile instrument on every arm; validity (slauto_why: amendment 70's predicates, no laddered call on l0, laddered calls on the matched la and none on the shipped la) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-slauto.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-139/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/am81-rederive/tc1-5090-139/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/tc1-5090-139/tc1/"
+      ],
+      "notes": "Vast invoiced $2.751, with seven load-gate re-runs. Paired by draw (not quoted by the rule): shipped la / l0 0.997 in both draws, matched 0.876 and 0.813. The matched l0's GPU busy was 0.460 of its step (host-bound). TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1-5090-139/); e4b.train.single-ladder-auto.field.5090.2026-10-08 quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.single-ladder-auto.field.5090.2026-10-08"
+      ]
     },
     {
       "id": "e4b.train.dense-executor.dq9.5090.2026-10-08",
@@ -12111,7 +12433,7 @@
       "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-141: instance redacted-66d8d20c, AMD Ryzen 9 9950X3D, 32 threads, Vast machine 18967); e4b @ 9629874 + grouped-nf4-gemm @ 3ce2ecd, torch 2.12.1+cu130",
       "conditions": "bench/tc1 token qwen3slauto (TC1 amendments 71 and 72): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_l0 / _la and fused_attn4_m_l0 / _la (+ _d2), --phase-peaks 1 and the profile instrument on every arm; validity (slauto_why) and scoring by bench/tc1/tc1_reduce.py",
       "measured_on": "2026-10-08",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/h2h-2026-10-02/tc1/README.md",
@@ -12123,7 +12445,38 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-08/tc1-5090-141/tc1/"
       ],
-      "notes": "Vast invoiced $0.798. Amendment 70's host-bound box read 0.797 on the matched arm; this GPU-bound one 1.031, the ladder's 5.5 % of device time not hidden. The default flip is grouped-nf4-gemm#521."
+      "notes": "Vast invoiced $0.798. Amendment 70's host-bound box read 0.797 on the matched arm; this GPU-bound one 1.031, the ladder's 5.5 % of device time not hidden. The default flip is grouped-nf4-gemm#521.",
+      "superseded_by": "e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08.am81"
+    },
+    {
+      "id": "e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08.am81",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 72 (#835), amendment 71's box unchanged on a third host (tc1-5090-141, AMD Ryzen 9 9950X3D, GPU-bound: the matched l0's GPU busy 0.871 of its step, no draw voided for host load): grouped-nf4-gemm's NF4_QLORA_SINGLE_LADDER=auto against 0 at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch 2.12.1), the shipped (bf16 adapters) and the matched (fp32 adapters) arm, two draws a side in ABBA order, every arm profiled. Matched s/step la / l0 1.031 [1.028, 1.034] (P215 HELD, <= 1.05 on a GPU-bound box); shipped 1.002 [1.001, 1.003] (P216 HELD); aten::bmm CPU self per call 95.9 -> 8.8 us = 0.092 (P217 HELD); device ms per profiled step 1.056 matched, 1.000 shipped (P218 HELD); held-out unchanged (P219 HELD). P220 and P221 hold with P219, so by amendment 72's rule auto becomes grouped-nf4-gemm's default.",
+      "value": 1.031,
+      "unit": "ratio, s/step NF4_QLORA_SINGLE_LADDER=auto / =0, e4b matched arm (fp32 adapters) at TC1's field recipe on a GPU-bound box (medians of two draws); shipped arm (bf16 adapters) 1.002",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-141: instance redacted-66d8d20c, AMD Ryzen 9 9950X3D, 32 threads); e4b @ 9629874 + grouped-nf4-gemm @ 3ce2ecd, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3slauto (TC1 amendments 71 and 72): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_l0 / _la and fused_attn4_m_l0 / _la (+ _d2), --phase-peaks 1 and the profile instrument on every arm; validity (slauto_why) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-slauto-h3.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-141/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/am81-rederive/tc1-5090-141/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/tc1-5090-141/tc1/"
+      ],
+      "notes": "Vast invoiced $0.798. Amendment 70's host-bound box read 0.797 on the matched arm; this GPU-bound one 1.031, the ladder's 5.6 % of device time not hidden. The default flip is grouped-nf4-gemm#521. TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1-5090-141/); e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08 quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08"
+      ]
     },
     {
       "id": "e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09",
@@ -12404,7 +12757,7 @@
       "hardware": "RTX 5090 (sm_120), one rented Vast.ai host (tc1-5090-147: instance redacted-697901ce, AMD EPYC 7B13, 128 threads, Vast machine 27708); e4b @ 51e5ae1 + grouped-nf4-gemm @ d1f64ba (v0.44.0), torch 2.12.1+cu130",
       "conditions": "bench/tc1 token qwen3fqkv3 (P129 Amendments 2 and 3): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_q0 / _q1 and fused_attn4_m_q0 / _q1 (+ _d2) in ABBA order, --phase-peaks 1 and the profile instrument on every arm, the step-0 floor (tc1_arm.qkv_floor_rows: A0, D1 fp32, D2 q/2, D3 k+v, D4 q/4) on the q0 arms; validity (fqkv3_why) and scoring (score_fqkv, the envelope rule) in bench/tc1/tc1_reduce.py",
       "measured_on": "2026-10-10",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/p129/PREREG-p129.md",
@@ -12417,7 +12770,41 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-09/tc1-5090-147/tc1/"
       ],
-      "notes": "Vast invoiced $2.759. 14 draws were voided for host load and run again; the last draw's re-runs were skipped by the host-limited deadline. On this card D2 equalled the stock rows. The step-0 shift is the router's top-8 choice amplifying sub-ulp q/k/v rounding (records/a3/routing_step0.json: pinning the routing removes it). tc1-5090-146 read QUALITY_FAIL under Amendment 2's 0.0005 step-0 clause, which no base-path change can meet."
+      "notes": "Vast invoiced $2.759. 14 draws were voided for host load and run again; the last draw's re-runs were skipped by the host-limited deadline. On this card D2 equalled the stock rows. The step-0 shift is the router's top-8 choice amplifying sub-ulp q/k/v rounding (records/a3/routing_step0.json: pinning the routing removes it). tc1-5090-146 read QUALITY_FAIL under Amendment 2's 0.0005 step-0 clause, which no base-path change can meet.",
+      "superseded_by": "e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10.am81"
+    },
+    {
+      "id": "e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10.am81",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane P129 Amendment 3 (#835), one RTX 5090 (tc1-5090-147, AMD EPYC 7B13, host-bound: the matched q0's GPU busy 0.446 of its step): e4b's opt-in fused q/k/v training projection (E4B_TRAIN_FUSE_QKV=1: one NF4 dequantize and matmul over the concatenated packed rows, one LoRA-A product, serving's fused attention forward) against the three projections, at TC1's field recipe over 60 load-gated steps. Launches per step fell 13.9 % (matched, fp32 adapters) and 14.6 % (shipped, bf16 adapters); the step took 0.895 and 0.868 of the time (two draws a side, cross-draw ranges [0.890, 0.901] and [0.862, 0.875]); device time 0.988 (matched) and 0.984 (shipped). Quality: the step-0 held-out lies within the box's fp32-anchored envelope (e_B 0.02313 against max over the stock and three registered bf16 schedules 0.03905, ratio 0.59), held-out at N within 0.0007. Every standing attempt ran above the 6.0 load gate (host load 12.3-32.0); the wall ratios match the first box's on another host (tc1-5090-146: 0.896 / 0.879). The knob stays opt-in until a second host reads.",
+      "value": 0.895,
+      "unit": "ratio, s/step E4B_TRAIN_FUSE_QKV=1 / 0, e4b matched arm (fp32 adapters) at TC1's field recipe on a host-bound box (medians of two draws); shipped arm (bf16 adapters) 0.868",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai host (tc1-5090-147: instance redacted-697901ce, AMD EPYC 7B13, 128 threads); e4b @ 51e5ae1 + grouped-nf4-gemm @ d1f64ba (v0.44.0), torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3fqkv3 (P129 Amendments 2 and 3): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_q0 / _q1 and fused_attn4_m_q0 / _q1 (+ _d2) in ABBA order, --phase-peaks 1 and the profile instrument on every arm, the step-0 floor (tc1_arm.qkv_floor_rows: A0, D1 fp32, D2 q/2, D3 k+v, D4 q/4) on the q0 arms; validity (fqkv3_why) and scoring (score_fqkv, the envelope rule) in bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-10",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p129/PREREG-p129.md",
+        "bench/p129/RESULTS-p129-a3.md",
+        "bench/p129/receipts/tc1-5090-147/RESULTS-tc1.md",
+        "bench/p129/receipts/tc1-5090-146/RESULTS-tc1.md",
+        "bench/p129/records/a3/routing_step0.json",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/am81-rederive/tc1-5090-147/rederive.json",
+        "bench/tc1/am81-rederive/tc1-5090-146/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md",
+        "bench/tc1/TC1-PREREG.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-09/tc1-5090-147/tc1/"
+      ],
+      "notes": "Vast invoiced $2.759. 14 draws were voided for host load and run again; the last draw's re-runs were skipped by the host-limited deadline. On this card D2 equalled the stock rows. The step-0 shift is the router's top-8 choice amplifying sub-ulp q/k/v rounding (records/a3/routing_step0.json: pinning the routing removes it). tc1-5090-146 read QUALITY_FAIL under Amendment 2's 0.0005 step-0 clause, which no base-path change can meet. TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1-5090-147/, bench/tc1/am81-rederive/tc1-5090-146/); e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10 quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10"
+      ]
     },
     {
       "id": "e4b.train.p129.fused-qkv.second-host.5090.2026-10-10",
@@ -12430,7 +12817,7 @@
       "hardware": "RTX 5090 (sm_120), one rented Vast.ai host (tc1-5090-150: instance redacted-03132d2a, AMD EPYC 7K62, 96 threads, Vast machine 152440); e4b @ 2d0ed91 + grouped-nf4-gemm @ d1f64ba (v0.44.0), torch 2.12.1+cu130",
       "conditions": "bench/tc1 token qwen3fqkv3 (P129 Amendments 3 and 4): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, the shipped and matched arms in ABBA order, every arm profiled, the step-0 floor on the q0 arms; the package diff against the first host's build (51e5ae1) audited to seven files off the Qwen3-30B-A3B training path; scoring by bench/tc1/tc1_reduce.py's score_fqkv (the envelope rule)",
       "measured_on": "2026-10-10",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/p129/PREREG-p129.md",
@@ -12444,7 +12831,42 @@
         "receipts/experts4bit-qlora/2026-10-10/tc1-5090-150/tc1/",
         "receipts/experts4bit-qlora/2026-10-09/tc1-5090-147/tc1/"
       ],
-      "notes": "Vast invoiced $1.326 (tc1-5090-150) and $2.759 (tc1-5090-147). The hosts are quoted separately, not pooled."
+      "notes": "Vast invoiced $1.326 (tc1-5090-150) and $2.759 (tc1-5090-147). The hosts are quoted separately, not pooled.",
+      "superseded_by": "e4b.train.p129.fused-qkv.second-host.5090.2026-10-10.am81"
+    },
+    {
+      "id": "e4b.train.p129.fused-qkv.second-host.5090.2026-10-10.am81",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane P129 Amendment 4 (#835), DEFAULT_ON's second host: e4b's fused q/k/v training projection (E4B_TRAIN_FUSE_QKV=1) against the three projections at TC1's field recipe over 60 load-gated steps, on two RTX 5090 hosts, each read on its own. Second host tc1-5090-150 (AMD EPYC 7K62, host-bound: the matched q0's GPU busy 0.521; no draw voided for host load): s/step q1 / q0 0.906 [0.903, 0.909] with fp32 adapters and 0.884 [0.870, 0.898] with bf16 (two draws a side, medians and cross-draw ranges); launches per step -13.9 % and -14.6 %; device time 0.988 (matched) and 0.984 (shipped); step-0 held-out within the box's fp32-anchored envelope (e_B 0.02313 against 0.03905); held-out at N +0.00182 and +0.00071. First host tc1-5090-147 (AMD EPYC 7B13, matched q0 busy 0.446; every standing attempt above the 6.0 load gate): 0.895 [0.890, 0.901] and 0.868 [0.862, 0.875]; the same step-0 numbers; held-out at N -0.00001 and +0.00063 (e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10.am81). Both GAIN, which meets P129's DEFAULT_ON rule.",
+      "value": 0.906,
+      "unit": "ratio, s/step E4B_TRAIN_FUSE_QKV=1 / 0, e4b matched arm (fp32 adapters) at TC1's field recipe on the second host tc1-5090-150 (medians of two draws); the other readings are quoted per host in the claim",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai host (tc1-5090-150: instance redacted-03132d2a, AMD EPYC 7K62, 96 threads); e4b @ 2d0ed91 + grouped-nf4-gemm @ d1f64ba (v0.44.0), torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3fqkv3 (P129 Amendments 3 and 4): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, the shipped and matched arms in ABBA order, every arm profiled, the step-0 floor on the q0 arms; the package diff against the first host's build (51e5ae1) audited to seven files off the Qwen3-30B-A3B training path; scoring by bench/tc1/tc1_reduce.py's score_fqkv (the envelope rule)",
+      "measured_on": "2026-10-10",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p129/PREREG-p129.md",
+        "bench/p129/RESULTS-p129-a4.md",
+        "bench/p129/RESULTS-p129-a3.md",
+        "bench/p129/receipts/tc1-5090-150/RESULTS-tc1.md",
+        "bench/p129/receipts/tc1-5090-147/RESULTS-tc1.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/am81-rederive/tc1-5090-150/rederive.json",
+        "bench/tc1/am81-rederive/tc1-5090-147/rederive.json",
+        "bench/tc1/am81-rederive/REDERIVE-REPORT.md",
+        "bench/tc1/TC1-PREREG.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-10/tc1-5090-150/tc1/",
+        "receipts/experts4bit-qlora/2026-10-09/tc1-5090-147/tc1/"
+      ],
+      "notes": "Vast invoiced $1.326 (tc1-5090-150) and $2.759 (tc1-5090-147). The hosts are quoted separately, not pooled. TC1 amendment 81: the device figures here are kernels-only (the Optimizer.step# annotation span removed), re-derived from the committed cells with each run's own staged reducer (bench/tc1/am81-rederive/tc1-5090-150/, bench/tc1/am81-rederive/tc1-5090-147/); e4b.train.p129.fused-qkv.second-host.5090.2026-10-10 quotes the all-CUDA figures.",
+      "supersedes": [
+        "e4b.train.p129.fused-qkv.second-host.5090.2026-10-10"
+      ]
     },
     {
       "id": "e4b.train.dense-adapter.dq11.matched-sdpa.5090.2026-10-11",
