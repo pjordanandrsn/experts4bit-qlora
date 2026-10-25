@@ -94,13 +94,19 @@ DATED = PUBLIC_RUN | PRIVATE_RUN
 # (receipts/<repo>/<date>/<run>/...), by an INT4B16 bundle file, or in prose, each with annotation after it. None of
 # these shapes may appear anywhere in it: they name the machine, a private checkout or the rented host.
 PRIVATE_SHAPES = (
-    ("an absolute path", re.compile(r"(?:^|[\s(,;:])~?/[A-Za-z0-9._-]")),
+    # a path rooted at / or ~/ wherever it starts (quoted, `ticked`, W=/x, [/x]); a Windows drive path
+    ("an absolute path", re.compile(r"(?<![\w.~/<>-])~?/[A-Za-z0-9._-]|(?<![\w])[A-Za-z]:[\\/]")),
     ("a URI", re.compile(r"[a-z][a-z0-9+.-]*://", re.I)),
     ("a receipts path under a checkout directory", re.compile(r"[A-Za-z0-9._-]+/receipts/[A-Za-z0-9._-]+/\d{4}-")),
     ("a UUID", re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)),
     ("a 7+ digit id", re.compile(r"(?<![\d.])\d{7,}(?!\d)")),
 )
-IPV4 = re.compile(r"(?<![\d.])((?:\d{1,3}\.){3}\d{1,3})(?![\d.])")
+# a run id may carry long numbers (a pre-create refusal is <run>-refused-<ns>-<pid>), so the digit rule reads the
+# string with its receipts paths taken out
+RECEIPT_PATH = re.compile(r"receipts/[A-Za-z0-9._-]+/\d{4}-\d{2}-\d{2}/[A-Za-z0-9._-]+")
+# an address after "@" or close after an address word: a dotted version (CUDA 12.8.0.38) is not one
+IPV4 = re.compile(r"(?i)(?:@|(?<![a-z_])(?:public_ipaddr|ipaddr|hostip|host|ip|addr|address)(?![a-z])[^0-9\n]{0,24}?)"
+                  r"((?:\d{1,3}\.){3}\d{1,3})(?![\d.-])")
 
 
 def _global_ipv4(text):
@@ -459,7 +465,8 @@ def check_claims(root: Path, doc: dict, claims: list[dict], *, sibling: Sibling 
             out.append(f"{cid}: evidence_private must be a list of non-empty strings")
         elif evp:
             for i, x in enumerate(evp):
-                why = next((w for w, rx in PRIVATE_SHAPES if rx.search(x)), None)
+                why = next((w for w, rx in PRIVATE_SHAPES
+                            if rx.search(RECEIPT_PATH.sub("", x) if w == "a 7+ digit id" else x)), None)
                 why = why or ("a public IPv4 address" if _global_ipv4(x) else None)
                 if why:
                     out.append(f"{cid}: evidence_private[{i}] carries {why}: name the receipt by its run "

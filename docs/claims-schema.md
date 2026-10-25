@@ -120,9 +120,11 @@ Each `evidence[]` entry takes one of three forms:
   Each string names the private receipt the way a public reader may see it:
   `receipts/<repo>/<YYYY-MM-DD>/<run>[/...]`, `INT4B16/<file>`, or prose, any of
   them followed by an annotation, which may name paths relative to the receipt
-  (`logs/`, a sibling run). None may carry an absolute path, a URI, a receipts
-  path under a checkout directory, a 7+ digit id, a UUID or a public IPv4
-  address: those name the machine, a private checkout or the rented host.
+  (`logs/`, a sibling run). None may carry an absolute path (wherever it starts,
+  or a Windows drive path), a URI, a receipts path under a checkout directory, a
+  7+ digit id outside a receipts path's run id, a UUID, or a public IPv4 address
+  after `@` or an address word: those name the machine, a private checkout or
+  the rented host.
 - **Everything else is refused.** Free text, globs, URL strings, notes inside an
   entry, or any other object shape is a finding. What a path was run with goes in
   `notes`, and a script that was never committed is not evidence: say so in
