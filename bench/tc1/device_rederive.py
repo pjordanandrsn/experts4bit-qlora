@@ -544,6 +544,172 @@ def check_batch(map_path, store, repo, out):
     return res
 
 
+QUOTE_DOCS = ("README.md", "docs", "llms.txt", "llms-full.txt")
+QUOTE_SKIP = ("docs/claims.json", ".sha256")
+QUOTE_FIELDS = ("claim", "value", "unit", "notes", "conditions")
+QUOTE_WORDS = re.compile(r"TC1|tc1|Unsloth|unsloth|busy|device|GPU time|qwen3|\bP\d{1,3}\b")
+_TOKEN = re.compile(r"(?<![\d.,])[-+]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\d.,])[-+]?\d+(?:\.\d+)?(?:\s?%)?")
+GENERIC_FAMILIES = frozenset({"qwen3"})          # a family token too common to place a figure: such runs need their run id
+
+
+def _committed_cell(repo, rec, cell):
+    for d in ("tc1", "public", ""):
+        p = os.path.join(repo, rec["path"], d, cell)
+        if os.path.exists(p):
+            with open(p, encoding="utf-8") as fh:
+                return json.load(fh)
+    raise Refused(f"{rec['receipt']}: the committed cell {cell} is not under {rec['path']}")
+
+
+def moved_figures(repo, out):
+    """Every figure the correction moves, by two methods, as {run: {"families": set, "figures": [(source, where, old, new)]}}:
+    ``reducer``, each number that changes on a paired line of the run's RESULTS diff; ``cell``, each cell's busy fraction (3 dp), device
+    ms (total and per profiled step, 1 dp) and memcpy fraction (3 dp), committed vs the persisted copy. The second finds figures a row
+    quotes straight from a cell that the reducer never prints."""
+    runs = {}
+    for run in sorted(os.listdir(out)):
+        p = os.path.join(out, run, "rederive.json")
+        if not os.path.exists(p):
+            continue
+        with open(p, encoding="utf-8") as fh:
+            rec = json.load(fh)
+        figs = []
+        minus = [ln[1:] for ln in rec["diff"] if ln.startswith("-")]
+        plus = [ln[1:] for ln in rec["diff"] if ln.startswith("+")]
+        for x, y in pair(minus, plus)[0]:
+            a, b = _ANY_NUM.findall(x), _ANY_NUM.findall(y)
+            if len(a) != len(b):
+                raise Refused(f"{run}: a paired line changed its number count, so its figures cannot be matched: {x[:120]}")
+            figs += [("reducer", (_key(x) or x[:40]).strip()[:40], u, v) for u, v in zip(a, b) if u != v and "." in u]
+        for cell in sorted(rec["cells"]):
+            old = _committed_cell(repo, rec, cell)["profile"]
+            with open(os.path.join(out, run, cell), encoding="utf-8") as fh:
+                new = json.load(fh)["profile"]
+            n = int(old["profiled_steps"])
+            for field, a, b, dp in (("device_busy_fraction", old["device_busy_fraction"], new["device_busy_fraction"], 3),
+                                    ("device_ms", old["device_ms"], new["device_ms"], 1),
+                                    ("device_ms per profiled step", old["device_ms"] / n, new["device_ms"] / n, 1),
+                                    ("memcpy_fraction_of_device", old.get("memcpy_fraction_of_device"),
+                                     new.get("memcpy_fraction_of_device"), 3)):
+                if a is not None and f"{a:.{dp}f}" != f"{b:.{dp}f}":
+                    figs.append(("cell", f"{cell[:-5]} {field}", f"{a:.{dp}f}", f"{b:.{dp}f}"))
+        fams = {re.split(r"_(?:e4b|unsloth|axolotl|hf)_", c)[0] for c in rec["cells"]} - GENERIC_FAMILIES
+        runs[run] = {"families": fams, "figures": figs}
+    return runs
+
+
+def _register_forms(old):
+    """The ways a register row writes a figure: as printed, without trailing zeros, comma-grouped, unsigned."""
+    out = {old, old.lstrip("+")}
+    if "." in old:
+        out.add(old.rstrip("0").rstrip("."))
+    i, _, f = old.lstrip("+-").partition(".")
+    if len(i) >= 4:
+        out.add(f"{int(i):,}" + (f".{f}" if f else ""))
+    return {x for x in out if len(x.lstrip("+-")) >= 4}
+
+
+def _doc_forms(old, new):
+    """The register forms plus the rounded ones (2 dp, 1 dp, a percent) that a document may print, each kept only when the rounded
+    old and new differ (a quote whose rounding does not move is still right)."""
+    a, b = float(old), float(new)
+    out = set(_register_forms(old))
+    for dp in (2, 1):
+        if f"{a:.{dp}f}" != f"{b:.{dp}f}" and abs(a) < 1000:
+            out.add(f"{a:.{dp}f}")
+    if abs(a) < 1.5 and f"{a * 100:.0f}" != f"{b * 100:.0f}":
+        out |= {f"{a * 100:.0f} %", f"{a * 100:.0f}%"}
+    return {x for x in out if len(x.replace(" ", "").replace("%", "").lstrip("+-")) >= 3}
+
+
+def _tokens(text):
+    found = _TOKEN.findall(text)
+    return set(found) | {t.lstrip("+-") for t in found}
+
+
+def _placed(text, run, fams):
+    return run in text or any(re.search(rf"(?<![\w-]){re.escape(f)}(?![\w-])", text) for f in fams)
+
+
+def quoted_figures(repo, out):
+    """{"rows": {row id: [hit]}, "docs": [hit]}: every register row and document line that quotes a moved figure.
+    A register hit is a figure, in a register form, in one of the row's QUOTE_FIELDS, the row placing the run (its id or a family token
+    anywhere in the row). A document hit is a figure in a document form on a line with a TC1 word, placed by the run id, a family token
+    or the id of a row with a register hit for that run, within three lines. Coincidences are possible and are read by hand; a figure
+    no rule places is not listed, which is why both methods run."""
+    runs = moved_figures(repo, out)
+    with open(os.path.join(repo, "docs", "claims.json"), encoding="utf-8") as fh:
+        claims = json.load(fh)["claims"]
+    rows, row_runs = {}, {}
+    for c in claims:
+        whole = json.dumps(c)
+        for run, r in runs.items():
+            if not _placed(whole, run, r["families"]):
+                continue
+            for field in QUOTE_FIELDS:
+                toks = _tokens(str(c.get(field) or ""))
+                for source, where, u, v in r["figures"]:
+                    for form in _register_forms(u) & toks:
+                        rows.setdefault(c["id"], []).append({"field": field, "run": run, "source": source, "where": where,
+                                                             "old": u, "new": v, "form": form})
+                        row_runs.setdefault(c["id"], set()).add(run)
+    files = subprocess.run(["git", "-C", repo, "ls-files", *QUOTE_DOCS], capture_output=True, text=True).stdout.split()
+    names = {rid: [rid] + [f"`.{m.group(1)}`" for m in [re.search(r"\.\d{4}-\d{2}-\d{2}\.(.+)$", rid)] if m] for rid in row_runs}
+    docs = []
+    forms = {run: [(f, s, w, u, v) for s, w, u, v in r["figures"] for f in _doc_forms(u, v)] for run, r in runs.items()}
+    for path in files:
+        if path.startswith(QUOTE_SKIP[0]) or path.endswith(QUOTE_SKIP[1:]):
+            continue
+        try:
+            with open(os.path.join(repo, path), encoding="utf-8") as fh:
+                lines = fh.read().splitlines()
+        except (UnicodeDecodeError, OSError):
+            continue
+        for i, ln in enumerate(lines):
+            if not QUOTE_WORDS.search(ln):
+                continue
+            toks = _tokens(ln)
+            lo, hi = i, i                                   # the line's paragraph (to blank lines), at most six lines each side
+            while lo > max(0, i - 6) and lines[lo - 1].strip():
+                lo -= 1
+            while hi + 1 < min(len(lines), i + 7) and lines[hi + 1].strip():
+                hi += 1
+            near = "\n".join(lines[lo:hi + 1])
+            for run, fl in forms.items():
+                hit = [(f, s, w, u, v) for f, s, w, u, v in fl if f in toks]
+                if hit and (_placed(near, run, runs[run]["families"])
+                            or any(n in near for rid, rr in row_runs.items() if run in rr for n in names[rid])):
+                    for f, s, w, u, v in hit:
+                        docs.append({"path": path, "line": i + 1, "run": run, "source": s, "where": w, "old": u, "new": v,
+                                     "form": f, "text": ln.strip()[:200]})
+    return {"rows": rows, "docs": docs}
+
+
+def quotes_md(q, claims_by_id):
+    out = ["# TC1 amendment 81: where the moved figures are quoted", "",
+           f"{len(q['rows'])} register rows; {len({(d['path'], d['line']) for d in q['docs']})} document lines.", "",
+           "| register row | status | field | figure (old -> new) | run | method | where |", "|---|---|---|---|---|---|---|"]
+    for rid in sorted(q["rows"]):
+        seen = set()
+        for h in sorted(q["rows"][rid], key=lambda h: (h["field"], h["run"], h["old"])):
+            k = (h["field"], h["old"], h["new"], h["run"], h["source"])
+            if k in seen:
+                continue
+            seen.add(k)
+            out.append(f"| `{rid}` | {claims_by_id[rid]['status']} | {h['field']} | {h['old']} -> {h['new']} (as `{h['form']}`) | "
+                       f"{h['run']} | {h['source']} | {h['where']} |")
+    out += ["", "| document line | figure (old -> new) | run | method | text |", "|---|---|---|---|---|"]
+    seen = set()
+    for d in sorted(q["docs"], key=lambda d: (d["path"], d["line"], d["old"])):
+        k = (d["path"], d["line"], d["form"], d["old"], d["new"])
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(f"| {d['path']}:{d['line']} | {d['old']} -> {d['new']} (as `{d['form']}`) | {d['run']} | {d['source']} | "
+                   f"{d['text'][:120].replace('|', '/')} |")
+    return "\n".join(out) + "\n"
+
+
 def report_md(rows):
     flips = sum(len(r.get("flips", [])) + len(r.get("unpaired", [])) for r in rows)
     fams = {}
@@ -593,9 +759,24 @@ def main(argv=None):
     ap.add_argument("--repo", help="with --batch: the e4b checkout holding the committed receipt copies")
     ap.add_argument("--out", help="write each corrected run to OUT/<run>/ (never the receipt)")
     ap.add_argument("--check", help="with --batch: re-derive every run persisted under CHECK from its copies")
+    ap.add_argument("--quotes", help="with --repo: list every register row and document line quoting a figure moved in QUOTES (an "
+                                     "--out directory), by both methods")
     ap.add_argument("--json", default=None)
     ap.add_argument("--md", default=None)
     a = ap.parse_args(argv)
+    if a.quotes:
+        if not a.repo:
+            ap.error("--quotes needs --repo")
+        q = quoted_figures(a.repo, a.quotes)
+        with open(os.path.join(a.repo, "docs", "claims.json"), encoding="utf-8") as fh:
+            by_id = {c["id"]: c for c in json.load(fh)["claims"]}
+        md = quotes_md(q, by_id)
+        if a.md:
+            _write(a.md, md)
+        if a.json:
+            _write(a.json, json.dumps(q, indent=1, sort_keys=True) + "\n")
+        print(md.split("\n", 3)[2])
+        return 0
     if a.check:
         if not (a.batch and a.store and a.repo):
             ap.error("--check needs --batch, --store and --repo")
