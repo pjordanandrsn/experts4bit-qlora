@@ -96,6 +96,16 @@ REWORD = {
         ("contains unchanged JSON receipts,",
          "contains the JSON receipts (their instance ids and GPU UUIDs replaced by tokens on 2026-10-25, see "
          "docs/receipts-redaction.md; the archive as first committed is in the private receipt store),"),),
+    # lines the path class turned into added lines that still named the receipt store by its repository; a count, when
+    # given, is how many identical copies the file must hold
+    "bench/p67/receipts/session.json": (
+        (f'"<home>/{_CP}-receipts/receipts/', '"private receipt store: ', 5),),
+    "bench/p67/receipts/session.md": (
+        (f"consistency (<home>/{_CP}-receipts/receipts/", "consistency (private receipt store: ", 4),),
+    "bench/moegen/rd1/attempts/rd1-5090-3/launch.json": (
+        (f"evidence <home>/{_CP}-receipts/receipts/", "evidence private receipt store: "),),
+    "bench/p112/PREREG-p112.md": (
+        (f"cost $0.3210, and is in {_CP}-receipts\n", "cost $0.3210, and is in the private receipt store\n"),),
 }
 
 
@@ -183,9 +193,10 @@ class Redactor:
             elif home.startswith("-"):
                 text = text.replace(home, "-<home>")
         text = self.inst_sub(text, path)
-        for old, new in REWORD.get(path, ()):
-            if text.count(old) != 1:
-                sys.exit(f"refusing: {path} holds {text.count(old)} copies of {old!r}, not one")
+        for old, new, *n in REWORD.get(path, ()):
+            want = n[0] if n else 1
+            if text.count(old) != want:
+                sys.exit(f"refusing: {path} holds {text.count(old)} copies of {old!r}, not {want}")
             text = text.replace(old, new)
         return text
 

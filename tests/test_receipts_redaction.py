@@ -106,6 +106,8 @@ def is_global(ip):
     return a.is_global and a not in ipaddress.ip_network("100.64.0.0/10")
 
 
+PREFIX = b"GPU-" + b"1a2b3c4d"    # split, so no added line here carries the shapes these tests plant
+HOST = b"ssh7." + b"vast.ai"
 NUMBER = re.compile(rb"(?<![0-9A-Za-z.])[0-9]{7,10}(?![0-9A-Za-z]|\.[0-9])")
 # a number 7-10 digits long, within 24 bytes after one of these words (a line break included), is an instance id;
 # offer, ask and machine ids are a different class (the machine-id follow-up), so the nearest word decides
@@ -196,7 +198,7 @@ def test_no_identifier_outside_the_holds():
 
 @pytest.mark.parametrize("why,data", [
     ("GPU UUID or its prefix", b"\0bin\0GPU-" + b"-".join((b"1" * 8, b"2" * 4, b"3" * 4, b"4" * 4, b"5" * 12))),
-    ("GPU UUID or its prefix", b"the card (GPU-1a2b3c4d) was pinned"),
+    ("GPU UUID or its prefix", b"the card (" + PREFIX + b") was pinned"),
     ("UUID after a uuid key", b'{"uuid": "' + b"-".join((b"6" * 8, b"7" * 4, b"8" * 4, b"9" * 4, b"a" * 12)) + b'"}'),
     ("instance id in context", b'"vast_instance_id": ' + str(7 * 10 ** 7 + 4321).encode()),
     ("instance id in context", b'{"proof": "{\\"instance_id\\": \\"' + str(7 * 10 ** 7 + 4321).encode() + b'\\"}"}'),
@@ -204,8 +206,8 @@ def test_no_identifier_outside_the_holds():
     ("instance id in context", b"| box **" + str(7 * 10 ** 7 + 4321).encode() + b"** |"),
     ("instance id in context", b"destroyed with Vast instance\n" + str(7 * 10 ** 7 + 4321).encode() + b" and gone"),
     ("container label", b"VAST_CONTAINERLABEL=C." + str(7 * 10 ** 7 + 4321).encode()),
-    ("provider ssh endpoint", b"ssh -p 22 root@ssh7.vast.ai:" + str(4321).encode()),
-    ("provider ssh endpoint", b"ssh -p " + str(4321).encode() + b" root@ssh7.vast.ai"),
+    ("provider ssh endpoint", b"ssh root@" + HOST + b":" + str(4321).encode()),
+    ("provider ssh endpoint", b"ssh -p " + str(4321).encode() + b" root@" + HOST),
     ("public IPv4 in an address context", b'{"public_ipaddr": "' + b".".join((b"81", b"2", b"3", b"4")) + b'"}'),
     ("public IPv4 in an address context", b"ssh root@" + b".".join((b"81", b"2", b"3", b"4"))),
     ("public IPv4 in an address context", b"box **redacted-0a0a0a0a** (" + b".".join((b"81", b"2", b"3", b"4")) + b", 56 MB/s)"),
@@ -219,10 +221,10 @@ def test_the_matcher_leaves_tokens_canaries_and_other_numbers_alone():
     canary = b"GPU-" + b"-".join((b"0" * 8, b"0" * 4, b"0" * 4, b"0" * 4, b"0" * 12))
     ok = (b"GPU-redacted-1a2b3c4d instance redacted-12345678 box redacted-1a2b3c4d " + canary
           + b" GPU-accelerated; offer 70004321 on machine 12345; host_bytes 1234567890; box at 20261025; 1.23456789"
-          + b" root@10.0.0.5 host 127.0.0.1 ip 203.0.113.9 nvidia-cublas==12.8.4.1 pkg@12.8.4.1-py3")
+          + b" root@172.16.4.5 host 127.0.0.1 ip 203.0.113.9 nvidia-cublas==12.8.4.1 pkg@12.8.4.1-py3")
     assert scan(ok) == collections.Counter()
-    assert scan(gzip.compress(b"GPU-1a2b3c4d")) == collections.Counter()             # bytes on disk, compressed
-    assert scan(gzip.decompress(gzip.compress(b"GPU-1a2b3c4d")))["GPU UUID or its prefix"] == 1
+    assert scan(gzip.compress(PREFIX)) == collections.Counter()                      # bytes on disk, compressed
+    assert scan(gzip.decompress(gzip.compress(PREFIX)))["GPU UUID or its prefix"] == 1
 
 
 # ---- the manifest: every redacted file is its recorded bytes, every removed file is held by the store ----

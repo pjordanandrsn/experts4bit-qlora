@@ -16,8 +16,8 @@ P67 registered read (bench/p67/P67-PREREG.md): TOL=0.05, K=3, N_MIN=3. Quantitie
 | `fused_attn4` | VALID | 0.01331 | 0.03565 | 0.01136 | PASS | **PASS** | tolerance | False | 0.11, 0.28 |
 | `batched_attn4` | VALID | 0.03694 | 0.04803 | 0.03786 | PASS | **PASS** | tolerance | False | 0.30, 0.38 |
 | `fused_attn4_nodgrad` | VOID | — | — | — | — | — | — | — | status 'not_run'; C1 frozen bytes not bit-exact; 0 losses for 20 steps |
-- consistency (<home>/adertha-receipts/receipts/experts4bit-qlora/2026-09-19/tp4-c-parity-2): `fused_attn4` D_final 0.08257 D_med 0.12421 -> PASS
-- consistency (<home>/adertha-receipts/receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3): `fused_attn4` D_final 0.10223 D_med 0.10639 -> PASS
-- consistency (<home>/adertha-receipts/receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3): `batched_attn4` D_final 0.05425 D_med 0.08487 -> PASS
-- consistency (<home>/adertha-receipts/receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3): `fused_attn4_nodgrad` D_final 0.10274 D_med 0.11678 -> PASS
+- consistency (private receipt store: experts4bit-qlora/2026-09-19/tp4-c-parity-2): `fused_attn4` D_final 0.08257 D_med 0.12421 -> PASS
+- consistency (private receipt store: experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3): `fused_attn4` D_final 0.10223 D_med 0.10639 -> PASS
+- consistency (private receipt store: experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3): `batched_attn4` D_final 0.05425 D_med 0.08487 -> PASS
+- consistency (private receipt store: experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3): `fused_attn4_nodgrad` D_final 0.10274 D_med 0.11678 -> PASS
 

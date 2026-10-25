@@ -112,7 +112,7 @@ def test_an_added_identifier_is_refused(repo, why, line):
 
 
 def test_a_private_or_documentation_address_passes(repo):
-    _add(repo, "bench/RESULTS.md", 'ssh root@10.0.0.5 and {"public_ipaddr": "%s"}\n' % ".".join(("203", "0", "113", "9")))
+    _add(repo, "bench/RESULTS.md", 'ssh root@172.16.4.5 and {"public_ipaddr": "%s"}\n' % ".".join(("203", "0", "113", "9")))
     assert _run(repo, "--added", "--base", "base").returncode == 0
 
 

@@ -41,7 +41,7 @@ ADDED = [
      re.compile(rb"(?i)ssh[0-9]+\.vast\.ai[: ]+(?:-p\s*)?[0-9]{2,5}|-p\s*[0-9]{2,5}\s+\S*@ssh[0-9]+\.vast\.ai")),
     ("public IP in an environment dump", re.compile(rb"PUBLIC_IPADDR=(?:[0-9]{1,3}\.){3}[0-9]{1,3}")),
     ("GPU UUID or its prefix", re.compile(rb"(?i)(?<![0-9a-z])(?:GPU|MIG)-(?!0{8}-0{4}-0{4}-0{4}-0{12})[0-9a-f]{6}")),
-    ("home directory", re.compile(rb"/Users/[a-z][a-z0-9_.-]+/|/home/[a-z][a-z0-9_.-]+/|/private/tmp/claude-[0-9]+/")),
+    ("home directory", re.compile(rb"/Users/[a-z][a-z0-9_.-]+/|/home" rb"/[a-z][a-z0-9_.-]+/|/private/tmp/claude-[0-9]+/")),
 ]
 IPV4 = rb"((?:[0-9]{1,3}\.){3}[0-9]{1,3})(?![0-9.-])"
 # a public address after its key or an "@": global only, so loopback, private, CGNAT and documentation ranges pass

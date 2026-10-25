@@ -79,7 +79,8 @@ those, and superseding 390 rows to change it would bury the register. So the edi
 
 ## Reworded lines
 
-Eight lines were also reworded by the transform (its `REWORD` table; each pair must match exactly once). `--verify`
+Nineteen lines were also reworded by the transform (its `REWORD` table; each pair must match exactly once, or as
+many times as the entry states). `--verify`
 re-derives them, so their manifest rows hold the final bytes.
 
 - **Three named the control plane or the receipt store** the way public text no longer does. Redacting a line makes it
@@ -92,6 +93,10 @@ re-derives them, so their manifest rows hold the final bytes.
   Each now says the trace is store-only.
 - **dq9-5090-2's README** described its archive as holding "unchanged JSON receipts". It now says the identifiers were
   replaced.
+- **Eleven lines named the receipt store by its repository**, in a path under a home directory or in prose. Replacing
+  the home directory made each an added line, so each now names "the private receipt store", keeping the run's own
+  path below it: P67's `receipts/session.json` (5) and `receipts/session.md` (4), which record the runs the reducer
+  read and are parsed by nothing; rd1-5090-3's `launch.json` notes; and one line of P112's registration.
 
 ## How to check it
 
