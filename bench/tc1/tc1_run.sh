@@ -787,15 +787,15 @@ case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*)
 esac
 # ---------------------------------------------------------------- the fixed texts: Alpaca (field recipe) + clinical (the anchor pair only)
 say "dataset alpaca (tp4_alpaca.py: unsloth/alpaca-cleaned @ pinned revision, seed 3407, 1200/48)"
-(cd $W/data && perl -e 'alarm 900; exec @ARGV' $PY_E4B $W/tp4_alpaca.py --out $W/data/ds_alpaca.json > $W/logs/dataset_alpaca.log 2>&1) || { tail -3 logs/dataset_alpaca.log; say "DATASET FAIL (alpaca)"; finish 13; }
+(cd $W/data && perl -e 'alarm 900; exec @ARGV' $PY_E4B $W/tp4_alpaca.py --out $W/data/ds_alpaca.json > $W/logs/dataset_alpaca.log 2>&1) || { tail -3 logs/dataset_alpaca.log; say "DATASET FAIL (alpaca)"; finish 21; }
 tail -1 logs/dataset_alpaca.log
-GOT=$(sha256sum $W/data/ds_alpaca.json | awk '{print $1}'); [ "$GOT" = "$DS_ALPACA_SHA" ] || { say "DATASET MISMATCH alpaca: $GOT != $DS_ALPACA_SHA"; finish 13; }
+GOT=$(sha256sum $W/data/ds_alpaca.json | awk '{print $1}'); [ "$GOT" = "$DS_ALPACA_SHA" ] || { say "DATASET MISMATCH alpaca: $GOT != $DS_ALPACA_SHA"; finish 21; }
 echo "DATASET alpaca sha=$DS_ALPACA_SHA" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)      # TC1b: the anchor pair's text, built and sha-verified exactly as tp4_run.sh does it (ds_manifest.json's clinical sha)
   say "dataset clinical (n9_datasets.py, sha-verified against ds_manifest.json) for the anchor pair"
   (cd $W/data && $PY_E4B $W/n9_datasets.py $W/data > $W/logs/dataset_clinical.log 2>&1); tail -1 logs/dataset_clinical.log
   CLIN_SHA=$($PY_E4B -c "import json; print(json.load(open('$W/ds_manifest.json'))['clinical']['sha256'])")
-  GOT=$(sha256sum $W/data/ds_clinical.json | awk '{print $1}'); [ "$GOT" = "$CLIN_SHA" ] || { say "DATASET MISMATCH clinical: $GOT != $CLIN_SHA"; finish 13; }
+  GOT=$(sha256sum $W/data/ds_clinical.json | awk '{print $1}'); [ "$GOT" = "$CLIN_SHA" ] || { say "DATASET MISMATCH clinical: $GOT != $CLIN_SHA"; finish 21; }
   echo "DATASET clinical sha=$CLIN_SHA" | tee -a summary.txt;;
 esac
 # ---------------------------------------------------------------- helpers
