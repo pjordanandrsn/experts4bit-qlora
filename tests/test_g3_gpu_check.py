@@ -66,7 +66,8 @@ def _health(captured=True, replays=6, requested="auto", kv_pool="shared", widths
     cfg = SimpleNamespace(kv_pool=kv_pool, kv_pool_resolution=res, prefill_graph=requested)
     # the configuration fields as sc2j-5090-1's own /health carried them (the fixture below)
     return {"model": "Qwen/Qwen3-30B-A3B",
-            "levers": {"moe_layers": 48, "int4_expert_layers": 48, "int4_attn_projections": 96},
+            "levers": {"moe_layers": 48, "int4_expert_layers": 48, "int4_attn_projections": 96,
+                       "attn_int4_rtn_projections": 192, "fuse_qkv_n": 48},
             "engine": {"max_seqs": res["max_seqs"], "max_tokens_per_seq": 4096, "kv_pool": kv_pool,
                        "kv_pool_sizing": _kv_pool_health(cfg, parts)},
             "prefill_graph": prefill_graph_report(cfg, SimpleNamespace(parts=parts))}
@@ -116,6 +117,7 @@ def test_with_no_hold_back_the_candidate_reads_fail(monkeypatch):
     ("2048 tokens a slot", ("engine", "max_tokens_per_seq"), 2048),
     ("bf16 experts", ("levers", "int4_expert_layers"), 0),
     ("bf16 attention", ("levers", "int4_attn_projections"), 0),
+    ("int4 attention on 95 of 96 served projections", ("levers", "int4_attn_projections"), 95),
 ])
 def test_each_configuration_mutant_reads_fail(name, path, value):
     h = _health()
@@ -146,6 +148,7 @@ def test_the_box_own_record_reads_fail_for_the_refusal_and_the_missing_hold_back
     assert v["verdict"] == "FAIL"
     assert v["model"] == "Qwen/Qwen3-30B-A3B" and v["max_tokens_per_seq"] == 4096 and v["max_seqs"] == 64
     assert v["int4_expert_layers"] == v["moe_layers"] == 48 and v["int4_attn_projections"] == 96
+    assert v["attn_int4_rtn_projections"] == 192 and v["fuse_qkv_n"] == 48
     assert sorted(w.split(" ")[0] for w in v["why"]) == sorted(
         ["no", "prefill_graph.status", "prefill_graph.T", "prefill_graph.replays"]), v["why"]
     assert any("prefill_graph_headroom_bytes" in w for w in v["why"])

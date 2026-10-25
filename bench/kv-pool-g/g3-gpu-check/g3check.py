@@ -13,7 +13,12 @@ is a FAIL (fail closed):
   - the configuration SC2j's shared arm ran, from the live server: top-level model == "Qwen/Qwen3-30B-A3B",
     engine.max_tokens_per_seq == 4096, and int4 experts AND int4 attention by ``levers``' census of the model as served
     (``int4_expert_layers`` counts the expert layers carrying an int4 store and must equal ``moe_layers`` > 0, a full
-    stack; ``int4_attn_projections`` counts the ``Int4Linear`` modules and must be > 0), never the launch env;
+    stack). Attention binds exactly too, derived from the served model's own layer count ``L`` = ``moe_layers`` (every
+    Qwen3-30B-A3B layer is an MoE layer): the int4 enable swapped q, k, v and o on every layer
+    (``attn_int4_rtn_projections`` == 4 L), the QKV fusion merged q, k and v into one projection on every layer
+    (``fuse_qkv_n`` == L), and the ``Int4Linear`` modules counted on the model as served are what that leaves
+    (``int4_attn_projections`` == 4 L - 2 L = 2 L). sc2j-5090-1's own record reads 192, 48 and 96 at L = 48. Never
+    the launch env;
   - engine.max_seqs == 64 and engine.kv_pool == "shared";
   - engine.kv_pool_sizing.pool_rows < claim_all_rows (the shared pool's own sizing ran, not the claim-all fallback),
     and the derivation's fitting 64-slot candidate carries prefill_graph_headroom_bytes > 0 (#2087's hold-back took
@@ -75,9 +80,11 @@ def verdict(h: dict) -> dict:
     il, ml = lv.get("int4_expert_layers"), lv.get("moe_layers")
     if not (isinstance(il, int) and isinstance(ml, int) and not isinstance(il, bool) and ml > 0 and il == ml):
         why.append(f"levers.int4_expert_layers {il!r} of moe_layers {ml!r}: the experts are not int4 on every MoE layer")
-    ia = lv.get("int4_attn_projections")
-    if not isinstance(ia, int) or isinstance(ia, bool) or ia <= 0:
-        why.append(f"levers.int4_attn_projections {ia!r}: attention is not int4")
+    ia, rtn, fq = lv.get("int4_attn_projections"), lv.get("attn_int4_rtn_projections"), lv.get("fuse_qkv_n")
+    ints = all(isinstance(x, int) and not isinstance(x, bool) for x in (ia, rtn, fq, ml))
+    if not ints or ml <= 0 or rtn != 4 * ml or fq != ml or ia != rtn - 2 * fq:
+        why.append(f"int4 attention not on every projection of {ml!r} layers: attn_int4_rtn_projections {rtn!r} "
+                   f"(want 4 L), fuse_qkv_n {fq!r} (want L), int4_attn_projections {ia!r} (want 2 L, as served)")
     if e.get("max_seqs") != SLOTS:
         why.append(f"engine.max_seqs {e.get('max_seqs', '<missing>')!r}, not {SLOTS}")
     if e.get("kv_pool") != "shared":
@@ -117,11 +124,13 @@ def verdict(h: dict) -> dict:
     return {"verdict": "PASS" if not why else "FAIL", "why": why, "info_margin_mib_rounded": margin,
             "prefill_graph": pg, "max_seqs": e.get("max_seqs"), "kv_pool": e.get("kv_pool"),
             "model": (h or {}).get("model"), "max_tokens_per_seq": e.get("max_tokens_per_seq"),
-            "int4_expert_layers": il, "moe_layers": ml, "int4_attn_projections": ia}
+            "int4_expert_layers": il, "moe_layers": ml, "int4_attn_projections": ia,
+            "attn_int4_rtn_projections": rtn, "fuse_qkv_n": fq}
 
 
 def _health(**over):
-    h = {"model": MODEL, "levers": {"moe_layers": 48, "int4_expert_layers": 48, "int4_attn_projections": 192},
+    h = {"model": MODEL, "levers": {"moe_layers": 48, "int4_expert_layers": 48, "int4_attn_projections": 96,
+                                    "attn_int4_rtn_projections": 192, "fuse_qkv_n": 48},
          "engine": {"max_seqs": 64, "max_tokens_per_seq": 4096, "kv_pool": "shared",
                     "kv_pool_sizing": {"pool_rows": 9768, "claim_all_rows": 16448, "derivation": {"candidates": [
                         {"max_seqs": 64, "fits": True, "pool_rows": 9768,
@@ -178,7 +187,12 @@ def self_test() -> int:
         ("int4 experts on part of the stack", _health(levers__int4_expert_layers=47), "FAIL"),
         ("moe_layers missing", _health(levers__moe_layers=KeyError), "FAIL"),
         ("bf16 attention (no Int4Linear)", _health(levers__int4_attn_projections=0), "FAIL"),
+        ("int4 attention on 95 of 96 served projections", _health(levers__int4_attn_projections=95), "FAIL"),
+        ("int4 enable swapped 191 of 192", _health(levers__attn_int4_rtn_projections=191), "FAIL"),
+        ("QKV fused on 47 of 48 layers", _health(levers__fuse_qkv_n=47, levers__int4_attn_projections=98), "FAIL"),
         ("int4 attention count missing", _health(levers__int4_attn_projections=KeyError), "FAIL"),
+        ("rtn count missing", _health(levers__attn_int4_rtn_projections=KeyError), "FAIL"),
+        ("fuse_qkv_n missing", _health(levers__fuse_qkv_n=KeyError), "FAIL"),
         ("no levers record", _health(levers=KeyError), "FAIL"),
         ("empty health", {}, "FAIL"),
     ]
