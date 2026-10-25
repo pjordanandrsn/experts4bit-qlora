@@ -307,6 +307,9 @@ fi
   # and the receipt should not flatten them (e4b#634).
   [ "${LANE_DEAD:-0}" = 1 ] && { say "lane DIED on the box: its process was gone with no TC1_EXIT_CODE and no TP_DONE -- artifacts fetched, nothing measured"; exit 25; }
   say "lane did not finish (no TP_DONE for this run)"; exit 23; }
-RC=$(cat "$RUN_DIR/tc1/TC1_EXIT_CODE.$NONCE" 2>/dev/null); case "$RC" in ''|*[!0-9]*) say "malformed exit code"; exit 24;; esac
-[ -f "$RUN_DIR/tc1/TC1_SUCCESS.$NONCE" ] && [ "$RC" = 0 ] || { say "lane exit rc=$RC without success marker"; exit "$RC"; }
-say "box $TC1_BOX complete rc=0"; exit 0
+# The box's own exit code, by the shared rule (bench/common/drive_tail.sh, e4b#2141): 0 only with this nonce's success marker (else
+# 24); 23 for a missing or unreadable exit file; the launcher's host codes (13 14 17 18) and TC1's registered box codes (tc1_run.sh's
+# finish: 9 12 15 19 78 130) passed through; anything else 26, never acted on.
+say "box $TC1_BOX fetched: its exit code goes to the launcher by drive_tail"
+. "$REPO/bench/common/drive_tail.sh"
+drive_finish "$RUN_DIR/tc1" "$NONCE" TC1 "9 12 15 19 78 130"

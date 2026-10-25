@@ -1194,13 +1194,6 @@
    "sha256": "6334b67ca87eaa7ca61425ab5cf41eb48099836ca14b167f3a1f0be962cc2b70",
    "status": "live: fix due in the lane's next PR"
   },
-  "bench/tc1/tc1_drive.sh": {
-   "fails": [
-    "(b) rc 0 without the success marker exits 0"
-   ],
-   "sha256": "b409f6788f74106527bc3dfa0e1ef2d39bb88c50500ac507c3fac2f3c65324c4",
-   "status": "live: fix due in the lane's next PR"
-  },
   "bench/tp4/tp4_drive.sh": {
    "fails": [
     "(b) rc 0 without the success marker exits 0"
