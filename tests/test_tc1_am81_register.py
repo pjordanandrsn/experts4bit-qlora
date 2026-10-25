@@ -98,7 +98,8 @@ def test_each_successor_is_well_formed(registers):
         for r in runs:
             assert AM + r + "/rederive.json" in new["evidence"] and (REPO / AM / r / "rederive.json").is_file(), (short, r)
             assert AM + r + "/" in new["notes"], (short, r)
-        assert "Vast machine" not in json.dumps(new), short                    # successors drop the machine ids (#1934)
+        mids = re.compile(r"machine \d+")                                      # the predecessor's machine ids, as the machine-id pass left them
+        assert mids.findall(json.dumps(new)) == mids.findall(json.dumps(old)), short
         assert old["claim"] != new["claim"], short
 
 
