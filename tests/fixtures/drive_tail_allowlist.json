@@ -6,14 +6,14 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "c27d230ff75ffec33fbb671ed4c29701a3e57c0159e95de2bd00b2d4f5b73a3b",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-b374-word-boundary-gpu.md"
   },
   "bench/b393/b393_drive.sh": {
    "fails": [
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "376a619ad9b91816bc7a3a3e6a5131721ee8be0be730229888051c32fe323820",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-b393-combine-reduce-bitwise.md"
   },
   "bench/b511/b511_drive.sh": {
    "fails": [
@@ -90,14 +90,14 @@
     "undrivable: no fetched exit file"
    ],
    "sha256": "18df8af25723bb47f1e22009c6b4f126615bb1b5ad20131f8000174c495b3b9f",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: its precondition cannot hold (bench/dq8/DQ8-PREREG.md draws only if DQ7 reads NEVER_UNDER; bench/dq7/RESULTS-dq7.md reads VOID)"
   },
   "bench/dq9/dq9_drive.sh": {
    "fails": [
     "undrivable: no fetched exit file"
    ],
    "sha256": "e2415215a81a2d028dbfcd50223f78a5985a0ce09a1fd4aa9b7d9fc38850716f",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged (bench/dq9/receipts/dq9-5090-2/README.md, #1396)"
   },
   "bench/fam/fam_drive.sh": {
    "fails": [
@@ -118,13 +118,6 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "9c1d7a98b42853f542b9c2dc0fe8e53bca03aa65fd0be69619fd6d4b3ab27d77",
-   "status": "live: fix due in the lane's next PR"
-  },
-  "bench/gpu-contract/gc_drive.sh": {
-   "fails": [
-    "(b) rc 0 without the success marker exits 0"
-   ],
-   "sha256": "7d4012bdd29cc9e5180d623e8abfa3da5800a80a2f257226c41028e1587851fc",
    "status": "live: fix due in the lane's next PR"
   },
   "bench/ho2/ho2_drive.sh": {
@@ -153,21 +146,21 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "8420e5c9cc80dbcf3021ec4ed667dd1bb22ebfc8dc04f5d0e69f45c9cd3f6a79",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: the split premise read PARK, and there is no third premise (bench/i8dense/PREMISE-w8a16.md; bench/p147/PREREG-p147.md)"
   },
   "bench/k14/k14_drive.sh": {
    "fails": [
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "5846ceedac561d31295728d8a7a9663dc517bfe1be97fc8cb345e8f1e075496f",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-k14-smallm-int4-gemm.md"
   },
   "bench/k15/k15_drive.sh": {
    "fails": [
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "d14e69a93fbf57cab674d75685e9628c549f394a7f12e61b9598533d7e7f44af",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-k15-marlin-comparator.md"
   },
   "bench/k16/k16_drive.sh": {
    "fails": [
@@ -188,56 +181,56 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "d43a6a82b0da920f2ef054a2c090e72e9543bb838c8a0c795e89f80361ee22b8",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-k17-fused-splitk-gemv.md"
   },
   "bench/k18/k18_drive.sh": {
    "fails": [
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "11129252b2675810ecd535e3768f61150fe6594bd3e4a0a2042c0a10241473ee",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-k18-grouped-expert-gemv.md"
   },
   "bench/k20/k20_drive.sh": {
    "fails": [
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "f6352f97422786086427e8c8ca9b8a6db3722a156759a013dd229a6f0b35750f",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-k20-k19-plan-sweep-5090.md"
   },
   "bench/k22/k22_drive.sh": {
    "fails": [
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "1eef4cd5329510939f4ab9afcdda393d56e499b2dad65d1f83d30e54648b11ff",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-k22-gptoss-mxfp4-b16.md"
   },
   "bench/k24/k24_drive.sh": {
    "fails": [
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "d7032279b4d1fd0ec4abf98a50162dbbcd8fca973f30ebe1e944e60a932f1179",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-k24-gptoss-per-layer.md"
   },
   "bench/k26/k26_drive.sh": {
    "fails": [
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "b600ff75ba6c646735e18de460474aacfd54f115a3fee3bf5f2a9ad11998232f",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-k26-nf4-decode-ablation.md"
   },
   "bench/k27/k27_drive.sh": {
    "fails": [
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "9b3b268dfdac2ffaa57a9e0b76e3687d3a687ca913a91184e4b0c5becd745391",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-k27-nf4-tree-precision.md"
   },
   "bench/k28/k28_drive.sh": {
    "fails": [
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "02fd3b1f18597e7cd5c5dc0515e6bd711769e9df0e70e51951e27e64311fcc94",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-k28-pdl-decode-chain.md"
   },
   "bench/k29/k29_drive.sh": {
    "fails": [
@@ -251,7 +244,7 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "4ccd83ca9336b944bee1b442bd38d2dbdc718663310733c277b158cbd8f4c417",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-k30-splitk-r-term-l4.md and kernel/RESULTS-k32-splitk-r-term-a4000.md"
   },
   "bench/k33/k33_drive.sh": {
    "fails": [
@@ -265,7 +258,7 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "996ca1843ac488ef5088a1ea9f842f30ff739ca909f5bd635a26c6dbdcc8e39b",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: results merged in grouped-nf4-gemm: kernel/RESULTS-k34-k16-wide-plan-census.md"
   },
   "bench/kv-pool-g/g1-smoke/g1_smoke_drive.sh": {
    "fails": [
@@ -286,7 +279,7 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "a3a5d47a1017f117f26997e3ad40f161537bf1b55b684f3f83cb3d4f1ad47250",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: the item 1 census read merged (#1555)"
   },
   "bench/p100/p100_drive.sh": {
    "fails": [
@@ -538,7 +531,7 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "069368da8850a9e54cf7ea2a8841cc42df249409641adcb636800ac35b0d28cd",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: closed in #1706 (comment 6246958085); its Gemma-4 successor is bench/g4census"
   },
   "bench/p137/p137_drive.sh": {
    "fails": [
@@ -727,7 +720,7 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "2f448ecb6e4fc66b921fdf69221d74bb05de666941fc6184afa22ec83281e9ba",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: superseded by P225 (bench/p225/PREREG-p225.md)"
   },
   "bench/p225/p225_drive.sh": {
    "fails": [
@@ -834,14 +827,14 @@
     "undrivable: no fetched exit file"
    ],
    "sha256": "44062baefbf1b5b8e4ace9c7dfd2d2b4a65e56357f9ac87e7a3e392f2e64eafd",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: work item closed (grouped-nf4-gemm#319 and #324, 2026-09-22)"
   },
   "bench/p319b/p319b_drive.sh": {
    "fails": [
     "undrivable: no fetched exit file"
    ],
    "sha256": "4daeffe5ec826d8e4172bd98aea4157b18dbfa5faaec2dbd5f0dbc9419ac5829",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: work item closed (grouped-nf4-gemm#319 and #324, 2026-09-22)"
   },
   "bench/p39/p39_drive.sh": {
    "fails": [
@@ -855,7 +848,7 @@
     "undrivable: no fetched exit file"
    ],
    "sha256": "0e1af04770a1020ad67d707cde7768f327e36271e746d3784cacf6bf8183293c",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: the R1 campaign closed FAIL / STOP-1 (bench/p41/README.md)"
   },
   "bench/p42/p42_drive.sh": {
    "fails": [
@@ -869,7 +862,7 @@
     "undrivable: no fetched exit file"
    ],
    "sha256": "54f348d87c6d46e61ff14a3431b9ac4e465c4cc04b925d164e1c1728e9ce8f9e",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: read merged (#582, the P43 read)"
   },
   "bench/p44/p44a_drive.sh": {
    "fails": [
@@ -1150,7 +1143,7 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "102eb22c4b34b6c6c29f27c7ee2e0aaa6367a796efafa81b30e740c029279194",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: read as P142's per-name census (bench/p145/PREREG-p145.md; bench/p148/RESULTS-p148.md)"
   },
   "bench/q235/q235_drive.sh": {
    "fails": [
@@ -1171,7 +1164,7 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "35da64f81b7d3a10e494d2ce45299d75113d0cff66fc82591541ddc7f9c4f9d1",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: SC1g ended at Amendment 7; no registration since (CHANGELOG.md, the SC1g A7 read)"
   },
   "bench/sd1/sd1_drive.sh": {
    "fails": [
@@ -1192,7 +1185,7 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "6334b67ca87eaa7ca61425ab5cf41eb48099836ca14b167f3a1f0be962cc2b70",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: closed by Amendment 1b on smt-sib-2's reading (CHANGELOG.md, SMT fuse Amendment 1b); Amendment 1c's smt-sib-9 was not run"
   },
   "bench/tc1/tc1_drive.sh": {
    "fails": [
