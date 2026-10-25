@@ -102,7 +102,7 @@ Nothing above moves a prediction, a threshold or a reading rule.
 
 ### Amendment 2 (2026-09-19 ~04:00Z, after run 2 of P44-b and before run 3) — the hook arms at process start; two instrument controls
 
-Run `p44-b-kl80-2` (H100 NVL, instance 51527275, ≈ 24 min, receipt 6c668b9): K0 passed on the box; the Gemma-4 reference (bf16,
+Run `p44-b-kl80-2` (H100 NVL, instance redacted-df5940a1, ≈ 24 min, receipt 6c668b9): K0 passed on the box; the Gemma-4 reference (bf16,
 `Gemma4ForConditionalGeneration`) was scored decode-shaped over the 200 prompts (5,879 tokens, 303 s); the `nf4` and `r1epi`
 arms produced rows; `int4_r1epi` and `calattn_r1epi` were REFUSED by the lever check ("the hook did not apply"); the gpt-oss
 family produced nothing (its reference check refused a correct dequant). Three facts, three fixes, no rule moved:

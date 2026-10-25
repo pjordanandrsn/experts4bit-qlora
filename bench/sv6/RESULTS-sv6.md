@@ -11,7 +11,7 @@ merged after review, both before any SV6 data. Work item #1267: owner-authorized
   - `sv6-4090-1`: NOT_RUN at the pre-flight, $0.023.
   - `sv6-4090-2`: driver 535, tripwire exit 9, $0.029.
   - Amendment 1 records both.
-- **`sv6-4090-3`:** one RTX 4090 (sm_89) on Vast instance 54502968, machine 146201. Driver 595.84, AMD EPYC 7B13, 504 GiB
+- **`sv6-4090-3`:** one RTX 4090 (sm_89) on Vast instance redacted-252bd905, machine 146201. Driver 595.84, AMD EPYC 7B13, 504 GiB
   RAM, PCIe gen 4 x16, 320 GB disk.
 - **$0.320**, 15:31:58–15:50:38Z, teardown proven. Lane total: **$0.372** of $5.
 - experts4bit-qlora `af0d95df` (0.48.0), grouped-nf4-gemm 0.41.0 (`dc8f94a`), torch 2.8.0+cu128, transformers 5.18.0.

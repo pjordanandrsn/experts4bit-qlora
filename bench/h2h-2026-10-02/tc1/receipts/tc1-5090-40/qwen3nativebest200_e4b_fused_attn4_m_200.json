@@ -283,7 +283,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-9381e8aa-b4fb-cca2-38d3-09b4fcfb87a7",
+   "uuid": "GPU-redacted-c16a1647",
    "pci.bus_id": "00000000:83:00.0",
    "pcie.link.gen.current": "1",
    "pcie.link.gen.max": "3",
@@ -297,7 +297,7 @@
    "cpu": "Intel(R) Xeon(R) CPU E5-2696 v4 @ 2.20GHz",
    "cpu_threads": 88,
    "host_mem_gib": 125.8,
-   "vast_instance_id": "53999231",
+   "vast_instance_id": "instance-redacted-5d54ddc2",
    "container_host": "63bcf4000c9a"
   },
   "anchor_json": null,

@@ -1,7 +1,7 @@
 # `p150-5090-1`: D2's quality ruling, the int8 lm_head on held-out windows (GO)
 
 One RTX 5090 (cc 12.0, driver 615.71.09, a 575 W power limit) on an AMD Ryzen 7 9800X3D host (16 CPUs): Vast instance
-56693297 on machine 147099, 2026-10-19T07:49:06Z to 08:24:15Z. Cost $0.615.
+redacted-f3f74421 on machine 147099, 2026-10-19T07:49:06Z to 08:24:15Z. Cost $0.615.
 - **Harness:** e4b `658a0665` (the registration's merge, #1807).
 - **Subject:** P125's: e4b 0.50.0 (`4934aba9`) and grouped-nf4-gemm 0.43.0 (`6ee2e104`), with torch 2.8.0+cu128,
   triton 3.4.0 and transformers 5.17.0. Qwen/Qwen3-30B-A3B @ `ad44e777`, on the default server built eager at all-VRAM.

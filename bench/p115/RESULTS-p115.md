@@ -22,7 +22,7 @@ Code under test:
 ## The reading (`p115-5090-8`)
 
 **Host:** one RTX 5090 (sm_120, driver 610.57.04) on an AMD engineering-sample CPU (100-000000897-03, 64 threads,
-251 GiB RAM). It was Vast instance 54698460 on machine 13828, at $0.736/h. **Cost:** $0.496.
+251 GiB RAM). It was Vast instance redacted-f7ed5a78 on machine 13828, at $0.736/h. **Cost:** $0.496.
 
 **Timeline (the box's own log):**
 - install at 19:09:47Z;
@@ -149,7 +149,7 @@ floor drawn from `half` and `chunk`.
 ### The reading (`p115c-5090-1`)
 
 **Host:** one RTX 5090 (sm_120, driver 595.84) on an AMD EPYC 7B13 host (256 threads, ~2 TB RAM), 320 GB free. It was
-Vast instance 54770431 ("verified-secure"). **Cost:** $1.345, about 44 minutes from start to teardown.
+Vast instance redacted-c3ca3617 ("verified-secure"). **Cost:** $1.345, about 44 minutes from start to teardown.
 
 **Timeline (the box's own log, UTC):**
 - the premise passed by 03:48 (48 passed, none skipped);
@@ -256,7 +256,7 @@ Code under test:
 ### The reading (`p115d-5090-1`)
 
 **Host:** one RTX 5090 (sm_120, driver 595.71.05, 170 SMs, **power limit 450 W**) on an AMD EPYC 7C13 host (256
-threads, ~1 TB RAM), 320 GB free. It was Vast instance 54900821. P118's 5090 ran at 575 W. Speed is reported here,
+threads, ~1 TB RAM), 320 GB free. It was Vast instance redacted-aa873fa9. P118's 5090 ran at 575 W. Speed is reported here,
 and every arm ran on this one host.
 
 **Cost:** $0.882, 20 minutes from launch to teardown (19:35:59–19:56:01).

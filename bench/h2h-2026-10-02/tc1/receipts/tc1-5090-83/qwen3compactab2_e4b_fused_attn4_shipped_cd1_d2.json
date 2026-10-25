@@ -146,7 +146,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-57a810f4-e9da-9936-1dea-06a358c24b20",
+   "uuid": "GPU-redacted-b56c5a3e",
    "pci.bus_id": "00000000:01:00.0",
    "pcie.link.gen.current": "4",
    "pcie.link.gen.max": "4",
@@ -160,7 +160,7 @@
    "cpu": "AMD EPYC 7702P 64-Core Processor",
    "cpu_threads": 126,
    "host_mem_gib": 503.5,
-   "vast_instance_id": "54275103",
+   "vast_instance_id": "instance-redacted-80dc1690",
    "container_host": "aaa3a4b1b8e4"
   },
   "anchor_json": null,

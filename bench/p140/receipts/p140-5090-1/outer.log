@@ -1,6 +1,6 @@
 KNOBS run=p140-5090-1 e4b=b4366b9af2234730b5df783c5f3b0c7aef3ab41c gnf4=6b7c2e7474d20c8843814dd46dad6cfc3d94b440 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=120 min_ram_gb=64 dry=0
 CUDA_PROBE ok torch=2.8.0+cu128 cc=12.0 sms=170
-NVIDIA GeForce RTX 5090, 32607 MiB, 615.71.09, GPU-25e4da5b-1340-0fa7-5dd3-df9f9f1df47f, 12.0, 4, 16
+NVIDIA GeForce RTX 5090, 32607 MiB, 615.71.09, GPU-redacted-4bdcd456, 12.0, 4, 16
 CPU(s):                                  16
 Vendor ID:                               AuthenticAMD
 Model name:                              AMD Ryzen 7 5700X3D 8-Core Processor

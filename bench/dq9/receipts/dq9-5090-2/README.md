@@ -21,11 +21,11 @@ For Llama streamed 4096, loader R/A = 2,214,592,512 / 2,213,095,424 B and setup 
 
 One RTX 5090, 32607 MiB, driver 595.91.07, PCIe gen5/x16. Loggetta efe1c93; torch2.8.0+cu128, bitsandbytes0.50.2, transformers5.18.0 and PEFT0.21.2; exact pins in runtime.json. Synthetic architecture-only checkpoints, no pretrained weights or quality claim. NF4/doublequant64/bf16 compute, fp32 all-projection LoRA r16/alpha32, SDPA/non-reentrant checkpointing, micro-batch1/grad-accum1, two AdamW steps at constant2e-4, clip1, default allocator. Qwen loss chunk512; Llama full logits. All eight shapes passed actual planner admission before full checkpoint generation.
 
-Guard armed 21:36:28Z, runner finished and final fetch completed 22:01:43Z. [Teardown](teardown-proof.json) at 22:01:44Z verified provider HTTP200 and instance54915655 absent. Actual invoice **$0.343**: GPU$0.288 + storage$0.047 + download$0.008 + upload$0.000; reservation$2.80. No model or adapter weight files were fetched. [Run provenance](run-provenance.json) records the invoice, source receipt hash and pinned local re-derivation. No further draw is authorized by this record.
+Guard armed 21:36:28Z, runner finished and final fetch completed 22:01:43Z. [Teardown](teardown-proof.json) at 22:01:44Z verified provider HTTP200 and instance-redacted-d0071e54 absent. Actual invoice **$0.343**: GPU$0.288 + storage$0.047 + download$0.008 + upload$0.000; reservation$2.80. No model or adapter weight files were fetched. [Run provenance](run-provenance.json) records the invoice, source receipt hash and pinned local re-derivation. No further draw is authorized by this record.
 
 ## Reproduce without a GPU
 
-The modest [raw scientific archive](raw-science.tar.gz) contains unchanged JSON receipts, four proofs, exact token rows, config/admission/checkpoint manifests and executed registered instrument sources. It contains no credentials, model weights, adapter tensors or private bus URI. Plain SHA256SUMS verifies the public files; SCIENCE-SHA256SUMS inside the archive verifies every raw member. The registered source checksums are also present.
+The modest [raw scientific archive](raw-science.tar.gz) contains the JSON receipts (their instance ids and GPU UUIDs replaced by tokens on 2026-10-25, see docs/receipts-redaction.md; the archive as first committed is in the private receipt store), four proofs, exact token rows, config/admission/checkpoint manifests and executed registered instrument sources. It contains no credentials, model weights, adapter tensors or private bus URI. Plain SHA256SUMS verifies the public files; SCIENCE-SHA256SUMS inside the archive verifies every raw member. The registered source checksums are also present.
 
 From this receipt directory:
 

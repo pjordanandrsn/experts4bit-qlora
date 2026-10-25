@@ -1,6 +1,6 @@
 # Results — P49: which store survives Gemma-4's layer 0 (H100 NVL, 2026-09-19)
 
-Pre-registration: [`P49-PREREG.md`](P49-PREREG.md) (+ amendment 1: the activation probe's own bug, below). Run `p49-gemma4fmt` (H100 NVL, vast 51572740, e4b `e4f25ad`, gnf4 v0.32.0), receipt `receipts/experts4bit-qlora/2026-09-19/p49-gemma4fmt/p47/`, read by `bench/p49/p49_reduce.py`. K0 passed; control (i) refused the decode scorer again (reference self-KL 0.2787) → prefill on both sides, the same cached bf16 reference and 200 prompts / 5,879 tokens as P44-b / P47 / P48. Every row carries exactly 1 quantised / 29 bf16 expert stacks AND the store the builder named (`kl_serve._builder_check`).
+Pre-registration: [`P49-PREREG.md`](P49-PREREG.md) (+ amendment 1: the activation probe's own bug, below). Run `p49-gemma4fmt` (H100 NVL, vast redacted-3c912bd4, e4b `e4f25ad`, gnf4 v0.32.0), receipt `receipts/experts4bit-qlora/2026-09-19/p49-gemma4fmt/p47/`, read by `bench/p49/p49_reduce.py`. K0 passed; control (i) refused the decode scorer again (reference self-KL 0.2787) → prefill on both sides, the same cached bf16 reference and 200 prompts / 5,879 tokens as P44-b / P47 / P48. Every row carries exactly 1 quantised / 29 bf16 expert stacks AND the store the builder named (`kl_serve._builder_check`).
 
 ## The stores, on layer 0 alone
 

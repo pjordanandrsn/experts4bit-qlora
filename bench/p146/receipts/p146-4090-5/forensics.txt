@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 4090, 24564 MiB, 595.84, GPU-1685aa5c-0b0f-e2ce-0ce1-8b5ec7f0dd25, 8.9, 4, 16
+NVIDIA GeForce RTX 4090, 24564 MiB, 595.84, GPU-redacted-a65ac7f2, 8.9, 4, 16
 CPU(s):                                  192
 Vendor ID:                               AuthenticAMD
 Model name:                              AMD EPYC 7K62 48-Core Processor

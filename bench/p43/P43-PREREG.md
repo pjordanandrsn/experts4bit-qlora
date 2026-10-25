@@ -80,7 +80,7 @@ Budget: `p43-t2b-g4sweep`, H100 NVL, $3.10/h ceiling, guard 1 h, estimate $3.10 
 
 ### Amendment 2 (2026-09-19, before any T2b data) — the sweep's layer discovery
 
-Run `p43-t2b-g4sweep` (H100 NVL, instance 51521714) produced NO per-layer data: `gemma4_layer_sweep.py` found the
+Run `p43-t2b-g4sweep` (H100 NVL, instance redacted-868b6ec4) produced NO per-layer data: `gemma4_layer_sweep.py` found the
 decoder as "the first `ModuleList` named `*.layers`", and on the bf16 oracle (the full multimodal class) that is the
 vision tower's 27 encoder layers, while the e4b side had walked the 30-layer text decoder → `IndexError: index 27`
 before any distance was read. HARNESS_ERROR, receipt committed. Fix: the sweep now uses the layer-1 probe's explicit
@@ -90,7 +90,7 @@ reading rules are unchanged; the redraw is `p43-t2b-g4sweep-2`.
 
 ## Read (2026-09-19, after both lanes; the rows are the receipts, this section only reads them)
 
-### T1 — Qwen3 field-recipe diagnosis (`p43-t1-qwen3-2`, RTX 5090, vast 51519025; run 1 `p43-t1-qwen3` never authenticated ssh, NOT_RUN, $0.13)
+### T1 — Qwen3 field-recipe diagnosis (`p43-t1-qwen3-2`, RTX 5090, vast redacted-52c13a71; run 1 `p43-t1-qwen3` never authenticated ssh, NOT_RUN, $0.13)
 
 Three arms, N=20 at the registered field fixture (alpaca, seq 2048, mb2 × accum 4, r 16, adamw_8bit), all `CELL OK`,
 VALID; e4b `ec22050` + gnf4 v0.31.0; receipts `2026-09-19/p43-t1-qwen3-2/tp4/`:

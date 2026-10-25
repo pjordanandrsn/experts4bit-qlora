@@ -1,6 +1,6 @@
 # `p143a2-5090-1`: Amendment 2, the first served read of the split cap (NO_FLIP)
 
-One RTX 5090 (cc 12.0, 170 SMs, driver 595.71.05, 575 W) on an AMD EPYC 7702P host (128 CPUs): Vast instance 56638605
+One RTX 5090 (cc 12.0, 170 SMs, driver 595.71.05, 575 W) on an AMD EPYC 7702P host (128 CPUs): Vast instance redacted-7e378f73
 on machine 45379, 2026-10-19T00:02:43Z to 00:31:40Z. Cost $0.406. Code: e4b `7ed1695e` (the registration's merge,
 #1778), grouped-nf4-gemm 0.47.1 (`38b30888`); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0. Qwen/Qwen3-30B-A3B
 @ `ad44e777`.

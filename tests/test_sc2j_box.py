@@ -143,7 +143,7 @@ def test_the_cap_ids_and_bound_are_registered():
 
 def test_box_q_is_wired_like_box_p():
     assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q) ;;' in RUN
-    assert 'case "$BOX" in P|Q) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac' in RUN
+    assert 'case "$BOX" in P) GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca;; Q) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac' in RUN      # Q stays on v0.50.0, SC2j's registered pin (SC2f Amendment 7 moved P alone)
     torch = next(x for x in RUN.splitlines() if '"torch==2.8.0"' in x and "pipx logs/pip_torch.log" in x)
     assert '[ "$BOX" = Q ]' in torch
     assert RUN.count('os.environ["TRIP_BOX"] in ("F", "G", "H", "I", "J", "K", "L", "N", "O", "P", "Q")') == 2
@@ -220,7 +220,8 @@ def test_engaged_fails_closed_on_the_real_record(path, how):
 # ---- Amendment 1: QUALITY reduced by P117's reducer and bar at box Q's two stack constants (sc2j_quality.py)
 QREC = REPO / "tests" / "fixtures" / "sc2j_r3_quality"     # sc2j-r3's QUALITY record (the proof box, Granite, 8 windows)
 QUAL = _mod("sc2j_quality")
-GNF4_Q = re.search(r'case "\$BOX" in P\|Q\) GNF4_SHA=([0-9a-f]{40})', RUN).group(1)
+# box Q's gnf4 pin in sc1_run.sh: "P|Q) GNF4_SHA=..." until SC2f Amendment 7 moved box P alone, then "Q) GNF4_SHA=..."
+GNF4_Q = re.search(r'^case "\$BOX" in .*?\bQ\) GNF4_SHA=([0-9a-f]{40})', RUN, re.M).group(1)
 
 
 def test_quality_wiring_exports_box_qs_gnf4_and_uses_the_wrapper():

@@ -515,7 +515,7 @@ recompiling Unsloth's compiled MoE block on every call (TC2 amendment 5).
 
 
 **Against Unsloth, end-to-end, on one identical training problem** (lane
-p38, 2026-09-05, one rented RTX 5090, box 49975389; **measured** — receipt
+p38, 2026-09-05, one rented RTX 5090, box redacted-4f9ef08b; **measured** — receipt
 [`bench/h2h-20260905/p38/`](../bench/h2h-20260905/p38/README.md), table in
 its [`RESULTS-p38.md`](../bench/h2h-20260905/p38/RESULTS-p38.md), the
 pre-registration verbatim as its `PREREG.md`; register
@@ -543,7 +543,7 @@ speed claim, nothing licensed, and the 2026-08-26 "1.17× ahead" memory
 (never a claim) is disqualified as a comparison.
 
 **tp2 / P40 (2026-09-06): the Unsloth head-to-head now covers all six
-families, one box, one fixture** (one rented RTX 5090, Vast box 50005568 on
+families, one box, one fixture** (one rented RTX 5090, Vast box redacted-7b32a0b8 on
 a Ryzen 7 5700X3D host, train-anchor class `pcie-full/launch-fast`;
 **measured** — receipt [`bench/h2h-20260906/tp2/`](../bench/h2h-20260906/tp2/README.md),
 reducer table in its [`RESULTS-tp2.md`](../bench/h2h-20260906/tp2/RESULTS-tp2.md),
@@ -898,7 +898,7 @@ comfortable statement than not run. Curve and rows in
 
 **Serving speed**, Qwen3-30B-A3B on a rented RTX 5090: the licensed
 position is the census's, below — **×2.067 at B=1 (238.1 tok/s on box
-49916675) and ×2.602 at B=16 (1327.5 tok/s) vs e4b's own NF4 control on
+redacted-98e7ba7d) and ×2.602 at B=16 (1327.5 tok/s) vs e4b's own NF4 control on
 the same box**, the streamed-calibrated stack bo6c licensed on both texts
 (`e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` /
 `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`, **measured**). Those
@@ -912,7 +912,7 @@ RTN-int4 class later FAILED the registered gate on its second text** (bo5,
 configuration's speed on its box, never as the position.
 
 **Against vLLM, same box, same session, identical prompt token ids — CURRENT vs
-CURRENT (lane P58, 2026-09-22, Vast 52069847, an RTX 5090 on an EPYC 9655 host;
+CURRENT (lane P58, 2026-09-22, Vast redacted-0aaa17b2, an RTX 5090 on an EPYC 9655 host;
 **measured** — [`bench/p58/RESULTS-p58.md`](../bench/p58/RESULTS-p58.md), register
 `e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22` /
 `e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22` /
@@ -935,7 +935,7 @@ stays as measured history. **B=16 gap (P86, same box, both censused):** the expe
 (`e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`).
 
 **Against vLLM 0.28.0 (history, lane p37, 2026-09-05;** one RTX 5090 box, Vast
-49975016; **measured** — [`RESULTS-p37.md`](../bench/h2h-20260905/p37/RESULTS-p37.md),
+redacted-aa0f9391; **measured** — [`RESULTS-p37.md`](../bench/h2h-20260905/p37/RESULTS-p37.md),
 register `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05`, its `.gate` row
 and one row per arm): vLLM 286.0 / 2030.0 tok/s against the NF4 control's
 113.4 / 500.1 — **vLLM / e4b-NF4 2.52 at B=1 and 4.06 at B=16**, the lane's only
@@ -1020,7 +1020,7 @@ is compared across lanes.
 table in its [`RESULTS.md`](../bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md)).**
 Speed only, under the **shipped** code (0.35.0 + 0.30.0 at their `main`,
 hook v6 at its 16k default), all six families on one rented RTX 5090 (EPYC
-7Q83 host, instance 49916675), 48 arms at B=1 and B=16, every ratio to
+7Q83 host, instance redacted-98e7ba7d), 48 arms at B=1 and B=16, every ratio to
 that family's own NF4 arm on that box and every licence label copied from
 this register — bo7 licenses nothing, and no bo3/bo5/bo6 number is divided
 into a bo7 number. Every ratio below is vs e4b's own NF4 control on the same
@@ -1100,7 +1100,7 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   enforces with the register's structure. The 2026-09-03 single-stream stack
   this page led with is the same RTN class, quoted above as unlicensed speed.
 - **The 2026-09-03 same-box vLLM comparison is SUPERSEDED** (2026-09-05):
-  `e4b.serve.h2h.vllm.same-box` (superseded; ×1.47 / ×1.55 on box 49702459,
+  `e4b.serve.h2h.vllm.same-box` (superseded; ×1.47 / ×1.55 on box redacted-7e2f3d24,
   the 0.27.0/0.21.0 RTN stack, vLLM version unrecorded) points at lane p37,
   `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05` (vLLM pinned, identical
   prompt ids, every knob recorded; above), itself now history beside P58.

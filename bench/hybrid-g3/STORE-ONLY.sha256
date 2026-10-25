@@ -1,0 +1,4 @@
+# Kept only in the private receipt store, byte-exact (docs/receipts-redaction.md): binaries that carried
+# rented-hardware identifiers, some split or compressed past any scan. sha256, then the file's name here.
+26e8846887a027144bb80fa22aedb8d0de6bdabf01abbcc4541443dd0e7a3cc1  g3_nsys.nsys-rep
+2c4cfc0768548172be7c9f5f72d6c1e6e8245f04bc640856ecb9acf3bc498a24  g3_nsys_235b.nsys-rep

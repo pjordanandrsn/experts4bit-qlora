@@ -2,7 +2,7 @@
 
 Pre-registration: [`P59-PREREG.md`](P59-PREREG.md) (#682, merged b2d6525 before the run; amendment 1 appended after this read). Receipts: [`receipts/`](receipts/) (per-arm censuses, trimmed logs, K0 controls, `p59_rep.json`, the prompt rows, the box's generated read, teardown proof; the fp32 logits stayed on the box). A2000 probe: [`probe/`](probe/). Every KL below is read from the receipts by [`p59_reduce.py`](p59_reduce.py).
 
-Lane `p59-5090-1`: Vast instance 52092816, one RTX 5090; e4b **b2d6525**, grouped-nf4-gemm **65cb104** (K17 merge), transformers 5.16.1, torch 2.8, triton 3.4; rented 17:16Z, `TP_DONE` 17:53Z, destroyed 17:53:14Z (proven); **$0.34** against the $0.66 estimate. K0 controls passed on the box (`kl-fidelity/1.0.0`); the prompt rows reproduced P54/P57/P58's digest `f67e7e4d…`.
+Lane `p59-5090-1`: Vast instance redacted-0271ef93, one RTX 5090; e4b **b2d6525**, grouped-nf4-gemm **65cb104** (K17 merge), transformers 5.16.1, torch 2.8, triton 3.4; rented 17:16Z, `TP_DONE` 17:53Z, destroyed 17:53:14Z (proven); **$0.34** against the $0.66 estimate. K0 controls passed on the box (`kl-fidelity/1.0.0`); the prompt rows reproduced P54/P57/P58's digest `f67e7e4d…`.
 
 ## The read
 
@@ -34,7 +34,7 @@ At 2–16 rows the K16 kernel's plan is the same for every N here (`block_n 64, 
 
 ## Amendment 1 read — `p59b-5090-1`: through a 128-row prefill the fusion changes bits, by 0.0044 nats/token; P1 P2 P3 hold → the fused q/k/v path is the B=16 default
 
-Lane `p59b-5090-1` (Vast 52099331, one RTX 5090; e4b **634e3ba** = #683's merge, grouped-nf4-gemm 65cb104; rented 18:12Z, `TP_DONE` 18:35Z, destroyed 18:35:30Z, proven; **$0.18**). Prefill in 8-token-per-row chunks (**128 rows per forward**, the harness's step); every `Int4Linear` on the K16 route (census: 192 routed unfused, 96 fused); all four arms ran. Receipts: [`receipts/p59b/`](receipts/p59b/).
+Lane `p59b-5090-1` (Vast redacted-e6983ab0, one RTX 5090; e4b **634e3ba** = #683's merge, grouped-nf4-gemm 65cb104; rented 18:12Z, `TP_DONE` 18:35Z, destroyed 18:35:30Z, proven; **$0.18**). Prefill in 8-token-per-row chunks (**128 rows per forward**, the harness's step); every `Int4Linear` on the K16 route (census: 192 routed unfused, 96 fused); all four arms ran. Receipts: [`receipts/p59b/`](receipts/p59b/).
 
 | pair (ref ‖ test) | positions | KL mean | median | p95 | max | top-1 | exactly zero |
 |---|---|---|---|---|---|---|---|

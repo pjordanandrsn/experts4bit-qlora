@@ -103,7 +103,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-b59c7979-74a7-fdfc-280d-0d81c32ec602",
+   "uuid": "GPU-redacted-0ca5c0c7",
    "pci.bus_id": "00000000:01:00.0",
    "pcie.link.gen.current": "5",
    "pcie.link.gen.max": "5",
@@ -117,7 +117,7 @@
    "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
    "cpu_threads": 32,
    "host_mem_gib": 124.9,
-   "vast_instance_id": "54011443",
+   "vast_instance_id": "instance-redacted-9eba24b4",
    "container_host": "ff64d9f56550"
   },
   "anchor_json": null,

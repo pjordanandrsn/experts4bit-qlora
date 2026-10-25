@@ -1,6 +1,6 @@
 # TC1 amendment 12 read (#945): where e4b's fused training step goes after the sync fix — P19 HELD
 
-**Box:** `tc1-5090-41` (instance 54000851, Intel Core Ultra 9 285K, RTX 5090, driver 595.91.07, $0.27; receipts in
+**Box:** `tc1-5090-41` (instance redacted-9a73468a, Intel Core Ultra 9 285K, RTX 5090, driver 595.91.07, $0.27; receipts in
 [`receipts/tc1-5090-41/`](receipts/tc1-5090-41/)). The code was e4b `635b66b` (with #946's single-read grouping) and grouped-nf4-gemm
 `133ad9d` (the pinned index ring as the default, #439). Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md),
 amendment 12.

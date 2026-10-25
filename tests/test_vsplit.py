@@ -242,7 +242,7 @@ def test_the_read_reproduces_from_its_receipts():
         want, name = line.split()
         sums[name] = want
         assert hashlib.sha256((rec / name).read_bytes()).hexdigest() == want, name
-    assert "verdict_vsplit.json" in sums and len(sums) == 27
+    assert "verdict_vsplit.json" in sums and len(sums) == 28   # 27 records + STORE-ONLY.sha256 (docs/receipts-redaction.md)
     red = _red()
     got = json.loads(json.dumps(red.judge(str(rec)), default=str))
     want = json.loads((rec / "verdict_vsplit.json").read_text())

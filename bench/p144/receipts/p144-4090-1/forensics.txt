@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 4090, 24564 MiB, 615.71.09, GPU-0723794d-b692-3327-dd05-e256993f5d81, 8.9, 4, 16
+NVIDIA GeForce RTX 4090, 24564 MiB, 615.71.09, GPU-redacted-e53abb34, 8.9, 4, 16
 CPU(s):                          256
 Vendor ID:                       AuthenticAMD
 Model name:                      AMD EPYC 7B13 64-Core Processor

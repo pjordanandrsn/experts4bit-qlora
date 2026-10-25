@@ -217,3 +217,28 @@ phase_start reduce reduce; python reduce.py ...;  phase_end reduce
   create, probes included. A boot figure states which field it came from.
 
 `ssh_ready_s` is the configured readiness ALLOWANCE (`--ssh-ready-s`; newer receipts also write it as `ssh_ready_allowance_s`), not a measurement. It takes only the configured values (180, 300, 420 s), so a ratio of it to the billed time measures nothing. A receipt with neither measured field has an UNKNOWN boot, never 0 and never the allowance.
+
+## Unsloth MoE GEMM counter
+
+`unsloth_moe_counter.py` counts the expert GEMMs Unsloth's MoE QLoRA dispatches on both grouped paths of the release-proven
+unsloth_zoo 2026.10.8. Any lane that times Unsloth's MoE training imports it, so no two lanes count differently.
+
+- **Install it before the model load, then `patch_loaded(experts)` after the load and before the first forward.** It wraps `moe_grouped_fp16.generic_grouped_mm`, `generic_grouped_wgrad` and
+  `moe_nf4_grouped.maybe_nf4_grouped_mm` as module attributes, which every caller resolves at call time. The library's self-check
+  calls are kept apart.
+- **Fused arm** (`UNSLOTH_MOE_NF4_FUSED` 1 or auto): it binds on `NF4_FUSED_STATS.launches` == `expected_launches`, exact: the
+  fused calls plus the dX launches by structure (`structural`; the lane marks each step with `mark_step`).
+- **Unfused arm:** it binds on zero launches and zero calls (`check_unfused`).
+- **Auto arm:** declining above the row cap is its design. Its expected count is the calls the library's own `nf4_auto_fused`
+  predicate admits, evaluated per call (`fused_calls_expected`, `check_auto`).
+- **The per-call dispatch** (`check_dispatch`): every grouped expert GEMM's Triton-or-torch decision is recorded from the library's
+  own predicate. `patch_loaded` wraps it in the module object behind the forward each loaded expert module runs
+  (`type(module).forward`), since the compile-cache copy can appear during the load, and records each expert type's distinct
+  forwards. Experts the library hands off (bnb 4-bit, then fp8, by its own predicates) are served by the package moe_utils.
+  Every serving object must decide the GEMMs, LoRA-class calls must decide Triton, the library's fallback count must not move,
+  and the generic counts must equal the Triton forwards plus the backward by structure.
+- **The arm's environment** (`check_env`): no `UNSLOTH_*` key is set unless registered at its value; the registered names are
+  held to a scan of every source file of the installed unsloth and unsloth_zoo packages.
+- **The library cross-check** (`check_library`) catches a caller that bypassed the wrapper.
+- **A wrapper count binds only beside a compile-safe counterpart** (`check_equal`): a captured or traced block runs the wrapper
+  once, at capture.

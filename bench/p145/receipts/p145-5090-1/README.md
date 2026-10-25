@@ -1,7 +1,7 @@
 # `p145-5090-1`: Mixtral-8x7B's one-request step after K33, kernel by kernel (the read)
 
 One RTX 5090 (cc 12.0, 170 SMs, driver 595.71.05) on an Intel Core Ultra 9 285K host (24 CPUs, 188 GB RAM): Vast instance
-56617171, launched 2026-10-18T20:56Z, torn down 21:12:02Z. Cost $0.816. Code: e4b `67ba40b7` (the registration's merge,
+redacted-fdb0136d, launched 2026-10-18T20:56Z, torn down 21:12:02Z. Cost $0.816. Code: e4b `67ba40b7` (the registration's merge,
 #1771), grouped-nf4-gemm 0.47.0 (`eea5df6b`); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2,
 Nsight Systems 2025.6.1.190.
 

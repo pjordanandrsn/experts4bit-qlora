@@ -103,7 +103,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-eecf00ca-44b0-935f-8716-cfefee62dc4e",
+   "uuid": "GPU-redacted-f0aae52f",
    "pci.bus_id": "00000000:02:00.0",
    "pcie.link.gen.current": "5",
    "pcie.link.gen.max": "5",
@@ -117,7 +117,7 @@
    "cpu": "AMD Ryzen 9 7900 12-Core Processor",
    "cpu_threads": 24,
    "host_mem_gib": 124.9,
-   "vast_instance_id": "54006898",
+   "vast_instance_id": "instance-redacted-4dbaf7c3",
    "container_host": "90606a9f8d52"
   },
   "anchor_json": null,

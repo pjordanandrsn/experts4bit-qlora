@@ -1,7 +1,7 @@
 {
  "lane": "SC1",
  "box": "A",
- "dir": "/private/tmp/claude-501/-Users-jordananderson-code/d479c659-f03e-44eb-9883-8d2aa60a2184/scratchpad/xbox/A",
+ "dir": "<scratch>",
  "pack_fp": "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d",
  "arms": {
   "e4b/lic/16": {

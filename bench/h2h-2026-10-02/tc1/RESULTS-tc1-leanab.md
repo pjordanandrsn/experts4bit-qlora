@@ -1,6 +1,6 @@
 # TC1 amendment 13 read (#945): grouped-nf4-gemm's trimmed LoRA delta makes e4b's training step 6–9 % faster on a 5090 — P20 and P21 HELD
 
-**Box:** `tc1-5090-42` (instance 54006898, AMD Ryzen 9 7900, RTX 5090, driver 580.178.04, $0.33; receipts in
+**Box:** `tc1-5090-42` (instance redacted-4dbaf7c3, AMD Ryzen 9 7900, RTX 5090, driver 580.178.04, $0.33; receipts in
 [`receipts/tc1-5090-42/`](receipts/tc1-5090-42/)). The code was e4b `e129650` and grouped-nf4-gemm `58fb19d` (#440).
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 13.
 

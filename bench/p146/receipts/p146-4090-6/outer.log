@@ -1,6 +1,6 @@
 KNOBS run=p146-4090-6 e4b=4917506a22d960a6586bd5cefe9a0deca662fc46 gnf4=6b7c2e7474d20c8843814dd46dad6cfc3d94b440 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=4090 min_disk_gb=120 min_ram_gb=64 dry=0
 CUDA_PROBE ok torch=2.8.0+cu128 cc=8.9 sms=128
-NVIDIA GeForce RTX 4090, 24564 MiB, 595.71.05, GPU-71293032-7f56-c340-98dd-33bfda44c86b, 8.9, 4, 16
+NVIDIA GeForce RTX 4090, 24564 MiB, 595.71.05, GPU-redacted-96bd20a7, 8.9, 4, 16
 CPU(s):                                  128
 Vendor ID:                               AuthenticAMD
 Model name:                              AMD EPYC 7B13 64-Core Processor

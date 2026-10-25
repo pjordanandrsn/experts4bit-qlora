@@ -5,7 +5,7 @@ refused GitHub codeload egress at 0.33 MB/s versus the unchanged 1 MB/s floor
 (registered rc14), before install, proof, admission or any holdout data. Its
 canonical receipt SHA256 is
 `24b74f533f0df89a87fd2efdca00578735f8b60608ec49a2ad15948fd960be97`.
-Teardown verified instance54926784 absent at 2026-10-08T23:12:43Z, HTTP200;
+Teardown verified instance-redacted-9875088c absent at 2026-10-08T23:12:43Z, HTTP200;
 invoice$0.097. Preserve that draw and its own ledger row, including the original
 refusal log. The public refusal record is a separate receipt change.
 

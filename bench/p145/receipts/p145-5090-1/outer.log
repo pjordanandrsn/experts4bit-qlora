@@ -1,6 +1,6 @@
 KNOBS e4b=67ba40b765368cd357f5003f4650d49886c1595c gnf4=eea5df6baefbe38b795621286fe70eac2980aa44 model=mistralai/Mixtral-8x7B-Instruct-v0.1@eba92302a2861cdc0098cc54bc9f17cb2c47eb61 gpu_class=5090 min_disk_gb=220 min_ram_gb=60 family=mixtral dry=0 short=32 long=160 reps=3 moe_layers=32
 CUDA_PROBE ok
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-0ca1ed62-a4bf-1965-5cf8-1333ee34175a, 12.0
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-redacted-c7be3da9, 12.0
 power.limit,clocks.max.sm 450.00 W, 3105 MHz
 CPU(s):                                  24
 Vendor ID:                               GenuineIntel

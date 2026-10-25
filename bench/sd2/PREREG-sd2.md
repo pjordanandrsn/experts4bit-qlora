@@ -468,7 +468,7 @@ ACK and the relay on #1313.
 
 ## Amendment 1b (2026-10-10): the proof's time budget, after `sd2-prove-1`
 
-**What happened.** `sd2-prove-1` (vast instance 55178430, **$0.046**, teardown complete) ended as **HARNESS_ERROR, rc
+**What happened.** `sd2-prove-1` (vast instance redacted-1534b1b3, **$0.046**, teardown complete) ended as **HARNESS_ERROR, rc
 40**: STOP-2 before the fetch.
 - **The box was healthy.** The tripwire passed, so the target imported with SD2's build (e4b 0.52.0 at `539a2d26`).
   All four self-tests passed.
@@ -505,7 +505,7 @@ rule. The next run is `sd2-prove-2`, and it launches on the maintainer's ACK and
 
 ## Amendment 2 (2026-10-10): V0's addressing gate is a logit gate, after `sd2-prove-2`
 
-**What happened.** `sd2-prove-2` (vast instance 55184960, **$0.66**, teardown complete) ran in full. Under Amendment 1's
+**What happened.** `sd2-prove-2` (vast instance redacted-03030a30, **$0.66**, teardown complete) ran in full. Under Amendment 1's
 rule its verdict is **FAILED** with one item, `GATE_TOO_WEAK:c`. The maintainer re-derived it with main's reducer and got
 the box's verdict exactly. That verdict stands.
 - **Every other item held:**

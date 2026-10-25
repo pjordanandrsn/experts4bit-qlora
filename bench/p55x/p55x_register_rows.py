@@ -31,7 +31,7 @@ REV = "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"
 BO6C = "e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05"
 P39_FP = "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42"
 HW = ("RTX 5090 (sm_120, driver 575.57.08, 32607 MiB) on an AMD Ryzen 9 7950X host, Vast.ai instance "
-      "51980935; the 5090 class carries ~8.5% inter-box dispersion, so only within-box deltas are quoted")
+      "instance-redacted-27c96424; the 5090 class carries ~8.5% inter-box dispersion, so only within-box deltas are quoted")
 COND = ("K8 teacher-forced NLL through the paged decode path, 2048 steps, 512-token prompt, --b1d-loop eager, "
         "--no-fuse-qkv, fp8 paged KV (gnf4 compute mode `fp8`, MEASURED per arm and recorded in each "
         "receipt as `attn_compute` and as the tally `mech.compute` = {f32: 0, fp8: 98304}, not inferred "
@@ -140,7 +140,7 @@ def build(run: Path, *, date: str, receipt_dir: str) -> list[dict]:
         "package": "experts4bit-qlora", "area": "serve",
         "claim": (f"The streamed 64k pack reproduces BYTE-for-byte across boxes and across a release "
                   f"boundary: this build's pack_fingerprint {fp} equals the one lane P39 recorded on "
-                  f"2026-09-10 on a different rented 5090 (instance 50509727) under e4b 0.35.3, where this "
+                  f"2026-09-10 on a different rented 5090 (instance redacted-4c549026) under e4b 0.35.3, where this "
                   f"ran under 0.36.4. P37's divergence (11522/766) is therefore an outlier, not the rule."),
         "value": 1.0, "unit": "identical pack_fingerprint across two boxes and two e4b releases",
         "model": MODEL, "hardware": HW,

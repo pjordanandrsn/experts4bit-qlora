@@ -63,7 +63,7 @@ stack; Qwen3.6 with K25 off; and Qwen3.6 with a single bucket.
 - **`p98-5090-1`:** REFUSED at **$0**. The controller's PUT to Vast timed out in the TLS handshake before any instance
   existed.
 - **`p98-5090-2`:** HARNESS_ERROR (lane rc ≠ 0), **$0.135**, 859 s. One RTX 5090 (sm_120, driver 580.95.05), Vast
-  machine 142284, instance 53938995, AMD EPYC 7663. Destroyed at 2026-10-03T00:23:29Z, instance absent.
+  machine 142284, instance redacted-d4f479ee, AMD EPYC 7663. Destroyed at 2026-10-03T00:23:29Z, instance absent.
 - **The lane: $0.153** of a $2.50 ceiling.
 
 Receipts (`receipts/p98-5090-2/`): the two eager records, `verdict.json`, `summary.txt`, `forensics.txt`,

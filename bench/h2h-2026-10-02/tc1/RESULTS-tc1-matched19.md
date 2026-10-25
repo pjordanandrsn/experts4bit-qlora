@@ -15,8 +15,8 @@ No environment variables were set. The tokens are unchanged from TC1 (`qwen3`, t
 
 | box | token | host | cost |
 |---|---|---|---|
-| `tc1-5090-49` | `qwen3` (box A) | instance 54075516, AMD EPYC 7C13, driver 580.95.05 | $1.15 |
-| `tc1-5090-50` | `qwen3axolotl` (box B) | instance 54075633, AMD Ryzen 9 9950X3D, driver 610.57.04 | $0.33 |
+| `tc1-5090-49` | `qwen3` (box A) | instance redacted-8fa6233a, AMD EPYC 7C13, driver 580.95.05 | $1.15 |
+| `tc1-5090-50` | `qwen3axolotl` (box B) | instance redacted-95827efe, AMD Ryzen 9 9950X3D, driver 610.57.04 | $0.33 |
 
 ## Readings (matched work: fp32 adapters, one per-slot init, the same tokens; s/step medians of steps 11..20 over two draws)
 

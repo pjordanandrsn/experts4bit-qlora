@@ -126,7 +126,7 @@ Mean ms per decode step, timed pass:
 
 ## Box, software and time
 
-- **Box.** One RTX 5090 (sm_120, driver 570.153.02, 450 W power limit), Vast.ai verified/secure instance 53286231, AMD
+- **Box.** One RTX 5090 (sm_120, driver 570.153.02, 450 W power limit), Vast.ai verified/secure instance redacted-b09452c5, AMD
   EPYC 7K62, 251 GiB of RAM ([`receipts/p81-5090-2/forensics.txt`](receipts/p81-5090-2/forensics.txt)).
 - **Software.** e4b 0.37.7 at `fa65132`; grouped-nf4-gemm 0.33.5 at `fb15cf5` (the registered pin); torch
   2.8.0+cu128, Triton 3.4.0, transformers 5.16.1, bitsandbytes 0.50.1.

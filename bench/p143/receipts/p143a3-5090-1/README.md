@@ -1,7 +1,7 @@
 # `p143a3-5090-1`: Amendment 3, the binding served read of the split cap (FLIP)
 
 One RTX 5090 (cc 12.0, 170 SMs, driver 615.71.09, a **450 W** power limit) on an AMD EPYC 9135 host (32 CPUs): Vast
-instance 56652416 on machine 151395, 2026-10-19T01:59:50Z to 02:29:33Z. Cost $0.479. Code: e4b `e8de1799` (the
+instance redacted-0fb2ce02 on machine 151395, 2026-10-19T01:59:50Z to 02:29:33Z. Cost $0.479. Code: e4b `e8de1799` (the
 registration's merge, #1788), grouped-nf4-gemm 0.47.1 (`38b30888`); torch 2.8.0+cu128, triton 3.4.0, transformers
 5.17.0. Qwen/Qwen3-30B-A3B @ `ad44e777`.
 

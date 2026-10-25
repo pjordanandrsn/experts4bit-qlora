@@ -12,8 +12,8 @@ levers.
 
 | run | host | verdict | why | cost |
 |---|---|---|---|---:|
-| `p112-5090-1` | Vast 54118102, machine 37958, Ryzen 9 7950X | **VOID** | engagement: "6907 of 6927 switched launches carried PDL", the lane's own accounting (Amendment 1) | $0.3210 |
-| `p112-5090-2` | Vast 54122612, machine 45511, EPYC 7C13 (shared: 762 of 1,007 GB of host RAM in use) | **VOID** | "a decode slope is void": W16 prefill jitter of about 1 s a pass, against the slope's 1.2 s of decode (Amendment 2) | $1.0210 |
+| `p112-5090-1` | Vast redacted-21dd2909, machine 37958, Ryzen 9 7950X | **VOID** | engagement: "6907 of 6927 switched launches carried PDL", the lane's own accounting (Amendment 1) | $0.3210 |
+| `p112-5090-2` | Vast redacted-b3279fdb, machine 45511, EPYC 7C13 (shared: 762 of 1,007 GB of host RAM in use) | **VOID** | "a decode slope is void": W16 prefill jitter of about 1 s a pass, against the slope's 1.2 s of decode (Amendment 2) | $1.0210 |
 
 The lane cost **$1.3420** by the receipts. Run 2's figure comes from the provider's invoice and includes $0.649 for
 downloading the 62.3 GB checkpoint. Run 1's is rate × runtime and may leave out its own download.

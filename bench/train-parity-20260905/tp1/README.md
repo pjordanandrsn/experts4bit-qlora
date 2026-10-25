@@ -24,7 +24,7 @@ keyed by model_type: quantize / reference_train / fast_train / batched_train / n
 `model_families` is exactly the families whose `fast_train` is `supported`. (3) `granitemoe.fast_train` is decided by
 the tp1b re-run only; `batched_train` is `supported` (PASS). No gate, threshold or fixture text changed.
 
-**Box:** Vast.ai instance **49937730**, RTX 5090 (sm_120, driver 595.84, 32607 MiB, power limit 550 W, PCIe gen 4 ×16)
+**Box:** Vast.ai instance **redacted-0cc9db7c**, RTX 5090 (sm_120, driver 595.84, 32607 MiB, power limit 550 W, PCIe gen 4 ×16)
 on an AMD EPYC 7Q83 64-core host (128 CPUs, 251.5 GiB; [`forensics.txt`](forensics.txt) is the lane script's probe at
 install; the per-receipt `env.host` block carries the GPU UUID, bus id, VBIOS and the instance id). **Train-anchor class
 `pcie-full/launch-fast`** ([`anchor.json`](anchor.json), gate log [`logs/anchor_gate.log`](logs/anchor_gate.log):
@@ -53,7 +53,7 @@ Granite re-fetched (its conditional Gemma-4 / Mixtral redo, amendment 4, found b
 did not run); its first `arm granite/fused` start at 15:30:43Z died on the follow-up script's own `DATA: unbound
 variable` before the harness ran (amendment 5), the fixed script's start at 15:31:49Z is the re-run → `GRANITE FUSED
 RERUN DONE`, **`TP1B DONE` / `TP2_DONE` 15:33:13Z**. **Wall on this box for the six families plus the re-run: 11:32Z →
-15:33Z = 4 h 01 min** against the pre-registration's ≈ 5.5 h. **Honest box time and cost:** the first box (49937447)
+15:33Z = 4 h 01 min** against the pre-registration's ≈ 5.5 h. **Honest box time and cost:** the first box (redacted-23746f9b)
 ≈ 5 min before amendment 1 destroyed it; this box rented ≈ 07:05Z, **≈ 4.4 h of it idle** after the fetch-by-sha false
 start (amendment 2, ≈ $3.4), the lane and re-run ≈ 4.0 h, `TP2_DONE` at 15:33Z — **≈ 8.5 h ≈ $6.8 at ~$0.8/h, of which
 the measurements themselves ≈ $3.2**; teardown follows `TP2_DONE` (label-guarded, proven before the guard is killed).
@@ -97,7 +97,7 @@ families.
 ## The five amendments, and why (each dated in the private record before the data it touches)
 
 1. **Amendment 1 (07:05Z, before any data) — the first box's link.** The queue fired on bo7's `TP_DONE` at 07:00:27Z
-   and rented Vast **49937447** (machine 37675). It passed the renter's 15-s pre-flight at 20 MB/s (bo7's 15 MB/s floor)
+   and rented Vast **redacted-23746f9b** (machine 37675). It passed the renter's 15-s pre-flight at 20 MB/s (bo7's 15 MB/s floor)
    but sustained **10.4 MB/s** on a 20-s range read of a Qwen3 shard while the install ran: at that rate Qwen3 (60 GB),
    Gemma-4 (52 GB) and Mixtral (93 GB) would have died by their fetch alarms — three of six families lost before a step.
    Decision at install time, nothing measured: lane stopped, instance destroyed by the label-guarded teardown (proven
@@ -107,7 +107,7 @@ families.
    [`logs/tp1_run.sh.pre-amend`](logs/tp1_run.sh.pre-amend)). Arm alarms, fixture, criteria, verdict rule, predictions
    unchanged. The first relaunch failed at the rent step (`KeyError: VAST_API_KEY` — the relaunch chain had not sourced
    the secrets the queue sources); relaunched with the environment.
-2. **Amendment 2 (11:40Z) — the short-sha fetch, and the idle time.** On the re-rolled box **49937730** the install and
+2. **Amendment 2 (11:40Z) — the short-sha fetch, and the idle time.** On the re-rolled box **redacted-0cc9db7c** the install and
    tripwire passed ([`logs/outer.attempt1.log`](logs/outer.attempt1.log): 07:05:35Z) but the helper fetch `git init &&
    git fetch --depth 1 origin f4b639fd2640` failed within a second — `fatal: couldn't find remote ref f4b639fd2640`
    (GitHub does not serve a fetch-by-abbreviated-sha) — `SRC FETCH FAIL`, exit 9, `TP_DONE` touched. **The box then idled
@@ -312,7 +312,7 @@ the verdict rule is v1's, verbatim.
   `bench/flagship-matrix/drivers/` and `bench/train-anchor/` at `f4b639f`), the regenerated `data/ds_*.json` (their
   registered shas are in `ds_manifest.json`; the lane refuses a mismatch), the mini-side renter / queue / watcher
   scripts (the copy of the renter in the receipt tree predates amendment 1's 40 MB/s floor and is not the one that ran,
-  so it is not offered as evidence), the empty `tp1b_wait.log`, `INSTANCE_ID` (49937730, also in every receipt's
+  so it is not offered as evidence), the empty `tp1b_wait.log`, `INSTANCE_ID` (instance-redacted-0cc9db7c, also in every receipt's
   `env.host.vast_instance_id`), the box's `RESULTS-tp1.md` (byte-identical to `logs/RESULTS.txt`), the `TP_DONE`
   marker and `__pycache__`.
 

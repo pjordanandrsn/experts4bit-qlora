@@ -127,7 +127,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-1baa5616-9f2b-8087-48c7-4aea735d7f39",
+   "uuid": "GPU-redacted-9c912ce5",
    "pci.bus_id": "00000000:C1:00.0",
    "pcie.link.gen.current": "1",
    "pcie.link.gen.max": "5",
@@ -141,7 +141,7 @@
    "cpu": "AMD Ryzen Threadripper PRO 7965WX 24-Cores",
    "cpu_threads": 48,
    "host_mem_gib": 251.2,
-   "vast_instance_id": "54537794",
+   "vast_instance_id": "instance-redacted-35deb70f",
    "container_host": "74c7552436ab"
   },
   "anchor_json": null,

@@ -3713,7 +3713,7 @@ paid wall clock and teardown reserve remain unchanged.
 
 ### P132 Amendment 2 (#1313): the box refuses any card but the reference card
 
-P132's rule reads absolute milliseconds against `sd2-5090-3`, which ran on one card (GPU-38c66e15). A matched pair in
+P132's rule reads absolute milliseconds against `sd2-5090-3`, which ran on one card (GPU-redacted-efc7954e). A matched pair in
 the records (`p116-5090-1` vs `p116-5090-2`: same package bytes, kernels, model, prompts and box) shows another RTX 5090
 taking 0.85–0.87× the time per B = 1 step, which would VOID P132 on the host, not the build.
 
@@ -15124,7 +15124,7 @@ Documentation and register only; no code, no version bump, no gate, threshold, f
 The receipts landed separately as `bench/h2h-20260906/tp2/` (#414); this entry registers them (#415).
 
 - **31 rows under `e4b.train.h2h.unsloth.<family>.5090.2026-09-06`** (lane tp2 / P40, 2026-09-06, one rented RTX
-  5090, Vast 50005568 on a Ryzen 7 5700X3D host; the pre-registration verbatim as the bundle's `P40-PREREG.md`;
+  5090, Vast redacted-7b32a0b8 on a Ryzen 7 5700X3D host; the pre-registration verbatim as the bundle's `P40-PREREG.md`;
   every number copied from `RESULTS-tp2.md` and the receipt JSONs; the `.coverage` and `.footprint` rows per the
   spec amendment on #415): one row per attempt (`….arm.<framework>.<arm>` — including Granite's Unsloth VOID,
   OLMoE's Unsloth HARNESS_ERROR, gpt-oss's three REFUSED rows and Gemma-4's two `void_attn4` rows, #412),
@@ -15190,7 +15190,7 @@ check from here on.
 
 ### vLLM 0.28.0 head-to-head, same box, identical prompt token ids (lane p37, receipt `bench/h2h-20260905/p37/`)
 
-- One rented RTX 5090 (Vast 49975016, EPYC 7Q83 host), one session, decode-vs-decode on the same 512-token prompt ids
+- One rented RTX 5090 (Vast redacted-aa0f9391, EPYC 7Q83 host), one session, decode-vs-decode on the same 512-token prompt ids
   (dumped once from the e4b harness's own window function and fed to vLLM verbatim; the reducer refuses to divide
   receipts that disagree on the prompt sha): vLLM 0.28.0 (torch 2.13.0+cu130, triton 3.7.1) serving Qwen's
   `Qwen3-30B-A3B-GPTQ-Int4` (Marlin, default CUDA graphs, kv auto; eager and fp8-KV arms beside) against
@@ -15222,7 +15222,7 @@ check from here on.
 
 ### e4b vs Unsloth, QLoRA end-to-end, one identical training problem (lane p38, receipt `bench/h2h-20260905/p38/`)
 
-- One rented RTX 5090 (Vast 49975389, train-anchor class `pcie-full/launch-fast` recorded): Qwen3-30B-A3B at one pinned
+- One rented RTX 5090 (Vast redacted-4f9ef08b, train-anchor class `pcie-full/launch-fast` recorded): Qwen3-30B-A3B at one pinned
   revision, the registered `clinical` fixture tokenised ONCE into a sha-asserted file both frameworks train on, seq 512,
   r 8 / α 16 on attention q/k/v/o and every expert (321,257,472 trainable parameters asserted in every arm, router
   frozen), the same AdamW call, batch 1, loss over all tokens, the same held-out eval -- experts4bit-qlora 0.35.0 +
@@ -16040,9 +16040,9 @@ Everything merged since 0.23.0, receipts in the audit tree:
   in RESULTS-sv1), and both it and the 7.25 ms graphed-default wall sit *above*
   the certified opt-in's own **6.476 ms** wall — which, since device work cannot
   exceed wall-clock on a single stream, is the correct bound for the certified
-  path. (Box provenance disclosed: 8.43 is box 48728047 / anchor 7.27 ms, 6.476 is
-  48709950 / anchor 7.25 ms — same class to 0.3%; and the load-bearing inequality
-  is within-run on 48709950, so it does not depend on the cross-box step.) The refutation stands: 6.476 → 3.636 ms is a **1.78×** device-work
+  path. (Box provenance disclosed: 8.43 is box redacted-c248d28c / anchor 7.27 ms, 6.476 is
+  instance-redacted-933abf0f / anchor 7.25 ms — same class to 0.3%; and the load-bearing inequality
+  is within-run on instance-redacted-933abf0f, so it does not depend on the cross-box step.) The refutation stands: 6.476 → 3.636 ms is a **1.78×** device-work
   reduction (not 2.32×), still not available from orchestration. The 0.23.0 entry
   below is left unedited so the record of what was claimed survives; the full
   reconciliation is appended to `bench/hybrid-g9/sv1/RESULTS-sv1-census.md`.

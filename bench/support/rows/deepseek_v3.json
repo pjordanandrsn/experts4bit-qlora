@@ -35,7 +35,7 @@
   "load": {
    "status": "checkpoint-broken",
    "refusal_basis": "n/a",
-   "error": "ImportError: cannot import name 'is_torch_fx_available' from 'transformers.utils.import_utils' (/Users/jordananderson/.venvs/e4b/lib/python3.14/site-packages/transformers/utils/import_utils.py)",
+   "error": "ImportError: cannot import name 'is_torch_fx_available' from 'transformers.utils.import_utils' (<home>/.venvs/e4b/lib/python3.14/site-packages/transformers/utils/import_utils.py)",
    "seconds": 0.2,
    "origin": "the checkpoint's own remote code, not e4b -- it imports a symbol the installed transformers no longer provides"
   }

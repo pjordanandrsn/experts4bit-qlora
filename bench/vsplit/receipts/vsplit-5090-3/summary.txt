@@ -1,5 +1,5 @@
 KNOBS e4b_target=88ae1cfd8fbe3477189f5a42d8448f395e974345 gnf4_target=724ccc454f006c1a46836e434e997f31f293747f e4b_harness=bd51c7d9ce8dd7ca2fa3e4b09308361ff6be74bd model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 head=RedHatAI/Qwen3-30B-A3B-speculator.eagle3@6afc5aa2477b923467fb9a8d906782b984a9a6ba gpu_class=5090 min_disk_gb=150 min_ram_gb=60
-VSPLIT_CARD uuid=GPU-98583136-4b17-4f20-f581-5a8df4ef762c
+VSPLIT_CARD uuid=GPU-redacted-0ae454eb
 SD2_AUDIT ok {"changed": 7, "unlisted": [], "stale": []}
 e4b target 0.53.0 sha 88ae1cfd8fbe3477189f5a42d8448f395e974345
 harness sha bd51c7d9ce8dd7ca2fa3e4b09308361ff6be74bd

@@ -9,3 +9,10 @@ feae3db02638f8c8f6b544d52a96d127e419282d7cf9430c1944181d68b99d66  p154/logs/fetc
 bf119271a263403d3770b6f4364e979f9e8353e9b5f710b0f876a79852e55ca8  p154/logs/route_b16.log
 c2e5ded7374928bdaa3fb207e14e7f56bc682468214575d81b1909dba9807464  p154/route_b16.json
 3319260a0dc006de1103c5ec0c4893068dfd4a540da5dd48d3048935517efe1a  teardown-proof.json
+# Originals of files this receipt carries with rented-hardware identifiers replaced by tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p154/receipts/p154-5090-1/forensics.txt at 069a029befd4
+c70ed902f92a1892af750f51f52c0347393456095baa48d43b19032c0087f825  forensics.txt
+# same bytes: bench/p154/receipts/p154-5090-1/outer.log at 069a029befd4
+06c5adfe4da1bb62d1d9df2c4f182d6baff5833991813378e92479251686d58b  outer.log

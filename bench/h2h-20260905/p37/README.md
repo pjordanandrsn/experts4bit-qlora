@@ -34,7 +34,7 @@ selection, asserted in every log), `dtype auto` → float16, `max_model_len 2048
 receipt. **Quality is quoted, never equated** (pre-registered rule 5): e4b's arm carries — was meant to carry — the
 register's two-text K8 licence; vLLM's checkpoint carries its author's evaluation; this lane scores neither.
 
-**Box:** Vast.ai instance **49975016**, RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host
+**Box:** Vast.ai instance **redacted-aa0f9391**, RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host
 (251 GiB, container cgroup `memory.max` 183,318,347,776 B = 170.7 GiB; [`forensics.txt`](forensics.txt)) — the same host
 class as bo7 and tp1; image `pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel` (vLLM on sm_120 needs a ≥ 12.9 toolkit in the
 container); pre-flight 42 MB/s against the 40 MB/s floor. B=1 is host-bound and the 5090 class carries ~8.5 %
@@ -140,7 +140,7 @@ and **`TP3_DONE` 22:18:07Z**; box torn down 22:22Z.
    reference on both texts. The `all` arms rebuilt the same pack the speed arms had (2418/142, 2398/162, 2412/148, 2338/222,
    1956/92 = **11522 / 766**; `INT4EXP enabled: 48 layers`, `ATTNINT4 calibrated: 192 projections`). In nats the c4val1 delta is
    +0.0066, inside Qwen3's 0.0095-nat arithmetic-order floor — and the floor is not the budget: the registered gate is in
-   perplexity and reads FAIL. Beside it, never divided into: bo6c's licensed pack (11512 / 776, box 49861751) read c4val1
+   perplexity and reads FAIL. Beside it, never divided into: bo6c's licensed pack (11512 / 776, box redacted-5c0ee9b4) read c4val1
    **−0.0662** against its own NF4, and this box's NF4 reference reproduces bo6c's to 0.0002 / 0.0000 ppl (6.41984 / 16.49703
    there too) — the reference travels, the calibrated pack does not. **Reading:** ten of 12,288 expert matrices classified
    differently at the `min_rows` threshold go with a real quality difference; the streamed calibration recipe does NOT
@@ -212,7 +212,7 @@ abbreviated here. vLLM's `memory.used` is a policy number: the comparable figure
   into a position. Amendment 3 ran the registered gate on that pack and it **failed on c4val1 (+0.1093 ppl)**: that does
   not change (`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate`).
 - **Secondary:** eager-vs-eager 1.705 (vLLM 20.8 vs e4b 12.2 at B=1); vLLM fp8-KV / kv-auto 1.052 at B=1, 1.087 at B=16.
-- **The old position** (`e4b.serve.h2h.vllm.same-box`, 2026-09-03, box 49702459, vLLM 0.28.0 vs the 0.27.0/0.21.0 RTN
+- **The old position** (`e4b.serve.h2h.vllm.same-box`, 2026-09-03, box redacted-7e2f3d24, vLLM 0.28.0 vs the 0.27.0/0.21.0 RTN
   stack: ×1.47 / ×1.55) is **superseded** for current-position use by this lane's claim and stays true as measured; the
   2026-08 "6.31×" figure is retired by id. No number from that box, bo7 or P20 is divided into a p37 number.
 
@@ -258,7 +258,7 @@ abbreviated here. vLLM's `memory.used` is a policy number: the comparable figure
   bytes are already in this repository under
   [`../../hybrid-g9/throughput-20260904/bo7/`](../../hybrid-g9/throughput-20260904/bo7/README.md) (`logs/hook/`,
   `logs/step_decomp.py`, `logs/k8_bake.py`, `calib.json`; the shas in `staged.sha256` are theirs), `INSTANCE_ID`
-  (49975016, also in every vLLM receipt's `vast_instance_id`), the empty `p37b_wait.log`, the NF4 arena and the two
+  (instance-redacted-aa0f9391, also in every vLLM receipt's `vast_instance_id`), the empty `p37b_wait.log`, the NF4 arena and the two
   checkpoints.
 
 ## Reproduce

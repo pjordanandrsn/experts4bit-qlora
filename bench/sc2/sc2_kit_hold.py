@@ -25,16 +25,20 @@ the create, its JSON recorded with the run:
              staging lines of `sc1_drive.sh` / `make_pin.sh` may gain exactly the names of the added sc2j entries; and
              INERT runs again AT THE LAUNCH COMMIT over every other entry and both drivers: no `sc2j_<name>` appears
              outside box Q's own sc1_run.sh lines and the drivers' staging lines.
+         (3) SC2f Am. 7 / SC2h Am. 5 / SC2i Am. 4: ``sc1_run.sh`` carries exactly the two declared gnf4 lines
+             (GNF4_DELTA: boxes N, O and P on v0.51.0, box Q unchanged on v0.50.0), each once, and nothing else differs.
+             The change is required: a launch commit whose sc1_run.sh equals the hold's refuses.
          The checkout that stages must BE the launch commit, clean: its ``git status --porcelain`` empty and its HEAD
          equal to ``--at`` (however ``--at`` is spelled), else it refuses.
-  STACK  the launch's ``E4B_SHA`` (``--e4b-sha``, by default the environment's) is the stack under test, 36cdd2d4, in full:
+  STACK  the launch's ``E4B_SHA`` (``--e4b-sha``, by default the environment's) is the stack under test, v0.58.1's
+         605d21e6 (SC2f Am. 7; was 36cdd2d4), in full:
          ``sc1_drive.sh`` installs it in place of the checkout's HEAD, so a launch without it would test the kit's commit.
 
 Each gate fails closed: an unreadable commit, file or pin, or a declared hunk that is absent, is a REFUSE.
 
 VERDICT-STACK (after the box, on the fetched run; part of each lane's verdict, never optional): a box's verdict stands
 only when this reads OK; otherwise it is VOID. It reads INSTALLED evidence first. ``versions.txt``'s ``e4b <version>
-@<commit>`` line, which the box writes only after its tripwire confirmed the install, must name 36cdd2d4. Every
+@<commit>`` line, which the box writes only after its tripwire confirmed the install, must name 605d21e6. Every
 ``KNOBS ... e4b=<commit>`` line of ``summary.txt``, the launch's ``E4B_SHA``, must name it too. Either record missing,
 abbreviated or disagreeing is VOID. The record (``verdict_stack.json``) is a required results file.
 
@@ -61,7 +65,39 @@ import sys
 
 BASE = "1a25b209023c4621fffbf2ab399e2d282474df58"   # the kit hold SC2f Am. 4, SC2h Am. 2 and SC2i Am. 1 registered
 HOLD = "7b8f1f69cf454433166cf349e7df6e7996349399"   # e4b#2041's merge commit, registered by the amendments
-STACK = "36cdd2d4e031e8365ab52e495c40cd79043edd49"  # the stack under test (SC2f Am. 4, SC2h Am. 2, SC2i Am. 1)
+STACK = "605d21e67958fa94d5e73fc3a95ffcb5c8eae02d"  # the stack under test: v0.58.1 (SC2f Am. 7, SC2h Am. 5, SC2i Am. 4;
+#                                                     was 36cdd2d4 under SC2f Am. 4, SC2h Am. 2, SC2i Am. 1)
+# SC2f Am. 7 / SC2h Am. 5 / SC2i Am. 4, HOLD exception 3: boxes N, O and P move to grouped-nf4-gemm v0.51.0 (30adb1bf,
+# e4b CI's pin); box Q keeps SC2j's registered v0.50.0. Exactly these two sc1_run.sh lines change against the hold,
+# and the change is REQUIRED: a launch commit whose sc1_run.sh still equals the hold's would install v0.50.0.
+GNF4_DELTA = (
+    ('case "$BOX" in N|O) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac   # N, O: v0.50.0\'s commit, installed '
+     'from git as L (SC2f Amendment 3, SC2h Amendment 1; was v0.45.0 724ccc45)',
+     'case "$BOX" in N|O) GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca;; esac   # N, O: v0.51.0\'s commit (e4b CI\'s '
+     'pin), installed from git as L (SC2f Amendment 7, SC2h Amendment 5; was v0.50.0 41ef086e)'),
+    ('case "$BOX" in P|Q) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac   # P, Q: v0.50.0\'s commit, installed '
+     'from git as L (SC2i; boxes N and O move to it in SC2f Amendment 3)',
+     'case "$BOX" in P) GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca;; Q) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67'
+     '862a949;; esac   # P: v0.51.0 as N and O (SC2i Amendment 4); Q: v0.50.0, SC2j\'s registered pin, unchanged (SC2j '
+     'stopped at two strikes)'),
+)
+
+
+def gnf4_delta_ok(at_text: str, hold_text: str) -> list:
+    """HOLD exception 3: ``sc1_run.sh`` at the launch commit is the hold's with exactly the declared GNF4_DELTA lines
+    replaced, each once. Returns the refusals (empty: OK)."""
+    why, at_lines, hold_lines = [], at_text.split("\n"), hold_text.split("\n")
+    for old, new in GNF4_DELTA:
+        if hold_lines.count(old) != 1:
+            why.append(f"the hold's sc1_run.sh carries the old gnf4 line {old[:40]!r} {hold_lines.count(old)} times, not once")
+        if at_lines.count(new) != 1:
+            why.append(f"the launch sc1_run.sh carries the declared gnf4 line {new[:40]!r} {at_lines.count(new)} times, not once")
+    back = at_text
+    for old, new in GNF4_DELTA:
+        back = back.replace(new, old)
+    if not why and back != hold_text:
+        why.append("sc1_run.sh differs from the hold beyond the two declared gnf4 lines")
+    return why
 PIN = "bench/sc1/staged.sha256"
 RUN = "sc1_run.sh"
 DRIVERS = ("bench/sc1/sc1_drive.sh", "bench/sc1/make_pin.sh")
@@ -349,7 +385,12 @@ def check(git, hold, base=BASE, at=None, e4b_sha=None) -> dict:
         # Defence in depth: INERT-at-launch below also refuses most of what these name rules refuse (a changed non-sc2j
         # runner that names an sc2j file trips both), so a mutant that weakens one rule can survive the self-test while
         # the other holds; the cases that only fullmatch refuses (a prefix or substring name) pin the name rule itself.
-        foreign = [n for n in diff if n in ea and not SC2J_NAME.fullmatch(n)]
+        foreign = [n for n in diff if n in ea and not SC2J_NAME.fullmatch(n) and n != RUN]
+        ra, rhh = git.show(at, resolve(RUN)), git.show(hold, resolve(RUN))
+        if ra is None or rhh is None:
+            why.append(f"HOLD: {RUN} unreadable")
+        else:
+            why += [f"HOLD (exception 3): {w}" for w in gnf4_delta_ok(ra.decode(), rhh.decode())]
         added = {n for n in diff if n not in eh and SC2J_NAME.fullmatch(n)}
         if removed:
             why.append(f"HOLD: entries removed from the hold: {removed}")
@@ -539,7 +580,8 @@ def _pin(tree):
 def _fixtures():
     base_run = "\n".join([
         'BOX=$SC1_BOX; case "$BOX" in N|O|P) ;; *) say "refusing: SC1_BOX must be N, O or P (SC2f, SC2h, SC2i)"; finish 78;; esac',
-        'case "$BOX" in P) GNF4_SHA=41ef;; esac   # P: v0.50.0\'s commit',
+        GNF4_DELTA[0][0],
+        q_strip(GNF4_DELTA[1][0]),
         '  "huggingface_hub>=0.23" pytest || { say "PIP FAIL (e4b)"; finish 9; }',
         'fetch(){ local NAME=$1',
         '  perl -e "alarm 9" get > logs/fetch_$NAME.log 2>&1 \\',
@@ -548,10 +590,10 @@ def _fixtures():
         '  [ "$BOX" = P ] && prove_p',
         'case "$BOX" in N) box_n;; O) box_o;; P) box_p;; esac', ""])
     lines = base_run.split("\n")
-    hold = [lines[0].replace("N|O|P)", "N|O|P|Q)"), lines[1].replace("P)", "P|Q)"),
-            lines[2].replace('"huggingface_hub>=0.23"', '"huggingface_hub>=0.23"' + BROTLI), FETCH[0], FETCH[1], lines[3],
-            lines[4], FETCH[2], FETCH[3], lines[5], lines[6], Q_LINES[0], lines[7], Q_LINES[1],
-            lines[8].replace("P) box_p;;", "P) box_p;; Q) box_q;;"), ""]
+    hold = [lines[0].replace("N|O|P)", "N|O|P|Q)"), lines[1], GNF4_DELTA[1][0],
+            lines[3].replace('"huggingface_hub>=0.23"', '"huggingface_hub>=0.23"' + BROTLI), FETCH[0], FETCH[1], lines[4],
+            lines[5], FETCH[2], FETCH[3], lines[6], lines[7], Q_LINES[0], lines[8], Q_LINES[1],
+            lines[9].replace("P) box_p;;", "P) box_p;; Q) box_q;;"), ""]
     common = {"bench/sc2/sc2f_box_n.sh": "prove_n(){ :; }\n", "bench/sc2/sc2i_box_p.sh": "prove_p(){ :; }\n",
               "bench/sc1/sc1_drive.sh": ('STAGE="$STAGE $REPO/bench/sc2/sc2f_box_n.sh"\n'
                                          'SC2="$REPO/bench/sc2"; for f in sc2f_box_n.sh sc2j_box_q.sh; do STAGE="$STAGE $SC2/$f"; done\n'
@@ -577,7 +619,14 @@ def self_test() -> int:
     try:
         b, h = _fixtures()
 
-        def run(mut_h=None, mut_at=None, mut_b=None, stack=STACK, head="L", dirty=False):
+        def gnf4(t, pairs=GNF4_DELTA):
+            """The declared exception 3 at the launch commit (both gnf4 lines), re-pinned."""
+            if "bench/sc1/sc1_run.sh" in t:
+                for old, new in pairs:
+                    t["bench/sc1/sc1_run.sh"] = t["bench/sc1/sc1_run.sh"].replace(old, new)
+                _pin(t)
+
+        def run(mut_h=None, mut_at=None, mut_b=None, stack=STACK, head="L", dirty=False, delta=True):
             bb, hh = dict(b), dict(h)
             if mut_b:
                 mut_b(bb)
@@ -586,6 +635,8 @@ def self_test() -> int:
             if mut_h and PIN in hh and not hh.get("_keep_pin"):
                 _pin(hh)
             aa = dict(hh)
+            if delta:
+                gnf4(aa)
             if mut_at:
                 mut_at(aa)
             return check(Fake({"B": bb, "H": hh, "L": aa}, head=head, dirty=dirty), "H", base="B", at="L",
@@ -663,6 +714,18 @@ def self_test() -> int:
              run(mut_at=boxq(name="foo_sc2j_extra.py", stage=False)), "REFUSE"),
             ("an added sc2j entry not staged by the drivers (never reaches a box)", run(mut_at=boxq(stage=False)), "OK"),
             ("launch pin unreadable", run(mut_at=lambda t: t.pop(PIN)), "REFUSE"),
+            ("exception 3: the launch kit without the gnf4 move (still v0.50.0)", run(delta=False), "REFUSE"),
+            ("exception 3: only the N|O line moved", run(delta=False, mut_at=lambda t: gnf4(t, GNF4_DELTA[:1])), "REFUSE"),
+            ("exception 3: only the P line moved", run(delta=False, mut_at=lambda t: gnf4(t, GNF4_DELTA[1:])), "REFUSE"),
+            ("exception 3: box Q moved to v0.51.0 too", run(mut_at=lambda t: gnf4(t, ((
+                "Q) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;;", "Q) GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca;;"),))),
+             "REFUSE"),
+            ("exception 3: the gnf4 move plus another sc1_run.sh byte",
+             run(mut_at=lambda t: (t.__setitem__("bench/sc1/sc1_run.sh", t["bench/sc1/sc1_run.sh"] + "# x\n"), _pin(t))),
+             "REFUSE"),
+            ("exception 3: the new N|O line twice", run(mut_at=lambda t: (t.__setitem__(
+                "bench/sc1/sc1_run.sh", t["bench/sc1/sc1_run.sh"] + GNF4_DELTA[0][1] + "\n"), _pin(t))), "REFUSE"),
+            ("STACK: the old stack 36cdd2d4", run(stack="36cdd2d4e031e8365ab52e495c40cd79043edd49"), "REFUSE"),
             ("no E4B_SHA on the launch", run(stack=None), "REFUSE"),
             ("E4B_SHA is the kit's commit", run(stack=HOLD), "REFUSE"),
             ("E4B_SHA abbreviated", run(stack=STACK[:8]), "REFUSE"),

@@ -1,6 +1,6 @@
 # Results — P47: where Gemma-4's 1.08 nats come from (H100 NVL, 2026-09-19)
 
-Pre-registration: [`P47-PREREG.md`](P47-PREREG.md) (+ amendment 1). Run `p47-gemma4diag` (H100 NVL, vast 51554073, e4b `d8b2ceb`, gnf4 v0.32.0), receipt `receipts/experts4bit-qlora/2026-09-19/p47-gemma4diag/p47/`, read by `bench/p47/p47_reduce.py`. K0 controls passed on the box; control (i) again refused the decode scorer (reference self-KL 0.279) so every row is PREFILL-shaped on both sides, against the same cached bf16 reference and the same 200 prompts / 5,879 tokens as P44-b.
+Pre-registration: [`P47-PREREG.md`](P47-PREREG.md) (+ amendment 1). Run `p47-gemma4diag` (H100 NVL, vast redacted-55bfc700, e4b `d8b2ceb`, gnf4 v0.32.0), receipt `receipts/experts4bit-qlora/2026-09-19/p47-gemma4diag/p47/`, read by `bench/p47/p47_reduce.py`. K0 controls passed on the box; control (i) again refused the decode scorer (reference self-KL 0.279) so every row is PREFILL-shaped on both sides, against the same cached bf16 reference and the same 200 prompts / 5,879 tokens as P44-b.
 
 | arm | builder | NF4 experts in layers | KL nats/token | top-1 | general / technical / code / longctx | stacks quantised / bf16 |
 |---|---|---|---|---|---|---|

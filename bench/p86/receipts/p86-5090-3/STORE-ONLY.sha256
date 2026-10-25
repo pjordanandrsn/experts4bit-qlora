@@ -1,0 +1,15 @@
+# Files of this receipt kept only in the private receipt store, byte-exact: sha256, then the path
+# within this receipt.
+# Originals of files this receipt carries with rented-hardware identifiers replaced by tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p86/receipts/p86-5090-3/forensics.txt at 069a029befd4
+9fb9fbc667273cea2e976b484b4ef64a3a53f26c5f55a7b196a5fac3ffe4edbf  forensics.txt
+# same bytes: bench/p86/receipts/p86-5090-3/vllm_graph_b1.json at 069a029befd4
+7b661cc74b914f7f1ac9d67bb1b63ee1152372f878bb072b7839f353518c940f  vllm_graph_b1.json
+# same bytes: bench/p86/receipts/p86-5090-3/vllm_graph_b16.json at 069a029befd4
+70234563c34400bc6c9e798677d7c120ac90a6d4e4648c08d2602afc67428843  vllm_graph_b16.json
+# same bytes: bench/p86/receipts/p86-5090-3/vllm_graph_b16_r2.json at 069a029befd4
+99fad9c07cf1baf6a64b99c9072103b9983f6615139adf69c7273ff33a33d9ad  vllm_graph_b16_r2.json
+# same bytes: bench/p86/receipts/p86-5090-3/vllm_graph_b1_r2.json at 069a029befd4
+bea03c0c5f0515ae174ba35918ae6f6345eddb864d1cf06c4354fe72e6b71f35  vllm_graph_b1_r2.json

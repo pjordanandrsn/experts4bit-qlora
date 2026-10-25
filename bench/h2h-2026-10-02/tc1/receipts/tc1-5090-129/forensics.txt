@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-37b7f5b1-c861-d5fd-4178-a997564500d3, 530.00 W, 3090 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-redacted-5e5de911, 530.00 W, 3090 MHz
 CPU(s):                                  32
 Model name:                              AMD Ryzen 9 5900XT 16-Core Processor
 MemTotal:       131821072 kB

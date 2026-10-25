@@ -139,7 +139,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-324c4806-62cd-d0b9-3803-0139fa529d9c",
+   "uuid": "GPU-redacted-2c7d48af",
    "pci.bus_id": "00000000:41:00.0",
    "pcie.link.gen.current": "5",
    "pcie.link.gen.max": "5",
@@ -153,7 +153,7 @@
    "cpu": "AMD Eng Sample: 100-000000897-03",
    "cpu_threads": 64,
    "host_mem_gib": 251.4,
-   "vast_instance_id": "54768641",
+   "vast_instance_id": "instance-redacted-896c2bc2",
    "container_host": "e6f2605a2f49"
   },
   "anchor_json": null,

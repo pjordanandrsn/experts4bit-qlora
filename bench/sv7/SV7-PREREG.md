@@ -165,7 +165,7 @@ The read PR carries a Reproduce line that runs this reducer from main on the com
 
 ## Amendment 1 (2026-10-07, after `sv7-4090-1`): the driver sampler's PID match
 
-**`sv7-4090-1`** ran from `7431a8ed` (this registration's merge) on Vast instance 54619847, machine 51613, driver
+**`sv7-4090-1`** ran from `7431a8ed` (this registration's merge) on Vast instance redacted-b710e370, machine 51613, driver
 580.95.05. It finished OK at $0.611 with both arms clean. Through `sv7_reduce.py`, verdict `READ`:
 - **V1, V2: NO_READING.** Neither arm recorded a driver peak (`driver_samples` 0). `bench/sv4/sv4_measure.py` finds its
   own row in `nvidia-smi --query-compute-apps` by PID, and this host's container listed host-namespace PIDs, so no row

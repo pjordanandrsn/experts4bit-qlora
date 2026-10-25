@@ -2,3 +2,10 @@
 # provider's instance. Receipts are never rewritten, so it is not committed here.
 # sha256, then the file's path within this run's receipt.
 cf1ea738b436554c46ccc0583d1de8d0b5a6ca2504d505e8dba7c49fb8ee8fbd  teardown-proof.json
+# Originals of files this receipt carries with rented-hardware identifiers replaced by tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p155/receipts/p155-5090-1/forensics.txt at 069a029befd4
+5d81891050ac68c00edd7a3938179939073b5f00a7cd027fbc00ae735ed73485  forensics.txt
+# same bytes: bench/p155/receipts/p155-5090-1/outer.log at 069a029befd4
+f886cddd990848abd3ea0d1eaaa27f383de313a9adea05c0026735ca149aac9b  outer.log

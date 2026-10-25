@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 580.119.02, GPU-2cb74243-9421-82cb-ca7a-5c2f8ba033ec, 12.0
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.119.02, GPU-redacted-1827cb96, 12.0
 power.limit,clocks.max.sm 475.00 W, 3090 MHz
 Vendor ID:                          AuthenticAMD
 Model name:                         AMD EPYC 9755 128-Core Processor

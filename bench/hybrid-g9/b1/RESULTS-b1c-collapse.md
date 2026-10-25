@@ -1,7 +1,7 @@
 # RESULTS — B1c collapse: CERTIFIED-WITH-OPEN-MECHANISM (default ON)
 
 Run 2026-08-24 against `PREREG-b1c-collapse.md` (#225), on a fresh
-EPYC 9655 + RTX 5090 box (vast 48593098, $0.553/hr, destroyed +
+EPYC 9655 + RTX 5090 box (vast redacted-ebd3ba97, $0.553/hr, destroyed +
 verified zero; device triad 1573.9 GB/s). e4b main `8483735`.
 Receipts in `receipts-b1c/`; verdict by `b1c_verdict.py` (self-tested,
 8 branches).

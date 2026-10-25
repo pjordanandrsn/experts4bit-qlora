@@ -1,6 +1,6 @@
 # `fam-mixtral-prove-2`: Mixtral's own proof under Amendment 7 (not a reading)
 
-One RTX 5090 (cc 12.0, driver 595.91.07) on an AMD EPYC 7763 host (256 CPUs): Vast instance 55054214, launched
+One RTX 5090 (cc 12.0, driver 595.91.07) on an AMD EPYC 7763 host (256 CPUs): Vast instance redacted-6cbeaa81, launched
 2026-10-09T16:32:50Z, torn down 17:31:37Z. Cost $1.775. Code: e4b `da17bbc5` (Amendment 7's merge, #1468),
 grouped-nf4-gemm 0.43.0 (`6ee2e10`). The box end to end at 32 positions.
 

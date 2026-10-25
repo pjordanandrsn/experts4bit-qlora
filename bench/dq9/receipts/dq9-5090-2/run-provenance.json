@@ -6,7 +6,7 @@
   "complete": true,
   "started_at": "2026-10-08T21:36:25Z",
   "finished_at": "2026-10-08T22:01:44Z",
-  "instance_id": "54915655",
+  "instance_id": "instance-redacted-d0071e54",
   "cost_usd": {
     "actual": 0.343,
     "estimated": 2.8
@@ -14,8 +14,8 @@
   "teardown_proof": {
     "at": "2026-10-08T22:01:44Z",
     "complete": true,
-    "evidence": "{\"destroy\": {\"at\": \"2026-10-08T22:01:43Z\", \"http\": 200, \"instance_id\": \"54915655\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": [\"54916667\", \"54917126\"]}",
-    "instance_id": "54915655",
+    "evidence": "{\"destroy\": {\"at\": \"2026-10-08T22:01:43Z\", \"http\": 200, \"instance_id\": \"instance-redacted-d0071e54\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": [\"instance-redacted-66d8d20c\", \"instance-redacted-3d7509a2\"]}",
+    "instance_id": "instance-redacted-d0071e54",
     "method": "vast-destroy",
     "reason": "completion"
   },

@@ -32,7 +32,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-10339cdb-8c2b-901b-591e-3f872639797a",
+   "uuid": "GPU-redacted-cfca8807",
    "pci.bus_id": "00000000:C1:00.0",
    "pcie.link.gen.current": "1",
    "pcie.link.gen.max": "4",
@@ -46,7 +46,7 @@
    "cpu": "AMD EPYC 7Q83 64-Core Processor",
    "cpu_threads": 128,
    "host_mem_gib": 251.5,
-   "vast_instance_id": "49937730",
+   "vast_instance_id": "instance-redacted-0cc9db7c",
    "container_host": "a7bece36dda7"
   },
   "anchor_json": "/root/tp1/anchor.json",
