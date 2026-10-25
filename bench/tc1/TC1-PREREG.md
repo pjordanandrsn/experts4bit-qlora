@@ -3930,3 +3930,140 @@ $0.02/GB. The screen (`bench/tc1/pos80_kit.py`, `offer_why`) and the launch temp
 - **The started box:** 3.5 h x $1.00 + 100 GB x $0.02 = **$5.50**.
 - **A box that does not start**, the host floors included: at most 1,470 s at the box rate plus 1.17 GB of probes, **$0.44**.
 - **The row:** one started box plus one retry id is **$5.94**, inside the $6 cap for this row.
+
+### Amendment 81 (2026-10-25T16:40Z, $0, no box): device time is kernels-only at the source, and TC1's 26 profiled runs are re-derived kernels-only with their own reducers (one fixed rule)
+
+**Why.** `tc1_arm.summarize_profile` summed every CUDA-typed row of torch's `key_averages()` into `device_ms`, the `Optimizer.step#…`
+user-annotation span included. That span covers the optimizer kernels it encloses, which are rows of their own, so their time was counted
+twice (e4b#2129 deliverable 2, confirmed by independent review). torch 2.8's own device total leaves annotations out
+(`profiler_util.py`, the `is_user_annotation` key that `key_averages` groups by). Every TC1 `device_ms`, `device_busy_fraction`,
+`device_by_family_fraction` and `memcpy_fraction_of_device` recorded so far carries the span: 0.3 % to 4.8 % of a cell's device time over the
+26 runs below.
+
+**At the source** (`bench/tc1/tc1_arm.py`). A row torch flags `is_user_annotation` is left out of `device_ms`, the memcpy figure and the
+family fractions, and its time is reported as `user_annotation_ms`; the row is still listed, marked `"user_annotation": true`. The summary
+says which method it used: `device_ms_method` is `kernels_only_at_source` when torch flags every CUDA row, else `all_cuda` (the legacy sum,
+on a torch that does not carry the flag). `bench/tc1/f15v2.kernels_only_device_ms` refuses a profile whose method is not `all_cuda`, so no
+figure is ever corrected twice. Amendments 78, 79 and 80 ran the arm before this change: their tests now read `tc1_arm.py` at their
+frozen commits (`Q235_FROZEN`, `POS79_FROZEN`, `POS80_FROZEN`), and staging amendment 78's kit from the live tree refuses. Amendment 80's
+box pins its own merge, so its profiles are legacy and its rule subtracts the span itself.
+
+**The re-derivation** (`bench/tc1/device_rederive.py`, `$0`). Every committed TC1 run whose cells carry a profile is read twice by the
+run's OWN reducer: the byte-exact `tc1_reduce.py` its box staged, from the private receipt store, sha256-checked against
+`bench/tc1/am81-rederive/staged-reducers.txt` (bench/common rule 6).
+1. **Proof step.** The as-recorded pass must print the run's committed `RESULTS-tc1.md` byte for byte below its title line, else the run
+   is UNREPRODUCED and is not corrected.
+2. **The correction.** Each profiled cell is rewritten kernels-only, from its full `_profile.json`:
+   - `device_ms` is recorded minus the annotation rows (`f15v2`: exactly one `Optimizer.step#` row, count == profiled steps);
+   - `device_busy_fraction` is the new `device_ms` over the same wall;
+   - `device_by_family_fraction` is re-attributed exactly. Each annotation row's ms comes out of its own `family` field, never
+     re-classified, and every other family keeps its absolute ms, unrounded. An annotation row outside `optimizer` REFUSES the receipt (a
+     ruling for the maintainer, never a wider rule);
+   - `memcpy_fraction_of_device` is `memcpy_ms` over the new `device_ms`;
+   - `device_ms_method` is `kernels_only_rederived`.
+3. **The input assertion.** The corrected pass may differ from the recorded one only in those five profile fields of profiled cells. Each
+   is recomputed from its formula, families in ms to float epsilon, with their total conserved: sum(new) x new device = sum(old) x old
+   device - annotation ms. Anything else REFUSES the receipt. So does any of these:
+   - an unparseable cell. A JSON Lines record file that its reducer reads line by line, like amendment 79's `release_proof_unsloth.json`,
+     is not a cell, unless a record carries a profile;
+   - a missing `_profile.json`;
+   - a cell whose `device_ms` is not its profile's.
+4. **A committed receipt is never edited.** Both passes run on temporary copies. Every file under `bench/*/receipts` and every reducer
+   read are hashed before and after the batch; any change refuses every run, and nothing is written.
+5. **What is kept.** Each run's corrected cells, and `rederive.json` (the record: what moved per cell, the annotation rows with their
+   names, families and ms, the RESULTS diff, and the corrected RESULTS' sha256 below its title), in `bench/tc1/am81-rederive/<run>/`.
+   `--check` lays the copies over the committed receipt, re-runs the reducer and must reproduce that sha256. The report is
+   `bench/tc1/am81-rederive/REDERIVE-REPORT.md`.
+6. **Reading the diff.** Flips are read per diff hunk. Table rows are paired by their first cell, other lines by position, and a verdict
+   is a bold word or a one-word upper-case table cell. Three further checks:
+   - **near bar:** a printed comparison whose corrected margin is below the run's annotation share is listed;
+   - **unparsed:** a changed prediction line with no comparison the tool parses is listed, to be read by hand;
+   - **reworded:** a paired line whose words change with its numbers masked (a branch whose bar is not printed) is listed.
+
+**What it found** (26 runs: 13 RTX 5090 TC1 boxes, tc1-5090-16 to -141; amendment 79's tc1-5090-pos79-r1; 9 H100 tc1c boxes; and
+P129's tc1-5090-146, -147 and -150):
+- 26 reproduced, 0 refused, **0 verdict flips**, 0 unpaired verdict lines. `--check`: 26 OK.
+- 119 annotation rows were removed, every one `Optimizer.step#` in `optimizer`. No other family's absolute ms moved: review's
+  acceptance check reads PASS on every family line.
+- **The headlines that move:**
+  - P205 (amendment 69): Unsloth / e4b device ms per profiled step 3259.1 / 1693.9 = **1.924 -> 3203.2 / 1639.9 = 1.953**, in [1.7, 2.7]
+    as before. P208: 1.457 -> 1.435, vs >= 1.05.
+  - P200 (amendment 68): 11649.4 / 10042.8 = **1.160 -> 11613.2 / 10006.7 = 1.161**, in [1.06, 1.24]. P203 stays FALSIFIED (+14.7 % ->
+    +14.4 % vs |.| <= 8 %).
+- **Near a bar, still HELD:**
+  - P213 m: 1.041 -> 1.046 vs <= 1.05;
+  - P218: 1.043 -> 1.045 (tc1-5090-139) and 1.055 -> 1.056 (tc1-5090-141), vs <= 1.06;
+  - P174: 0.994 vs <= 1.01, an s/step ratio that does not move.
+- **A bar not printed, read by hand:** P215's host-bound branch (`SLAUTO_HOST_BOUND_MAX` 0.85 in the reducer). The matched l0's busy_t
+  goes 0.884 -> 0.871 on tc1-5090-141, still GPU-bound, and 0.475 -> 0.460 on tc1-5090-139, still host-bound. The busy premises of
+  P174/P175, P182 and P210/P211 move by at most 0.015 and stay inside their bars.
+- **Reworded:** only tc1-5090-110's two family lines, whose largest-first order changes as the optimizer's figure falls.
+
+- P203 stays FALSIFIED. The reducer compares Unsloth's corrected 11613.2 ms with amendment 66's all-CUDA constant 10152.2 and prints
+  +14.4 %. Both sides kernels-only, against amendment 66's own corrected 10125.2, the gap is +14.7 %, as first read. Amendment 66's
+  device ratio, 1.141, reads 1.141 kernels-only too.
+
+**The quoted figures** (`device_rederive.py --quotes`; the table is `bench/tc1/am81-rederive/QUOTES.md`, generated on the register and
+documents as they stood at `42b6f2b9`, before this amendment). Two methods find every figure that moves:
+- **reducer:** each number that changes on a paired line of a run's RESULTS diff;
+- **cell:** each corrected cell's busy fraction, device ms (total and per profiled step) and memcpy fraction, against its committed
+  value. This finds figures a row quotes straight from a cell that the reducer never prints, such as e4b's busy fraction on
+  tc1-5090-16 and the H100 boxes.
+
+A register row quotes a figure when it prints the figure in its claim, value, unit, notes or conditions, and names the run (its id or
+a family token other than the bare `qwen3`). A document line quotes one in a form whose rounding moves (as printed, 2 dp, 1 dp, a
+percent), with the run, a family token or the citing row's id within its paragraph.
+
+The table holds 16 register rows and 34 document lines. Each line was read by hand.
+
+**The register** (the maintainer's ruling (B), per `docs/claims-schema.md`):
+- **13 rows** quote a moved figure in their claim. Each gets a successor `<id>.am81` with the kernels-only figures, its evidence
+  (the receipt, then `bench/tc1/am81-rederive/<run>/rederive.json` and the report) and `supersedes`. Successors drop Vast machine
+  ids. The predecessor changes only `status` (superseded) and `superseded_by`:
+  `h2h.unsloth.qwen3.5090.2026-10-02.host-variance`, `h2h.unsloth.qwen3.h100.2026-10-02.dispatch-profile`,
+  `env-gap.torch28.profile.qwen3.5090.2026-10-06`, `ckpt-offload.field-torch28.5090.2026-10-07`,
+  `ckpt-flavour.default.5090.2026-10-07`, `h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio` (1.160 -> **1.161**),
+  `h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio` (1.924 -> **1.953**), `single-ladder.field.5090.2026-10-08`,
+  `single-ladder-auto.field.5090.2026-10-08`, `single-ladder-auto.gpu-bound.5090.2026-10-08`,
+  `p129.fused-qkv.qwen3.5090.2026-10-10`, `p129.fused-qkv.second-host.5090.2026-10-10`, `h2h.unsloth.qwen3.h100.2026-10-04.route-v2`
+  (each `e4b.train.`).
+- **3 rows** quote one only in their notes. Each gets one correction sentence in notes, naming the corrected value and its am81-rederive
+  path, with every other field unchanged: `h2h.unsloth.qwen3.5090.2026-10-02`, `h2h.unsloth.qwen3.h100.2026-10-04` and
+  `h2h.unsloth.qwen3.h100.2026-10-04.moe-keep`.
+- `tests/test_tc1_am81_register.py` reads the register at `42b6f2b9` and holds all of this field by field. It also re-runs
+  `--quotes` on the tree: every old figure left is meant to be there, each with its reason. A quote left behind is a mutant it kills.
+
+**Quotes that move with their entry** (schema: "when a quote moves, the entry moves"):
+- README.md (the field ratio 1.92x -> 1.95x, packed 1.160x -> 1.161x);
+- docs/CHOOSING.md (1.924x -> 1.953x);
+- docs/REPRODUCE.md (1.924x -> 1.953x twice, 1.160x -> 1.161x twice);
+- docs/STATUS.md (1.92x -> 1.95x; e4b's busy 0.49 -> 0.47 beside Unsloth's 0.33, unchanged; 1.160x -> 1.161x);
+- every citation of the 13 ids in docs/STATUS.md and docs/capabilities.json.
+docs/COMPARATORS.md, docs/FAMILIES.md and llms-full.txt are regenerated.
+
+**Where the old figures stand, as written** (records of what was read, never edited; read them kernels-only here):
+- docs/STATUS-RECORD.md, frozen at 0.50.0: lines 176, 194, 196, 221, 229, 299, 370 and 374;
+- the TC1 and TC1c lane READMEs' amendment readings (`bench/h2h-2026-10-02/tc1/README.md`, `bench/h2h-2026-10-02/tc1c/README.md`);
+- the published RESULTS files: `bench/h2h-2026-10-02/tc1/RESULTS-tc1-{combined,prof945,prof28,ckptoff28,ckptre64-field28,cbk,pos68,
+  pos69,sladder,slauto,slauto-h3}.md` and `bench/p129/RESULTS-p129-a{2,3,4}.md`, and every receipt's own `RESULTS-tc1.md`;
+- released CHANGELOG sections;
+- TC1 amendments up to 80.
+
+**bench/common's registration rules, stated:**
+1. **Launch commit:** none. No box is rented; the tool reads committed receipts and the store's staged reducers.
+2. **Frozen pins:** amendments 78-80's tests read `tc1_arm.py` at their frozen commits.
+3. **Fail closed:** every gate above refuses, and `tests/test_device_rederive.py` kills a mutant of each:
+   - pro-rata families;
+   - a forgotten memcpy fraction;
+   - an unchanged busy fraction;
+   - an extra field;
+   - an in-place correction;
+   - a touched neighbouring receipt;
+   - a torn cell;
+   - a wrong reducer;
+   - a tampered copy.
+   `tests/test_tc1_am81.py` reads a real committed profile: at-source equals f15v2, f15v2 refuses an at-source profile, and an unflagged
+   torch falls back to `all_cuda`.
+4. **The fetch imports no links.**
+
+**Budget.** $0.

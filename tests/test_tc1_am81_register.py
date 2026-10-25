@@ -150,7 +150,8 @@ def test_every_old_figure_left_in_the_register_or_the_docs_is_meant_to_be_there(
     for d in q["docs"]:
         why, must = DOC_KEEPS.get(d["path"], (None, None))
         assert why is not None, f"{d['path']}:{d['line']} quotes {d['old']} -> {d['new']} as {d['form']!r}: {d['text'][:120]}"
-        assert re.search(must, d["text"]), f"{d['path']}:{d['line']} is excused as {why!r}, but the line does not show it"
+        line = (REPO / d["path"]).read_text(encoding="utf-8").splitlines()[d["line"] - 1]
+        assert re.search(must, line), f"{d['path']}:{d['line']} is excused as {why!r}, but the line does not show it"
 
 
 def test_mutant_a_quote_left_behind_is_caught(registers, tmp_path):
@@ -181,4 +182,4 @@ def test_mutant_a_quote_left_behind_is_caught(registers, tmp_path):
     q = m.quoted_figures(str(tmp_path), str(tmp_path / "out"))
     olds = {h["old"] for h in q["rows"].get(rid, [])}
     assert {"1.924", "1693.9", "3259.1"} <= olds, olds
-    assert [(d["path"], d["form"]) for d in q["docs"] if d["old"] == "1.924"] == [("README.md", "1.92")], q["docs"]
+    assert {(d["path"], d["form"]) for d in q["docs"] if d["old"] == "1.924"} == {("README.md", "1.92")}, q["docs"]
