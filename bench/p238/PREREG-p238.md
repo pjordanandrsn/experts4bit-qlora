@@ -96,15 +96,15 @@ A point that runs out of memory at rank 8 is reported OOM (TC1's verdict), never
   scaling, and the same matched A bytes per slot on both sides.
 - **The layout check with a non-zero B.** PEFT stores B rank-major (`get_delta_weight` reads it as `[out, r, E]`, 2554), and
   Unsloth re-reads it for its grouped GEMM through its own layout resolver. B starts at zero, so neither training nor the A bytes can
-  show a mismatch. The shakedown therefore sets, on one layer, every expert's B to a fixed seeded non-zero value (the test's own,
-  written into each side's storage in that side's layout), and asserts that the per-expert delta `scaling * B[e] @ A[e]`
-  (`[E, out, in]`) is EQUAL on both sides, from e4b's tensors and from PEFT's `get_delta_weight`. It also asserts the delta each
-  framework's grouped forward actually APPLIES: that layer's expert forward on a fixed routed input, run once with the non-zero B
-  and once with B zero, differs by the same LoRA contribution on both sides, within the op tolerance (2e-2 x max|ref|, the
-  forwards are bf16). Each load saves its contribution for a fixed 64-token input (seeded, the same rows and routing for every
-  arm), and the reducer compares the loads across processes. The layer's B is then restored to zero before any timed step, and the
-  restore is checked (every B exactly zero). A difference STOPS the lane, and it is brought to the maintainer. It
-  is never "close enough".
+  show a mismatch. The check sets every expert's B on layer 0 to the same fixed seeded per-expert values, each written into its
+  library's own storage in that library's layout (a view of PEFT's flat B, read as `[out, r, E]`; e4b's `[E, out, r]`). It then
+  asserts that each arm's applied forward output, dX and LoRA gradients on a seeded routed input match the ONE fp32 reference
+  (which applies `scaling * B[e] @ A[e]` per expert), within the op tolerance. A library that reads B in another layout misses it
+  (a tested mutant). B is then restored to zero and checked exactly zero.
+  - **It runs in the op processes,** which load the model through the same tc1_arm path as the step loads (Level 1). It changes B
+    and runs forwards, so it cannot run inside a step load, whose hook only observes. The step loads' adapter census (counts,
+    shapes, scaling and the A bytes per (layer, projection)) is compared with the op processes' by the reducer.
+- A difference in any of these STOPS the lane, and it is brought to the maintainer. It is never "close enough".
 - **PEFT is pinned** (0.21.2, the version e4b's own TC1 venv pins) because Unsloth leaves it open (`peft>=0.18.0`, unsloth 2026.10.8
   METADATA), and its `ParamWrapper` defines Unsloth's adapter layout.
 
