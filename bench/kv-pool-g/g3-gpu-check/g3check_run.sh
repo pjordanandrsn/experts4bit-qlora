@@ -160,12 +160,19 @@ HF=$W/health_end.json; [ -s "$HF" ] || HF=$W/health_start.json
 "$PY" $W/g3check.py verdict --health "$HF" --out $W/verdict_g3check.json 2>&1 | tee -a summary.txt
 VRC=${PIPESTATUS[0]}
 # one exit code per cause (CHECK.md's exit table; none is the launcher's host-excluding 13/14/17/18):
-#   0 PASS; 1 FAIL (a server record read, and it fails the check; a server that stopped on an engine error is read, its
-#   own record the evidence); 31 UNREAD (no server state, or a server that never reached ready: the check never read,
-#   a harness fault, never a G3 FAIL); 32 the prompts failed (the server answered, its premise did not hold)
+#   0 PASS; 1 FAIL (a server record read, and it fails the check: an engine error at start or after the prompts, a
+#   graph refused at start, or an end record that fails); 31 UNREAD (no server state; a server that never reached
+#   ready; or ready but no end record after the prompts, so nothing was read after them: a harness fault, never a G3
+#   FAIL); 32 the prompts failed while the server stayed up (its end record says so)
+END=0; [ -s $W/health_end.json ] && END=1
 ST=$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status",""))' "$HF" 2>/dev/null)
+RAS=$("$PY" -c 'import json,sys; print((json.load(open(sys.argv[1])).get("prefill_graph") or {}).get("status",""))' \
+      $W/health_start.json 2>/dev/null)
 if [ "$VRC" = 3 ]; then RC=31
-elif [ "$RDY" != 0 ] && [ "$ST" != error ]; then RC=31       # answered but never ready (still loading at the cap): unread
+elif [ "$ST" = error ]; then RC=1                       # an engine error is read, at start or after the prompts
+elif [ "$RDY" != 0 ]; then RC=31                        # answered, never ready
+elif [ "$RAS" = refused ]; then RC=1                    # the graph refused at start: decided there, with or without an end record
+elif [ "$END" = 0 ]; then RC=31                         # ready, but nothing read after the prompts (replays unknown)
 elif [ "$DRV" != 0 ]; then RC=32
 elif [ "$VRC" = 0 ]; then RC=0
 else RC=1; fi

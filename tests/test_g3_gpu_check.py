@@ -358,13 +358,14 @@ def test_the_webstack_tripwire(tmp_path, case, kw, ok):
     assert RUN.index("<<'PYW'") < RUN.index('say "fetch $QWEN @ $QWEN_REV"')      # before the 61 GB fetch
 
 
-def _run_tail(tmp_path, health, rdy, drv):
-    """The run script's own verdict and exit block, against a fetched-like dir."""
+def _run_tail(tmp_path, start, end, rdy, drv):
+    """The run script's own verdict and exit block, against a box-like dir with a start and an end record."""
     w = tmp_path / "w"
     w.mkdir()
     shutil.copy(KIT / "g3check.py", w / "g3check.py")
-    if health is not None:
-        (w / "health_start.json").write_text(json.dumps(health))
+    for name, h in (("health_start.json", start), ("health_end.json", end)):
+        if h is not None:
+            (w / name).write_text(json.dumps(h))
     block = RUN[RUN.index('HF=$W/health_end.json; [ -s "$HF" ]'):RUN.index('finish "$RC"')]
     script = (f'set -uo pipefail\nW={w}; PY={sys.executable}; RDY={rdy}; DRV={drv}; touch summary.txt\n' + block + 'echo "RC=$RC"\n')
     out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, cwd=w)
@@ -372,16 +373,24 @@ def _run_tail(tmp_path, health, rdy, drv):
 
 
 def test_one_exit_code_per_cause(tmp_path):
-    cases = [("PASS", g3c._health(), 0, 0, 0),
-             ("FAIL: the refused graph", g3c._health(prefill_graph={"status": "refused", "why": "x", "requested": "auto"}), 0, 0, 1),
-             ("UNREAD: no server state", None, 1, 0, 31),
-             ("UNREAD: answered, never ready", {"status": "loading"}, 1, 0, 31),
-             ("FAIL: an engine error is read", {"status": "error", "error": "CUDA out of memory"}, 1, 0, 1),
-             ("the prompts failed", g3c._health(), 0, 1, 32)]
-    for i, (name, h, rdy, drv, want) in enumerate(cases):
+    at_ready = g3c._health(prefill_graph__replays=0)                  # the start record: captured, nothing replayed yet
+    refused = g3c._health(prefill_graph={"status": "refused", "why": "x", "requested": "auto"})
+    err = {"status": "error", "error": "CUDA out of memory"}
+    cases = [("PASS: end record passes", at_ready, g3c._health(), 0, 0, 0),
+             ("FAIL: the end record fails", at_ready, g3c._health(prefill_graph__T=256), 0, 0, 1),
+             ("FAIL: refused at start, end record too", refused, refused, 0, 0, 1),
+             ("FAIL: refused at start, no end record", refused, None, 0, 1, 1),
+             ("UNREAD: no server state", None, None, 1, 0, 31),
+             ("UNREAD: answered, never ready", {"status": "loading"}, None, 1, 0, 31),
+             ("FAIL: an engine error at start", err, None, 1, 0, 1),
+             ("A. FAIL: an engine error during the prompts", at_ready, err, 0, 1, 1),
+             ("B. UNREAD: prompts OK, the end /health fetch failed", at_ready, None, 0, 0, 31),
+             ("C. UNREAD: the prompts failed and the server is gone", at_ready, None, 0, 1, 31),
+             ("32: the prompts failed, the server stayed up", at_ready, g3c._health(), 0, 1, 32)]
+    for i, (name, start, end, rdy, drv, want) in enumerate(cases):
         d = tmp_path / str(i)
         d.mkdir()
-        assert _run_tail(d, h, rdy, drv) == want, name
+        assert _run_tail(d, start, end, rdy, drv) == want, name
     assert not set(re.findall(r"\bRC=(\d+)", RUN)) & {"13", "14", "17", "18", "23", "24"}
 
 

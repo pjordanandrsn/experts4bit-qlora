@@ -71,14 +71,14 @@ One code per cause. None is the launcher's host-excluding 13, 14, 17 or 18, so n
 | code | cause |
 |---|---|
 | 0 | PASS |
-| 1 | FAIL: a server record was read and fails the check. A server that stopped on an engine error is read, and its own record is the evidence. |
+| 1 | FAIL: a server record was read and fails the check. That covers an engine error at start or after the prompts (the server's own record is the evidence), a graph refused at start, or an end record that fails. |
 | 9 | an install or a tripwire failed |
 | 10 | no GPU (`nvidia-smi` did not answer) |
 | 11 | the checkpoint fetch failed |
 | 12 | the bake failed |
 | 23 | DEADLINE: too little time left for the next phase |
-| 31 | UNREAD: no server state, or a server that never reached ready. The check never read, which is a harness fault and never a FAIL of the fix under test. |
-| 32 | the prompts failed: the server answered, but the check's premise (six completed prompts longer than T) did not hold |
+| 31 | UNREAD: no server state; a server that never reached ready; or a server that was ready but left no end record after the prompts (a failed fetch, or the server gone), so nothing was read after them. The check never read, which is a harness fault and never a FAIL of the fix under test. |
+| 32 | the prompts failed while the server stayed up (its end record reads, without an engine error): the check's premise (six completed prompts longer than T) did not hold |
 | 41 | the guard-fit refusal before the install (not a strike) |
 | 78 | a refusal at start (an unset variable or a malformed sha) |
 
