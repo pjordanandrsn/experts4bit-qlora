@@ -1,8 +1,8 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""SC2f Amendment 7 (SC2h Amendment 5, SC2i Amendment 4), on the CPU: qualify-at-proof's admission, its card checks and
-its post-proof judge (``bench/sc2/sc2_qualify.py``), the controller wrapper's refusals on a stubbed box
-(``bench/sc2/sc2_qualify_drive.sh``), the release pair in ``bench/sc1/sc1_run.sh``, and the default-dump records behind
-the amendment's "what moved under the arms" (``bench/sc2/sc2f-am7/``)."""
+"""SC2f Amendment 7 (SC2h Amendment 5, SC2i Amendment 4), on the CPU: qualify-at-proof's open-walk admission, its card
+checks, its run sampler and its post-proof judge (``bench/sc2/sc2_qualify.py``), the controller wrapper's three-way exit
+codes on a stubbed box (``bench/sc2/sc2_qualify_drive.sh``), the release pair in ``bench/sc1/sc1_run.sh``, the basis
+window's stability recount, and the default-dump records behind "what moved under the arms" (``bench/sc2/sc2f-am7/``)."""
 import hashlib
 import importlib.util
 import json
@@ -21,6 +21,7 @@ Q = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(Q)
 PREREG = (SC2 / "SC2f-PREREG.md").read_text()
 AM7 = PREREG[PREREG.index("### Amendment 7"):]
+AM7_FLAT = re.sub(r"\s+", " ", AM7)
 RUN = (REPO / "bench" / "sc1" / "sc1_run.sh").read_text()
 REC = SC2 / "sc2f-am7"
 FIX = REPO / "tests" / "fixtures" / "sc2f_am7"
@@ -32,15 +33,15 @@ def test_the_self_test_passes():
 
 # ---- the admission is the text
 def test_the_admission_constants_are_the_texts():
-    assert Q.WALK == ("52780", "145701", "55337")
-    assert "**52780, then 145701, then 55337**" in AM7
+    assert Q.NAMED == ("52780", "145701") and "**52780, then 145701**" in AM7
+    assert "The walk is **open**" in AM7_FLAT and "**any other machine whose offers list 575 W**" in AM7_FLAT
     assert Q.EXCLUDED == ("13828", "37367") and Q.UNTIL_CREATE == ("26157",)
-    assert "excluded: 13828 (clock-bound) and 37367" in AM7 and "26157 stays excluded until a create there" in AM7
-    assert (Q.MAX_ATTEMPTS, Q.CEILING_USD_H, Q.MIN_DISK_GB, Q.STABLE_READS) == (3, 1.05, 320, 3)
-    assert "**Every create consumes one of 3 proof attempts** (`sc2f-prove-11`, `-12`, `-13`)" in AM7
+    assert "Excluded throughout: 13828 (clock-bound) and 37367" in AM7_FLAT and "26157 until a create there succeeds" in AM7_FLAT
+    assert (Q.MAX_ATTEMPTS, Q.CEILING_USD_H, Q.MIN_DISK_GB, Q.STABLE_READS, Q.LISTED_W) == (3, 1.05, 320, 3, 575.0)
+    assert "**Every create consumes one of 3 proof attempts** (`sc2f-prove-11`, `-12`, `-13`), whatever its exit" in AM7_FLAT
     assert Q.FIRST_ID == {"sc2f": 11, "sc2h": 1, "sc2i": 1}
-    assert "each of\n  the last 3 consecutive reads" in AM7 or "the last 3 consecutive reads" in AM7.replace("\n  ", " ")
-    assert Q.ENFORCED_W == 575.0 and "--floor 2700" in AM7
+    assert "`vast_provider.hourly(offer)` at 320 GB disk" in AM7_FLAT and "`gpu_max_power` as `listed_power_w`" in AM7_FLAT
+    assert Q.ENFORCED_W == 575.0 and "--floor 2700" in AM7 and Q.SOFT_MIN_CLEAN == 0.95
 
 
 def _receipt(store, day, run_id, machine, instance="1", status="OK", result="pass"):
@@ -50,13 +51,14 @@ def _receipt(store, day, run_id, machine, instance="1", status="OK", result="pas
                                                 "environment": {"vast_machine_id": machine}}))
 
 
-def _reads(*machines, n=3, usd=0.9, disk=400):
-    return [[{"machine_id": m, "offer_id": f"o{m}", "usd_h": usd, "disk_gb": disk} for m in machines]] * n
+def _reads(*machines, n=3, usd=0.9, disk=400, w=575.0):
+    return [[{"machine_id": m, "offer_id": f"o{m}", "usd_h": usd, "disk_gb": disk, "listed_power_w": w}
+             for m in machines]] * n
 
 
-def _admit(store, lane, reads):
+def _admit(store, lane, reads, clean_runs=None):
     return Q.admit(Q.lane_attempts(store, lane), reads, Q.creates_on(store, "26157"),
-                   prefer=Q.earlier_hosts(store, lane))
+                   prefer=Q.earlier_hosts(store, lane), clean_runs=clean_runs)
 
 
 def test_admission_from_the_receipt_store(tmp_path):
@@ -69,8 +71,9 @@ def test_admission_from_the_receipt_store(tmp_path):
     _receipt(s, "2026-10-26", "sc2f-prove-12-refused-1", "145701", instance="none", status="REFUSED", result="invalid")
     assert _admit(s, "sc2f", _reads("145701"))["machine"] == "145701"               # refused before create: no attempt
     _receipt(s, "2026-10-26", "sc2f-prove-12", "145701", status="HARNESS_ERROR", result="fail")
-    _receipt(s, "2026-10-27", "sc2f-prove-13", "55337", status="HARNESS_ERROR", result="fail")
-    assert _admit(s, "sc2f", _reads("52780", "145701", "55337"))["verdict"] == "PARK"
+    assert _admit(s, "sc2f", _reads("52780", "145701", "999"))["machine"] == "999"  # the open walk
+    _receipt(s, "2026-10-27", "sc2f-prove-13", "999", status="HARNESS_ERROR", result="fail")
+    assert _admit(s, "sc2f", _reads("52780", "145701", "1000"))["verdict"] == "PARK"
 
 
 def test_a_proved_host_is_the_lanes_and_carries_to_sc2h(tmp_path):
@@ -82,6 +85,30 @@ def test_a_proved_host_is_the_lanes_and_carries_to_sc2h(tmp_path):
     assert _admit(s, "sc2h", _reads("52780"))["machine"] == "52780"                # unlisted: the walk
 
 
+def test_the_open_walk_orders_by_tier_then_clean_runs_then_id(tmp_path):
+    s = tmp_path / "store"
+    reads = [[{"machine_id": m, "offer_id": f"o{m}", "usd_h": 0.9, "disk_gb": 400, "listed_power_w": w}
+              for m, w in (("55337", None), ("700", 575.0), ("600", 575.0), ("19317", 450.0), ("145701", 575.0))]] * 3
+    r = _admit(s, "sc2f", reads, clean_runs={"600": 4, "700": 4, "55337": 9})
+    assert r["walk"] == ["52780", "145701", "600", "700", "55337"] and r["machine"] == "145701"
+    assert "19317" not in r["walk"]
+
+
+def test_a_new_machine_appearing_mid_screen(tmp_path):
+    s = tmp_path / "store"
+    reads = _reads("52780", usd=1.2, n=2) + _reads("888", n=2)
+    assert _admit(s, "sc2f", reads)["verdict"] == "NONE"                       # two reads: not yet
+    assert _admit(s, "sc2f", reads + _reads("888", n=1))["machine"] == "888"   # its third read admits it
+
+
+def test_the_price_is_the_all_in_hourly_never_a_base_rate(tmp_path):
+    """``usd_h`` is the launcher's hourly at 320 GB (GPU plus storage); an offer whose base rate is under the ceiling but
+    whose all-in hourly is over it is never admitted, whatever other field the read carries."""
+    reads = [[{"machine_id": "52780", "offer_id": "1", "usd_h": 1.08, "base_usd_h": 0.95, "disk_gb": 400,
+               "listed_power_w": 575.0}]] * 3
+    assert _admit(tmp_path / "store", "sc2f", reads)["verdict"] == "NONE"
+
+
 def test_26157_is_admissible_only_after_a_create_there(tmp_path):
     s = tmp_path / "store"
     assert not Q.creates_on(s, "26157")
@@ -89,11 +116,43 @@ def test_26157_is_admissible_only_after_a_create_there(tmp_path):
     assert Q.creates_on(s, "26157")
 
 
+# ---- the basis window's stability recount (F4): the rule admission binds on, from the window's own record
+def test_the_stability_recount_is_the_texts():
+    rec = json.loads((REC / "sc2j_screen_reads.json").read_text())
+    reads = rec["reads"]
+    assert len(reads) == 40 and reads[0]["at"] == "2026-10-23T15:12:02Z" and reads[-1]["at"] == "2026-10-23T22:35:22Z"
+    present, stable, prev = {}, {}, []
+    for rd in reads:
+        keys = {tuple(x) for x in rd["under_ceiling"]}
+        for m, _ in keys:
+            present[m] = present.get(m, 0) + 1
+        hist = (prev + [keys])[-3:]
+        if len(hist) == 3:
+            for m, _ in set.intersection(*hist):
+                stable[m] = stable.get(m, 0) + 1
+        prev = hist[-2:]
+    assert present == {"52780": 15, "145701": 2, "55337": 1, "36213": 1, "150147": 1, "19317": 2, "46990": 2}
+    assert sum(1 for rd in reads if rd["under_ceiling"]) == 21
+    assert sum(1 for rd in reads if any(rec["listed_power_w"].get(m) == 575.0 for m, _ in rd["under_ceiling"])) == 16
+    assert "575 W under the $1.05/h ceiling in 16 of 40 reads (any under-ceiling offer in 21)" in AM7_FLAT
+    assert stable == {"52780": 6}                       # every other machine: 0; without 52780, no admissible read
+    assert "52780 in **6 of 40** reads" in AM7_FLAT and "**every other machine in 0**" in AM7_FLAT
+    # the admission itself, replayed read by read over the window with each machine's listed power: only 52780 admits
+    lp = rec["listed_power_w"]
+    window = [[{"machine_id": m, "offer_id": o, "usd_h": 1.0, "disk_gb": 320, "listed_power_w": lp.get(m)}
+               for m, o in rd["under_ceiling"]] for rd in reads]
+    hits = {Q.admit([], window[:i + 1], False).get("machine") for i in range(len(window))} - {None}
+    assert hits == {"52780"}
+    no52780 = [[o for o in rd if o["machine_id"] != "52780"] for rd in window]
+    assert all(Q.admit([], no52780[:i + 1], False)["verdict"] == "NONE" for i in range(len(no52780)))
+    assert lp["55337"] == 575.0 and "its one logged offer lists 575 W" in AM7_FLAT
+
+
 # ---- the card checks
 @pytest.mark.parametrize("csv,want", [("575.00 W, 575.00 W, 600.00 W", "PASS"), ("575 W, 575 W, 575 W", "PASS"),
-                                      ("574.99 W, 575.00 W, 600.00 W", "REFUSE"), ("[N/A], 575.00 W, 600.00 W", "REFUSE"),
-                                      ("575.00 W, 575.00 W", "REFUSE"), ("", "REFUSE")])
-def test_the_power_parse(csv, want):
+                                      ("574.99 W, 575.00 W, 600.00 W", "REFUSE"), ("[N/A], 575.00 W, 600.00 W", "UNREAD"),
+                                      ("575.00 W, 575.00 W", "UNREAD"), ("", "UNREAD")])
+def test_the_power_parse_three_ways(csv, want):
     assert Q.power(csv)["verdict"] == want
 
 
@@ -107,37 +166,43 @@ def test_the_post_proof_judge_on_a_real_proofs_records():
     hf = json.loads(raw)
     forensics = "GPU 0: NVIDIA GeForce RTX 5090\n" + SC2J_PROVE2_POWER_LINE + "\n"
     assert Q.judge_proof(forensics, hf)["verdict"] == "PASS"
-    assert Q.judge_proof(forensics.replace("575.00 W", "500.00 W"), hf)["verdict"] == "REFUSE"
-    assert Q.judge_proof(forensics, dict(hf, gpu_power_limit_w=400.0))["verdict"] == "REFUSE"
+    assert Q.judge_proof(forensics, dict(hf, gpu_power_limit_w=450.0))["verdict"] == "REFUSE"
+    assert Q.judge_proof(forensics, None)["verdict"] == "UNREAD"                 # host_facts.json deleted
 
 
 # ---- the wrapper, on a stubbed box
+CLEAN = "0x0000000000000000"
+
+
 def _tree(tmp_path, drive_rc=0):
-    """A copy of the repo pieces the wrapper reads, with bench/sc1/sc1_drive.sh a stub that records its call."""
+    """A copy of the repo pieces the wrapper reads, with bench/sc1/sc1_drive.sh a stub that records its call and writes
+    the proof's forensics line."""
     t = tmp_path / "repo"
-    (t / "bench" / "sc2").mkdir(parents=True)
-    (t / "bench" / "sc1").mkdir(parents=True)
-    (t / "bench" / "common").mkdir(parents=True)
+    for d in ("sc2", "sc1", "common"):
+        (t / "bench" / d).mkdir(parents=True)
     for f in ("sc2_qualify_drive.sh", "sc2_qualify.py"):
         shutil.copy(SC2 / f, t / "bench" / "sc2" / f)
     shutil.copy(REPO / "bench" / "common" / "card_clock.py", t / "bench" / "common" / "card_clock.py")
     (t / "bench" / "sc1" / "sc1_drive.sh").write_text(
-        f'#!/bin/bash\necho DRIVE_CALLED >> "$DRIVE_LOG"\nmkdir -p "$E4B_RENT_RUN_DIR/sc1"\n'
-        f'printf "power.limit,clocks.max.sm %s W, 3105 MHz\\n" "$PROOF_W" > "$E4B_RENT_RUN_DIR/sc1/forensics.txt"\n'
+        '#!/bin/bash\necho DRIVE_CALLED >> "$DRIVE_LOG"\nmkdir -p "$E4B_RENT_RUN_DIR/sc1"\n'
+        '[ -n "$PROOF_W" ] && printf "power.limit,clocks.max.sm %s W, 3105 MHz\\n" "$PROOF_W" > "$E4B_RENT_RUN_DIR/sc1/forensics.txt"\n'
         f'exit {drive_rc}\n')
     return t
 
 
-def _stubs(tmp_path, power, burn_rc):
-    b = tmp_path / "bin"
+def _stubs(tmp_path, power, burn_rc, burn_refusal, sampler):
+    b, box = tmp_path / "bin", tmp_path / "box"
     b.mkdir()
-    box = tmp_path / "box"
-    box.mkdir()
+    (box / "q").mkdir(parents=True)
+    smp = tmp_path / "sampler.src"
+    smp.write_text(sampler if sampler is not None else "")
     (b / "ssh").write_text(f'''#!/bin/bash
 for a in "$@"; do last=$a; done
 case "$last" in
-  nvidia-smi*) echo "{power}";;
-  *card_clock.py*) mkdir -p {box}/q; echo {burn_rc} > {box}/q/burn.rc; echo "burn" > {box}/q/card_clock.log;;
+  nvidia-smi\\ --query-gpu=enforced*) echo "{power}";;
+  *card_clock.py\\ burn*) echo {burn_rc} > {box}/q/burn.rc; echo "burn" > {box}/q/card_clock.log
+     echo '{{"refusal": "{burn_refusal}"}}' > {box}/q/card_clock.json;;
+  *-lms\\ 1000*) {"cp " + str(smp) + " " + str(box) + "/q/sampler.csv" if sampler is not None else ":"};;
   *) :;;
 esac
 ''')
@@ -148,77 +213,120 @@ esac
     return b
 
 
-def _wrap(tmp_path, power="575.00 W, 575.00 W, 600.00 W", burn_rc=0, drive_rc=0, prove="1", proof_w="575.00"):
-    t, b = _tree(tmp_path, drive_rc), _stubs(tmp_path, power, burn_rc)
+HDR = "timestamp, clocks.sm [MHz], clocks_event_reasons.active, power.draw [W]\n"
+
+
+def _sampler(n=30, mask=CLEAN, bad_tail=None):
+    rows = "".join(f"2026/10/26 10:00:{i % 60:02d}.000, 2800 MHz, {CLEAN}, 540.00 W\n" for i in range(n - 1))
+    return HDR + rows + f"2026/10/26 10:01:00.000, 2800 MHz, {mask}, 540.00 W\n" + (bad_tail or "")
+
+
+def _wrap(tmp_path, power="575.00 W, 575.00 W, 600.00 W", burn_rc=0, burn_refusal="", drive_rc=0, prove="1",
+          proof_w="575.00", host_facts=575.0, sampler=None, box="N"):
+    sampler = _sampler() if sampler is None else sampler
+    t, b = _tree(tmp_path, drive_rc), _stubs(tmp_path, power, burn_rc, burn_refusal, None if sampler == "MISSING" else sampler)
     run = tmp_path / "run"
+    run.mkdir()
+    if host_facts is not None:
+        (run / "host_facts.json").write_text(json.dumps({"gpu_power_limit_w": host_facts}))
     env = {"PATH": f"{b}:{os.environ['PATH']}", "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1",
            "E4B_RENT_SSH_OPTS": "-o X=1", "E4B_RENT_RUN_DIR": str(run), "E4B_RENT_RUN_ID": "sc2f-prove-11",
-           "E4B_RENT_DEADLINE_EPOCH": "9999999999", "E4B_RENT_INSTANCE_ID": "1", "SC1_BOX": "N", "SC1_PROVE": prove,
-           "DRIVE_LOG": str(tmp_path / "drive.log"), "PROOF_W": proof_w}
-    out = subprocess.run(["bash", str(t / "bench" / "sc2" / "sc2_qualify_drive.sh")], capture_output=True, text=True,
-                         env=env)
+           "E4B_RENT_DEADLINE_EPOCH": "9999999999", "E4B_RENT_INSTANCE_ID": "1", "SC1_BOX": box, "SC1_PROVE": prove,
+           "DRIVE_LOG": str(tmp_path / "drive.log"), "PROOF_W": proof_w or ""}
+    out = subprocess.run(["bash", str(t / "bench" / "sc2" / "sc2_qualify_drive.sh")], capture_output=True, text=True, env=env)
     return out, (tmp_path / "drive.log").exists(), run
 
 
-def test_the_wrapper_refuses_a_400_w_card_before_anything(tmp_path):
+def test_a_400_w_card_is_refused_before_anything(tmp_path):
     out, drove, run = _wrap(tmp_path, power="400.00 W, 575.00 W, 600.00 W")
     assert out.returncode == 17 and not drove, out.stdout + out.stderr
     assert json.loads((run / "qualify" / "power.json").read_text())["enforced_w"] == 400.0
 
 
-def test_the_wrapper_refuses_a_slow_card_with_18(tmp_path):
-    out, drove, _ = _wrap(tmp_path, burn_rc=18)
+def test_an_unreadable_power_read_is_a_harness_fault(tmp_path):
+    out, drove, _ = _wrap(tmp_path, power="[N/A], [N/A], [N/A]")
+    assert out.returncode == 25 and not drove, out.stdout + out.stderr
+
+
+def test_a_slow_card_is_refused_with_18(tmp_path):
+    out, drove, _ = _wrap(tmp_path, burn_rc=18, burn_refusal="below_floor")
     assert out.returncode == 18 and not drove, out.stdout + out.stderr
 
 
-def test_a_qualified_card_runs_the_lanes_driver_and_its_clean_proof_is_judged(tmp_path):
+def test_a_burn_that_could_not_read_the_card_is_a_harness_fault(tmp_path):
+    out, drove, _ = _wrap(tmp_path, burn_rc=18, burn_refusal="probe_error")
+    assert out.returncode == 25 and not drove, out.stdout + out.stderr
+
+
+def test_a_qualified_proof_runs_the_driver_and_is_judged_twice(tmp_path):
     out, drove, run = _wrap(tmp_path)
     assert out.returncode == 0 and drove, out.stdout + out.stderr
+    assert json.loads((run / "qualify" / "run_judge.json").read_text())["verdict"] == "PASS"
     assert json.loads((run / "qualify" / "proof_judge.json").read_text())["verdict"] == "PASS"
 
 
-def test_a_clean_proof_on_a_500_w_record_is_a_host_fault(tmp_path):
-    out, drove, _ = _wrap(tmp_path, proof_w="500.00")
-    assert out.returncode == 18 and drove
+@pytest.mark.parametrize("prove", ["1", "0"])
+def test_a_capped_sample_is_a_host_fault_on_proofs_and_readings(tmp_path, prove):
+    out, drove, run = _wrap(tmp_path, prove=prove, sampler=_sampler(mask="0x0000000000000040"))   # HwThermalSlowdown
+    assert out.returncode == 18 and drove, out.stdout + out.stderr
+    assert json.loads((run / "qualify" / "run_judge.json").read_text())["refusal"] == "below_floor"
 
 
-def test_a_failed_proof_keeps_its_own_code_and_is_never_judged(tmp_path):
-    out, drove, run = _wrap(tmp_path, drive_rc=23, proof_w="500.00")
-    assert out.returncode == 23 and drove and not (run / "qualify" / "proof_judge.json").exists()
+@pytest.mark.parametrize("prove", ["1", "0"])
+def test_a_missing_sampler_is_a_harness_fault_on_proofs_and_readings(tmp_path, prove):
+    out, drove, _ = _wrap(tmp_path, prove=prove, sampler="MISSING")
+    assert out.returncode == 25 and drove, out.stdout + out.stderr
 
 
-def test_a_reading_is_not_judged_after_the_box(tmp_path):
-    out, drove, run = _wrap(tmp_path, prove="0", proof_w="500.00")
+def test_a_clean_reading_is_judged_on_its_sampler_only(tmp_path):
+    out, drove, run = _wrap(tmp_path, prove="0", proof_w="", host_facts=None)
     assert out.returncode == 0 and drove and not (run / "qualify" / "proof_judge.json").exists()
 
 
+def test_a_proof_without_host_facts_is_a_harness_fault_never_a_pass(tmp_path):
+    out, drove, run = _wrap(tmp_path, host_facts=None)
+    assert out.returncode == 25 and drove, out.stdout + out.stderr
+    assert json.loads((run / "qualify" / "proof_judge.json").read_text())["verdict"] == "UNREAD"
+
+
+def test_a_proof_whose_host_facts_read_450_w_is_a_host_fault(tmp_path):
+    out, _, _ = _wrap(tmp_path, host_facts=450.0)
+    assert out.returncode == 18
+
+
+def test_a_clean_proof_on_a_500_w_forensics_record_is_a_host_fault(tmp_path):
+    out, _, _ = _wrap(tmp_path, proof_w="500.00")
+    assert out.returncode == 18
+
+
+def test_a_failed_run_keeps_its_own_code(tmp_path):
+    out, drove, run = _wrap(tmp_path, drive_rc=23, proof_w="500.00", sampler=_sampler(mask="0x0000000000000040"))
+    assert out.returncode == 23 and drove
+    assert (run / "qualify" / "run_judge.json").exists()            # judged for the record only
+
+
 def test_the_wrapper_refuses_boxes_outside_sc2f_h_i(tmp_path):
-    t = _tree(tmp_path)
-    env = {"PATH": os.environ["PATH"], "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "x",
-           "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_RUN_ID": "r", "E4B_RENT_DEADLINE_EPOCH": "1",
-           "E4B_RENT_INSTANCE_ID": "1", "SC1_BOX": "Q"}
-    out = subprocess.run(["bash", str(t / "bench" / "sc2" / "sc2_qualify_drive.sh")], capture_output=True, text=True, env=env)
-    assert out.returncode == 78
+    out, drove, _ = _wrap(tmp_path, box="Q")
+    assert out.returncode == 78 and not drove
 
 
-def test_the_wrapper_never_exits_a_launcher_host_code_for_a_setup_failure():
+def test_the_wrapper_passes_host_facts_always():
     src = (SC2 / "sc2_qualify_drive.sh").read_text()
-    assert re.findall(r"exit 17\b", src) == ["exit 17"] and len(re.findall(r"exit 18\b", src)) == 2
-    assert "rc 9, not a card verdict\"; exit 9" in src
+    assert '--host-facts "$RUN_DIR/host_facts.json"' in src and "HF=(" not in src
 
 
 # ---- the release pair
 def test_boxes_n_o_p_on_gnf4_0_51_0_and_q_unchanged():
     assert 'case "$BOX" in N|O) GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca;; esac' in RUN
-    assert 'case "$BOX" in P) GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca;; Q) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac' in RUN
+    assert ('case "$BOX" in P) GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca;; '
+            'Q) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac') in RUN
     ci = (REPO / ".github" / "workflows" / "ci.yml").read_text()
     assert "grouped-nf4-gemm.git@30adb1bfa76f95f9ce4a4c29734b8f36de907eca" in ci
 
 
 def test_the_kit_hold_names_the_new_stack():
-    from importlib.util import module_from_spec, spec_from_file_location
-    sp = spec_from_file_location("skh", SC2 / "sc2_kit_hold.py")
-    kh = module_from_spec(sp)
+    sp = importlib.util.spec_from_file_location("skh", SC2 / "sc2_kit_hold.py")
+    kh = importlib.util.module_from_spec(sp)
     sp.loader.exec_module(kh)
     assert kh.STACK == "605d21e67958fa94d5e73fc3a95ffcb5c8eae02d"
     for old, new in kh.GNF4_DELTA:
@@ -259,12 +367,13 @@ def test_the_on_off_contrast_is_exactly_p130s_two_knobs_in_both_trees(sha):
 
 
 def test_the_text_names_the_window_the_limit_and_the_deadline():
-    for s in ("15:12Z to 22:35Z (7.4 h, 40 reads)", "only `offers_total`", "145701 alone was present in 2 of 40 reads (5 %)",
-              "**upper bound**", "**The deadline is 72 h**", "whichever is\n  later", "**The G3 GPU check (e4b#2133) must PASS",
-              "**Box Q stays at `v0.50.0`**", "**P130's two knobs: neither default moved.**",
-              "**e4b#2087 moves neither arm's path.**", "$12.42"):
-        assert s in AM7, s
+    for s in ("15:12Z to 22:35Z (7.4 h, 40 reads", "only `offers_total`", "0 %, not the 5 %", "**The deadline is 72 h**",
+              "whichever is later", "**The G3 GPU check (e4b#2133) must PASS", "**Box Q stays at `v0.50.0`**",
+              "**P130's two knobs: neither default moved.**", "**e4b#2087 moves neither arm's path.**", "$12.42",
+              "a failed burn setup (rc 9)", "rc 25, which voids the run and never excludes the machine"):
+        assert s in AM7_FLAT, s
     for lane, n in (("SC2h", 5), ("SC2i", 4)):
         t = (SC2 / f"{lane}-PREREG.md").read_text()
         assert f"### Amendment {n} (registered before any {lane} run): SC2f Amendment 7's" in t
         assert "If one lane later moves alone, its\n  cross-lane read is VOID." in t
+        assert "the same OPEN walk" in t

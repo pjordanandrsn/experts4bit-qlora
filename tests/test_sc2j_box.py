@@ -143,7 +143,7 @@ def test_the_cap_ids_and_bound_are_registered():
 
 def test_box_q_is_wired_like_box_p():
     assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q) ;;' in RUN
-    assert 'case "$BOX" in P|Q) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac' in RUN
+    assert 'case "$BOX" in P) GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca;; Q) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac' in RUN      # Q stays on v0.50.0, SC2j's registered pin (SC2f Amendment 7 moved P alone)
     torch = next(x for x in RUN.splitlines() if '"torch==2.8.0"' in x and "pipx logs/pip_torch.log" in x)
     assert '[ "$BOX" = Q ]' in torch
     assert RUN.count('os.environ["TRIP_BOX"] in ("F", "G", "H", "I", "J", "K", "L", "N", "O", "P", "Q")') == 2

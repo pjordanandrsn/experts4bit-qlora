@@ -1,20 +1,25 @@
 #!/bin/bash
 # bench/sc2/sc2_qualify_drive.sh -- SC2f Amendment 7's qualify-at-proof gate (SC2h Amendment 5, SC2i Amendment 4),
-# CONTROLLER side: the launcher's --command for every SC2f/h/i box, proof and reading. Before any install, on the
-# rented card:
+# CONTROLLER side: the launcher's --command for every SC2f/h/i box, proof and reading. Exit codes, three ways:
+#   17 / 18  a host fault, READ and failed (the launcher's power-cap / host-floor codes: it excludes the machine);
+#   25       probe_error: a record missing or unreadable, a HARNESS fault that voids the run and never excludes;
+#   9        the burn's setup (apt / venv / torch download) failed: a harness fault, not a card verdict.
+# Before any install, on the rented card:
 #   1. nvidia-smi enforced.power.limit (with power.limit and power.max_limit, recorded) must be 575 W, compared as a
-#      float (bench/sc2/sc2_qualify.py power); else rc 17, the launcher's power-cap code;
-#   2. bench/common/card_clock.py burn --floor 2700 (hard reason bits refuse on any sample; SwPowerCap clear on >= 95 %
-#      of busy samples) in a throwaway venv whose torch 2.8.0+cu128 is a pip DOWNLOAD (the image ships no torch),
-#      about 3 GB and a few minutes, counted in each attempt's cost; else rc 18, the launcher's host-floor code. The
-#      burn's torch is not the arms' torch: it qualifies the CARD only;
-# then it runs bench/sc1/sc1_drive.sh unchanged, with the launcher's environment, and after a CLEAN proof (SC1_PROVE=1,
-# exit 0) judges the proof's own host records (sc2_qualify.py judge-proof: forensics.txt's power.limit and the
-# launcher's host_facts.json at 575 W); a refusal there is rc 18 too. The proof records no per-block clock samples, so
-# the "no capped block" term is the pre-install burn's. Every record lands in <run>/qualify/ (fetched by rsync --no-links, bench/common rule 8) before
-# teardown. A refusal is a host fault, never a strike; the create still consumes one of the lane's 3 attempts
-# (sc2_qualify.py admit reads that from the receipt store). Nothing here creates, destroys or approves compute, and
-# no staged kit entry changes: this script stages only card_clock.py, to /root/qualify, apart from the box's kit.
+#      float (bench/sc2/sc2_qualify.py power): READ at another limit 17, unreadable 25;
+#   2. bench/common/card_clock.py burn --floor 2700 in a throwaway venv whose torch 2.8.0+cu128 is a pip DOWNLOAD (the
+#      image ships no torch), about 3 GB and a few minutes, counted in each attempt's cost; the burn's own refusal
+#      field decides: below_floor 18, probe_error 25. The burn's torch is not the arms': it qualifies the CARD only;
+# then, on every box, a controller-side sampler (nvidia-smi --query-gpu=timestamp,clocks.sm,clocks_event_reasons.active,
+# power.draw --format=csv -lms 1000) starts on the box, bench/sc1/sc1_drive.sh runs unchanged, and the sampler is
+# stopped and fetched. After a CLEAN run (exit 0) the sampler is judged over the whole timed run (sc2_qualify.py
+# judge-run, card_clock's rule: no hard bit on any sample, SwPowerCap clear on >= 95 %): READ and failed 18,
+# unreadable 25. After a clean PROOF, its own host records too (judge-proof, forensics.txt and host_facts.json, both
+# always passed): READ at another limit 18, missing or unreadable 25. A run that did not finish clean keeps its own
+# exit code; its records are fetched and judged for the record only. Every record lands in <run>/qualify/ (rsync
+# --no-links, bench/common rule 8) before teardown. Each create consumes one of the lane's 3 attempts whatever its
+# exit (sc2_qualify.py admit reads that from the receipt store). Nothing here creates, destroys or approves compute,
+# and no staged kit entry changes: this script stages only card_clock.py, to /root/qualify, apart from the box's kit.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [sc2_qualify] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID SC1_BOX; do
@@ -39,6 +44,7 @@ fetch_q(){ rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $
 $SSH "nvidia-smi --query-gpu=enforced.power.limit,power.limit,power.max_limit --format=csv,noheader" > "$QD/power.csv" 2> "$QD/power.err" \
   || { say "nvidia-smi did not answer: $(head -c 200 "$QD/power.err")"; exit 10; }
 python3 "$Q" power --csv "$QD/power.csv" --out "$QD/power.json"; rc=$?
+[ "$rc" = 25 ] && { say "the power read was unreadable: probe_error (rc 25, a harness fault; the machine is not excluded)"; exit 25; }
 [ "$rc" = 0 ] || { say "QUALIFY REFUSED: enforced power limit (rc 17, a host fault, not a strike)"; exit 17; }
 
 # 2. the card's loaded clock (card_clock.py, TC1 amendment 80's floor), on a throwaway venv apart from the box's kit
@@ -52,19 +58,29 @@ $SSH "cd $QW || exit 20
   perl -e 'alarm 300; exec @ARGV' venv/bin/python card_clock.py burn --floor 2700 --out card_clock.json > card_clock.log 2>&1; echo \$? > burn.rc; exit 0" \
   || { fetch_q; say "the burn's setup failed (apt / venv / torch download): rc 9, not a card verdict"; exit 9; }
 fetch_q
-BRC=$(cat "$QD/box/burn.rc" 2>/dev/null); case "$BRC" in ''|*[!0-9]*) say "malformed burn rc"; exit 24;; esac
-[ "$BRC" = 0 ] || { say "QUALIFY REFUSED: card_clock burn rc $BRC (rc 18, a host fault, not a strike): $(tail -1 "$QD/box/card_clock.log" 2>/dev/null | cut -c1-200)"; exit 18; }
+BRC=$(cat "$QD/box/burn.rc" 2>/dev/null); case "$BRC" in ''|*[!0-9]*) say "no burn rc: probe_error (rc 25)"; exit 25;; esac
+if [ "$BRC" != 0 ]; then
+  WHY=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('refusal') or '')" "$QD/box/card_clock.json" 2>/dev/null)
+  [ "$WHY" = below_floor ] || { say "the burn did not read the card (refusal '${WHY:-none}', rc $BRC): probe_error (rc 25, a harness fault)"; exit 25; }
+  say "QUALIFY REFUSED: card_clock below_floor (rc 18, a host fault, not a strike): $(tail -1 "$QD/box/card_clock.log" 2>/dev/null | cut -c1-200)"; exit 18
+fi
 say "qualified: $(python3 -c "import json; d=json.load(open('$QD/power.json')); print('enforced', d['enforced_w'], 'W, limit', d['power_limit_w'], 'W, max', d['power_max_limit_w'], 'W')") ; card_clock PASS"
 $SSH "rm -rf -- $QW/venv" > /dev/null 2>&1 || true
 
-# 3. the lane's box, unchanged
+# 3. the run sampler, the lane's box (unchanged), then the sampler stopped and fetched
+$SSH "mkdir -p $QW && cd $QW && rm -f sampler.csv sampler.pid && (setsid nohup nvidia-smi --query-gpu=timestamp,clocks.sm,clocks_event_reasons.active,power.draw --format=csv -lms 1000 > sampler.csv 2> sampler.err < /dev/null & echo \$! > sampler.pid)" \
+  || say "the sampler did not start (judged UNREAD after the run)"
 bash "$REPO/bench/sc1/sc1_drive.sh"; DRC=$?
-[ "${SC1_PROVE:-0}" = 1 ] || exit "$DRC"
-# a proof that did not finish clean keeps its own exit code: the lane's rules classify it, and a partial box.json is
-# never read as a host fault
+$SSH "cd $QW && kill \$(cat sampler.pid) 2>/dev/null; sleep 1" > /dev/null 2>&1 || true
+fetch_q
+python3 "$Q" judge-run --sampler "$QD/box/sampler.csv" --out "$QD/run_judge.json"; jr=$?
+PJ=0
+if [ "${SC1_PROVE:-0}" = 1 ]; then
+  python3 "$Q" judge-proof --forensics "$RUN_DIR/sc1/forensics.txt" --host-facts "$RUN_DIR/host_facts.json" --out "$QD/proof_judge.json"; PJ=$?
+fi
+# a run that did not finish clean keeps its own exit code: the lane's rules classify it, and its records are never
+# read as a host fault (they are fetched and judged above for the record only)
 [ "$DRC" = 0 ] || exit "$DRC"
-# 4. after a clean proof: its own host record
-HF=(); [ -s "$RUN_DIR/host_facts.json" ] && HF=(--host-facts "$RUN_DIR/host_facts.json")
-python3 "$Q" judge-proof --forensics "$RUN_DIR/sc1/forensics.txt" ${HF[@]+"${HF[@]}"} --out "$QD/proof_judge.json"; jrc=$?
-[ "$jrc" = 0 ] || { say "QUALIFY REFUSED after the proof: its host record (rc 18, a host fault, not a strike)"; exit 18; }
-exit "$DRC"
+for c in "$jr" "$PJ"; do [ "$c" = 18 ] && { say "QUALIFY REFUSED after the run: a host record READ and failed (rc 18, a host fault, not a strike)"; exit 18; }; done
+for c in "$jr" "$PJ"; do [ "$c" = 0 ] || { say "a host record after the run was unreadable: probe_error (rc 25, a harness fault; the machine is not excluded)"; exit 25; }; done
+exit 0

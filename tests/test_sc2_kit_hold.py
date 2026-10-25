@@ -38,9 +38,15 @@ def test_the_hold_is_registered():
     assert kh.HOLD and len(kh.HOLD) == 40, "the amendments register e4b#2041's merge commit as HOLD"
 
 
+def _only_exception_3(rec):
+    """SC2f Am. 7 / SC2h Am. 5 / SC2i Am. 4 make HOLD exception 3 REQUIRED: a commit before that amendment refuses for
+    the absent gnf4 move, and for nothing else."""
+    return rec["verdict"] == "REFUSE" and rec["why"] and all(w.startswith("HOLD (exception 3): ") for w in rec["why"])
+
+
 def test_the_registered_delta_is_exactly_the_declared_set():
     rec = kh.check(AtGit(kh.HOLD), kh.HOLD, at=kh.HOLD, e4b_sha=kh.STACK)
-    assert rec["verdict"] == "OK", rec["why"]
+    assert _only_exception_3(rec), rec["why"]
     kinds = [x["kind"] for x in rec["run_hunks"]]
     assert kinds.count("brotli") == 1 and kinds.count("fetch-retry") == 4
     assert kinds.count("q-line") == 2 and kinds.count("q-wiring") == kh.Q_REPLACED
@@ -55,8 +61,9 @@ def test_the_check_itself_is_not_staged():
 
 
 def test_the_check_refuses_a_launch_without_the_stack():
-    assert kh.check(AtGit(kh.HOLD), kh.HOLD, at=kh.HOLD)["verdict"] == "REFUSE"
-    assert kh.check(AtGit(kh.HOLD), kh.HOLD, at=kh.HOLD, e4b_sha=kh.HOLD)["verdict"] == "REFUSE"
+    for sha in (None, kh.HOLD):
+        rec = kh.check(AtGit(kh.HOLD), kh.HOLD, at=kh.HOLD, e4b_sha=sha)
+        assert rec["verdict"] == "REFUSE" and any(w.startswith("STACK: ") for w in rec["why"]), rec["why"]
 
 
 FIX = REPO / "tests" / "fixtures" / "sc2_verdict_stack"   # a real fetched run's records (sc2j-r3: box Q at 7b8f1f69)
@@ -129,6 +136,6 @@ def test_the_hold_passes_a_registered_main_commit_with_box_qs_and_rule_8s_deltas
     at = "ac7e6ed123403af2bd4582cd792a2c5bb4114076"
     g = AtGit(at)
     r = kh.check(g, kh.HOLD, at=at, e4b_sha=kh.STACK)
-    assert r["verdict"] == "OK", r["why"]
+    assert _only_exception_3(r), r["why"]          # Amendment 6's exceptions pass; only Amendment 7's move is absent
     assert r["hold_diff"] == ["sc2j_box_q.sh", "sc2j_quality.py"]
     assert kh.check(g, kh.HOLD, at=at, e4b_sha=kh.HOLD)["verdict"] == "REFUSE"      # the stack gate still holds

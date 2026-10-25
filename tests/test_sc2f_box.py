@@ -170,7 +170,7 @@ def test_the_lane_tools_pass_their_self_tests(script):
 
 def test_box_n_is_wired_like_box_l():
     assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q) ;;' in RUN
-    assert 'case "$BOX" in N|O) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac' in RUN      # v0.50.0 (Amendment 3)
+    assert 'case "$BOX" in N|O) GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca;; esac' in RUN      # v0.51.0 (Amendment 7; v0.50.0 under Amendment 3)
     assert "C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q) BASEPY=python3;;" in RUN
     torch = next(x for x in RUN.splitlines() if '"torch==2.8.0"' in x and "pipx logs/pip_torch.log" in x)
     assert '[ "$BOX" = N ]' in torch

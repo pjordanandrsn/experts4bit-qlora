@@ -195,13 +195,16 @@ the stack under test (`36cdd2d4`) are unchanged.
 grouped-nf4-gemm 0.51.0. SC2i reads no other lane's verdict, but the three lanes (SC2f, SC2h, SC2i) must sit on the same pair and the same gate.
 
 **The change.** SC2i takes SC2f Amendment 7, by reference, in full:
-- **(a) the gate.** Box P launches through `bench/sc2/sc2_qualify_drive.sh`. Before any install: the enforced
-  power read (575 W, as a float; rc 17) and the `card_clock.py` burn (floor 2700 MHz; rc 18). After a clean proof,
-  the proof's host records (rc 18). Admission is `bench/sc2/sc2_qualify.py admit --lane sc2i`: the same walk (52780,
-  then 145701, then 55337), the same exclusions (13828, 37367; 26157 until a create there succeeds; the launcher's
-  power exclusions at create), the same stability rule (3 consecutive reads, ≤ $1.05/h, ≥ 320 GB). Host continuity
-  puts the earlier lanes' PROVED host first.
-- **(b) attempts.** Every create consumes one of **3** proof attempts (`sc2i-prove-1` to `-3`), a qualify refusal
+- **(a) the gate.** Box P launches through `bench/sc2/sc2_qualify_drive.sh`, with SC2f Amendment 7's exit codes
+  (a record read and failed: rc 17 or 18, a host fault; missing or unreadable: rc 25, a harness fault that never
+  excludes the machine). Before any install: the enforced power read (575 W, as a float) and the `card_clock.py` burn
+  (floor 2700 MHz). Over every run, proof and reading: the controller-side sampler, judged by `card_clock.py`'s rule
+  over the whole timed run. After a clean proof: its host records. Admission is `bench/sc2/sc2_qualify.py admit
+  --lane sc2i`, the same OPEN walk: host continuity first, then 52780, then 145701, then any machine listing 575 W by
+  prior clean runs and id, then listed-power-unknown machines last. Same exclusions (13828, 37367; 26157 until a create
+  there succeeds; the launcher's power exclusions at create). Same listing filters (the launcher's hourly at 320 GB
+  ≤ $1.05, ≥ 320 GB, by offer id in 3 consecutive reads).
+- **(b) attempts.** Every create, whatever its exit, consumes one of **3** proof attempts (`sc2i-prove-1` to `-3`), a qualify refusal
   included. A host tried is never revisited unless its proof PROVED. Three creates and no PROVED: the lane parks. The
   worst case per run is as SC2f Amendment 7 counts it (a proof $1.18, a reading $4.44), each under $15.
 - **(c) the deadline.** One 72 h deadline for the three lanes, counted from SC2f Amendment 7's merge or the G3 GPU
