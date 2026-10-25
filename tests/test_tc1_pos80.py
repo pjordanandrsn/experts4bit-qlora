@@ -324,6 +324,42 @@ def test_kernels_only_device_time_on_a_real_profile_drops_the_annotation_span_an
     assert round(F2.kernels_only_device_ms(inj)[0], 1) == 1979.5                         # an injected annotation never moves the kernel total
 
 
+@pytest.mark.parametrize("edit", ["the row removed", "a wrong count", "two rows"])
+def test_kernels_only_device_time_fails_closed_without_exactly_one_annotation_row(edit):
+    """Review finding 1: without the Optimizer.step# row the recorded total would pass as kernels-only (2064.8, not 1979.5, on this real
+    profile). Any profile without exactly one such row, counted once a profiled step, raises."""
+    prof = json.loads((P79 / "tc1" / "qwen3pos79_e4b_fused_attn4_m_fd_profile.json").read_text())
+    rows = prof["top_device"]
+    i = next(k for k, r in enumerate(rows) if r["name"].startswith("Optimizer.step#"))
+    if edit == "the row removed":
+        del rows[i]
+    elif edit == "a wrong count":
+        rows[i]["count"] = 2
+    else:
+        rows.append(dict(rows[i]))
+    with pytest.raises(F2.AnnotationError):
+        F2.kernels_only_device_ms(prof)
+
+
+def test_a_draw_whose_profile_lacks_the_annotation_row_is_void(tmp_path):
+    d = _run_dir(tmp_path)
+    pp = d / "qwen3pos80_e4b_fused_attn4_m_fd_profile.json"
+    prof = json.loads(pp.read_text())
+    prof["top_device"] = [r for r in prof["top_device"] if not r["name"].startswith("Optimizer.step#")]
+    pp.write_text(json.dumps(prof))
+    rows = {(x["fw"], x["tag"]): x for x in RED.reduce_dir(str(d))["qwen3pos80"]["rows"]}
+    x = rows[("e4b", "fused_attn4_m_fd")]
+    assert x["verdict"] == "VOID" and "kernels-only device time" in x["why"], x.get("why")
+
+
+def test_a_helper_off_its_digest_is_never_executed(tmp_path, monkeypatch):
+    """Review finding 2: the reducer executes f15v2.py / card_clock.py only at the kit's sha256."""
+    monkeypatch.setitem(RED.POS80_HELPER_SHA256, "f15v2", "0" * 64)
+    assert RED._pos80_helper("f15v2") is None
+    monkeypatch.setitem(RED.POS80_HELPER_SHA256, "f15v2", _sha(TC1 / "f15v2.py"))
+    assert RED._pos80_helper("f15v2") is not None
+
+
 # ------------------------------------------------------------------ the reducer, end to end on a run built from the real receipts
 def _run_dir(tmp: Path, clocks: str = "clean", pins: bool = True, burn: bool = True, mutate=None):
     """A qwen3pos80 run directory derived from amendment 79's committed receipt copy:

@@ -1137,7 +1137,7 @@ POS80_PROVEN = tuple(POS80_PINS)                                   # all four ar
 #: the import each proof must show among its origins: the arms' entry module (grouped-nf4-gemm installs flat modules, no package of its name)
 POS80_OWN_IMPORT = {"experts4bit-qlora": "experts4bit_qlora", "grouped-nf4-gemm": "nf4_qlora", "unsloth": "unsloth", "unsloth_zoo": "unsloth_zoo"}
 POS80_HELPER_SHA256 = {"release_proof": "aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0",
-                       "card_clock": "fed8a3df23f3933fba8d27050c56c1afd578a77851cdfd8c827e42e721f74450", "f15v2": "a7ed7d74ea1674e27bac11ef6e4357b484cdfc893283b39cabc88a3c2a9cf508"}
+                       "card_clock": "1dae29569b776f7ce4595e07b1582011ed8ed1b7068b07ce7cb484aa8ed266ac", "f15v2": "e6d19b3eabc33bf9af5817d01879d757e72fec34be8fe337d6a86bddc572ed68"}
 POS80_HARNESS_ENV = POS79_HARNESS_ENV
 POS80_PYCACHE_PREFIX = "/tmp/tc1-pycache-"
 POS80_HELDOUT_MAX = POS79_HELDOUT_MAX                              # amendment 69's P209
@@ -3339,11 +3339,15 @@ def score_pos79(F, d, fam=POS79_FAM):
 
 
 def _pos80_helper(name):
-    """f15v2.py / card_clock.py: beside this file on the box (staged flat), or in the repository (bench/tc1, bench/common). None if absent."""
+    """f15v2.py / card_clock.py: beside this file on the box (staged flat), or in the repository (bench/tc1, bench/common). Only a file
+    whose sha256 is the kit's (POS80_HELPER_SHA256) is executed. None if absent or different, which every caller reads as unread."""
+    import hashlib
     import importlib.util
     here = os.path.dirname(os.path.abspath(__file__))
     for path in (os.path.join(here, name + ".py"), os.path.join(here, "..", "common", name + ".py")):
         if os.path.exists(path):
+            if hashlib.sha256(open(path, "rb").read()).hexdigest() != POS80_HELPER_SHA256.get(name):
+                continue
             spec = importlib.util.spec_from_file_location(f"_pos80_{name}", path)
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
@@ -3379,18 +3383,23 @@ def pos80_why(tag, r):
     prof = r.get("_profile_file")
     if not isinstance(prof, dict) or not (prof.get("summary") or {}).get("profiled_steps"):
         bad.append("no _profile.json beside the receipt: amendment 80 reads engagement and device time from it")
-    elif fw == "unsloth":
+    else:
         f2 = _pos80_helper("f15v2")
         if f2 is None:
-            bad.append("f15v2.py is not beside the reducer: F15 v2 is unread")
+            bad.append("f15v2.py at the kit's digest is not beside the reducer: F15 v2 and the kernels-only device time are unread")
         else:
-            v, why, _ = f2.engagement(r, prof)
-            if v != "ENGAGED":
-                bad.append(f"F15 v2: {why}")
+            try:
+                f2.kernels_only_device_ms(prof)
+            except f2.AnnotationError as e:
+                bad.append(f"kernels-only device time: {e}")
+            if fw == "unsloth":
+                v, why, _ = f2.engagement(r, prof)
+                if v != "ENGAGED":
+                    bad.append(f"F15 v2: {why}")
     cc = _pos80_helper("card_clock")
     g = r.get("_gpuclk")
     if cc is None or not isinstance(g, dict):
-        bad.append("no gpuclk log (or no card_clock.py): the card floor is unread for this draw")
+        bad.append("no gpuclk log (or no card_clock.py at the kit's digest): the card floor is unread for this draw")
     else:
         ok, why = cc.passes(g, POS80_CLOCK_FLOOR, POS80_DRAW_MIN_CLEAN)
         if not ok:
@@ -3497,7 +3506,12 @@ def pos80_box(d):
 def _pos80_dev(r):
     """Kernels-only device ms per profiled step (f15v2.kernels_only_device_ms on the full profile), or None."""
     prof, f2 = (r or {}).get("_profile_file"), _pos80_helper("f15v2")
-    return f2.kernels_only_device_ms(prof)[0] if (isinstance(prof, dict) and f2) else None
+    if not (isinstance(prof, dict) and f2):
+        return None
+    try:
+        return f2.kernels_only_device_ms(prof)[0]
+    except f2.AnnotationError:
+        return None
 
 
 def _pos80_sides(R):
@@ -8456,7 +8470,10 @@ def render(F, d):
         for x in F[POS80_FAM]["rows"]:
             r = x.get("r") or {}
             prof = r.get("_profile_file")
-            k = f2.kernels_only_device_ms(prof) if (f2 and isinstance(prof, dict)) else (None, None, [])
+            try:
+                k = f2.kernels_only_device_ms(prof) if (f2 and isinstance(prof, dict)) else (None, None, [])
+            except f2.AnnotationError:
+                k = (None, None, [])
             eng = f2.engagement(r, prof)[0] if (f2 and isinstance(prof, dict) and x["fw"] == "unsloth") else "—"
             g = r.get("_gpuclk") or {}
             out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(k[0], 1)} | {f(k[1], 1)} | {eng} | "

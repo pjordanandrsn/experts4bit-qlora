@@ -25,7 +25,8 @@ Fallbacks only these counts catch (they have no counter of their own): moe_utils
 and moe_grouped_modulelist.py:180-185 (the inline per-group loop). v1's manual counter wraps ``_ManualGroupedMM`` on the imported
 moe_utils module and is blind to its compile-cache copy (``_load_cached_moe_utils_module``, moe_utils.py:297). The device-kernel count
 doesn't depend on the module. The one-time probes (moe_utils.py:1637, 1717, 1807-1808; moe_grouped_modulelist.py:97;
-moe_grouped_fp16.py:788-789) run at first use, before the profiled window (``profile_warm`` 3).
+moe_grouped_fp16.py:788-789) run at first use, before the profiled window. The profiler starts after ``profile_warm`` steps (a 0-based
+loop index: warm W profiles steps W+1..W+3, counting from 1); W is 3 at amendments 69 and 79 and 20 at amendment 80.
 
 Truncation. A profile file keeps the top 80 rows of each list (tc1_arm.py:3600-3601). An absent row counts 0, so a dispatch ranked
 below the kept rows changes an exact count, and the arm VOIDs. It is never a pass.
@@ -33,8 +34,9 @@ below the kept rows changes an exact count, and the arm VOIDs. It is never a pas
 Kernels-only device time. tc1_arm.summarize_profile sums every CUDA-typed event into ``device_ms``, user-annotation spans included. The
 ``Optimizer.step#…`` row is such a span: it overlaps the optimizer kernels it encloses, gaps included. torch 2.8.0's own device-time
 sum excludes them (profiler_util.py:1010-1020, ``not evt.is_user_annotation``). The stored profile keeps no such flag, so this subtracts
-the rows whose NAME is a known annotation (``ANNOTATION_RE``) and records what it removed. TC1 amendment 81 fixes the instrument at the
-source.
+the rows whose NAME is a known annotation (``ANNOTATION_RE``) and records what it removed. It fails CLOSED: exactly one
+``Optimizer.step#`` row with count == profiled_steps is required (it is in all 120 of TC1's stored profiles), and anything else raises,
+so a missing or truncated annotation is never read as kernels-only. TC1 amendment 81 fixes the instrument at the source.
 """
 from __future__ import annotations
 
@@ -111,10 +113,19 @@ def v1_line(cell) -> str:
             f"against 6*L*A = {6 * cell['n_layers'] * cell['accum']}")
 
 
+class AnnotationError(ValueError):
+    """The profile's annotation rows are not the one the kernels-only figure can subtract."""
+
+
 def kernels_only_device_ms(profile):
     """(kernel ms per profiled step, annotation ms per profiled step, annotation row names): recorded device_ms minus the rows whose
-    name is a known user annotation."""
+    name is a known user annotation. Raises AnnotationError unless exactly one ``Optimizer.step#`` row is present with count ==
+    profiled_steps. A missing row would leave the annotation span inside the figure, unnoticed."""
     ps = profile["summary"]["profiled_steps"]
     ann = [r for r in profile["top_device"] if ANNOTATION_RE.match(r["name"])]
+    opt = [r for r in ann if r["name"].startswith("Optimizer.step#")]
+    if len(opt) != 1 or int(opt[0].get("count") or 0) != int(ps):
+        raise AnnotationError(f"{len(opt)} Optimizer.step# annotation rows (counts {[r.get('count') for r in opt]}) where exactly one with "
+                              f"count {ps} (one a profiled step) is required: the span cannot be removed, so kernels-only is unread")
     a_ms = sum(r["self_device_ms"] for r in ann) / ps
     return profile["summary"]["device_ms"] / ps - a_ms, a_ms, [r["name"] for r in ann]

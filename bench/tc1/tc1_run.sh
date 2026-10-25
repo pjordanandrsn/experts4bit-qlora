@@ -242,8 +242,9 @@ POS80_E4B_SHA=605d21e67958fa94d5e73fc3a95ffcb5c8eae02d     # v0.58.1's peeled ta
 POS80_GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca     # v0.51.0's peeled tag commit
 POS80_E4B=0.58.1; POS80_GNF4=0.51.0; POS80_UNSLOTH=2026.10.8; POS80_UNSLOTH_ZOO=2026.10.8
 POS80_CLOCK_FLOOR=2700     # MHz: the burn's busy SM median on the RTX 5090 (59 of TC1's 76 committed 5090 training medians clear it)
-POS80_PROFILE_WARM=20      # the profiled steps are 20..22: past Unsloth's compile transient (amendment 79's draw 1 compiled and saved its
-                           # Mega-cache bundle and draw 2 loaded it, and steps 3..5 differed 16 % between them); 3 of the 50 median steps
+POS80_PROFILE_WARM=20      # warm is a 0-based loop index: the profiled steps are 21..23 (counting from 1), past Unsloth's compile transient
+                           # (amendment 79's draw 1 compiled and saved its Mega-cache bundle and draw 2 loaded it, and its steps 4..6 differed
+                           # 16 % between them); 3 of the 50 median steps
 case " $FAMILIES " in *" qwen3pos80 "*)
   why=""
   [ "$FAMILIES" = qwen3pos80 ] || why="the qwen3pos80 token runs alone (got: $FAMILIES)"

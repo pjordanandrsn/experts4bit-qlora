@@ -162,4 +162,5 @@ def test_a_burn_that_cannot_read_the_card_refuses_with_the_host_floor_code(tmp_p
     r = subprocess.run([sys.executable, str(TOOL), "burn", "--floor", str(FLOOR), "--seconds", "1", "--out", str(out)],
                        capture_output=True, text=True)
     assert r.returncode == 18
-    assert json.loads(out.read_text())["pass"] is False
+    rec = json.loads(out.read_text())
+    assert rec["pass"] is False and rec["refusal"] == "probe_error"          # told apart from a card read below its floor

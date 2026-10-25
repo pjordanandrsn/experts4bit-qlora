@@ -16,7 +16,9 @@ Two uses:
         - SwPowerCap is clear on at least --min-clean of the busy samples. A healthy 575 W card may touch it briefly under a
           full-power burn, so it is held to a fraction, not to every sample.
         It exits 0 on a pass and 18 otherwise (TC1's host-floor code: the launcher excludes the machine on its next draw). A probe
-        that can't read the card refuses too: an unscreened card is never passed.
+        that can't read the card refuses too: an unscreened card is never passed. The JSON's ``refusal`` says which it was:
+        ``below_floor`` (read, and failed) or ``probe_error`` (not read: no torch, no CUDA, no nvidia-smi).
+        One GPU: the burn runs on cuda:0 and samples ``nvidia-smi -i 0``. A multi-GPU lane screens each card itself.
     python3 card_clock.py check-log GPUCLK_TXT --floor MHZ [--min-clean 0.95]
         The same test on a run's ``gpuclk_<arm>.txt``. It prints the summary as JSON and exits 0 on a pass, 1 otherwise. A reducer
         imports ``summarize_log`` and ``passes`` instead.
@@ -199,7 +201,8 @@ def main(argv=None) -> int:
         except Exception as e:                           # no torch, no CUDA, no nvidia-smi: the card is unscreened, so it refuses
             summ = {"error": f"{type(e).__name__}: {e}"}
         ok, why = passes(summ, a.floor, a.min_clean, burn=True) if "error" not in summ else (False, summ["error"])
-        summ.update({"floor_mhz": a.floor, "min_clean": a.min_clean, "hard_bits_every_sample": True, "pass": ok, "why": why})
+        summ.update({"floor_mhz": a.floor, "min_clean": a.min_clean, "hard_bits_every_sample": True, "pass": ok, "why": why,
+                     "refusal": None if ok else ("probe_error" if "error" in summ else "below_floor")})
         if a.out:
             with open(a.out, "w") as f:
                 json.dump(summ, f, indent=1)
