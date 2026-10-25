@@ -66,6 +66,8 @@ def _fake_zoo():
         try:
             mg._self_check_generic(device)
             ok = True
+        except RuntimeError:
+            ok = False                               # 821-830: the generic path is disabled for the process
         finally:
             mg.GENERIC_CALLS.update(saved)          # "the self-check's own launches are not engagement" (833-834)
         mg._SELF_CHECKED[device] = ok
@@ -105,11 +107,14 @@ def _fake_zoo():
     def moe_utils_expert_forward(x, w, lora, device="cuda:0"):
         """One expert-module forward, the way moe_utils.forward_native_grouped_mm calls the two paths."""
         from unsloth_zoo.temporary_patches.moe_nf4_grouped import maybe_nf4_grouped_mm as maybe   # resolved at call time (1188)
+        if not mg.triton_grouped_available(device):                      # 599: the self-check failed, torch._grouped_mm
+            gm = lambda a, b: a @ b                                      # noqa: E731 -- uncounted here, as in the library
+        else:
+            gm = lambda a, b: mg.generic_grouped_mm(a, b.unsqueeze(0), None)   # noqa: E731 -- 602
         base = maybe(x, None, w, None)
         if base is None:
-            mg.triton_grouped_available(device)
-            base = mg.generic_grouped_mm(x, w.unsqueeze(0), None)        # the dequant path's base GEMM (602)
-        return base + mg.generic_grouped_mm(mg.generic_grouped_mm(x, lora[0].unsqueeze(0), None), lora[1].unsqueeze(0), None)
+            base = gm(x, w)                                              # the dequant path's base GEMM
+        return base + gm(gm(x, lora[0]), lora[1])
 
     return pkg, tp, mg, nf, moe_utils_expert_forward
 
@@ -251,3 +256,21 @@ def test_no_library_at_all_reads_unread_never_pass(monkeypatch):
     s = c.snapshot()
     assert s["library_delta"] == {"generic": None, "nf4": None}
     assert not C.check_library(s)[0] and not C.check_fused(s, 6)[0] and not C.check_unfused(s)[0]
+
+
+def test_a_failed_self_check_leaves_the_generic_counts_at_zero_so_a_lane_bar_fails_closed(zoo):
+    mg, nf, fwd = zoo
+    nf.MODE["mode"] = "0"
+
+    def failing_self_check(device):
+        raise RuntimeError("generic grouped GEMM self-check bfloat16 forward: 1.0")
+
+    mg._self_check_generic = failing_self_check                   # the library then uses torch._grouped_mm (821-830)
+    c = C.UnslothMoeCounter().install()
+    for _ in range(3):
+        fwd(X, W, LORA)
+    s = c.snapshot()
+    assert s["counts"]["generic_gemm"] == 0 and s["counts"]["selfcheck_gemm"] == 0
+    assert C.check_library(s) == (True, "")                       # consistent: nothing reached the generic path
+    ok, why = C.check_equal("generic_gemm", s["counts"]["generic_gemm"], 9, "the lane's expected 3E")
+    assert not ok                                                 # the lane's bar fails CLOSED, never passes on zero
