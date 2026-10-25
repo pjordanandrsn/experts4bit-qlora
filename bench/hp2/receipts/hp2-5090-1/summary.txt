@@ -1,6 +1,6 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407 pack=0
 FIXTURE hp2 (HP2-PREREG): steps=200 eval_n=48; calibration rows 97-396 (300), 1 step; P seeds=[3410 3411 3412]; e4b K00 vs Unsloth; axolotl out
-BOX A families: qwen3hp2; e4b 68801d3efba2f82aea2d6e3cc44c4f93bca929db gnf4 724ccc454f006c1a46836e434e997f31f293747f; run hp2-5090-1 instance 56686154 deadline 1792413915; prereg hp2/HP2-PREREG.md
+BOX A families: qwen3hp2; e4b 68801d3efba2f82aea2d6e3cc44c4f93bca929db gnf4 724ccc454f006c1a46836e434e997f31f293747f; run hp2-5090-1 instance redacted-f748bf02 deadline 1792413915; prereg hp2/HP2-PREREG.md
 OMP_NUM_THREADS=64 (physical cores) box_class=RTX 5090
 CPU allotment 62 (cgroup quota capped by affinity; physical cores 64)
 CUDA_PROBE ok

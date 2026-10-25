@@ -53,7 +53,7 @@
   "greedy": true,
   "n_predict": "= the registered N (32/128; 8 for TTFT)"
  },
- "vast_instance_id": "54042467",
+ "vast_instance_id": "instance-redacted-f7439ed1",
  "env": {
   "GGML_CUDA_MMQ_PREC": null,
   "GGML_CUDA_FORCE_MMQ": null,

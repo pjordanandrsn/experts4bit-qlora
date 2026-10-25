@@ -139,7 +139,7 @@ def reduce_run(run_dir: str) -> dict:
         if hi <= BAND:
             # The outcome neither registered pattern covers, and it is not "mixed":
             # the standing FAIL did not reproduce at all. It was measured on a
-            # different box (Vast 51645512) and this is a different draw, so a
+            # different box (Vast redacted-11ed5d06) and this is a different draw, so a
             # non-reproduction is a real and reportable result about the standing
             # row -- NOT evidence that anything was fixed.
             verdict = "DID-NOT-REPRODUCE"

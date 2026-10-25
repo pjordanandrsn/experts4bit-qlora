@@ -1,7 +1,7 @@
 # `p143-5090-2`: step 1, the attention decode microbench (GO_FIXED)
 
 One RTX 5090 (cc 12.0, 170 SMs, driver 580.173.02, 575 W) on an Intel Core i9-9900K host (16 CPUs): Vast instance
-56596124 on machine 83029, 2026-10-18T18:05:55Z to 18:09:28Z. Cost $0.029. Code: e4b `adea7321` (Amendment 1's merge,
+redacted-b6a651a0 on machine 83029, 2026-10-18T18:05:55Z to 18:09:28Z. Cost $0.029. Code: e4b `adea7321` (Amendment 1's merge,
 #1762), grouped-nf4-gemm 0.46.1 (`70bc03cb`). No model.
 
 **Verdict: GO_FIXED.** The paged FP8 attention decode is e4b's own `Fp8PagedKV` at Qwen3-30B-A3B's geometry, 48 layers

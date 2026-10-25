@@ -1,7 +1,7 @@
 # RESULTS — T5 dispatch-algebra diet: REFUTED (revert)
 
 Run 2026-08-24 against `PREREG-t5-dispatch-diet.md` (merged #218), on a
-rented EPYC 9755 (48-core slice) + RTX 5090 (vast 48576023, $0.526/hr,
+rented EPYC 9755 (48-core slice) + RTX 5090 (vast redacted-b6ba6066, $0.526/hr,
 destroyed + verified zero). e4b at `7559f36`, gnf4 at `f08a66f`,
 torch 2.13.0+cu130, transformers 5.15.1. Receipts in `receipts-t5/`.
 Verdict computed by `t5_verdict.py` (self-tested, 10 branches).

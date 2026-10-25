@@ -147,7 +147,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-764553f2-f4d8-1559-6bd3-ace29dd21f67",
+   "uuid": "GPU-redacted-879557a3",
    "pci.bus_id": "00000000:41:00.0",
    "pcie.link.gen.current": "2",
    "pcie.link.gen.max": "4",
@@ -161,7 +161,7 @@
    "cpu": "AMD Ryzen Threadripper PRO 3955WX 16-Cores",
    "cpu_threads": 32,
    "host_mem_gib": 251.6,
-   "vast_instance_id": "54366046",
+   "vast_instance_id": "instance-redacted-befd3b3c",
    "container_host": "a542e679703e"
   },
   "anchor_json": null,

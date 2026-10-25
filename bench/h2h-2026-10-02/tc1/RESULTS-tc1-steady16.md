@@ -1,6 +1,6 @@
 # TC1 amendment 16 read: at steady state e4b as shipped now steps faster than axolotl's scattermoe on a 5090 — P27 HELD (1.238)
 
-**Box:** `tc1-5090-46` (instance 54024744, AMD EPYC 7663, RTX 5090, driver 580.95.05, $0.99; receipts in
+**Box:** `tc1-5090-46` (instance redacted-107aa14e, AMD EPYC 7663, RTX 5090, driver 580.95.05, $0.99; receipts in
 [`receipts/tc1-5090-46/`](receipts/tc1-5090-46/)). The code was e4b `e5859e9` and grouped-nf4-gemm `00929a4`, with every default
 from amendments 10–15:
 

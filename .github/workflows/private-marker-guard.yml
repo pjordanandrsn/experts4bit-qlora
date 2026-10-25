@@ -100,6 +100,8 @@ jobs:
           NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-00000000-0000-0000-0000-000000000000, 12.0
           _CudaDeviceProperties(name='NVIDIA GeForce RTX 4090', major=8, minor=9, uuid=00000000-0000-0000-0000-000000000000)
           {"device": {"name": "NVIDIA GeForce RTX 4090", "uuid": "00000000-0000-0000-0000-000000000000"}}
+          {"vast_instance_id": "12345678", "machine_id": "0"}
+          ran on Vast instance 12345678 (destroyed)
           # Append-only ledger: one JSON object per line
           {"run_id": "canary-1", "external_receipt": {}}
           {"cost_usd": 0.0, "role": "canary", "date_utc": "2026-01-01", "run_id": "canary-2"}
@@ -263,3 +265,22 @@ jobs:
             exit 1
           fi
           echo "clean: no added line carries an #added-only marker (since ${mb:0:12})"
+
+      - name: refuse rented-hardware identifiers in raw bytes (binaries and .gz members included)
+        # `git grep -I` above skips every file git calls binary, which is exactly where a profiler dump or a gzip
+        # member hides a GPU UUID or an instance id (docs/receipts-redaction.md). This reads bytes: the whole tree for
+        # UUIDs, and every added line for each instance-id form the redaction met.
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          base="${PR_BASE:-${PUSH_BEFORE:-}}"
+          if [ -z "${base}" ] || [ "${base}" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${base}^{commit}" 2>/dev/null \
+             || ! git merge-base --is-ancestor "${base}" HEAD; then
+            git fetch -q origin "${DEFAULT_BRANCH}"
+            base=$(git merge-base HEAD FETCH_HEAD)
+          fi
+          python3 scripts/check_public_ids.py --tree --added --base "$(git merge-base "${base}" HEAD)"

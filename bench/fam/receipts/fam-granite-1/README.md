@@ -1,6 +1,6 @@
 # `fam-granite-1`: Granite-3.1-3b-a800m, the B=1 fused stack at T == 1 (a reading)
 
-One RTX 5090 (cc 12.0, driver 595.71.05) on an AMD EPYC 7C13 host (256 CPUs): Vast instance 54930667, launched
+One RTX 5090 (cc 12.0, driver 595.71.05) on an AMD EPYC 7C13 host (256 CPUs): Vast instance redacted-a714e684, launched
 2026-10-08T23:32:43Z, lane done 2026-10-09T00:33:39Z, torn down 00:33:39Z. Cost $0.828. Code: e4b `9766fb4c` (the
 #1403 merge), grouped-nf4-gemm 0.43.0 (`6ee2e10`). Granite at 128 teacher-forced positions; OFF and ON_auto.
 

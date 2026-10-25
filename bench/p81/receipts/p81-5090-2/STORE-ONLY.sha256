@@ -8,3 +8,8 @@ fe134f66fe8269ee9ef2ca7df533d41b79f60603968658fbeebfe83d31d738e8  p81_A1.json
 d0f43988f79156db2207565ba1fb76bbe2d8f7b3531be7d693b0fe44f38363f7  p81_B1.json
 e19452bfe0d95d61eb401eea81eafdab1c79e5346213af1b1eebcb3a58c7619d  p81_B2.json
 c2d7027d62b8786853a83ec8360b0f76b37153dfabd97211cfb8bf7a5003b4f2  p81_P.json
+# Originals of files this receipt carries with rented-hardware identifiers replaced by tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p81/receipts/p81-5090-2/forensics.txt at 069a029befd4
+c7a209c7db5404408f92a23920f61006bc4c032764aee747b988280ff96f1a94  forensics.txt

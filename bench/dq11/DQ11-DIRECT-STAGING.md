@@ -7,7 +7,7 @@ for work. Science, thresholds, driver, tariffs and the single-draw limit stay fi
 `dq11-l-census-4`; a template is not paid authority.
 
 The observed initial staging payload was 170,378,038 bytes across 57 files.
-Its proxy SSH endpoint was `ssh2.vast.ai:17364`; the outer staging interval
+Its proxy SSH endpoint was `ssh-redacted-a18487f6`; the outer staging interval
 was 1265 seconds, about 134,686 bytes/s (1.08 Mbps). This interval includes
 remote directory setup. A direct/proxy paired measurement was unavailable
 once the instance was destroyed; the proxy bottleneck attribution is an

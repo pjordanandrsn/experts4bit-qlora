@@ -14,7 +14,7 @@ vllm(secondary) 0.29.0
 torch(vllm secondary) 2.13.0+cu130
 triton(vllm secondary) 3.7.1
 ```
-box: NVIDIA GeForce RTX 5090, 32607 MiB, 580.119.02, GPU-c8b01e63-c0cd-d763-4a5a-161c91dcdaac | power.limit,clocks.max.sm 575.00 W, 3090 MHz | Model name:                              AMD EPYC 9655 96-Core Processor | total        used        free      shared  buff/cache   available | Mem:             108           1          44           0          62         105 | cgroup memory.max 111380791296 | Build cuda_12.9.r12.9/compiler.36037853_0
+box: NVIDIA GeForce RTX 5090, 32607 MiB, 580.119.02, GPU-redacted-76c76083 | power.limit,clocks.max.sm 575.00 W, 3090 MHz | Model name:                              AMD EPYC 9655 96-Core Processor | total        used        free      shared  buff/cache   available | Mem:             108           1          44           0          62         105 | cgroup memory.max 111380791296 | Build cuda_12.9.r12.9/compiler.36037853_0
 
 ## B=1  (prompts_sha a8e6ea1d7d140dbe, rows 1, row step 298426 tokens)
 | engine | arm | status | tok/s | ms/step | peak VRAM GB (nvidia-smi max) | notes |

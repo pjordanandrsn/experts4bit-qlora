@@ -1,9 +1,9 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3; e4b 14a9a17d090e89a0a9ea546438013ea66d88c962 gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-49 instance 54075516 deadline 1791084769; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3; e4b 14a9a17d090e89a0a9ea546438013ea66d88c962 gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-49 instance redacted-8fa6233a deadline 1791084769; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=128 (physical cores) box_class=RTX 5090
 [2026-10-03T23:04:08Z] tc1/boxA: driver 580.95.05: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 580.95.05 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-d321d32d-c03d-b266-a033-cddcb4447116, 600.00 W, 3135 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-redacted-454eda0c, 600.00 W, 3135 MHz
 CPU(s):                                  256
 Model name:                              AMD EPYC 7C13 64-Core Processor
 MemTotal:       858436212 kB
@@ -141,7 +141,7 @@ QWEN3 DONE
 | P10 | qwen3 | **UNTESTED** | C1 bit-exact; expert slots ['N-A', 'N-A'] (regime differs: anchor nf4/64 vs nf4/64+dq); attention SAME-BYTES |
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3; e4b 14a9a17d090e89a0a9ea546438013ea66d88c962 gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-49 instance 54075516 deadline 1791084769; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3; e4b 14a9a17d090e89a0a9ea546438013ea66d88c962 gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-49 instance redacted-8fa6233a deadline 1791084769; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=128 (physical cores) box_class=RTX 5090
 DRIVER 580.95.05 cu130_ok=1
 AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType

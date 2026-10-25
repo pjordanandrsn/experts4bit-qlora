@@ -1,5 +1,5 @@
-GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-ca0541dc-05ed-7dae-ea2e-9c6872809767)
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-ca0541dc-05ed-7dae-ea2e-9c6872809767, 12.0, 1, 16, 4, 16
+GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-redacted-b76c77f5)
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-redacted-b76c77f5, 12.0, 1, 16, 4, 16
 power.limit,clocks.max.sm 575.00 W, 3090 MHz
 Vendor ID:                               AuthenticAMD
 Model name:                              AMD EPYC 7B13 64-Core Processor

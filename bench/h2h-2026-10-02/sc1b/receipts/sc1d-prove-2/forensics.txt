@@ -1,5 +1,5 @@
-GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-5e911316-b19e-7a23-f96a-6c16430f161a)
-NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-5e911316-b19e-7a23-f96a-6c16430f161a, 12.0, 1, 16, 4, 16
+GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-redacted-6891f93d)
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-redacted-6891f93d, 12.0, 1, 16, 4, 16
 power.limit,clocks.max.sm 600.00 W, 3210 MHz
 Vendor ID:                               AuthenticAMD
 Model name:                              AMD EPYC 7663 56-Core Processor

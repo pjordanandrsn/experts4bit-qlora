@@ -1,5 +1,5 @@
 KNOBS box=A e4b=c19dd5248c9af650d1619dba45ea62d28a59772c gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=0
-NVIDIA GeForce RTX 5090, 32607 MiB, 580.159.03, GPU-b59c7979-74a7-fdfc-280d-0d81c32ec602, 12.0, 1, 16, 5, 16
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.159.03, GPU-redacted-0ca5c0c7, 12.0, 1, 16, 5, 16
 power.limit,clocks.max.sm 500.00 W, 3105 MHz
 Vendor ID:                            AuthenticAMD
 Model name:                           AMD Ryzen 9 7950X 16-Core Processor

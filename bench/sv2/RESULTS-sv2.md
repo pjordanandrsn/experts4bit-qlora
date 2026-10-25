@@ -3,7 +3,7 @@
 Registered in `bench/sv2/SV2-PREREG.md` (#1208) before the box; work item #1207 (owner-authorized, $5 cap).
 
 **The run.**
-- One RTX 5090: Vast instance 54392386, driver 595.91.07, AMD EPYC 7K62, 504 GB RAM, 320 GB disk.
+- One RTX 5090: Vast instance redacted-0786562f, driver 595.91.07, AMD EPYC 7K62, 504 GB RAM, 320 GB disk.
 - **$0.45**; teardown proven (destroy HTTP 200, instance absent from the list after).
 - experts4bit-qlora `467f25d` (#1208's head, 0.48.0, including #1182), grouped-nf4-gemm 0.41.0 (`dc8f94a`),
   torch 2.8.0+cu128, transformers 5.18.0.

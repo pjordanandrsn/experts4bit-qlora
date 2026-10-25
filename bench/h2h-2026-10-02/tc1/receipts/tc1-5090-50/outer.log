@@ -1,9 +1,9 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3axolotl; e4b 14a9a17d090e89a0a9ea546438013ea66d88c962 gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-50 instance 54075633 deadline 1791077674; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3axolotl; e4b 14a9a17d090e89a0a9ea546438013ea66d88c962 gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-50 instance redacted-95827efe deadline 1791077674; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=16 (physical cores) box_class=RTX 5090
 [2026-10-03T23:05:22Z] tc1/boxA: driver 610.57.04: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 610.57.04 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 610.57.04, GPU-3ac82132-b928-547f-6616-3284eb216566, 575.00 W, 3090 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 610.57.04, GPU-redacted-d37fda1e, 575.00 W, 3090 MHz
 CPU(s):                                  32
 Model name:                              AMD Ryzen 9 9950X3D 16-Core Processor
 MemTotal:       129218432 kB
@@ -101,7 +101,7 @@ QWEN3AXOLOTL DONE
 | P10 | qwen3 | **UNTESTED** | no receipts |
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3axolotl; e4b 14a9a17d090e89a0a9ea546438013ea66d88c962 gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-50 instance 54075633 deadline 1791077674; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3axolotl; e4b 14a9a17d090e89a0a9ea546438013ea66d88c962 gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-50 instance redacted-95827efe deadline 1791077674; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=16 (physical cores) box_class=RTX 5090
 DRIVER 610.57.04 cu130_ok=1
 DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb

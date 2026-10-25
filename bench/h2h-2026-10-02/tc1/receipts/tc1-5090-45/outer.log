@@ -1,9 +1,9 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3rmsab; e4b aba67eab3e7a239f0be29c71edc5c613866d3992 gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-45 instance 54018669 deadline 1791040346; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3rmsab; e4b aba67eab3e7a239f0be29c71edc5c613866d3992 gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-45 instance redacted-828beb47 deadline 1791040346; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=112 (physical cores) box_class=RTX 5090
 [2026-10-03T13:43:56Z] tc1/boxA: driver 580.95.05: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 580.95.05 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-ab5e6d67-b55e-ac03-7d07-802cde1b3e52, 600.00 W, 3210 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-redacted-d76a069f, 600.00 W, 3210 MHz
 CPU(s):                                  224
 Model name:                              AMD EPYC 7663 56-Core Processor
 MemTotal:       792385364 kB
@@ -113,7 +113,7 @@ QWEN3RMSAB DONE
 | P26 | qwen3rmsab | **HELD** | shipped: mean held-out rms1 - rms0 -0.0021 (|.| <= 0.01); held-out at N rms0 [0.8143, 0.8139] rms1 [0.8136, 0.8103]; matched: mean held-out rms1 - rms0 -0.0015 (|.| <= 0.01); held-out at N rms0 [0.8534, 0.8477] rms1 [0.8482, 0.8499] |
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3rmsab; e4b aba67eab3e7a239f0be29c71edc5c613866d3992 gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-45 instance 54018669 deadline 1791040346; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3rmsab; e4b aba67eab3e7a239f0be29c71edc5c613866d3992 gnf4 00929a493f8ca6ef60c950d666eb5fa5cee38df6; run tc1-5090-45 instance redacted-828beb47 deadline 1791040346; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=112 (physical cores) box_class=RTX 5090
 DRIVER 580.95.05 cu130_ok=1
 DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb

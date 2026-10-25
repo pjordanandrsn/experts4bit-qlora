@@ -1,5 +1,5 @@
 FIXTURE field: template=alpaca steps=60 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407 pack=0
-BOX A families: qwen3samestackh2; e4b 5c908866f73ab7d63f87ff8ecac291e2f92d1c7c gnf4 ccf4de91e9138764e4635d42dc10cca005ef26f4; run tc1-5090-94 instance 54328898 deadline 1791224361; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3samestackh2; e4b 5c908866f73ab7d63f87ff8ecac291e2f92d1c7c gnf4 ccf4de91e9138764e4635d42dc10cca005ef26f4; run tc1-5090-94 instance redacted-8aa7d116 deadline 1791224361; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=48 (physical cores) box_class=RTX 5090
 DRIVER 595.91.07 cu130_ok=1
 AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType

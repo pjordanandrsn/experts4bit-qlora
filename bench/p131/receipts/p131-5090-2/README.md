@@ -1,7 +1,7 @@
 # `p131-5090-2`: the reading (M32_HELD M64_HELD DEFAULT_NONE)
 
 One RTX 5090 (cc 12.0, driver 595.91.07, 32,607 MiB) on an AMD EPYC 7K62 host (96 CPUs, 503 GB RAM, a 200 GB disk):
-Vast instance 56686506 on machine 152440 at $0.837/h, 2026-10-19 06:48Z to 07:52Z. Cost $1.048 (guard 2.5 h, worst
+Vast instance redacted-3001f56d on machine 152440 at $0.837/h, 2026-10-19 06:48Z to 07:52Z. Cost $1.048 (guard 2.5 h, worst
 $2.80). Code: e4b `8e6471f5` (Amendment 2's merge, #1800), grouped-nf4-gemm `57f53e19`; torch 2.8.0+cu128, triton
 3.4.0, transformers 5.17.0. Qwen/Qwen3-30B-A3B at `ad44e777`. The fetch gate (STOP-0) passed at the launch commit
 (`p131_fetch_gate.json`). [`p131-5090-1`](../p131-5090-1/README.md) stalled at the pre-flight before this run.

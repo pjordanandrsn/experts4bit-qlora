@@ -1,6 +1,6 @@
 # Results — P45: where the training step's time goes (Qwen3-30B-A3B field recipe, RTX 5090, 2026-09-19)
 
-Pre-registration: [`P45-PREREG.md`](P45-PREREG.md) (2026-09-19, before any box). Run `p45-qwen3prof-2` (vast 51531525; run 1 was refused at the manifest guard — the driver's box-E fix had not reached main). e4b `7f9bb05` + gnf4 v0.31.0 (`24f8c9fb`), transformers 5.17.0, torch 2.8.0+cu128. Field fixture: alpaca, seq 2048, mb 2 × accum 4, r 16, adamw_8bit; 8 steps, steps 3–5 profiled (`torch.profiler`, CPU + CUDA). Reducer: `bench/p45/p45_reduce.py`; receipts `receipts/experts4bit-qlora/2026-09-19/p45-qwen3prof-2/tp4/` (`qwen3_e4b_fused_attn4_profile.json`, `logs/dmon_*.txt`).
+Pre-registration: [`P45-PREREG.md`](P45-PREREG.md) (2026-09-19, before any box). Run `p45-qwen3prof-2` (vast redacted-b59f4646; run 1 was refused at the manifest guard — the driver's box-E fix had not reached main). e4b `7f9bb05` + gnf4 v0.31.0 (`24f8c9fb`), transformers 5.17.0, torch 2.8.0+cu128. Field fixture: alpaca, seq 2048, mb 2 × accum 4, r 16, adamw_8bit; 8 steps, steps 3–5 profiled (`torch.profiler`, CPU + CUDA). Reducer: `bench/p45/p45_reduce.py`; receipts `receipts/experts4bit-qlora/2026-09-19/p45-qwen3prof-2/tp4/` (`qwen3_e4b_fused_attn4_profile.json`, `logs/dmon_*.txt`).
 
 ## The e4b arm (`fused_attn4`: `enable_fast_train(dgrad=True)` + int4 attention), three profiled steps
 

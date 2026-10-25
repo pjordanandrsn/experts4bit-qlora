@@ -1,0 +1,9 @@
+# Files of this receipt kept only in the private receipt store, byte-exact: sha256, then the path
+# within this receipt.
+# Originals of files this receipt carries with rented-hardware identifiers replaced by tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p91/receipts/p91-5090-1/forensics.txt at 069a029befd4
+770456c46f34663f15de9737438a90120212d580869f7d410325ef46e8ecd966  forensics.txt
+# same bytes: bench/p91/receipts/p91-5090-1/teardown-proof.json at 069a029befd4
+cd762bfc770c7ba60dc285f7a4875553f138bd3944b9f0b392f1cff78218e5c6  teardown-proof.json

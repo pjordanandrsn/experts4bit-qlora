@@ -1,6 +1,6 @@
 # `p135-5090-2`: what Mixtral's ON_auto folds buy at one row (the reading)
 
-One RTX 5090 (cc 12.0, driver 580.95.05) on an AMD EPYC 7742 host (128 CPUs): Vast instance 56547516, launched
+One RTX 5090 (cc 12.0, driver 580.95.05) on an AMD EPYC 7742 host (128 CPUs): Vast instance redacted-d1e4ceeb, launched
 2026-10-18T11:54:56Z, torn down 12:20:22Z. Cost $1.159. Code: e4b `5be4c4d9` (Amendment 1's merge, #1737),
 grouped-nf4-gemm 0.45.0 (`724ccc45`); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0.
 

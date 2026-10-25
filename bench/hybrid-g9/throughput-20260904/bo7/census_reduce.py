@@ -284,7 +284,7 @@ def main():
     # ---- licensed best per family, three axes
     print("\n### Licensed best per family -- the three axes (rule 3)")
     print("Ratio = the family's own NF4 arm on this box; tok/s = rental-measured on this box (one RTX 5090, driver 595.84, on an AMD EPYC "
-          "7Q83 host, Vast.ai instance 49916675); the anchor-class projection is `159.2 tok/s x the B=1 ratio` and exists ONLY for "
+          "7Q83 host, Vast.ai instance redacted-98e7ba7d); the anchor-class projection is `159.2 tok/s x the B=1 ratio` and exists ONLY for "
           "Qwen3-30B-A3B at B=1 (the anchor class was never certified: 12 refusals) -- every other cell says so.")
     print("| family | licensed configuration | licence basis (register) | ×NF4 (B=1) | B=1 tok/s (this box) | anchor-class projection (B=1) | ×NF4 (B=16) | B=16 tok/s (this box) | anchor (B=16) |")
     print("|---|---|---|---|---|---|---|---|---|")

@@ -1,4 +1,4 @@
-# bo7 — throughput census, results (2026-09-05, box 49916675, one RTX 5090 on an EPYC 7Q83 host)
+# bo7 — throughput census, results (2026-09-05, box redacted-98e7ba7d, one RTX 5090 on an EPYC 7Q83 host)
 
 The tables below are the verbatim output of `python census_reduce.py .` over the JSON receipts in this directory (box, cut, the amendments, protocol, the reading rules and the layout: [`README.md`](README.md)). **bo7 measures speed only; it licenses nothing.** The `licence (register)` column is the register as it stood when this bundle was written — `docs/claims.json` and the K8 verdicts on record from bo3, bo5, bo6 and bo6c — with the claim id that carries each verdict; where the register is silent the cell says `no quality verdict on record`. Every ratio is to the family's own NF4 arm on this box in this session; bo3 / bo5 / bo6 numbers are cited beside, never divided into, these. All 50 arms are in: the 48 lane arms (`TP_DONE` 07:00:26Z) and amendment 2's two `calibexp_all_n128` arms (`logs/bo7b.sh`, after `TP_DONE`; `TP2_DONE` 08:52:27Z).
 
@@ -72,7 +72,7 @@ Ratios are to `nf4` on this box (NF4 experts, bf16 attention, no folds (this lan
 Instrument (Mixtral-8x7B-Instruct, from the B=1 receipts' `mech` tallies, counted at warmup + graph capture): decode-attention compute path {"f32": 0, "fp8": 128}; NF4 GEMV dispatch `all` none (int4 / MXFP4 path), `folds` {'scalar': 128, 'scalar_splitk': 128}, `lic` none (int4 / MXFP4 path), `nf4` {'scalar': 128, 'scalar_splitk': 128}.
 
 ### Licensed best per family -- the three axes (rule 3)
-Ratio = the family's own NF4 arm on this box; tok/s = rental-measured on this box (one RTX 5090, driver 595.84, on an AMD EPYC 7Q83 host, Vast.ai instance 49916675); the anchor-class projection is `159.2 tok/s x the B=1 ratio` and exists ONLY for Qwen3-30B-A3B at B=1 (the anchor class was never certified: 12 refusals) -- every other cell says so.
+Ratio = the family's own NF4 arm on this box; tok/s = rental-measured on this box (one RTX 5090, driver 595.84, on an AMD EPYC 7Q83 host, Vast.ai instance redacted-98e7ba7d); the anchor-class projection is `159.2 tok/s x the B=1 ratio` and exists ONLY for Qwen3-30B-A3B at B=1 (the anchor class was never certified: 12 refusals) -- every other cell says so.
 | family | licensed configuration | licence basis (register) | ×NF4 (B=1) | B=1 tok/s (this box) | anchor-class projection (B=1) | ×NF4 (B=16) | B=16 tok/s (this box) | anchor (B=16) |
 |---|---|---|---|---|---|---|---|---|
 | Granite-3.1-3B-A800M | `r12epi` -- NF4 experts + round-1 + round-2 (rotary-only) folds + router epilogue | K8 verdict: +0.019 ppl wikitext, pass (`e4b.serve.buildout.granite.b1.5090.2026-09-04`) | 1.341 | 304.9 | no anchor projection (no anchor-class measurement exists for this family) | 1.160 | 1836.8 | no anchor projection (B=16 has no anchor-class measurement) |
@@ -106,7 +106,7 @@ console line. Every receipt carries `fuse_qkv: false` and `recompiles_in_window:
 - **Granite-3.1-3B-A800M — the licensed stack `r12epi` (NF4 experts + round-1/2 folds with the rotary-only fold + router
   epilogue) is ×1.341 at B=1 (4.40 → 3.28 ms, 304.9 tok/s) and ×1.160 at B=16 (1583.2 → 1836.8 tok/s) over NF4 on this
   box.** The register's K8 verdict for that stack is +0.019 ppl on wikitext, pass (bo3). Beside it, with their boxes and
-  never divided into these: bo3 259.1 / 1689.6 on instance 49817195 and bo5 294.1 / 1736.1 on 49841214, both EPYC 9755
+  never divided into these: bo3 259.1 / 1689.6 on instance redacted-f766bcf4 and bo5 294.1 / 1736.1 on instance-redacted-b507888e, both EPYC 9755
   hosts. The two int4-expert arms are measured and refused: RTN `int4_r12epi` ×2.146 / ×2.094 (+0.063 ppl, FAIL;
   retracted in #381) and calibrated `calibexp_r12epi` ×2.157 / ×2.093 (c4val1 +0.387 ppl, FAIL, bo5). The calibrated
   pack is speed-identical to RTN (2.04 vs 2.05 ms; 3313.8 vs 3315.0 tok/s), as it must be — same kernel, same bytes,
@@ -148,8 +148,8 @@ console line. Every receipt carries `fuse_qkv: false` and `recompiles_in_window:
   from the 16k one only in the packed values (11512 gptq / 776 rtn against 10820 / 1468 on bo6b/bo6c), not in the kernel
   or the bytes read, so the expectation was that the licensed stack's speed equals the 16k arm's — amendment 2 measured
   it and it does (above). Beside, each with its box and never divided into these: bo5's RTN `all` 204.1 / 1251.6 on an EPYC 9755 host
-  (49841214), bo6's all-at-once calibrated stack 158.0 / 993.6 on a Threadripper PRO 7975WX host (49861751), bo3's
-  177.9 / 1089.6 on 49817195 (EPYC 9755, without #385's glue). Instrument: the 16k streamed calibration on this EPYC
+  (instance-redacted-b507888e), bo6's all-at-once calibrated stack 158.0 / 993.6 on a Threadripper PRO 7975WX host (instance-redacted-5c0ee9b4), bo3's
+  177.9 / 1089.6 on instance-redacted-f766bcf4 (EPYC 9755, without #385's glue). Instrument: the 16k streamed calibration on this EPYC
   7Q83 box packed 10820 gptq / 1468 rtn on both calibrated arms — the counts bo6b and bo6c reported on their Threadripper
   box — so the calibration set and the `min_rows` fallbacks are host-independent at the count level.
 - **Gemma-4-26B-A4B — no K8 instrument exists for this family, so no arm carries a K8 licence; the register's position
@@ -158,7 +158,7 @@ console line. Every receipt carries `fuse_qkv: false` and `recompiles_in_window:
   #344 fault (bake 05:44–05:57Z). The register's quoted best, `int4_r1epi` (bo3's `stack`: RTN int4 experts + round-1 fold
   + epilogue), reads ×1.705 at B=1 (7.25 ms = 137.9 tok/s) and ×1.697 at B=16 (1037.4) — measured, no quality verdict
   (its claim text says "licensed configuration", its notes "NO quality instrument"; the census reads the notes); beside,
-  its box only: bo3's 121.1 / 962.8 (×1.69 / ×1.68) on instance 49817195 — the same shape, cited, not divided.
+  its box only: bo3's 121.1 / 962.8 (×1.69 / ×1.68) on instance redacted-f766bcf4 — the same shape, cited, not divided.
   Calibrated int4 attention on top of `r1epi` (`calattn_r1epi`, 115 projections) reads ×1.398 / ×1.120 — ×1.092 at B=1
   over `r1epi` and ×1.013 at B=16 — measured, no quality verdict (an unreadable K8 on this family). Round 2 refuses by
   design on this family and was not run. Instrument: decode-attention compute `fp8` (120), NF4 GEMV dispatch scalar (240).
@@ -171,7 +171,7 @@ console line. Every receipt carries `fuse_qkv: false` and `recompiles_in_window:
   calibrated int4 attention (`all`, 128 projections) ×2.597 / ×1.962 (7.65 ms = 130.7; 375.5) — both measured, not
   licensed (c4val1 +0.0575 and +0.116 ppl, FAIL as registered on bo5). Calibrated attention is worth ×1.115 on top of
   `lic` at B=1 and ×1.002 at B=16 here (bo5: ×1.101 / ×1.002 on its box). Beside, with their boxes: bo3 `stack` 102.8 /
-  372.0 and `all` 110.0 / 373.4 (49817195); bo5 `lic` 112.0 / 376.5 and `all` 123.3 / 377.3 (49841214). Mixtral's
+  372.0 and `all` 110.0 / 373.4 (instance-redacted-f766bcf4); bo5 `lic` 112.0 / 376.5 and `all` 123.3 / 377.3 (instance-redacted-b507888e). Mixtral's
   `calibexp_lic` was dropped under amendment 1 before the box was rented (FAIL as registered on bo6b; ~85-min streamed
   calibration per arm) and is a row that says so. Instrument: decode-attention compute `fp8` (128); this is the one
   family whose NF4 GEMV dispatch tally shows split-K beside scalar (128 + 128) — the 8-expert, 14336-wide shape.

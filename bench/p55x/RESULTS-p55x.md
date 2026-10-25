@@ -62,7 +62,7 @@ compared at the byte level.
 - upload probe: **10.67 MB/s** over 256 MB (floor 3, rsync rc 0) — the direction the rental
   pre-flight does not measure, and the one this lane's product has to travel
 - artifact fetch, **sustained**: 3.33 MB/s over 15559 MB in 4667 s (rsync rc 0), against the probe's 10.67 MB/s on the same box minutes earlier. The probe **overstated** by 3.2×. A prior lane's probe went the other way (14.76 probe vs 38.70 sustained), so a short probe has **no consistent sign** against sustained rate — it is a disaster detector, and a transfer budget must come from a sustained row like this one.
-- `NVIDIA GeForce RTX 5090, 32607 MiB, 575.57.08, GPU-7a6634c6-2afe-863b-7f96-d00691343cdc`
+- `NVIDIA GeForce RTX 5090, 32607 MiB, 575.57.08, GPU-redacted-3e7298fd`
 - `power.limit,clocks.max.sm 600.00 W, 3105 MHz`
 - `Model name:                              AMD Ryzen 9 7950X 16-Core Processor`
 

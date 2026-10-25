@@ -1,9 +1,9 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3nativebest; e4b bb32ea83f99985494d8731318eec0f8a261398eb gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-33 instance 53916526 deadline 1790989910; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3nativebest; e4b bb32ea83f99985494d8731318eec0f8a261398eb gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-33 instance redacted-79966154 deadline 1790989910; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=112 (physical cores) box_class=RTX 5090
 [2026-10-02T20:43:15Z] tc1/boxA: driver 580.95.05: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 580.95.05 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-7af44365-bd9e-461a-7d00-5a5ac4fbbd9a, 600.00 W, 3210 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-redacted-9d27324d, 600.00 W, 3210 MHz
 CPU(s):                                  224
 Model name:                              AMD EPYC 7663 56-Core Processor
 MemTotal:       792385364 kB
@@ -116,7 +116,7 @@ QWEN3NATIVEBEST DONE
 | qwen3nativebest | unsloth/ckpt_unsloth_best_d2 | **VOID** | VOID | N-A (anchor VOID) | no registered n_layers for family qwen3nativebest |
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3nativebest; e4b bb32ea83f99985494d8731318eec0f8a261398eb gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-33 instance 53916526 deadline 1790989910; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3nativebest; e4b bb32ea83f99985494d8731318eec0f8a261398eb gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-33 instance redacted-79966154 deadline 1790989910; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=112 (physical cores) box_class=RTX 5090
 DRIVER 580.95.05 cu130_ok=1
 AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType

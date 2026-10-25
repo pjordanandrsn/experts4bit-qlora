@@ -1,7 +1,7 @@
 # `fam-gptoss-1`: gpt-oss-20b, the B=1 fused stack at T == 1, one knob per arm, and the anchor (a reading)
 
 One RTX 5090 (cc 12.0, driver 610.57.04) on an AMD engineering-sample host (100-000000897-03, 64 CPUs): Vast instance
-54930717, launched 2026-10-08T23:33:11Z, torn down 2026-10-09T00:41:58Z. Cost $1.007. Code: e4b `9766fb4c` (the #1403
+redacted-a79c1dec, launched 2026-10-08T23:33:11Z, torn down 2026-10-09T00:41:58Z. Cost $1.007. Code: e4b `9766fb4c` (the #1403
 merge), grouped-nf4-gemm 0.43.0 (`6ee2e10`). gpt-oss-20b at 128 teacher-forced positions: OFF, ON_glue, ON_r2, ON_epi
 and ON_auto on the default path; the anchor's OFF and ON_auto on SC2g's.
 

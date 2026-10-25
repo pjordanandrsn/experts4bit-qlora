@@ -1,6 +1,6 @@
 # `p131-prove-1`: the proof (PROVED)
 
-One RTX 5090 (cc 12.0, driver 610.57.04) on an AMD EPYC 7D12 host (64 CPUs, 251 GB RAM): Vast instance 56667234 on
+One RTX 5090 (cc 12.0, driver 610.57.04) on an AMD EPYC 7D12 host (64 CPUs, 251 GB RAM): Vast instance redacted-e3f4cede on
 machine 150168 at $0.7504/h, 2026-10-19 04:04Z to 04:48Z. Cost $0.661 (guard 1.25 h). Code: e4b `c7a40682` (the
 registered launch commit under Amendment 1), grouped-nf4-gemm `57f53e19`. The proof's sizes: four processes, 4 speed
 windows, 3 timed rounds after 1 warm-up, Phase B over 16 windows of 512 prompt tokens and 32 positions.

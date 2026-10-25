@@ -16,6 +16,6 @@ sc1c-5090-5 -> box C; its staged reducer sha256 799b3302eaba28df; e4b 9dd712b
 Substitution licence (box A, |lic/rtn - 1| <= 2 % at both B): HOLDS -- B=1 -0.1 %, B=16 +0.1 %. Boxes B/C anchors are RTN: licensed as the e4b stand-in.
 
 P13: HOLD -- B=1 B 1.203, C 1.167 (gap 3.1 % vs 5 %); B=16 B 1.172, C 1.177 (gap 0.4 % vs 5 %)
-wrote /private/tmp/claude-501/-Users-jordananderson-code/d479c659-f03e-44eb-9883-8d2aa60a2184/scratchpad/xbox/A/RESULTS-sc1-A-generated.md
-wrote /private/tmp/claude-501/-Users-jordananderson-code/d479c659-f03e-44eb-9883-8d2aa60a2184/scratchpad/xbox/B/RESULTS-sc1-B-generated.md
-wrote /private/tmp/claude-501/-Users-jordananderson-code/d479c659-f03e-44eb-9883-8d2aa60a2184/scratchpad/xbox/C/RESULTS-sc1-C-generated.md
+wrote <scratch>
+wrote <scratch>
+wrote <scratch>

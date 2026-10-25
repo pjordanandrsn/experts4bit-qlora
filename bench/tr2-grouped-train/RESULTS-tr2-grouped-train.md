@@ -11,7 +11,7 @@ at the end of this file. -->
 
 Adjudicated 2026-08-26 by `tr2_verdict.py` (amended A/A gate,
 self-tests green) on `receipts-tr2/tr2_report.json`. Box: RTX 5090 +
-EPYC 9654, instance 48709950 (serving anchor probe 7.25 ms — the
+EPYC 9654, instance redacted-933abf0f (serving anchor probe 7.25 ms — the
 post-F2 class). Recipe as registered: the TR1 subject verbatim,
 TOKEN_BUDGET pinned 1024.
 
@@ -79,7 +79,7 @@ budget knob re-opens on top of this step mechanics as its own cycle.
 Appended, not edited: the original verdict is left intact because it is
 correct for the stack it was measured on.
 
-**The treatment did not regress.** Re-run on a fresh RTX 5090 (vast 48803545,
+**The treatment did not regress.** Re-run on a fresh RTX 5090 (vast redacted-97d65e06,
 driver 595.84) with transformers 5.5.0, bnb 0.50.1, gnf4 0.16.0, the TR1
 recipe verbatim:
 

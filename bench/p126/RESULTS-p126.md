@@ -20,7 +20,7 @@ carries `"amendment": 1`. The rule's steps, in order:
 ## Attempt 2: the reading (`p126-5090-2`)
 
 **Host:** one RTX 5090 (driver 610.57.04, power cap 575 W of a 600 W maximum) on a 64-thread AMD host with 251 GiB RAM.
-It was Vast instance 55056239 on machine 13828; the launcher avoided attempt 1's machine (37367) by citing its receipt.
+It was Vast instance redacted-9559ff55 on machine 13828; the launcher avoided attempt 1's machine (37367) by citing its receipt.
 **Cost:** $0.332. Teardown was proven at 17:01:27Z. The blocks' clock logs read 2130–2242 MHz (attempt 1's capped card:
 2385–2632), so the absolute step here is slower than attempt 1's (18.5 against 17.0 ms). Every ratio is inside one box.
 
@@ -158,7 +158,7 @@ re-reduced under a later rule. The rule's steps, in order:
 ### The reading (`p126-5090-1`)
 
 **Host:** one RTX 5090 (driver 595.71.05) on an AMD EPYC 7C13 host (256 CPUs, 1007 GiB RAM, 496 GiB of it already in use
-when the box started: a shared host). It was Vast instance 55043022 on machine 37367. In every block's clock log, the card's power draw peaked
+when the box started: a shared host). It was Vast instance redacted-cc64acd3 on machine 37367. In every block's clock log, the card's power draw peaked
 at 400 W: on this host the card runs under a 400 W cap. **Cost:** $0.874, most of it the 61 GB fetch at this host's
 download price. Teardown was proven at 15:28:03Z.
 

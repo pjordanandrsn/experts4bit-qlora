@@ -30,7 +30,8 @@ decode of 64 new tokens (transformers generate, sync-bracketed).
 No expert-row-sized transfers appear in the captured window — the link
 carried activation-class traffic only, versus the ~1 GB/token the
 streaming baseline moves by design. That is the disjoint-bus law,
-observed. Trace committed (`g3_nsys.nsys-rep` + stats extracts).
+observed. Trace committed (`g3_nsys.nsys-rep` + stats extracts; since 2026-10-25 the trace is in the
+private receipt store only, its sha256 in `STORE-ONLY.sha256` here).
 
 ## Honest caveats
 

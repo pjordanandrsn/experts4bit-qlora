@@ -22,7 +22,7 @@ Stack:
 ## The reading (`p120-5090-1`)
 
 **Host:** one RTX 5090 (sm_120, driver 595.71.05) on an AMD EPYC 7C13 (256 threads, 1,007 GiB RAM), Vast instance
-54897838.
+redacted-85a6deba.
 
 **Cost:** $0.878. Teardown proven at 19:32:51Z.
 

@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-92b071c6-a971-d058-d0e5-20a4b7f6452c
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-redacted-c5971a51
 power.limit,clocks.max.sm 475.00 W, 3090 MHz
 Model name:                              AMD EPYC 7352 24-Core Processor
                total        used        free      shared  buff/cache   available

@@ -182,7 +182,7 @@ Fetched to the run directory's `p112/` and committed to `bench/p112/receipts/<ru
 
 ## Amendment 1 (2026-10-04, after `p112-5090-1`, written after seeing its arms): the launch accounting's compile launches
 
-`p112-5090-1` ran on one RTX 5090 (Vast 54118102, machine 37958, AMD Ryzen 9 7950X), cost $0.3210, and is in adertha-receipts
+`p112-5090-1` ran on one RTX 5090 (Vast redacted-21dd2909, machine 37958, AMD Ryzen 9 7950X), cost $0.3210, and is in the private receipt store
 `a88df20`. Teardown was proven at 07:31:36Z. Everything before the verdict passed:
 - the tripwire and both self-tests;
 - the premise: 7 + 23 passed, none skipped;
@@ -243,7 +243,7 @@ checks the match directly.
 
 ## Amendment 2 (2026-10-04, after `p112-5090-2`): the lane closes VOID
 
-`p112-5090-2` ran on Vast 54122612 (machine 45511, EPYC 7C13, a shared host with 762 of its 1,007 GB of RAM in use),
+`p112-5090-2` ran on Vast redacted-b3279fdb (machine 45511, EPYC 7C13, a shared host with 762 of its 1,007 GB of RAM in use),
 cost $1.0210 by its invoice, and is in adertha-receipts `19fb230`. It ran under Amendment 1. Its amended accounting
 passed and confirms that amendment's cause directly: every kernel's compile launches equal its compiled variants, and
 in P1 every variant and every handled launch carried PDL. Tokens were identical in every arm.

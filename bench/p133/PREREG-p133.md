@@ -171,7 +171,7 @@ eager. So these run for the first time in this lane on the proof:
 
 ## Amendment 1 (2026-10-17, after `p133-4090-prove-1` VOIDed on a defect in the reducer)
 
-**What happened.** `p133-4090-prove-1` ($0.17, Vast contract 56454024 on machine 51612) ran every registered box step:
+**What happened.** `p133-4090-prove-1` ($0.17, Vast contract instance-redacted-559bc5df on machine 51612) ran every registered box step:
 - refusals passed (`cc=8.9 sms=128`, torch 2.8.0+cu128); the tripwire and self-tests passed;
 - the premise read 33 + 2 and 18 + 0, by id;
 - the fit check passed (`max_seqs` auto 64, buckets 1–64, graphs on);
@@ -209,7 +209,7 @@ ratios at the proof's lengths, were seen. They are noise diagnostics, per the ru
 
 ## Amendment 2 (2026-10-17, after `p133-4090-1` was ABORTED ahead of the registered time-left check; nothing read)
 
-**What happened.** `p133-4090-1` ($0.50 billed, Vast instance 56463118 on machine 51617) passed its refusals and premise.
+**What happened.** `p133-4090-1` ($0.50 billed, Vast instance redacted-2cef3d86 on machine 51617) passed its refusals and premise.
 The 61.1 GB fetch then took about 17 min (23:02:47Z to 23:19:56Z), and the NF4 bake was still running at 23:35Z (about 0.65–1
 GB of arena a minute). At the earliest quality-OFF check the box would have had about 1,900 s left, below `NEED_QOFF` 1500 +
 600, so STOP-2 would have skipped quality and the lane would have exited 40 with no verdict. On the maintainer's ruling it was

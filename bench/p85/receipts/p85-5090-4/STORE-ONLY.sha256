@@ -1,0 +1,7 @@
+# Files of this receipt kept only in the private receipt store, byte-exact: sha256, then the path
+# within this receipt.
+# Originals of files this receipt carries with rented-hardware identifiers replaced by tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p85/receipts/p85-5090-4/forensics.txt at 069a029befd4
+04cb108ae759e0827c38e274e62efd6ef01dbde5fec400f69b0397cc61a3de10  forensics.txt

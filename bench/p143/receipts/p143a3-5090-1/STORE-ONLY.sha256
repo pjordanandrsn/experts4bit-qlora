@@ -13,3 +13,10 @@ a1e8178079982b9754d9648a164ddab0f1660d37b02bc47be03469d0d2309c91  receipts/exper
 c1ef3ab90f316e9607c4cfc9fed089ee8676a7dfa8ee9b9ba26c342c96602dd8  receipts/experts4bit-qlora/2026-10-19/p143a3-5090-1/p143a3/logs/prompts.log
 feb248ad00f5785864792e1dfb4824d80b56f36bbe6e480ef768e5786ad1a8a0  receipts/experts4bit-qlora/2026-10-19/p143a3-5090-1/p143a3/logs/sane_off.log
 56a608638f9ca28744045c1a419e56c955b278e14983e055eb0e0b166128cfbc  receipts/experts4bit-qlora/2026-10-19/p143a3-5090-1/p143a3/logs/sane_on.log
+# Originals of files this receipt carries with rented-hardware identifiers replaced by tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p143/receipts/p143a3-5090-1/forensics.txt at 069a029befd4
+15b9eee20a12cd77d1b87da4837f2a5f53c07603236f916a587245a0fde85e55  forensics.txt
+# same bytes: bench/p143/receipts/p143a3-5090-1/teardown-proof.json at 069a029befd4
+3d19c6fa25e01c856aa59bc9058f1aed42546959b426a6a29cf4888b0917ba46  teardown-proof.json

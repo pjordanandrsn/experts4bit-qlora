@@ -48,7 +48,8 @@ than the Phase-0 blob box, same class; link latency measured in-session.)
 | cudaMemcpyAsync | 6,432 (D2H hidden + fused H2D idx/wts) | 6,400 |
 
 Traces committed: `g1_audit_replica.nsys-rep`, `g1_audit_legacy.nsys-rep`
-(+ `g1_nsys_api_*.txt` extracts). This is the per-layer contract from the
+(+ `g1_nsys_api_*.txt` extracts; since 2026-10-25 the traces are in the private receipt store only, with their
+sha256 in `STORE-ONLY.sha256` here). This is the per-layer contract from the
 design: one D2H, one fused H2D, all waits event-scoped or device-side.
 
 ## Round trip and its dissection (replica, batch 1)

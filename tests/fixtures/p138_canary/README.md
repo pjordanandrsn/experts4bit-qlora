@@ -1,6 +1,6 @@
 # P138 canary records (`vsplit-5090-2`, 2026-10-18)
 
-The box's own canary records, as fetched at teardown from `/root/vsplit/` on one RTX 5090 (card GPU-ecc38202):
+The box's own canary records, as fetched at teardown from `/root/vsplit/` on one RTX 5090 (card GPU-redacted-340036b9):
 
 | file | sha256 | what it is |
 |---|---|---|

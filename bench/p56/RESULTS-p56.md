@@ -1,7 +1,7 @@
 # Results — P56: Gemma-4's training-parity FAIL is not a defect in the fused path
 
 Pre-registration: [`P56-PREREG.md`](P56-PREREG.md) (merged `d0f8fde`, 2026-09-21; erratum `706942a`).
-Run **`p56-gemma4-ladder-3`**, one RTX 5090 (Vast verified-secure, instance ssh7.vast.ai:25378),
+Run **`p56-gemma4-ladder-3`**, one RTX 5090 (Vast verified-secure, instance ssh-redacted-d9014c85),
 e4b `2555cf3`, grouped-nf4-gemm pinned at **`9206352f` (v0.32.1)** — the cut the standing claim row
 was measured on. Read by [`p56_reduce.py`](p56_reduce.py); nothing below is hand-transcribed.
 

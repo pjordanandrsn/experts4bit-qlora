@@ -134,7 +134,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-7ad8f490-fcd6-e98f-6a7a-2329e08d349d",
+   "uuid": "GPU-redacted-c138f66c",
    "pci.bus_id": "00000000:01:00.0",
    "pcie.link.gen.current": "2",
    "pcie.link.gen.max": "5",
@@ -148,7 +148,7 @@
    "cpu": "13th Gen Intel(R) Core(TM) i9-13900",
    "cpu_threads": 32,
    "host_mem_gib": 125.6,
-   "vast_instance_id": "53772765",
+   "vast_instance_id": "instance-redacted-83bc413b",
    "container_host": "ce06413975ef"
   },
   "anchor_json": null,

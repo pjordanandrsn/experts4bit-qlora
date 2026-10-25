@@ -1,9 +1,9 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3prof945; e4b 635b66ba74a6cf459cab51c43f323c8705dd756e gnf4 133ad9d4f35937a5fbd929703059b4f3b08010e9; run tc1-5090-41 instance 54000851 deadline 1791029523; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3prof945; e4b 635b66ba74a6cf459cab51c43f323c8705dd756e gnf4 133ad9d4f35937a5fbd929703059b4f3b08010e9; run tc1-5090-41 instance redacted-9a73468a deadline 1791029523; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=24 (physical cores) box_class=RTX 5090
 [2026-10-03T10:43:31Z] tc1/boxA: driver 595.91.07: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 595.91.07 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-1988d9ef-19d0-36d8-6639-210c4347c852, 470.00 W, 3090 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-redacted-b72d3910, 470.00 W, 3090 MHz
 CPU(s):                                  24
 Model name:                              Intel(R) Core(TM) Ultra 9 285K
 MemTotal:       197216440 kB
@@ -88,7 +88,7 @@ QWEN3PROF945 DONE
 | P19 | qwen3prof945 | **HELD** | device busy fraction matched new 0.740 vs legacy 0.595 (+0.145; >= +0.05 predicted); device events/step 136969 vs 140809; CPU ops/step 750409 vs 753087 |
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3prof945; e4b 635b66ba74a6cf459cab51c43f323c8705dd756e gnf4 133ad9d4f35937a5fbd929703059b4f3b08010e9; run tc1-5090-41 instance 54000851 deadline 1791029523; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3prof945; e4b 635b66ba74a6cf459cab51c43f323c8705dd756e gnf4 133ad9d4f35937a5fbd929703059b4f3b08010e9; run tc1-5090-41 instance redacted-9a73468a deadline 1791029523; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=24 (physical cores) box_class=RTX 5090
 DRIVER 595.91.07 cu130_ok=1
 DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
