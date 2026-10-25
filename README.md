@@ -98,7 +98,7 @@ These are specific workloads, with public results and controls. The table is che
 
 The speed rows profile both frameworks on one stack (torch 2.12.1). The GPU-time ratio is the host-independent figure; the
 wall-clock ratio grows on a slower host, because Unsloth runs 14× e4b's CPU ops per step at the field recipe. On packed rows
-the wall ratio read 1.472 (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`) and 1.773
+the wall ratio read 1.472 (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio.am81`) and 1.773
 (`e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`) on two hosts. The earlier field-recipe readings, 2.352 and 2.468, were wall
 ratios from before the reentrant checkpoint.
 The offload row uses a different training setup.
