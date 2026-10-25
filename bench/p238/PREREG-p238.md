@@ -346,9 +346,9 @@ attention-only training (except the stated e4b property), other ranks, other mod
     from the shakedown's receipt and stated before the reading launches.
 - A box is started at its `STARTED` marker (after the refusals and the pre-install fit). Two strikes end the lane. The runner's exit
   codes follow P236's table (13, 15, 16, 18 host refusals before `STARTED`; 41 fit; 9, 10, 28, 78, 130 halts; 27 VOID). The
-  DRIVER passes each registered box code through unchanged, since the launcher reads only the driver's own code (it excludes a
-  machine on 13, 14, 17, 18). The driver's own codes are 23 (no readable exit file fetched), 24 (the box said 0 without its
-  `P238_SUCCESS` marker: never a success) and 26 (a box code the table does not register).
+  DRIVER passes each registered box code through unchanged, and ALWAYS the launcher's host codes 13, 14, 17 and 18 (it reads
+  only the driver's own code and excludes a machine on those). The driver's own codes are 23 (no readable exit file fetched),
+  24 (the box said 0 without this run's `P238_SUCCESS` marker: never a success) and 26 (any other code).
 - **Host refusals and the pin walk.** The launcher excludes a machine on 13, 14, 17 and 18 only (its host-refusal set). 15 (card,
   compute capability, SM count or VRAM) and 16 (host RAM) end the box WITHOUT excluding the machine, so P238's pin walk excludes it
   itself: the driver records the machine of every 15 / 16 refusal and the screen skips it for the rest of the lane (a card that

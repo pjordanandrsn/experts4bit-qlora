@@ -10,8 +10,10 @@
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p238_drive] $*"; }
 # The driver's OWN exit code is what the launcher reads (it writes "command exited {rc}" and excludes the machine on 13/14/17/18),
-# so the box's registered code passes through unchanged. 23: no readable exit file was fetched. 24: the box said 0 but wrote no
-# P238_SUCCESS marker (never read as success). 26: the box wrote a code the PREREG does not register.
+# so the launcher's host codes (13 14 17 18) ALWAYS pass through, whatever the lane registers (a shared helper exiting 14 or 17 must
+# still exclude its host), and so does every code the PREREG registers. 23: no readable exit file was fetched. 24: the box said 0
+# but wrote no P238_SUCCESS marker for this nonce (never read as success). 26: any other code.
+HOST_CODES=" 13 14 17 18 "
 BOX_CODES=" 9 10 13 15 16 18 27 28 41 78 130 "
 finish(){   # finish OUT NONCE -> exits with the driver's code
   local out=$1 nonce=$2 rc
@@ -23,7 +25,7 @@ finish(){   # finish OUT NONCE -> exits with the driver's code
     [ -f "$out/P238_SUCCESS.$nonce" ] && exit 0
     say "box rc 0 without P238_SUCCESS.$nonce: not a success"; exit 24
   fi
-  case "$BOX_CODES" in *" $rc "*) exit "$rc";; esac
+  case "$HOST_CODES$BOX_CODES" in *" $rc "*) exit "$rc";; esac
   say "box rc $rc is not a registered code"; exit 26
 }
 if [ -n "${P238_DRIVE_TAIL_DIR:-}" ]; then finish "$P238_DRIVE_TAIL_DIR" "${P238_DRIVE_TAIL_NONCE:?}"; fi   # the tail, alone (tests)

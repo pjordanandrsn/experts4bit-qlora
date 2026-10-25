@@ -446,6 +446,8 @@ def test_the_driver_parses_and_refuses_unregistered_ids(tmp_path):
     ({"P238_EXIT_CODE.n1": "0\n", "P238_SUCCESS.n0": ""}, 24),   # another run's marker does not count
     ({"P238_EXIT_CODE.n1": "13\n"}, 13),                         # disk: the launcher excludes the machine
     ({"P238_EXIT_CODE.n1": "18\n"}, 18),                         # card floor / CUDA: excluded
+    ({"P238_EXIT_CODE.n1": "14\n"}, 14),                         # a launcher host code P238 does not register: still passes
+    ({"P238_EXIT_CODE.n1": "17\n"}, 17),
     ({"P238_EXIT_CODE.n1": "15\n"}, 15),                         # card: passed through for the pin walk
     ({"P238_EXIT_CODE.n1": "16\n"}, 16),
     ({"P238_EXIT_CODE.n1": "27\n"}, 27),                         # VOID
