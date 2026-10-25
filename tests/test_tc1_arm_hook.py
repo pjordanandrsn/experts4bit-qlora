@@ -90,6 +90,7 @@ def test_the_selftest_runs_the_extension_block(selftest):
     p, d = selftest
     ext = re.search(r"extension=(\{.*\})$", p.stdout.strip().splitlines()[-1]).group(1)
     assert "'hook': {'edges': 13, 'losses_equal': True}" in ext and "'refusals': 5" in ext and "'engine_calls': 13" in ext, ext
+    assert "'raising': 5" in ext, ext       # a raising phase (and an observer's OOM) is harness_error 10 naming arm_hook.<phase>
     assert "FAILING-CASE ext-hook-output-equality: a hook scaling the training loss by 1.001 moves losses[0]" in p.stdout
     hk = json.loads((d / "tiny_e4b_fused_attn4_ext_hook.json").read_text())
     base = json.loads((d / "tiny_e4b_fused_attn4_ext_base.json").read_text())
@@ -144,6 +145,7 @@ REFUSALS = [
     (("--framework", "unsloth", "--arm", "unsloth", "--unsloth-offload-layers", "x", "--vram-cap-gib", "12"), "auto or a positive integer"),
     (("--framework", "unsloth", "--arm", "unsloth", "--layer-major", "1"), "is an e4b option"),
     (("--framework", "e4b", "--arm", "fused", "--layer-major", "1", "--microbatch-timing", "1"), "no micro-batch boundary"),
+    (("--framework", "e4b", "--arm", "fused", "--layer-major", "1", "--mem-census", "1"), "no micro-batch boundary"),
 ]
 
 
@@ -197,6 +199,15 @@ def test_the_vram_cap_sets_the_fraction_and_reads_it_back(tmp_path):
     assert arm.apply_vram_cap(_args(tmp_path), cuda=cuda) is None
 
 
+def test_the_vram_cap_refuses_when_the_getter_reads_another_fraction(tmp_path):
+    arm = _load_arm()
+    cuda = _FakeCuda(24.0)
+    cuda.get_per_process_memory_fraction = lambda dev=0: 1.0          # a getter that does not report what was set
+    with pytest.raises(SystemExit) as e:
+        arm.apply_vram_cap(_args(tmp_path, vram_cap_gib=12.0), cuda=cuda)
+    assert e.value.code == 10 and "the getter reads" in json.loads(next(tmp_path.glob("*.json")).read_text())["reason"]
+
+
 def test_the_vram_cap_refuses_without_the_getter_and_above_the_card(tmp_path):
     """Without get_per_process_memory_fraction, Unsloth's planner silently reads 1.0, so the cap refuses rather than run uncapped."""
     arm = _load_arm()
@@ -245,6 +256,82 @@ def test_the_block_swaps_resolved_layers():
     peft = types.SimpleNamespace(base_model=types.SimpleNamespace(model=types.SimpleNamespace(_unsloth_block_swap=bs)))
     assert arm.unsloth_offload_resolved(peft)["indices"] == [3, 4, 5]
     assert arm.unsloth_offload_resolved(types.SimpleNamespace()) is None
+
+
+@pytest.mark.parametrize("given,swap,ok", [
+    (4, None, False),                                   # no block swap on the model: the offload did not engage
+    ("auto", [], False),                                # auto resolved to no layer ("loads every layer onto the GPU")
+    (4, [1, 2, 3, 4], True), ("auto", [5, 6], True),
+    (4, [1, 2, 3], False),                              # an explicit N resolved to another count
+])
+def test_the_offload_must_engage_as_given(given, swap, ok):
+    arm = _load_arm()
+    model = types.SimpleNamespace() if swap is None else types.SimpleNamespace(_unsloth_block_swap=types.SimpleNamespace(indices=swap))
+    rec = {"given": given}
+    if ok:
+        assert arm.offload_engaged(rec, model) == {"n_layers": len(swap), "indices": swap} and rec["resolved"]["indices"] == swap
+    else:
+        with pytest.raises(NotImplementedError):
+            arm.offload_engaged(rec, model)
+
+
+def _hook_file(tmp_path, monkeypatch, arm, name="tc1_test_hook", body="def make():\n    return object()\n"):
+    import hashlib
+    d = tmp_path / "hk"
+    d.mkdir(exist_ok=True)
+    f = d / f"{name}.py"
+    f.write_text(body)
+    monkeypatch.syspath_prepend(str(d))
+    monkeypatch.setenv(arm.ARM_HOOK_SHA_ENV, hashlib.sha256(f.read_bytes()).hexdigest())
+    return f
+
+
+def test_a_module_already_imported_from_another_file_is_refused(tmp_path, monkeypatch):
+    """The sha is of the file on disk; a module of that name already in sys.modules from ANOTHER file is not the hashed one."""
+    import importlib.util
+    arm = _load_arm()
+    f = _hook_file(tmp_path, monkeypatch, arm, "tc1_preseeded_hook")
+    impostor = types.ModuleType("tc1_preseeded_hook")
+    impostor.__file__ = str(tmp_path / "elsewhere.py")
+    impostor.__spec__ = importlib.util.spec_from_file_location("tc1_preseeded_hook", f)
+    impostor.make = lambda: object()
+    monkeypatch.setitem(sys.modules, "tc1_preseeded_hook", impostor)
+    monkeypatch.setenv(arm.ARM_HOOK_ENV, "tc1_preseeded_hook:make")
+    out = tmp_path / "out"
+    out.mkdir()
+    with pytest.raises(SystemExit) as e:
+        arm.load_arm_hook(_args(out))
+    assert e.value.code == 10 and "not the hashed" in json.loads(next(out.glob("*.json")).read_text())["reason"]
+
+
+def test_a_dotted_module_name_is_refused_before_any_import(tmp_path, monkeypatch):
+    arm = _load_arm()
+    _hook_file(tmp_path, monkeypatch, arm)
+    monkeypatch.setenv(arm.ARM_HOOK_ENV, "json.tool:main")
+    with pytest.raises(SystemExit) as e:
+        arm.load_arm_hook(_args(tmp_path))
+    assert e.value.code == 10 and "top-level module" in json.loads(next(tmp_path.glob("*.json")).read_text())["reason"]
+
+
+def test_every_phase_is_named_in_a_trace_and_timed(tmp_path, monkeypatch):
+    """step_edge runs inside the profiled window for the inner profiled steps, so each phase is wrapped in a record_function named
+    tc1_arm.arm_hook.<phase> (a trace shows it) and its seconds are recorded."""
+    import contextlib
+    import torch.profiler as tp
+    arm = _load_arm()
+    names = []
+
+    @contextlib.contextmanager
+    def rf(name):
+        names.append(name)
+        yield
+    monkeypatch.setattr(tp, "record_function", rf)
+    seen = []
+    h = {"obj": types.SimpleNamespace(step_edge=lambda i: seen.append(i)), "phases": ["step_edge"], "calls": {"step_edge": 0},
+         "seconds": {"step_edge": 0.0}, "a": _args(tmp_path), "spec": "m:f", "file": "m.py", "sha256": "0" * 64}
+    arm.arm_hook_call(h, "step_edge", 3)
+    assert seen == [3] and names == ["tc1_arm.arm_hook.step_edge"] and h["calls"]["step_edge"] == 1 and h["seconds"]["step_edge"] >= 0.0
+    assert "seconds" in arm.arm_hook_receipt(h, None)
 
 
 def test_no_hook_set_loads_nothing(tmp_path, monkeypatch):

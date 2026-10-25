@@ -290,7 +290,9 @@ timing and kernel-call counters, refusal/OOM/fault receipts with exit codes. Wha
       key set:
       - TC1_ARM_HOOK=module:factory (with TC1_ARM_HOOK_SHA256, the lane's staged pin): a generic OBSERVE-ONLY hook with the phases
         post_import(args), post_load(args, model) before the first forward, step_edge(i) before step i and once after the last
-        (i = N), and record() into the receipt's `arm_hook`. A wrong sha, an import or a factory failure exits 10;
+        (i = N; it must launch no device work: inside the profiled window it runs while the profiler records), and record() into the
+        receipt's `arm_hook`, each phase named in a trace and timed. A wrong sha, an import, a factory or ANY phase failure exits 10
+        (harness_error, never the arm's refused or oom);
       - --vram-cap-gib X: the per-process memory fraction before the load, the getter read back (`vram_cap`);
       - --unsloth-offload-layers N|auto (Unsloth only, needs the cap): from_pretrained(offload_layers, max_memory), the swapped
         layers recorded (`unsloth_offload_layers`);
@@ -2187,10 +2189,8 @@ def load_unsloth(a):
     print("\n".join(out.splitlines()[-40:]), flush=True)
     if not any(BANNER in l for l in x["banner_lines"]):
         x["banner_lines"].append(f"NO '{BANNER}' banner on stdout (the census below decides)")
-    if x.get("unsloth_offload_layers") is not None:                    # what the block swap chose; none on the model = it did not engage
-        x["unsloth_offload_layers"]["resolved"] = unsloth_offload_resolved(model)
-        if not x["unsloth_offload_layers"]["resolved"]:
-            raise NotImplementedError(f"--unsloth-offload-layers {a.unsloth_offload_layers}: the loaded model carries no block swap")
+    if x.get("unsloth_offload_layers") is not None:                    # what the block swap chose; refused unless it engaged as given
+        offload_engaged(x["unsloth_offload_layers"], model)
     dq["loaded_nested"] = loaded_expert_double_quant(model)            # P2-1: what the loaded expert Params4bit says (None = none found)
     x["unsloth_double_quant"] = dq
     x["moe_backend_selected"] = unsloth_backend_selected()             # P2-1: select_moe_backend() after load (lru_cached)
@@ -4120,15 +4120,19 @@ def load_arm_hook(a):
     ``post_import(args)`` before the load; ``post_load(args, model)`` after the load and every harness setup (the casts, the matched
     init, the counters), before the first forward; ``step_edge(i)`` before optimizer step i (i = 0..N-1, outside the step's clock) and
     once after the last (i = N); ``record()``, after training, returning a JSON-able dict for the receipt's ``arm_hook.record``.
-    Anything a hook installs must return the wrapped output unchanged: the selftest's output-equality case pins that."""
+    Anything a hook installs must return the wrapped output unchanged: the selftest's output-equality case pins that.
+    The PROFILER: step_edge(i) for warm < i < warm + profile_steps runs while the profiler records, so the contract is that step_edge
+    launches NO device work (counters, NVML and snapshots are CPU work). Every phase runs inside
+    ``torch.profiler.record_function("tc1_arm.arm_hook.<phase>")``, so a trace names it, and its seconds go into ``arm_hook.seconds``.
+    The module name is top-level only (``find_spec`` on a dotted name would import the parent package before the sha check)."""
     spec = os.environ.get(ARM_HOOK_ENV)
     if not spec:
         return None
     import importlib.util
     want = (os.environ.get(ARM_HOOK_SHA_ENV) or "").strip().lower()
     mod_name, _, fac_name = spec.partition(":")
-    if not mod_name or not fac_name or not re.fullmatch(r"[0-9a-f]{64}", want):
-        stub(a, "harness_error", f"{ARM_HOOK_ENV}={spec!r} needs the form module:factory, and {ARM_HOOK_SHA_ENV} its full sha256 "
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", mod_name) or not fac_name or not re.fullmatch(r"[0-9a-f]{64}", want):
+        stub(a, "harness_error", f"{ARM_HOOK_ENV}={spec!r} needs the form module:factory (a top-level module), and {ARM_HOOK_SHA_ENV} its full sha256 "
              f"(got {want[:16]!r})", {"phase": "preamble"}, code=10)
     try:
         found = importlib.util.find_spec(mod_name)
@@ -4153,20 +4157,33 @@ def load_arm_hook(a):
     except Exception as e:
         stub(a, "harness_error", f"{ARM_HOOK_ENV}={spec!r}: {type(e).__name__}: {str(e)[:300]}", {"phase": "preamble"}, code=10)
     phases = [p for p in ARM_HOOK_PHASES if callable(getattr(hook, p, None))]
-    return {"obj": hook, "spec": spec, "file": os.path.basename(origin), "sha256": got, "phases": phases, "calls": {p: 0 for p in phases}}
+    return {"obj": hook, "spec": spec, "file": os.path.basename(origin), "sha256": got, "phases": phases, "calls": {p: 0 for p in phases},
+            "seconds": {p: 0.0 for p in phases}, "a": a}
 
 
 def arm_hook_call(h, phase, *args):
-    """Call one phase of a loaded hook, if it defines that phase; nothing otherwise. A raise propagates (the arm's row names the phase)."""
+    """Call one phase of a loaded hook, if it defines that phase; nothing otherwise. ANY exception a phase raises, an OOM included, is
+    the OBSERVER's fault: a harness_error row (exit 10) naming ``arm_hook.<phase>``, never let through to the arm's own classifiers,
+    where a KeyError would read as the framework refusing (3) and an OOM as the arm's own (5) -- reading outcomes."""
     if h is None or phase not in h["phases"]:
         return None
     h["calls"][phase] += 1
-    return getattr(h["obj"], phase)(*args)
+    t0 = time.perf_counter()
+    try:
+        from torch.profiler import record_function
+        with record_function(f"tc1_arm.arm_hook.{phase}"):
+            return getattr(h["obj"], phase)(*args)
+    except Exception as e:
+        import traceback
+        stub(h["a"], "harness_error", f"arm_hook.{phase}: {type(e).__name__}: {str(e)[:500]}",
+             {"phase": f"arm_hook.{phase}", "exception_type": type(e).__name__, "traceback_tail": traceback.format_exc()[-1500:]}, code=10)
+    finally:
+        h["seconds"][phase] += time.perf_counter() - t0
 
 
 def arm_hook_receipt(h, record):
     return {"spec": h["spec"], "file": h["file"], "sha256": h["sha256"], "phases": list(h["phases"]), "calls": dict(h["calls"]),
-            "record": record}
+            "seconds": {k: round(v, 4) for k, v in h["seconds"].items()}, "record": record}
 
 
 def apply_vram_cap(a, cuda=None):
@@ -4240,6 +4257,23 @@ def unsloth_offload_resolved(model):
         return None
     idx = [int(i) for i in (getattr(bs, "indices", None) or [])]
     return {"n_layers": len(idx), "indices": idx}
+
+
+def offload_engaged(rec, model):
+    """``--unsloth-offload-layers``: what the block swap resolved to, recorded into ``rec["resolved"]``; refused (NotImplementedError, a
+    refusal row) when the model carries no block swap, when it swaps no layer (``auto`` falls back to 0, "loads every layer onto the
+    GPU"), or when an explicit N resolved to another count. The attribute is Unsloth 2026.10.8's: ``model._unsloth_block_swap = swapper``
+    (unsloth/models/_utils.py:9101 and :9776) and ``swapper.indices`` (unsloth_zoo/block_swap.py:271)."""
+    resolved = unsloth_offload_resolved(model)
+    rec["resolved"] = resolved
+    given = parse_offload_layers(rec.get("given"))
+    if not resolved:
+        raise NotImplementedError(f"--unsloth-offload-layers {given}: the loaded model carries no block swap (the offload did not engage)")
+    if resolved["n_layers"] == 0:
+        raise NotImplementedError(f"--unsloth-offload-layers {given}: the block swap holds no layer (the offload did not engage)")
+    if isinstance(given, int) and resolved["n_layers"] != given:
+        raise NotImplementedError(f"--unsloth-offload-layers {given}: the block swap holds {resolved['n_layers']} layers, not {given}")
+    return resolved
 
 
 def layer_major_engine():
@@ -6297,6 +6331,54 @@ def make_edges_only():
 
 def make_broken():
     raise RuntimeError("selftest: factory failure injected")
+
+
+class _Raises(_Hook):
+    """Observes like _Hook, but one phase raises (step_edge at i = 1, inside the training loop)."""
+
+    def __init__(self, phase, exc):
+        super().__init__()
+        self.phase, self.exc = phase, exc
+
+    def post_import(self, args):
+        if self.phase == "post_import":
+            raise self.exc
+        super().post_import(args)
+
+    def post_load(self, args, model):
+        if self.phase == "post_load":
+            raise self.exc
+        super().post_load(args, model)
+
+    def step_edge(self, i):
+        if self.phase == "step_edge" and i == 1:
+            raise self.exc
+        super().step_edge(i)
+
+    def record(self):
+        if self.phase == "record":
+            raise self.exc
+        return super().record()
+
+
+def make_raise_post_import():
+    return _Raises("post_import", ValueError("selftest: post_import fault"))
+
+
+def make_raise_post_load():
+    return _Raises("post_load", KeyError("selftest: post_load fault"))
+
+
+def make_raise_step_edge():
+    return _Raises("step_edge", RuntimeError("selftest: step_edge fault"))
+
+
+def make_raise_record():
+    return _Raises("record", TypeError("selftest: record fault"))
+
+
+def make_raise_oom():
+    return _Raises("step_edge", RuntimeError("CUDA out of memory. Tried to allocate 2.00 GiB (selftest: an observer's OOM)"))
 '''
 
 
@@ -6372,6 +6454,23 @@ def _selftest_harness_extension(a, d):
             row = json.load(open(receipt_path(a)))
             assert row["status"] == "harness_error" and why in row["reason"], (spec, row["status"], row["reason"])
         out["refusals"] = len(refusals)
+        # a RAISING hook is the observer's fault: harness_error, exit 10, naming its phase -- never the arm's refused (3) or oom (5)
+        os.environ[ARM_HOOK_SHA_ENV] = sha
+        raising = (("make_raise_post_import", "post_import", "ValueError"), ("make_raise_post_load", "post_load", "KeyError"),
+                   ("make_raise_step_edge", "step_edge", "RuntimeError"), ("make_raise_record", "record", "TypeError"),
+                   ("make_raise_oom", "step_edge", "RuntimeError"))
+        for fac, phase, etype in raising:
+            os.environ[ARM_HOOK_ENV] = f"tc1_selftest_hook:{fac}"
+            a.tag = "fused_attn4_ext_raise"
+            try:
+                run_arm(a, _selftest_load_e4b, sampler=False)
+                raise AssertionError(f"{fac}: the raising hook did not stop the arm")
+            except SystemExit as e:
+                assert e.code == 10, (fac, e.code)
+            row = json.load(open(receipt_path(a)))
+            assert row["status"] == "harness_error" and row["phase"] == f"arm_hook.{phase}" and row["exception_type"] == etype, \
+                (fac, row["status"], row.get("phase"), row.get("exception_type"))
+        out["raising"] = len(raising)
         for k in (ARM_HOOK_ENV, ARM_HOOK_SHA_ENV):
             os.environ.pop(k, None)
 
