@@ -38,6 +38,9 @@ earlier, "best licensed" after the licence was withdrawn):
     need a non-empty ``evidence`` whose FIRST entry is a location string (the
     receipt a reader lands on); ``measured-private`` rows need a non-empty
     ``evidence_private`` (paths outside the repository: listed, never resolved).
+    An ``evidence_private`` string names its receipt by run, INT4B16 file or prose,
+    and carries no absolute path, URI, checkout-rooted receipts path, 7+ digit id,
+    UUID or public IPv4 address.
   * **Dates.** ``measured_on`` is required on measured / measured-private /
     confirmed / verified rows; wherever present it is an ISO calendar date.
   * **Successors.** ``superseded_by`` sits only on ``superseded`` rows (required)
@@ -68,6 +71,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import ipaddress
 import json
 import os
 import re
@@ -86,6 +90,29 @@ MANIFEST = "docs/system-manifest.json"
 PUBLIC_RUN = frozenset({"measured", "confirmed", "verified"})
 PRIVATE_RUN = frozenset({"measured-private"})
 DATED = PUBLIC_RUN | PRIVATE_RUN
+# An evidence_private string names a private receipt the way a public reader may see it: by its run
+# (receipts/<repo>/<date>/<run>/...), by an INT4B16 bundle file, or in prose, each with annotation after it. None of
+# these shapes may appear anywhere in it: they name the machine, a private checkout or the rented host.
+PRIVATE_SHAPES = (
+    ("an absolute path", re.compile(r"(?:^|[\s(,;:])~?/[A-Za-z0-9._-]")),
+    ("a URI", re.compile(r"[a-z][a-z0-9+.-]*://", re.I)),
+    ("a receipts path under a checkout directory", re.compile(r"[A-Za-z0-9._-]+/receipts/[A-Za-z0-9._-]+/\d{4}-")),
+    ("a UUID", re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)),
+    ("a 7+ digit id", re.compile(r"(?<![\d.])\d{7,}(?!\d)")),
+)
+IPV4 = re.compile(r"(?<![\d.])((?:\d{1,3}\.){3}\d{1,3})(?![\d.])")
+
+
+def _global_ipv4(text):
+    """A public IPv4 in TEXT; loopback, private, CGNAT and documentation ranges are not one."""
+    for m in IPV4.finditer(text):
+        try:
+            a = ipaddress.ip_address(m.group(1))
+        except ValueError:
+            continue
+        if a.is_global and a not in ipaddress.ip_network("100.64.0.0/10"):
+            return True
+    return False
 #: Every field a row may carry (docs/claims-schema.md, "Fields").
 ROW_FIELDS = frozenset({
     "id", "package", "area", "claim", "value", "unit", "model", "hardware", "conditions", "measured_on",
@@ -430,6 +457,13 @@ def check_claims(root: Path, doc: dict, claims: list[dict], *, sibling: Sibling 
         evp = c.get("evidence_private")
         if evp is not None and (not isinstance(evp, list) or any(not isinstance(x, str) or not x.strip() for x in evp)):
             out.append(f"{cid}: evidence_private must be a list of non-empty strings")
+        elif evp:
+            for i, x in enumerate(evp):
+                why = next((w for w, rx in PRIVATE_SHAPES if rx.search(x)), None)
+                why = why or ("a public IPv4 address" if _global_ipv4(x) else None)
+                if why:
+                    out.append(f"{cid}: evidence_private[{i}] carries {why}: name the receipt by its run "
+                               f"(receipts/<repo>/<date>/<run>), an INT4B16 file, or prose")
         if st in PUBLIC_RUN:
             if not ev:
                 out.append(f"{cid}: status {st!r} needs a public receipt: evidence is empty")
