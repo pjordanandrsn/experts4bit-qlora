@@ -67,13 +67,13 @@ jobs:
           # is the commit of a RELEASE TAG of the kernel package
           # (scripts/check_system_manifest.py asserts it is the tag the
           # manifest's consumer_ci_pin names, or a later release), so the
-          # suite exercises the released kernel: 41ef086e… = v0.50.0. Pin a
+          # suite exercises the released kernel: 30adb1bf… = v0.51.0. Pin a
           # SHA, never a branch name — a deleted branch has broken this
           # install form before — and never a tag name, which can be moved.
           # The int4 tripwire below is why a plain `pip install .[test]` is
           # not enough: tests/test_int4_*.py importorskip on the int4 modules
           # and would report green coverage that never executed (#310).
-          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@41ef086e6a3e2be5b158ff1bb38e0de67862a949"
+          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@30adb1bfa76f95f9ce4a4c29734b8f36de907eca"
           pip install -e ".[test]"
       - name: int4 modules present (tripwire)
         # The int4 suites guard with importorskip, so a gnf4 build without
@@ -84,8 +84,9 @@ jobs:
       - name: qwen3_moe's default K25 plan resolves to c1 under K39's prmt (tripwire)
         # The CPU resolution tests (test_k25_plan*.py, test_k25_lut_default.py) must exercise the default the package
         # ships, not its refusal and off branches: qwen3_moe's unset knobs resolve to K39's prmt decode and plan c1
-        # only on a kernel package that carries prmt (grouped-nf4-gemm 0.50.0, #569). On the 0.49.0 pin they silently
-        # took the off branch. Resolved here against the INSTALLED package, unguarded, so a pin that loses prmt fails.
+        # only on a kernel package that carries prmt (grouped-nf4-gemm 0.50.0 and later, #569). On the 0.49.0 pin they
+        # silently took the off branch. Resolved here against the INSTALLED package, unguarded, so a pin that loses
+        # prmt fails.
         run: |
           python -c "
           import nf4_smallm
@@ -152,6 +153,18 @@ jobs:
           python bench/smt-fuse/smt_fuse_box.py --self-test
       - name: Test
         run: pytest tests/ -q
+      - name: fixed attention split, the kernel itself (Triton's CPU interpreter; must RUN, never skip)
+        # tests/test_attn_split_fixed.py's interpreter row check is the only machine-checked evidence that a fixed
+        # split count (E4B_ATTN_SPLIT_FIXED) keeps one sequence's attention bitwise the same in a batch of 2 and of 16.
+        # It skips where Triton is absent, so it is re-run here alone and must report "1 passed": a skip or a
+        # deselection fails this step. No Triton is installed or pinned here: grouped-nf4-gemm declares it on Linux
+        # (triton>=3.4), and the version the install above resolved is printed.
+        run: |
+          set -euo pipefail
+          python -c "import triton, importlib.metadata as m; print('triton', triton.__version__, '| grouped-nf4-gemm', m.version('grouped-nf4-gemm'))"
+          out=$(python -m pytest tests/test_attn_split_fixed.py -k bitwise_the_same_in_a_batch_of_2_and_of_16 -rs -q -p no:cacheprovider 2>&1) || { echo "$out"; exit 1; }
+          echo "$out"
+          echo "$out" | grep -qE '(^|[^0-9])1 passed' || { echo "the interpreter row check did not run and pass (skipped or deselected)"; exit 1; }
       - name: census cross-check (grouped-nf4-gemm#353 -- every claimed family the kernel's shape census covered is still covered, against the census of the exact kernel commit installed above)
         # The census comes from the commit pip installed (direct_url.json), so it
         # is the kernel this suite ran against, never a second pin to keep in

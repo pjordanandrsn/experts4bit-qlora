@@ -2,7 +2,10 @@
 
 **Status: registered 2026-10-21, before any data**, on #1932: one review outside the HP lane, then the maintainer's pass. Ruling
 5 was added on the harness PR, also before any data. Nothing launches without the maintainer's exec ACK with the kit hash, from
-main.
+main. **Amendment 2 (2026-10-24, before any reading box):** the spare shakedown triggered the registered (R) fallback,
+and HP3 reads e4b vs Unsloth 2026.9.14 on torch 2.8.0+cu128; axolotl waits for an amendment. **Amendment 3 (2026-10-24, before any reading box):** the
+(R) shakedown `hp3r-shake-1` read `HP3 SHAKEDOWN_OK`, and the read launches from Amendment 3's merge. **Amendment 4 (2026-10-24,
+before any reading box):** the read's guard is 6.0 h (the launcher's cap), and the read launches from Amendment 4's merge.
 
 **Scope label, in every verdict line:** *parity of the exported adapters under one evaluator on byte-identical bases*. HP3 says
 nothing about any framework's own in-loop loss.
@@ -44,7 +47,7 @@ adapter score at **parity** on held-out loss, read by one evaluator, or **better
 e4b vs Unsloth, e4b vs axolotl and Unsloth vs axolotl.
 
 - **Recipe:** HP2's (HP1's field recipe): 200 steps, r = alpha = 16, the registered Alpaca rows, HP1's 48 held-out rows, seeds
-  3410–3412 paired by `order_sha`.
+  3410–3412 paired by `order_sha` *(superseded by Amendment 1: seeds 3410–3414)*.
 - **e4b:** K00, the shipped settings, as HP2.
 - **Unsloth:** its own default path on the build, as a user gets it. The MoE backend it selects is recorded (HPN's t28 build ran
   native_torch and HP2's cu130 build ran grouped_mm).
@@ -169,7 +172,7 @@ paired by seed and `order_sha`.
 - The margin is m = min(max(σ_seed, 0.005), 0.02), with σ_seed as HP2 defines it (`hp1_reduce.pooled_sd` over the pair's seeds).
 - **G2'** is HP2's realized-margin TOST on Δ alone. HP2's δ0 term is dropped: on identical bases Δ_base = 0 exactly, which G1'
   has already checked.
-- A pair needs all three seeds of both frameworks non-VOID to be read. Otherwise it reads NOT_READ, naming the VOID runs.
+- A pair needs all three seeds *(superseded by Amendment 1: all five)* of both frameworks non-VOID to be read. Otherwise it reads NOT_READ, naming the VOID runs.
 
 **Bands and wording (HP2's, unchanged):**
 - **BEATS / BEHIND:** the 90 % interval excludes 0 on that side and |Δ̄| > σ_seed.
@@ -224,8 +227,8 @@ its own registered question. The three-way summary is a statement about that tab
   - G1' on real records;
   - one 4-step confirmation run per framework, with 6(b) and the engagement check;
   - the reducer's `g1` and `verdict` on those real records.
-- Guard 2.5 h at a cap of $0.40/h, plus about 20 GB downloaded at $0.011/GB, gives a worst case of **$1.22**. One attempt, and one
-  spare after a harness fix.
+- Guard 2.5 h at a cap of $0.40/h, plus about 20 GB downloaded at $0.011/GB, gives a worst case of **$1.22**
+  *(superseded by Amendment 1: $2.10, with the 100 GB download term)*. One attempt, and one spare after a harness fix.
 
 **2. The read:** one RTX 5090 (HP2's class; the build-sensitive quantize kernel is also arch-sensitive), at the full 48 layers,
 under the registered host rule (driver ≥580, RAM ≥98 GB, disk ≥220 GB).
@@ -234,16 +237,17 @@ under the registered host rule (driver ≥580, RAM ≥98 GB, disk ≥220 GB).
 |---|---|---|
 | A | three installs (venv-e4b, venv-unsloth, venv-axolotl, all on the matched build), fetch, the resolver check | ~1.0 h |
 | B | calibration: one step per framework on the 300 rows, three exports, three zero-adapter passes → **G1'** | ~1.2 h |
-| C | confirmation: seeds 3410–3412 per framework that passed G1' (≤9 runs, with axolotl's eager path the slowest) | ~3.4 h |
-| D | the evaluator's pass on the confirmation runs → 6(b), the pair verdicts, the three-way read | ~0.9 h |
+| C | confirmation: seeds 3410–3412 per framework that passed G1' (≤9 runs, with axolotl's eager path the slowest) | ~3.4 h *(superseded by Amendment 1: 3410–3414, ≤15 runs, ~6.4 h)* |
+| D | the evaluator's pass on the confirmation runs → 6(b), the pair verdicts, the three-way read | ~0.9 h *(superseded by Amendment 1: ~1.5 h)* |
 
-- That totals about 6.5 h. A whole-box CLOSE at G1' tears down at about 2.2 h.
+- That totals about 6.5 h *(superseded by Amendment 1: about 10.1 h)*. A whole-box CLOSE at G1' tears down at about 2.2 h.
 - **The deciding-depth rule (HPN's floor rule, applied to one depth):** the registered depth is the full 48 layers. An arm that
   cannot run at 48 on the read card is recorded as a depth limit, and its pairs read NOT_READ. No shallower depth substitutes for
   it.
-- Guard 8 h at $0.85/h, plus 90 GB at $0.011/GB, gives a worst case of **$7.79**. One box-started attempt and one pre-create spare.
+- Guard 8 h at $0.85/h, plus 90 GB at $0.011/GB, gives a worst case of **$7.79** *(superseded by Amendment 1: guard 11 h, $10.45)*. One box-started attempt and one pre-create spare.
 
-**Lane worst case:** 2 × $1.22 (shakedown and spare) + $7.79 = **$10.23**, under the lane's $15.
+**Lane worst case:** 2 × $1.22 (shakedown and spare) + $7.79 = **$10.23**, under the lane's $15 *(superseded by Amendment 1:
+$14.65)*.
 
 ## Rulings taken (maintainer, before any HP3 data)
 
@@ -272,6 +276,260 @@ under the registered host rule (driver ≥580, RAM ≥98 GB, disk ≥220 GB).
 5. 2026-10-21 14:23Z, on the harness review, before any data: a shakedown arm that installs and imports but fails to run is the
    (R) trigger, unless its captured error text is one of the three pre-named host classes ("The fallback" above), which use the
    spare. If the spare also fails host-attributably, the lane stops with no (R) and no read.
+
+## Amendment 1 (2026-10-21, before any HP3 data): five seeds per framework
+
+**Why.** A power pre-read ($0, from prior records, never an HP3 number) found that 3 seeds read PARITY about as often as a coin flip
+at plausible noise. Every number in this section is an ESTIMATE.
+- **No prior record measures σ_seed or the seed-level ρ.** All 33 committed 200-step Qwen3-30B-A3B arms ran seed 3407 (21 e4b, 12
+  axolotl, 0 Unsloth), and the private receipt store adds only 60-step arms at seed 0.
+- **What prior records do give is a fixed-seed floor.** Six TC1 RTX 5090 boxes (`tc1-5090-35/36/40/46/47/48`; seed 3407; 200
+  steps; 16 in-loop rows):
+  - across boxes, e4b's sd is 0.00078 (n = 7) and axolotl's 0.00070 (n = 6);
+  - same-box redraws give sd/√2 of 0.00098–0.00124;
+  - corr(e4b, axolotl) across boxes is −0.16, and their paired difference has sd 0.00115.
+
+  So σ_seed ≥ ~0.001. These are in-loop numbers on 16 rows; HP3 reads the evaluator on 48.
+- **The table.** P(PARITY | true Δ = 0) for one pair under this registration's own verdict rule, with BEATS / BEHIND tested before
+  PARITY, m = min(max(σ_pooled, 0.005), 0.02) and a 90 % t-interval on the paired difference. It is the evaluator's independent
+  re-implementation (4000 reps, seed 20261021), reproduced to the digit by `bench/hp3/hp3_power.py`:
+
+| σ_seed | ρ | 3 seeds | 5 seeds | 8 seeds |
+|---|---|---|---|---|
+| 0.001 | 0 | 0.86 | 0.92 | 0.94 |
+| 0.002 | 0 | 0.40 | 0.81 | 0.94 |
+| 0.002 | 0.5 | 0.70 | 0.96 | 0.98 |
+| 0.003 | 0 | 0.17 | 0.44 | 0.81 |
+| 0.003 | 0.5 | 0.39 | 0.82 | 0.98 |
+| 0.005 | 0 | 0.05 | 0.10 | 0.27 |
+| 0.005 | 0.82 | 0.48 | 0.88 | 0.99 |
+
+- **REPORTED context, a property of the HP2/HP3 rule and not a defect to fix.** Under true parity at small σ, the BEATS / BEHIND
+  step makes a false directional call 5.4–9.0 % of the time at ρ = 0 (`hp3_power.py`'s last column). That caps P(PARITY) near
+  0.92–0.94 even when the noise is low.
+- **Cost.** 8 seeds would run about 14.3 h, so a ~15.5 h guard: 15.5 × $0.85 + 100 GB × $0.011 + 2 × $2.10 ≈ $18, over the lane's
+  $15. 5 is the largest count that fits.
+
+**The change.**
+1. **Seeds:** 3410–3414 per framework that passes G1', each seed paired by `order_sha`. A pair needs all five seeds of both
+   frameworks non-VOID to be read. The verdict rule, its order, the margin and the 90 % t-interval (now df = 4) are unchanged.
+   `hp3_reduce.paired_reading` is `hp1_reduce.paired_reading`'s rule over HP3's seeds, and a test checks they are equal at HP1's
+   three seeds.
+2. **ρ is REPORTED only:** each pair's verdict records `rho_seed_reported`, the correlation over seeds between the two frameworks'
+   row means. It gates nothing.
+3. **The read box:** a guard of 11 h at $0.85/h, plus the launcher's 100 GB × $0.011 download reservation, gives a worst case of
+   **$10.45**. The phases are estimated at ~10.1 h: A ~1.0, B ~1.2, C ~6.4 for ≤15 runs with axolotl's eager path the slowest, and
+   D ~1.5.
+4. **The shakedown:** unchanged (one seed, 4 steps). Each attempt's worst case is 2.5 h × $0.40 + 100 GB × $0.011 = **$2.10**.
+5. **Lane worst case:** 2 × $2.10 + $10.45 = **$14.65**, under the lane's $15.
+   - The approval at 15:59Z quoted $12.78. That figure carried 20 GB (shakedown) and 90 GB (read) download terms rather than the
+     launcher's 100 GB reservation. This amendment states the reservation.
+
+6. **Run ids (bench/common rule 2's form).**
+   - The shakedown is `hp3-shake-1`, with `hp3-shake-2` as its one spare.
+   - The read is `hp3-5090-1`, with `hp3-5090-2` as its one pre-create spare.
+   - At most one shakedown box and one read box start, beyond a host-attributable spare (ruling 5).
+   - A refusal at create uses no id: the launcher receipts it as `<id>-refused-*`, and the next attempt takes the same id.
+   - No code parses an id's number.
+
+7. **A slow host shortens the read; it never voids it.** The 11 h guard leaves ~9 % headroom over the ~10.1 h of phases.
+   - **Decided by timing alone.** The seed count reads wall time and the deadline, never a loss, a receipt's result or a verdict,
+     so it is not an outcome-dependent stopping rule.
+   - **The plan.** Phase C is seed-major: at each seed, e4b, then Unsloth, then axolotl, for every framework that passed G1'. So
+     the seeds a box completes are always a PREFIX of 3410–3414, and none can be dropped selectively. After seed 3410 completes
+     for every framework, the runner measures that seed's wall time W, across all of its frameworks (e4b runs first and axolotl's
+     eager path is the slowest, so one arm would underestimate a seed).
+     - It sets n to the largest k in {5, 4, 3} with (k − 1) × W + 360 s × (frameworks) × k + 900 s ≤ the time left − 900 s. The
+       evaluator's pass is estimated at ~6 min a run.
+     - It writes `hp3/seed_plan.json` (n, the seeds, W, the time left, each k's need, `basis: timing`, the reason,
+       `written_at_utc`) BEFORE any later seed or the evaluator's pass.
+   - **The read.** The box runs exactly n seeds, and `hp3_reduce.py verdict --seed-plan` reads the first n (df = n − 1).
+     - The verdict records `seed_count`, `seeds_read` and `seed_plan_reason` (e.g. "fit: 4 seeds at seed 3410's wall time 2400 s").
+     - A read on 3 or 4 seeds is a **reduced-power read**, stated as such in the record and every RESULTS line. It is never
+       upgraded later.
+     - A VOID run among the planned seeds still makes its pairs NOT_READ.
+   - **The refusals.** The reducer refuses a plan whose n is not 0, 3, 4 or 5, whose seeds are not that prefix, or whose basis is
+     not timing.
+   - **The content binding (the maintainer, 20:54Z, replacing an mtime check that a re-derivation cannot confirm).**
+     - The runner hands the plan to the evaluator explicitly (`hp1_eval.py --seed-plan`). At its start, before any model or base
+       is touched, the evaluator records `plan_sha256`, the sha256 of the plan's raw bytes, in `hp3/eval_P.json`.
+     - The reducer, given `--seed-plan`, refuses unless every evaluator output's `plan_sha256` equals that file's hash. A missing
+       or null field also refuses.
+     - Given no plan, it refuses any evaluator output that carries one: the runner made a plan the reducer was not handed.
+     - What this binds: the plan was fixed before the evaluator's pass. That is the pre-data property, and it survives the
+       store, which keeps content and not mtimes. The runner writes the plan before seed 3411 by its code order. That is
+       recorded (`summary.txt`'s `HP3 SEED_PLAN` line, the plan's `written_at_utc`, a clock read kept for the record only), but
+       the binding does not claim it.
+     - HP1, HP2, HPN and the shakedown never pass `--seed-plan`, so their evaluator output is unchanged.
+   - **Fewer than 3 seeds fit:** n = 0. The box stops after seed 3410, with no evaluator pass. Every pair reads NOT_READ,
+     host-limited, with a host refusal note. It is no strike, and the spend is minimal.
+   - **A plan that cannot be written** (a harness fault, never the host's): the box prints `HP3 SEED_PLAN_UNWRITABLE` and stops
+     after seed 3410, with no evaluator pass. Every pair reads NOT_READ, and the record names the harness, never HOST_LIMITED.
+   - **The power each count can read.** ESTIMATE, P(PARITY | true Δ = 0) under the registered verdict order, from
+     `bench/hp3/hp3_power.py`. The 3 and 5 columns are the table above; the 4 column is `--counts 4` on its own stream, at the
+     same RNG seed:
+
+     | σ_seed | ρ | 3 seeds | 4 seeds | 5 seeds |
+     |---|---|---|---|---|
+     | 0.001 | 0 | 0.86 | 0.91 | 0.92 |
+     | 0.002 | 0 | 0.40 | 0.66 | 0.81 |
+     | 0.002 | 0.5 | 0.70 | 0.91 | 0.96 |
+     | 0.003 | 0 | 0.17 | 0.28 | 0.44 |
+     | 0.003 | 0.5 | 0.39 | 0.64 | 0.82 |
+     | 0.005 | 0 | 0.05 | 0.07 | 0.10 |
+     | 0.005 | 0.82 | 0.48 | 0.73 | 0.88 |
+
+   - **Cost:** unchanged. The guard stays at 11 h: read $10.45, lane $14.65.
+
+8. **The card's memory, not only its name** (the reviewer, 2026-10-23, after a name-only screen elsewhere pinned a 48 GB modded RTX
+   4090).
+   - The box checks `memory.total` right after the card-class check, for both HP3 tokens, against the class's band in MiB:
+     RTX A4000 15000–17000, L4 22000–24576, RTX 4090 23000–25000, L40S 44000–49152, RTX 5090 31000–33000.
+   - Outside its band, or a class with no band, the box refuses with rc 18 (the launcher's "a lane's other registered host
+     floor"; its rc 14 means egress) before any staging. That is a pre-install host check,
+     so it is host-attributable and uses the spare (ruling 4(C)), never the (R) trigger.
+   - The shakedown's screen applies the same bands to each offer's `gpu_ram`.
+
+**Unchanged:** everything else in this registration, including G1', 6(b), G2', the three-way read, the labels and the (R) fallback.
+
+**Rulings:** part 7 was ruled by the maintainer at 2026-10-23 19:56Z and 19:57Z ((b) plus (c), before data), with the reviewer's
+two details (project from the first complete seed; record the count and its timing-only reason). The rest was approved by the
+maintainer at 15:59Z on 2026-10-21, conditional on the evaluator's re-run of the simulation. The evaluator's checks:
+(a) the margin formula PASS, (b) the paired t quantile PASS, (c) a discrepancy (0.40, not 0.45) that came from the pre-read's
+PARITY-only test and strengthens the case. This amendment merges before the read box is created.
+
+## Amendment 2 (2026-10-24, before any reading box): the (R) fallback is triggered, and how it runs
+
+**Why.**
+- The spare shakedown `hp3-shake-2` (never data; receipt in the private store) read `HP3_BUILD=MATCHED`, and then G1' at L2 =
+  PARTIAL:
+  - e4b PASS as the reference;
+  - Unsloth PASS: the same dequantized digest, every zero-adapter row equal, equal row means;
+  - axolotl CLOSE: the digests differ, a zero-adapter row differs by 0.01238, the row means differ.
+- Under "The fallback" (decided before any data), a G1' other than PASS for every framework at L2 is the (R) trigger. The
+  maintainer re-derived the classes from the store (a g1.json identical to the box's) and ruled: follow the registration.
+- HP3 therefore runs **(R): e4b K00 vs Unsloth 2026.9.14 on HPN's build (torch 2.8.0+cu128)**, and axolotl waits for an
+  amendment.
+- *A hypothesis, never part of the classification:* axolotl's own 4-bit config records `bnb_4bit_use_double_quant: false`, and
+  e4b's and Unsloth's bases are byte-identical to each other. Bringing axolotl back is a separate amendment with its own
+  shakedown, and nothing about it changes (R).
+- The first shakedown, `hp3-shake-1`, was a harness fault (the evaluator's trainable count on the cut), fixed in e4b#2088. It
+  is the registration's spare after a harness fix, and it was never part of the trigger.
+
+**(R) as run.**
+1. **Token `qwen3hp3r`.** The family is `tc1_hp3_family` in its (R) mode, and two venvs are built:
+   - `venv-unsloth-t28`: Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 on the image's torch 2.8.0+cu128, as HP1/HP2/HPN installed it.
+   - e4b, installed into that same venv (`t28u`, HBD's E2 route).
+   - The evaluator also runs there, so the evaluator's process is on the build too.
+   - No cu130 Unsloth venv and no axolotl venv are built. The build record (`hp3/build.json`) probes both frameworks in that
+     venv and requires one build at torch 2.8.0+cu128. bitsandbytes is Unsloth's own resolve, recorded and never pinned by us
+     (HP1/HP2's rule for Unsloth).
+2. **Unchanged from the registration and Amendment 1:**
+   - the recipe, G1' (now over the two bases), 6(b), G2' and the bands and wording;
+   - five seeds with part 7's seed plan, the content binding, and part 8's memory band (RTX 5090: 31000–33000 MiB);
+   - the reported-only statistics and the scope label.
+3. **One pair, no three-way read.** The reading is the e4b–Unsloth pair's verdict. The record's three-way entry reads
+   NOT_APPLICABLE, with the reason.
+4. **Labels, in every verdict line (replacing (i)–(iii) for (R)):**
+   - (R) is the registered fallback: e4b K00 vs Unsloth 2026.9.14, HP1/HP2's version;
+   - axolotl waits for an amendment;
+   - the build is torch 2.8.0+cu128 with Unsloth's own bitsandbytes, so no HP3 (R) number is compared with an HP2 or HPN number.
+5. **The read box.** One RTX 5090 under the registered host rule (driver ≥580, RAM ≥98 GB, disk ≥220 GB), at all 48 layers.
+   - The phases are ~4.8 h: A ~0.6 (one venv + e4b + the fetch), B ~0.7, C ~2.6 for ≤10 runs, and D ~0.9.
+   - The guard is 6.5 h, and the worst case is 6.5 h × $0.85 + 100 GB × $0.011 = **$6.63** *(superseded by Amendment 4: guard
+     6.0 h, $6.20)*.
+   - Ids: `hp3r-5090-1`, with `hp3r-5090-2` as the one pre-create spare. A refusal at create uses no id.
+   - It launches only after the (R) shakedown in item 7 reads `HP3 SHAKEDOWN_OK`.
+   - At most one reading box starts.
+6. **Lane worst case** (bench/common rule 4's form):
+   - the shakedowns spent $0.373;
+   - the (R) shakedown: 2 × $0.83 = $1.66 (item 7: `hp3r-shake-1` and its spare; a shakedown box that does not start costs less than
+     its $0.83);
+   - the read: one started box, $6.63;
+   - a created read box that does not start (NOT_RUN, or a host refusal before the install: rc 12, 13, 15 or 18) costs its time to
+     the refusal before the spare runs. That is at most 0.5 h × $0.85 (the launcher's 420 s ssh wait, staging and the host probes)
+     plus 10 GB × $0.011 before it, so $0.54, once.
+   - So $0.373 + $1.66 + $6.63 + $0.54 = **$9.20**, under $15.
+7. **An (R) shakedown before the read** (the maintainer, 2026-10-24 04:36Z, before the independent review finished). The
+   `qwen3hp3r` token is new runner code (its own venv set, the build compare at 2.8.0+cu128, the reducer's `--fallback-r` mode and
+   the arm gating), and no box has run it. No earlier box ran this token or this venv set: HPN read e4b from `venv-e4b`, and HBD's E2
+   cell installed e4b into `venv-unsloth-t28` but ran neither this family nor this reducer mode.
+   - **Token `qwen3hp3rshake`:** the same family in its (R) mode with the shakedown switch, on the 2-layer cut (only the two shards
+     it reads are fetched), with one seed (3410) and 4-step runs, as `hp3-shake` ran. It runs, end to end:
+     - the (R) build record (both frameworks probed in `venv-unsloth-t28`, compared at torch 2.8.0+cu128);
+     - one calibration step and an export per framework, and G1' over the two bases;
+     - one confirmation run per framework, with 6(b);
+     - the evaluator on both passes, with its trainable-count check off. That branch is keyed on the ids `hp3r-shake-1` and
+       `hp3r-shake-2` alone: each mode's shakedown token refuses the other mode's ids and any reading id;
+     - the reducer's `g1` and `verdict` in `--fallback-r` mode.
+     It writes no seed plan and runs no reading phase.
+   - **Ids:** `hp3r-shake-1`, with `hp3r-shake-2` as its one spare. A refusal at create uses no id.
+   - **Tier:** explore, never data, and outside the lane's counts (no strike, no attempt). It is not quoted as a finding.
+   - **Card:** the shakedown's terms ("Hosts and budget" 1 with Amendment 1 part 8): compute capability ≥7.5, ≥16 GB, driver ≥580,
+     an RTX A4000, L4, RTX 4090 or L40S inside its memory band, never an RTX 5090, at ≤$0.40/h including a 120 GB disk.
+   - **Cost:** a guard of 1.25 h and a 30 GB download reservation. `hp3-shake-2`, with three venvs, ran 31 min and was billed $0.021
+     for its download. The worst case is 1.25 h × $0.40 + 30 GB × $0.011 = **$0.83**.
+   - **Outcomes:**
+     - `HP3 SHAKEDOWN_OK`: the read launches from the merge of a later amendment that cites this shakedown's committed record (as
+       Amendment 1 did). Then the $0 dry run, then the maintainer's approval.
+     - A host-attributable stop uses the spare: rc 12, 13, 15 or 18, a provider or boot error before any pip resolve, or a pre-named
+       host class at an arm.
+     - Anything else is an (R) **kit fault**: the kit is fixed, then the spare runs. It is never the (R) trigger, and it never
+       changes (R).
+   - **What the read still adds beyond the cut:** e4b and Unsloth at all 48 layers on the RTX 5090. A read box on which either
+     framework fails to install or run is a harness fault: NOT_READ, with no read and no strike, and its spare id follows a fix.
+
+## Amendment 3 (2026-10-24, before any reading box): the (R) shakedown's record; the read launches from this merge
+
+Amendment 2 (item 7) put an (R) shakedown before the read, and its "Outcomes" say the read launches from the merge of a later
+amendment that cites the shakedown's committed record. This is that amendment. Nothing else in the registration changes.
+
+1. **The record.** `hp3r-shake-1` (explore tier, never data) ran on one L4.
+   - It ran from e4b `db5387eb` (Amendment 2's merge), and the controller was verified equal to it before the create.
+   - Receipt status OK, committed to the private receipt store as `cbafcf16`.
+   - It ran 26 min and cost $0.154 (10.5 GB downloaded). Teardown is complete and the instance is gone.
+   - The spare `hp3r-shake-2` was not needed.
+2. **What it read** (the box's own `summary.txt` and `hp3/` records):
+   - `HP3_BUILD=MATCHED`: the (R) build record, with both frameworks probed in `venv-unsloth-t28` and compared at torch
+     2.8.0+cu128;
+   - `HP3_G1=PASS`, with e4b PASS and Unsloth PASS;
+   - the reducer in its `--fallback-r` mode: three-way NOT_APPLICABLE, and the e4b–Unsloth pair NOT_READ at one seed. Its only
+     VOIDs are seeds 3411–3414 of both frameworks, each `absent`, as a one-seed shakedown leaves them;
+   - `HP3 SHAKEDOWN_OK`. The evaluator ran both passes on the cut, with its trainable check off under the `hp3r-shake` id.
+3. **The code it proved is the code the read runs** (the maintainer's condition, 2026-10-24 05:21Z). This PR shows
+   `git diff db5387eb..<its head> -- bench/tc1/tc1_run.sh bench/tc1/tc1_drive.sh bench/hp3/ bench/hp1/ tests/test_hp3.py
+   tests/test_hp3_driver.py`. At this PR's head it touches only this file, `bench/hp3/HP3-PREREG.md`, which no box executes.
+   - If main moves before the merge, the same diff is read at the merge commit and checked before any approval for an
+     `hp3r-5090` id.
+   - Every change in it outside this file must be reviewed and argued harmless, or a new shakedown runs before the read.
+4. **The read:** unchanged from Amendment 2 items 1–5. One RTX 5090, `hp3r-5090-1` with the pre-create spare `hp3r-5090-2`, a
+   guard of 6.5 h and a worst case of $6.63.
+   - It launches from THIS amendment's merge.
+   - It needs a $0 dry run from that merge, and then the maintainer's explicit approval comment on this PR, before the create.
+5. **Lane spend and worst case** (bench/common rule 4's form):
+   - spent: the shakedowns, $0.373 + $0.154 = $0.527;
+   - the read: one started box, $6.63;
+   - a created read box that does not start: at most $0.54, once (Amendment 2 item 6).
+   - So $0.527 + $6.63 + $0.54 = **$7.70**, under $15. It is below Amendment 2's $9.20, because the (R) shakedown's spare was not
+     used. *(Superseded by Amendment 4: $7.27.)*
+
+## Amendment 4 (2026-10-24, before any reading box): the read's guard is 6.0 h
+
+1. **Why.** Amendment 3's merge was checked at $0 before any read box. The launcher's `--validate` refused one value: the
+   registered 6.5 h guard exceeds its `teardown.max_wallclock_h` of 6.0 h. Every other check passed, including the cited
+   registration being on main. The maintainer ruled (2026-10-24 11:27Z) that the registration changes, not the launcher's policy
+   for one lane.
+2. **The change.** The read's guard is **6.0 h**. Nothing else changes: the box, the ids, the phases and every rule.
+   - **Margin.** The phases are estimated at about 4.8 h (A 0.6, B 0.7, C 2.6, D 0.9), so 6.0 h leaves about 25%.
+   - **A slow host costs power, never the read.** Amendment 1 part 7's seed plan is decided by timing alone. It reads 5, 4 or 3
+     seeds from the time left after seed 3410, so a tighter guard can read fewer seeds on a slow host. It never voids a read, and
+     fewer than 3 seeds is the registered host-limited NOT_READ.
+3. **Cost.** The read's worst case is 6.0 h × $0.85 + 100 GB × $0.011 = **$6.20** (was $6.63). The lane worst case is
+   $0.527 spent + $6.20 + $0.54 (a created read box that does not start; Amendment 2 item 6) = **$7.27**, under $15.
+4. **The read launches from THIS amendment's merge.** The rest of Amendment 3 item 4 stands: a $0 dry run from that merge, then
+   the maintainer's explicit approval comment on this PR.
+   - The approval names the full merge sha and the read kit's hashes.
+   - Amendment 3 item 3's diff condition now reads from `db5387eb` to this merge.
 
 ## Harness
 

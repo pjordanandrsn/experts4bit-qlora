@@ -10160,6 +10160,34 @@
       "notes": "Pre-registered in #1029; the switches are grouped-nf4-gemm#448 and #453; follows K28 (LEVER) and P112 (closed VOID twice: its accounting, then a prefill-jittered slope). All eight predictions held, written after P112 run 1's arms. Uncapped PDL costs the 16-row step 8.947 -> 9.127 ms; the cap leaves it at 8.937. Lane cost $0.4710."
     },
     {
+      "id": "e4b.serve.p230.gnf4-pdl.qwen3-nf4.5090.2026-10-23",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P230, one RTX 5090: on the DEFAULT serve_paged NF4 graph server (every serving lever unset; Qwen3-30B-A3B), grouped-nf4-gemm's programmatic dependent launch as it ships (GNF4_PDL on, capped at 8 activation rows) decodes identical tokens on every row and runs 1.00526x the switch off (GNF4_PDL=0) with one request (min over two palindromic pairs, 1.00564 and 1.00526; 3.707 -> 3.687 ms a decode step), decode-only timing. At sixteen requests, where the cap launches nothing with PDL (read per bucket), the control pairs read 0.99732 and 0.99959. KEEP: the shipped default stands on the NF4 server.",
+      "value": 1.00526,
+      "unit": "decode tok/s ratio, shipped PDL over no PDL, one request (min over two palindromic pairs, decode-only timing)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 595.84, 32607 MiB, 500 W power limit), one rented Vast.ai verified host (AMD EPYC 7402P, 125 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @b1ba9408 (0.57.0 + P230's registration) + grouped-nf4-gemm @41ef086e (0.50.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box; the default server resolved to max_seqs 32, buckets 1-32, all-vram, graphs; premise test_decode_graph_buckets.py 7 passed + grouped-nf4-gemm test_pdl.py 26 passed + K33's two PDL tests 2 passed on the card; four palindromic arms (OFF1 DEF1 DEF2 OFF2) differing only in GNF4_PDL, W1 = one wikitext 512-token prompt, W16 = sixteen, 32/160 new tokens, 3 timed reps, decode-only slope; verdict by bench/p230/p230_reduce.py (bars from the self-pair spread: KEEP at g1 >= 1.005)",
+      "measured_on": "2026-10-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p230/RESULTS-p230.md",
+        "bench/p230/PREREG-p230.md",
+        "bench/p230/p230_reduce.py",
+        "bench/p230/p230_box.py",
+        "bench/p230/receipts/p230-5090-r1/verdict.json",
+        "bench/p230/receipts/p230-5090-r1/arm_DEF1.json",
+        "bench/p230/receipts/p230-5090-r1/arm_OFF1.json",
+        "bench/p230/receipts/p230-5090-r1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-23/p230-5090-r1/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2042 (Lever D of the decode roadmap); follows P113 (CAP_DEFAULT on SC1's int4 configuration), which said nothing about the NF4 default server. All five predictions held. Reported, not ruled on: the box read seven switched kernels on the default build (the registration's census named three) and PDL on buckets 2-8 (723 of 867 launches each, kernels keyed on tokens), which this lane did not read. Lane cost $0.472, plus one $0 refusal at create."
+    },
+    {
       "id": "e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07",
       "package": "experts4bit-qlora",
       "area": "serve",
@@ -11950,6 +11978,33 @@
       "notes": "USD 1.331 actual. One draw per arm: the 0.10 GB reserved/device threshold sits inside one-draw variation (cd1 vs fd moved reserved +0.021 GB on amendment 74's box and -0.147 here; allocated 0.639 on both). The chunked loss also frees the held bf16 logits (0.343 GB at fd's peak), which the registered LM-loss target did not name."
     },
     {
+      "id": "e4b.train.4090-fit.field.4090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 78 (#835), the fit reading on real 24 GiB cards: two rented RTX 4090s on two different machines (tc1-4090-1, AMD EPYC 7702P; tc1-4090-2, AMD EPYC 9684X), one draw each of e4b's matched arm with the pb1cl256 levers (NF4_QLORA_COMPACT_DELTA=1, NF4_QLORA_PAD_BUCKETS=1, E4B_CHUNKED_LM_LOSS=256) at TC1's field recipe over 60 steps. FIT: both draws trained all 60 steps with no out-of-memory error, and their steps 1-2 losses are bitwise equal. The least headrooms over both draws, against an RTX 4090's 24,564 MiB total: usable minus max allocated 1,258 MiB (step 22), usable minus max reserved 586 MiB (step 29), memory.total minus device used 586 MiB (step 29). It fits; it does not fit with room. Held-out at 60 steps 0.75444 and 0.75667 (no quality claim). FIT covers this fixture only, and the levers are opt-in.",
+      "value": 586,
+      "unit": "MiB, the least headroom over both draws: memory.total minus device used at the fullest step (also usable minus max reserved), TC1 field recipe on an RTX 4090, two draws on two machines",
+      "hardware": "RTX 4090 (sm_89, 24,564 MiB), two rented Vast.ai verified/secure hosts on two machines (tc1-4090-1, AMD EPYC 7702P; tc1-4090-2, AMD EPYC 9684X; each a 30.72-CPU quota); e4b @ 576d99e + grouped-nf4-gemm @ efdda94, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3pos78fit (TC1 amendment 78): TC1's tokens (tc1-5090-155's) and field recipe (alpaca, seq 2048, micro-batch 2 x accum 4, r 16), TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, the pb1cl256 arm (fp32 adapters, matched init) with the step memory record; each draw gated by the card band (memory.total 23,500-24,600 MiB and an RTX 4090 by name), the pre-check, the pad-buckets probe and the token check; the lane rule (pos78_draw, pos78_lane: one bound OOM decides NOT_FIT; the first two COMPLETE draws on different machines pair; a steps 1-2 bitwise loss check) by bench/tc1/tc1_reduce.py --pos78-lane; each box's public copy rebuilds its RESULTS with bench/tc1/tc1_public.py",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos78fit.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-4090-1/README.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-4090-2/README.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/tc1_public.py"
+      ],
+      "evidence_private": [
+        "the private receipt store, runs tc1-4090-1 and tc1-4090-2 (receipt.json with each run's machine id, teardown-proof.json)"
+      ],
+      "notes": "USD 1.621 actual for the lane (0.693 + 0.928), against the registered worst of 13.94. tc1-4090-1's host voided two attempts for host load (load1 medians 17.84 and 18.09 against 6.0); the third (18.22) stands under amendment 33. Each box's own RESULTS reads its draw VOID ('the machine id is unread') because the runner writes it before the launcher's receipt exists; the lane verdict reads the receipts in the store, and the maintainer re-derived it there. The longest padded micro-batch in these tokens is 565 tokens (step 22); longer batches are not covered. A default change needs its own PR citing this reading."
+    },
+    {
       "id": "e4b.train.single-ladder.field.5090.2026-10-08",
       "package": "experts4bit-qlora",
       "area": "train",
@@ -12823,6 +12878,289 @@
         "the private receipt store, run p149-5090-2 (receipt.json, teardown-proof.json)"
       ],
       "notes": "Pre-registered in #1806 with Amendments 1-5 (one non-consumer review and the maintainer's final pass before any data); the premise was box K's K_GO (p149k-5090-8, a microbench). Predictions: Q GO hit; FLIP hit; g1 1.04-1.08 missed toward faster; g16 0.99-1.03 hit; ROUTING_CLEAR and the pre-read g16_routing band [0.9979, 1.0019] not read (VOID). The verdict re-derives byte-identical from the receipt subset with p149_reduce.py at 835874d1. The lever stays opt-in: E4B_SERVE_ATTN_INT8 is in e4b v0.56.0, off by default."
+    },
+    {
+      "id": "e4b.kernel.p227.per-row-gemv.mixtral.5090.2026-10-23",
+      "package": "experts4bit-qlora",
+      "area": "kernel",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1 (expert shapes only; random NF4 bytes, no checkpoint loaded)",
+      "claim": "Lane P227 (one RTX 5090): on Mixtral-8x7B's experts at two and four decode tokens, the per-row GEMV route (E4B_NF4_SMALLM_BW=1, K33 one row per program) runs the captured expert call in a median 0.36 and 0.46 of K25's time (upper bounds 0.3601 and 0.4655 against P227's 0.70 bar: PASS); at eight tokens a median 0.73 (upper bound 0.7351), where it runs at 2.00x the byte floor, which fires B2's multi-row trigger (threshold 1.25).",
+      "value": 0.4655,
+      "unit": "ratio, B / K expert-call time at T = 4, the upper bound (median + 2 SE over 60 reps; T = 2 reads 0.3601; clock-adjusted bounds equal)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 580.126.18, a 575 W power limit read on the box before any install), one rented Vast.ai host (verified-secure, AMD EPYC 9334, 128 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @b7146363 (P227's registration with Amendments 1-4, #2036's merge) + grouped-nf4-gemm v0.50.0 @41ef086e; torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; premise 25 tests passed on the card (e4b#2009's GPU contract, 20; the served T == 1 GEMV route's tests, 5); arms K (device grouping, then K25 at the family's served decode plan), K2 (K captured again, the self-pair) and B (E4B_NF4_SMALLM_BW=1: singleton groups, K33, one row per program) in captured graphs of the family's layers (Qwen3 48, Mixtral 8) on random NF4 bytes, 60 reps of Williams-ordered arms with spacer replays, P155's larger-of SE, clock-adjusted bounds from a sampled SM clock; verdict by bench/p227/p227_reduce.py",
+      "measured_on": "2026-10-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p227/RESULTS-p227.md",
+        "bench/p227/PREREG-p227.md",
+        "bench/p227/p227_reduce.py",
+        "bench/p227/receipts/p227-5090-1/verdict_p227.json",
+        "bench/p227/receipts/p227-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p227-5090-1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2013 (Amendments 1-4: the shakedowns and real fixture, the runner's strike-note comment, pod-launch's drive contract, the retry ids and the started-box cap), before any data. A microbench of the expert call, not a served read: B3, a served read of E4B_NF4_SMALLM_BW=1, needs its own registration with a quality bar. E4B_NF4_SMALLM_BW stays opt-in."
+    },
+    {
+      "id": "e4b.kernel.p227.per-row-gemv.qwen3.5090.2026-10-23",
+      "package": "experts4bit-qlora",
+      "area": "kernel",
+      "model": "Qwen/Qwen3-30B-A3B (expert shapes only; random NF4 bytes, no checkpoint loaded)",
+      "claim": "Lane P227 (one RTX 5090): on Qwen3-30B-A3B's experts at two and four decode tokens, the per-row GEMV route (E4B_NF4_SMALLM_BW=1) runs the captured expert call in a median 0.74 and 0.90 of K25's time at its served plan (upper bounds 0.7478 and 0.9047 against P227's 0.70 bar: MISS); at eight tokens a median 1.20 (upper bound 1.2122), slower than K25; lever B is small on Qwen3 at these token counts.",
+      "value": 0.9047,
+      "unit": "ratio, B / K expert-call time at T = 4, the upper bound (median + 2 SE over 60 reps; T = 2 reads 0.7478; clock-adjusted bounds equal)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 580.126.18, a 575 W power limit read on the box before any install), one rented Vast.ai host (verified-secure, AMD EPYC 9334, 128 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @b7146363 (P227's registration with Amendments 1-4, #2036's merge) + grouped-nf4-gemm v0.50.0 @41ef086e; torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; premise 25 tests passed on the card (e4b#2009's GPU contract, 20; the served T == 1 GEMV route's tests, 5); arms K (device grouping, then K25 at the family's served decode plan), K2 (K captured again, the self-pair) and B (E4B_NF4_SMALLM_BW=1: singleton groups, K33, one row per program) in captured graphs of the family's layers (Qwen3 48, Mixtral 8) on random NF4 bytes, 60 reps of Williams-ordered arms with spacer replays, P155's larger-of SE, clock-adjusted bounds from a sampled SM clock; verdict by bench/p227/p227_reduce.py",
+      "measured_on": "2026-10-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p227/RESULTS-p227.md",
+        "bench/p227/PREREG-p227.md",
+        "bench/p227/p227_reduce.py",
+        "bench/p227/receipts/p227-5090-1/verdict_p227.json",
+        "bench/p227/receipts/p227-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p227-5090-1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2013 (Amendments 1-4: the shakedowns and real fixture, the runner's strike-note comment, pod-launch's drive contract, the retry ids and the started-box cap), before any data. A microbench of the expert call, not a served read: B3, a served read of E4B_NF4_SMALLM_BW=1, needs its own registration with a quality bar. E4B_NF4_SMALLM_BW stays opt-in."
+    },
+    {
+      "id": "e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23",
+      "package": "experts4bit-qlora",
+      "area": "kernel",
+      "model": "Qwen/Qwen3-30B-A3B (lm_head shape only, 151936 x 2048; a random bf16 head on its per-row int8 grid, no checkpoint loaded)",
+      "claim": "Lane P229 (one RTX 5090): at 2, 4 and 8 rows of Qwen3-30B-A3B's 151936 x 2048 lm_head on its per-row int8 grid, the E4B_INT8_HEAD_ROWS route (grouped-nf4-gemm K37's linear_i8 at its shipped plan) runs the captured head call in a median 0.51 of F.linear's time on the grid's bf16 rounding (upper bounds 0.5109, 0.5148 and 0.5085 against P229's 0.70 bar) and within a median 1.01-1.03 of the one-row int8 GEMV (K36; upper bounds up to 1.0296 against 1.25); P229's verdict is GO_ROWS_8.",
+      "value": 0.5148,
+      "unit": "ratio, I / D head-call time, the largest upper bound over M = 2, 4, 8 (median + 2 SE over 60 reps, at M = 4; clock-adjusted bounds equal by construction: clocks are sampled per M window, so the arms within an M share one clock median)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 580.105.08, a 575 W power limit read on the box before any install), one rented Vast.ai host (AMD EPYC 7713, 256 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @32fda64d (P229's registration with Amendments 1-6, #2061's merge) + grouped-nf4-gemm v0.50.0 @41ef086e; torch 2.8.0+cu128, triton 3.4.0; premise on the card exactly as registered (the real kernels, 11 passed; the route's CPU suite, 45 passed); one random bf16 head (seed 229) swapped by e4b's own resolvers (apply_int8_head_bw, then apply_int8_head_rows 8); arms D (F.linear on the grid's bf16 rounding, the control), D2 (D captured again, the self-pair), I (the installed route at M rows, K37 at plan (32, 256, 4)) and K (the route at one row, K36) in captured graphs, 60 reps of Williams-ordered arms with spacer replays, P155's larger-of SE, clock-adjusted bounds from a sampled SM clock; verdict by bench/p229/p229_reduce.py",
+      "measured_on": "2026-10-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p229/RESULTS-p229.md",
+        "bench/p229/PREREG-p229.md",
+        "bench/p229/p229_reduce.py",
+        "bench/p229/receipts/p229-5090-3/verdict_p229.json",
+        "bench/p229/receipts/p229-5090-3/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p229-5090-3 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2026 (Amendments 1-6: the shakedown and real fixture, a runner comment re-pinned, pod-launch's drive contract, the retry ids, the power admission by the latest record, and a fetch that imports no links), before any data. A microbench of the head call, not a served read: the served read (W2, W4 and W8 on the default Qwen3 server, with P153's quality bars) is registered next and comes before any default. The default now follows that served read, P232 (bench/p232/RESULTS-p232.md, e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24: FLIP_ROWS_8): E4B_INT8_HEAD_ROWS resolves to 8 on qwen3_moe at the 151936 x 2048 head (serve_paged.INT8_HEAD_ROWS_DEFAULT_FAMILIES) where the int8 head is on, K37 imports (grouped-nf4-gemm 0.49.0 or later) and E4B_PAGED_SPEC is off, else to 1, recorded; E4B_INT8_HEAD_ROWS=1 opts out."
+    },
+    {
+      "id": "e4b.kernel.p228.dense-lt-pin.o-proj.qwen3.5090.2026-10-23",
+      "package": "experts4bit-qlora",
+      "area": "kernel",
+      "model": "Qwen/Qwen3-30B-A3B (o_proj shape only, 2048 x 4096; random bf16 weights, no checkpoint loaded)",
+      "claim": "Lane P228 (one RTX 5090, cuBLASLt 120804): at 2 and 4 rows of Qwen3-30B-A3B's 2048 x 4096 o_proj, the cuBLASLt configuration selected on the card (algo 21, tile 5, split_k 16, reduction scheme 4) and run through E4B_DENSE_LT_PIN's installed path takes a median 0.60 of F.linear's time in a captured graph of 48 copies (upper bounds 0.5981 and 0.6009 against P228's 0.85 bar; 0.6025 at 8 rows, which never rules); P228's verdict for o_proj is PASS.",
+      "value": 0.6009,
+      "unit": "ratio, P / D o_proj call time, the larger upper bound over the ruling M = 2, 4 (median + 2 SE over 60 reps, at M = 4; clock-adjusted bounds equal: every arm in a cell ran at the same median SM clock)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 580.126.18, a 575 W power limit read on the box before any install), one rented Vast.ai host (verified-secure, AMD EPYC 9334, 128 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @32fda64d (P228's registration with Amendments 1-7, #2061's merge), 0.57.0; torch 2.8.0+cu128 with its own cuBLASLt 120804, transformers 5.17.0; premise on the card exactly as registered (K1's GPU suite, 10, and CPU suite, 27: 37 passed); block A: every configuration on cuBLASLt's own heuristic list per (site, M in 2, 4, 8) (6 each) checked, run bitwise twice, compared with F.linear within 1.5e-2 and timed, the pin named by p228_reduce.select (algo 21, tile 5, split_k 16, reduction scheme 4, 20 stages in all six cells); block B: the pins installed by e4b's own apply_dense_lt_pin on toy modules holding the same random bf16 weights (o_proj 48 copies, router 384); arms D (F.linear at M, the control), D2 (D captured again, the self-pair), P (the pinned call through e4b's installed path) and T1 (F.linear at one row) in captured graphs, 60 reps of Williams-ordered arms with spacer replays, P155's larger-of SE, clock-adjusted bounds from a sampled SM clock; verdict by bench/p228/p228_reduce.py",
+      "measured_on": "2026-10-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p228/RESULTS-p228.md",
+        "bench/p228/PREREG-p228.md",
+        "bench/p228/p228_reduce.py",
+        "bench/p228/receipts/p228-5090-r1/verdict_p228.json",
+        "bench/p228/receipts/p228-5090-r1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p228-5090-r1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2021 (Amendments 1-7: the shakedown and real fixture, wording, a runner comment re-pinned, pod-launch's drive contract, the retry ids, the power admission by the latest record, and a fetch that imports no links), before any data. A microbench of the two dense projections, not a served read: a code PR fills K1's LT_PINS from the verdict's pin table with no speed claim, and a served read with B3's quality bar, per bucket and with the router as its own arm, comes before any default. E4B_DENSE_LT_PIN stays opt-in."
+    },
+    {
+      "id": "e4b.kernel.p228.dense-lt-pin.router.qwen3.5090.2026-10-23",
+      "package": "experts4bit-qlora",
+      "area": "kernel",
+      "model": "Qwen/Qwen3-30B-A3B (router gate shape only, 128 x 2048; random bf16 weights, no checkpoint loaded)",
+      "claim": "Lane P228 (one RTX 5090, cuBLASLt 120804): at 2 and 4 rows of Qwen3-30B-A3B's 128 x 2048 router gate, the cuBLASLt configuration selected on the card (algo 21, tile 5, split_k 16, reduction scheme 4) and run through E4B_DENSE_LT_PIN's installed path (router_linear) takes a median 0.28 of F.linear's time in a captured graph of 384 copies (upper bounds 0.2832 and 0.2843 against P228's 0.85 bar); P228's verdict for the router is PASS. At 8 rows, which never rules, it reads 0.884 (upper bound), above the bar: the pinned call is flat (3.61 to 3.71 us) while F.linear's own choice goes split-K there.",
+      "value": 0.2843,
+      "unit": "ratio, P / D router call time, the larger upper bound over the ruling M = 2, 4 (median + 2 SE over 60 reps, at M = 4; clock-adjusted bounds equal: every arm in a cell ran at the same median SM clock)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 580.126.18, a 575 W power limit read on the box before any install), one rented Vast.ai host (verified-secure, AMD EPYC 9334, 128 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @32fda64d (P228's registration with Amendments 1-7, #2061's merge), 0.57.0; torch 2.8.0+cu128 with its own cuBLASLt 120804, transformers 5.17.0; premise on the card exactly as registered (K1's GPU suite, 10, and CPU suite, 27: 37 passed); block A: every configuration on cuBLASLt's own heuristic list per (site, M in 2, 4, 8) (6 each) checked, run bitwise twice, compared with F.linear within 1.5e-2 and timed, the pin named by p228_reduce.select (algo 21, tile 5, split_k 16, reduction scheme 4, 20 stages in all six cells); block B: the pins installed by e4b's own apply_dense_lt_pin on toy modules holding the same random bf16 weights (o_proj 48 copies, router 384); arms D (F.linear at M, the control), D2 (D captured again, the self-pair), P (the pinned call through e4b's installed path) and T1 (F.linear at one row) in captured graphs, 60 reps of Williams-ordered arms with spacer replays, P155's larger-of SE, clock-adjusted bounds from a sampled SM clock; verdict by bench/p228/p228_reduce.py",
+      "measured_on": "2026-10-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p228/RESULTS-p228.md",
+        "bench/p228/PREREG-p228.md",
+        "bench/p228/p228_reduce.py",
+        "bench/p228/receipts/p228-5090-r1/verdict_p228.json",
+        "bench/p228/receipts/p228-5090-r1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p228-5090-r1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2021 (Amendments 1-7: the shakedown and real fixture, wording, a runner comment re-pinned, pod-launch's drive contract, the retry ids, the power admission by the latest record, and a fetch that imports no links), before any data. A microbench of the two dense projections, not a served read: a code PR fills K1's LT_PINS from the verdict's pin table with no speed claim, and a served read with B3's quality bar, per bucket and with the router as its own arm, comes before any default. E4B_DENSE_LT_PIN stays opt-in. The router claim is bounded to M <= 4: at 8 rows the default closes most of the gap."
+    },
+    {
+      "id": "e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P232 (one RTX 5090 at 575 W): on Qwen3-30B-A3B's default serve_paged server with the lm_head on its per-row int8 grid (E4B_INT8_HEAD_BW, the qwen3_moe default), routing the head's 2- to 8-row calls through grouped-nf4-gemm K37's linear_i8 (E4B_INT8_HEAD_ROWS=8) instead of F.linear on the grid's bf16 rounding decodes 2, 4 and 8 requests 1.0311x, 1.0243x and 1.0165x as fast (the smallest of four ABBA pairs at each workload), inside P153's quality bars at group T = 2, 4 and 8 (NLL gap -0.000091, -0.000091, -0.000031; argmax 3064, 3064, 3066 of 3072; KL 0.000142), TRIPWIRE none. P232's verdict is FLIP_ROWS_8, which licenses a separate PR to make E4B_INT8_HEAD_ROWS=8 qwen3_moe's default.",
+      "value": 1.0165,
+      "unit": "ratio, K / R decode rate (tokens/s) at W8, the smallest of four ABBA pairs (Ka/Ra 1.0165, Kb/Rb 1.0239, Kc/Rc 1.0240, Kd/Rd 1.0235); the smallest g_T over T = 2, 4, 8 (W2 1.0311, W4 1.0243)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 595.91.07, a 575 W power limit read on the box before any install and enforced in every timed block), one rented Vast.ai host (verified-secure, AMD Ryzen 9 7900X, 24 CPUs), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @f7589a02 (0.57.0, P232's registration with Amendments 1-2, #2085's merge) + grouped-nf4-gemm v0.50.0 @41ef086e; torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; premise on the card exactly as registered (the real kernels, 11 passed; the route's CPU suite, 45 passed); Qwen/Qwen3-30B-A3B @ad44e777, NF4 arena baked on the box; the default serve_paged server (graphs on, 16 x 4096 tokens, buckets 1-16, the split cap at its qwen3_moe default of 16, the dense attention GEMV off, the int8 head on by default in both arms); a warm-up process Rw (integrity-checked, never scored), then eight arms ABBA twice (R = E4B_INT8_HEAD_ROWS unset, K = 8), W2, W4 and W8 at 32 and 160 tokens, 5 timed reps, a 575 W power floor read either side of every timed block; quality = P153's instrument eager at group T = 2, 4 and 8, 24 wikitext windows x 128 positions per T, the pass KV at the server's 4096 tokens; verdict by bench/p232/p232_reduce.py",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p232/RESULTS-p232.md",
+        "bench/p232/PREREG-p232.md",
+        "bench/p232/p232_reduce.py",
+        "bench/p232/receipts/p232-5090-1/verdict_p232.json",
+        "bench/p232/receipts/p232-5090-1/SHA256SUMS",
+        "bench/p229/RESULTS-p229.md"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p232-5090-1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2071 (Amendments 1-2: what the kit could implement exactly; the shakedown's record as the reducer's real fixture, the 575 W floor shown on its real bytes, and the guard read on a real host), before any reading. The premise: P229's GO_ROWS_8 microbench of the head call. Self-pairs 0.9925-1.0033 (band 0.985-1.015). T = 2 and T = 4 read identical quality numbers (observed, not explained by this record: the head-only bucket-stability record reads every row identical at T = 8 too, where the quality numbers differ). Greedy tokens (reported only): 76 of 112 rows identical to R's; a divergent row diverges at the same step in all four pairs. Predictions: quality, self-pairs and the verdict held; g_T in [1.02, 1.05] missed at T = 8 (1.0165, on the low side); most W2 rows identical at 32 tokens missed (half). The knob stays opt-in until the default PR merges; every other model family keeps its current default."
+    },
+    {
+      "id": "e4b.serve.p233.solver-placement-quality.qwen3.5090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P233 (one RTX 5090): on Qwen3-30B-A3B's serve_paged server, E4B_PAGED_PLACEMENT=solver at 8.0 GiB VRAM / 3.0 GiB DRAM (3236 / 1213 / 1695 experts on VRAM / DRAM / NVMe; 23 of 48 MoE layers on the tiered forward) keeps teacher-forced quality against the same server at all-vram inside P153's bars at group T = 1 and 8 (NLL gap +0.002077 and -0.000047 nats; argmax agreement 2993 of 3072 = 0.974284 at both T; KL 0.003925 and 0.003729). The verdict is SOLVER_SANE, and the TRIPWIRE fired at both T: the argmax agreement is below its 0.98 look-bar and the KL above its 0.002 bound. The written look in RESULTS-p233.md finds the disagreement smaller in every window than the reference server's own registered chunked-prefill floor arm ( KL 0.0100 and 0.0097, agreement 0.964 and 0.967), unbiased in NLL, and matched in size at T = 8 by a placement with no DRAM tier (C: KL 0.003676). A doc or lane may cite it for solver as an opt-in placement only, never a default; no speed is claimed.",
+      "value": 0.974284,
+      "unit": "argmax agreement, S (solver 8.0 / 3.0) against A (all-vram), teacher-forced, at T = 1 and at T = 8 (bar 0.95; the tripwire's look-bar 0.98)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 595.84, a 575 W power limit recorded and never ruled), one rented Vast.ai host (AMD EPYC 7532, 64 CPUs, AVX2 only, one NUMA node), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @2a0a9afc (0.57.0, P233's registration with Amendments 1-4, #2110's merge) + grouped-nf4-gemm v0.50.0 @41ef086e; torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; premise on the card exactly as registered (37 passed; CPU 6 passed); Qwen/Qwen3-30B-A3B @ad44e777, NF4 arena baked on the box; every arm E4B_PAGED_GRAPHS=0, E4B_INT8_HEAD_BW=1, E4B_INT8_HEAD_ROWS=8, E4B_PAGED_HOT_ROWS=128; arms A all-vram (the reference), S solver 8.0 / 3.0 GiB (ruling), C solver 8.0 / 0 (reported); quality = P153's instrument (P115 Phase B's measure_phase, unmodified) eager at group T = 1 and 8, 24 wikitext windows x 128 positions after a 512-token prompt per T, the pass KV at the server's 4096 tokens; the DRAM tier's experts on the host CPU kernels (64 threads); verdict by bench/p233/p233_reduce.py, re-derived byte-identical from the private receipt store",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p233/RESULTS-p233.md",
+        "bench/p233/PREREG-p233.md",
+        "bench/p233/p233_reduce.py",
+        "bench/p233/receipts/p233-5090-1/verdict_p233.json",
+        "bench/p233/receipts/p233-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p233-5090-1 (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2103 (Amendments 1-4: the head knobs named in every arm; what the kit implements exactly; E4B_PAGED_HOT_ROWS=128 after the shakedown found the cold tier's floor; the shakedown's records as the real fixture and phase A's term re-fit), before any reading. The TRIPWIRE fired (argmax 0.974284 < 0.98; KL above 0.002, A's repeat pass bit-identical so the floor fell to the absolute bound); the verdict stands, and a doc or lane may propose solver only as an opt-in placement citing this read and its written look, with the agreement below 0.98 stated. Predictions: the verdict held; S's |gap| <= 0.002 and argmax >= 0.98, S's KL <= 0.001, and C within 0.0005 / 0.995 all missed; T = 1 and T = 8 within 2x held for argmax and KL, missed for the NLL gap (sign change). One host CPU (EPYC 7532, AVX2) and one split read; the DRAM tier's reduction order on other instruction sets is not read. Phase A ran 1,217 s against its re-fit 1,026 s term (inside its 2,400 s alarm)."
+    },
+    {
+      "id": "e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "claim": "Lane P234, one RTX 5090: on the DEFAULT serve_paged NF4 graph server (every serving lever unset; Mixtral-8x7B-Instruct, 16 slots x 768 tokens), E4B_NF4_SMALLM_BW=1 (2-8-token decode calls on singleton groups, so grouped-nf4-gemm's K33 bandwidth GEMV, instead of the device tile table and K25) decodes two requests 2.12452x and four requests 1.76481x as fast as the switch unset (min over two palindromic pairs; 73.2 -> 155.7 and 107.3 -> 189.4 tok/s, decode-only timing), with one request unchanged (0.99182, tokens identical) and sixteen requests' speed unchanged (1.00013; tokens differ in some rows, reported), and P115's teacher-forced quality at group 4 within P110's bars on wikitext and c4val1 (wikitext ON bias -0.00144, K8 perplexity -0.0065). LICENSED for buckets 2 and 4; 5 to 8 tokens stay opt-in.",
+      "value": 2.12452,
+      "unit": "decode tok/s ratio, E4B_NF4_SMALLM_BW=1 over unset, two requests (min over two palindromic pairs, decode-only timing); four requests 1.76481",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, driver 570.133.07, 32607 MiB, 500 W power limit), one rented Vast.ai verified host (Intel Core i9-13900F, 94 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @47bf1ed2 (0.57.0 + P234's registration) + grouped-nf4-gemm @41ef086e (0.50.0); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; mistralai/Mixtral-8x7B-Instruct-v0.1 @eba92302, NF4 arena baked on the box; the default server at 16 x 768, buckets 1, 2, 4, 8, 16, all graphs; premise test_decode_graph_buckets.py 7 passed + test_nf4_smallm_bw_gpu.py 20 passed + the rows premise (6 routings, 0 mismatches) on the card; four palindromic arms (B0a B1a B1b B0b) differing only in E4B_NF4_SMALLM_BW, W1/W2/W4/W8/W16 wikitext 512-token prompts, 32/160 new tokens, 3 timed reps; token identity ruled on W1 only, W16 a speed regression bar; quality by P115 at group 4; verdict by bench/p234/p234_reduce.py",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p234/RESULTS-p234.md",
+        "bench/p234/PREREG-p234.md",
+        "bench/p234/p234_reduce.py",
+        "bench/p234/p234_box.py",
+        "bench/p234/receipts/p234-5090-1/verdict.json",
+        "bench/p234/receipts/p234-5090-1/arm_B0a.json",
+        "bench/p234/receipts/p234-5090-1/arm_B1a.json",
+        "bench/p234/receipts/p234-5090-1/quality_on.json",
+        "bench/p234/receipts/p234-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-24/p234-5090-1/ (receipt.json, teardown-proof.json)"
+      ],
+      "licensed_by": "e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24",
+      "notes": "Pre-registered in #2114 (lever B, step B3, re-registered after P231's FUNCTION_FAIL, whose sixteen-request token-identity check ran the switched buckets in its admission ramp). All six predictions held. Reported, not ruled on: B1's tokens differ from B0's by row at W2 to W16 (the switch acts there; W16 on the same rows as P231), and W8 reads 1.22138. The default change for buckets 2 and 4 lands in its own PR citing this read. Lane cost $1.023 (the reading), plus a $0.12 exploratory shakedown before it."
+    },
+    {
+      "id": "e4b.kernel.p236.nf4-gemv-vs-bnb.moe-experts.5090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "kernel",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1, Qwen/Qwen3-30B-A3B, allenai/OLMoE-1B-7B-0125-Instruct (expert shapes only; seeded random NF4 bytes, no checkpoint loaded)",
+      "claim": "Lane P236 (one RTX 5090): on the same NF4 bytes, bitsandbytes 0.50.2's gemm_4bit is faster than grouped-nf4-gemm 0.51.0's K33 decode GEMV at all 30 cells (six MoE expert projections of Mixtral-8x7B, Qwen3-30B-A3B and OLMoE-1B-7B, at M = 1, 2, 4, 8 and 16), timed as eager calls between CUDA events that include each library's Python dispatch: the ratio (bitsandbytes' time over gnf4's) runs 0.2993 to 0.9176, and 0.4870 to 0.8654 at M = 1. Op level only: not the served, graph-captured decode path and not K33's device time; descriptive, it moves no default.",
+      "value": 0.9176,
+      "unit": "ratio, bitsandbytes / grouped-nf4-gemm time per eager call (above 1 = gnf4 faster), the largest of the 30 cell medians (20 palindromic reps of 50 calls; OLMoE-1B-7B gate_up at M = 16); the smallest 0.2993",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, 32607 MiB, a 575 W power limit recorded on the box), one rented Vast.ai verified host (AMD Ryzen 9 7900X, 94 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @d3b518b3 (P236's registration with Amendments 1-2, #2124's merge) + grouped-nf4-gemm v0.51.0 @30adb1bf; bitsandbytes 0.50.2 (its published wheel, RECORD-equal), torch 2.8.0+cu128, triton 3.4.0; premise per cell (bitsandbytes' dequantize_4bit bit-equal to dequant_ref on the same bytes), both correctness tolerances, engagement (one K33 launch per gnf4 call, with its split-K mark on Mixtral's down projection; one gemm_4bit dispatch per bitsandbytes call to one route) in every cell; copies spanning four times the L2; 10 warm-up calls; verdict by bench/p236/p236_reduce.py",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p236/RESULTS-p236.md",
+        "bench/p236/PREREG-p236.md",
+        "bench/p236/p236_reduce.py",
+        "bench/p236/p236_bench.py",
+        "bench/p236/receipts/p236-5090-2/verdict_p236.json",
+        "bench/p236/receipts/p236-5090-2/bench_p236.json",
+        "bench/p236/receipts/p236-5090-2/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-24/p236-5090-2/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #2116 (Amendment 1 #2122: the driver's staging loop; Amendment 2 #2124: the engagement gate accepts K33's split-K mark, after p236-5090-1 read VOID, whose timings are never read), before any reading. Predictions: Q1 held (bitsandbytes took dequant at Mixtral down and OLMoE gate_up at M = 16, custom elsewhere); Q2 (gnf4 faster at M = 1, ratio 1.2 to 3) was wrong; Q3 was wrong as written (its M = 16 clause held, bitsandbytes faster on both Mixtral projections there, but the ratio does not fall with M: only Mixtral's gate_up falls, not at every step, the others are near flat, and bitsandbytes is faster at every M); Q4 in part (16 self-pair bands outside [0.95, 1.05], 3 on Mixtral); Q5 READ. That per-call dispatch dominates the small projections is a reading of their flat-in-M times, untested. The box did not write the SHA256SUMS its registration lists; the committed one is computed over the committed files. Lane cost $0.010 (the reading)."
+    },
+    {
+      "id": "e4b.serve.h2h.vllm-0.32.0.p235.qwen3.b1.5090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P235 (P58's same-box head-to-head at the 0.58.0 release pins, one RTX 5090): vLLM 0.32.0 on Qwen's GPTQ-Int4 checkpoint decodes one request 1.038x as fast as e4b 0.58.0's int4 stack on Qwen3-30B-A3B (287.9 vs 277.4 tok/s, graph_r1 against int4_r1; vLLM 0.30.0 on the same box 1.031), identical prompt ids. Quoted beside P58's 1.087 (another box), never divided into it; the difference is not read as an e4b gain.",
+      "value": 1.038,
+      "unit": "ratio vLLM 0.32.0 / e4b 0.58.0 int4 stack, decode tok/s at B=1 (>1 = vLLM ahead)",
+      "hardware": "RTX 5090 (sm_120, driver 595.91.07, a 470 W power limit recorded on the box, never ruled: the ratio is read inside one box), one rented Vast.ai host (Intel Core Ultra 9 285K), image pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel",
+      "conditions": "P58's harness by named edits (bench/p235, e4b#2119, launch commit 7be9e610): experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0 installed from PyPI, provenance-checked and proven byte-identical to the published wheels (loggetta bench/release_proof.py at f09e5676, RECORD equal, pycache fresh, run in the arms' own import environment); e4b's int4 stack (fused q/k/v at B=1, unfused at B=16) in step_decomp's graph-replay window on torch 2.8.0+cu129; vLLM 0.32.0 (primary) and 0.30.0 (secondary) from PyPI in their own venvs on torch 2.13.0+cu130, Qwen/Qwen3-30B-A3B-GPTQ-Int4 @9b534e43, graphs, vLLM's defaults (0.90 memory utilisation); identical prompt ids on both engines (prompts_sha a8e6ea1d at B=1, f67e7e4d at B=16); every arm VALID, every self-pair inside 1.03x; verdict by bench/p235/p235_reduce.py, re-derived byte-identical from the private receipt store",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p235/RESULTS-p235.md",
+        "bench/p235/PREREG-p235.md",
+        "bench/p235/p235_reduce.py",
+        "bench/p235/receipts/p235-5090-1/RESULTS.txt",
+        "bench/p235/receipts/p235-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p235-5090-1 (receipt.json, teardown-proof.json, the vLLM arm receipts)"
+      ],
+      "notes": "Pre-registered in e4b#2119 (P58's harness by named edits; the release-provenance rule: PyPI wheels, provenance, release proofs as fast-check and binding; the pre-install guard fit), before any reading. Not measured: TTFT and prefill, other batch sizes or contexts, memory footprint, other checkpoints, GNF4_GEMV_FUSED_REDUCE=1, fp8-KV. The e4b window is not the shipped server's scheduler, and vLLM's slope includes its scheduler and detokenisation, so the engine advantage is understated, not inflated. It licenses nothing and moves no default. STOP-1 (informational): e4b's B=16 step 9.496 ms is outside +-8 % of P54's 11.42 ms on its box."
+    },
+    {
+      "id": "e4b.serve.h2h.vllm-0.32.0.p235.qwen3.b16.5090.2026-10-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P235 (P58's same-box head-to-head at the 0.58.0 release pins, one RTX 5090): at 16 requests vLLM 0.32.0 on Qwen's GPTQ-Int4 checkpoint decodes 1.203x as fast as e4b 0.58.0's int4 stack on Qwen3-30B-A3B (2026.9 vs 1684.9 aggregate tok/s, graph_r1 against int4_r1; vLLM 0.30.0 on the same box 1.187; build to build 1.013), identical prompt ids. Quoted beside P58's 1.396 (another box), never divided into it; the difference is not read as an e4b gain.",
+      "value": 1.203,
+      "unit": "ratio vLLM 0.32.0 / e4b 0.58.0 int4 stack, decode tok/s at B=16 (>1 = vLLM ahead)",
+      "hardware": "RTX 5090 (sm_120, driver 595.91.07, a 470 W power limit recorded on the box, never ruled: the ratio is read inside one box), one rented Vast.ai host (Intel Core Ultra 9 285K), image pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel",
+      "conditions": "P58's harness by named edits (bench/p235, e4b#2119, launch commit 7be9e610): experts4bit-qlora 0.58.0 and grouped-nf4-gemm 0.51.0 installed from PyPI, provenance-checked and proven byte-identical to the published wheels (loggetta bench/release_proof.py at f09e5676, RECORD equal, pycache fresh, run in the arms' own import environment); e4b's int4 stack (fused q/k/v at B=1, unfused at B=16) in step_decomp's graph-replay window on torch 2.8.0+cu129; vLLM 0.32.0 (primary) and 0.30.0 (secondary) from PyPI in their own venvs on torch 2.13.0+cu130, Qwen/Qwen3-30B-A3B-GPTQ-Int4 @9b534e43, graphs, vLLM's defaults (0.90 memory utilisation); identical prompt ids on both engines (prompts_sha a8e6ea1d at B=1, f67e7e4d at B=16); every arm VALID, every self-pair inside 1.03x; verdict by bench/p235/p235_reduce.py, re-derived byte-identical from the private receipt store",
+      "measured_on": "2026-10-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p235/RESULTS-p235.md",
+        "bench/p235/PREREG-p235.md",
+        "bench/p235/p235_reduce.py",
+        "bench/p235/receipts/p235-5090-1/RESULTS.txt",
+        "bench/p235/receipts/p235-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "the private receipt store, run p235-5090-1 (receipt.json, teardown-proof.json, the vLLM arm receipts)"
+      ],
+      "notes": "Pre-registered in e4b#2119 (P58's harness by named edits; the release-provenance rule: PyPI wheels, provenance, release proofs as fast-check and binding; the pre-install guard fit), before any reading. Not measured: TTFT and prefill, other batch sizes or contexts, memory footprint, other checkpoints, GNF4_GEMV_FUSED_REDUCE=1, fp8-KV. The e4b window is not the shipped server's scheduler, and vLLM's slope includes its scheduler and detokenisation, so the engine advantage is understated, not inflated. It licenses nothing and moves no default. STOP-1 (informational): e4b's B=16 step 9.496 ms is outside +-8 % of P54's 11.42 ms on its box."
     }
   ]
 }

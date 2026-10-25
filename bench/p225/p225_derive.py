@@ -15,7 +15,7 @@ The model forms, fixed here:
   stream while the fetch runs 8 workers, and the measured pairs do not track (62.7 MB/s -> 297 s, 71 MB/s -> 461 s), so
   the screen does not bound it, and a fetch timeout falls after strike-eligibility begins.
 need = model x (1.75 for the unbounded phases: train, ref, fetch) x 1.5; alarm >= 1.25 x need, rounded up to 10 s;
-guard = (sum of needs + gate 60 + reduce 60 + install 450 + reserve 600) x 1.25 + 300 boot;
+guard = (sum of needs + gate 60 + reduce 60 + install 450 + reserve 600) x 1.25 + 880 boot (Amendment 2; was 300);
 worst = guard x USD 1.05/h + 66 GB x USD 0.011.
 
     python p225_derive.py --tier a --rows 1632
@@ -39,7 +39,11 @@ SCORE_S_PER_ROW = 0.28                                  # a scoring slot's extra
 # 18.0-Mops host, sits under need(slot) + need(score) at 688 rows (the self-test checks it).
 FIRST_SLOTS_688 = {"p224-5090-2": 364.0, "p225x-5090-3": 264.0, "p225x-5090-4": 274.0}
 MARGIN_UNNAMED, NEED_X, ALARM_X, GUARD_X = 1.75, 1.5, 1.25, 1.25
-GATE_S, REDUCE_S, INSTALL_S, RESERVE_S, BOOT_S = 60, 60, 450, 600, 300
+GATE_S, REDUCE_S, INSTALL_S, RESERVE_S, BOOT_S = 60, 60, 450, 600, 880
+# BOOT_S is the launch-to-fit-check allowance (Amendment 2): the launcher alone may wait SSH_READY_S for ssh on Vast
+# (the launch manifest's ssh_ready_s), then stages the kit and runs the pre-fit checks. p225-5090-r1 took 443 s and
+# halted at the fit (rc 41) under the registered 300 s. BOOT_S must cover SSH_READY_S + STAGING_MARGIN_S (tested).
+SSH_READY_S, STAGING_MARGIN_S = 420, 300
 USD_H, DOWNLOAD_GB, USD_GB = 1.05, 66, 0.011
 FLOOR_MOPS = {"a": 30.0}                                # one tier; the 18-Mops fallback was withdrawn (its guard
 #                                                         is 8.9 h at the registered N, over the 6 h teardown cap)

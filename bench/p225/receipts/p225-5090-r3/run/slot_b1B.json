@@ -1,0 +1,81 @@
+{
+ "arm": "PA",
+ "slot": "b1B",
+ "build_s": 17.5,
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ],
+ "graphs": true,
+ "placement": "all-vram",
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16,
+  32
+ ],
+ "identity": {
+  "health_status": "ready",
+  "served_names": [
+   "Qwen/Qwen3-30B-A3B+93bc577962b9"
+  ],
+  "served_name": "Qwen/Qwen3-30B-A3B+93bc577962b9",
+  "adapter_id": "93bc577962b9f82f0a03c40a012fc6b0d8d3f8d2d42b595b1eb14e3e3a819e53",
+  "manifest_sha256": "5f17ae942358be84e48e462a1ded24ea80d140b85c068cc59480aaaef5eca099",
+  "base_match": {
+   "attention": "exact by construction (up to the measured merge rounding)",
+   "experts": "unverified (backend-adapter/1 records no expert absmax form; training defaults to the double-quantized absmax, the NF4 arena stores fp32 (docs/ADAPTER_PORTABILITY.md F1))",
+   "lm_head": "int8 weight-only (base-serving property, identical to the base server)"
+  },
+  "accepted_unverified_base": [
+   "experts"
+  ],
+  "merge": {
+   "merged": 192,
+   "scale": 2.0,
+   "max_err": 0.0038121938705444336,
+   "max_abs_delta": 0.029942050576210022,
+   "seconds": 0.095
+  },
+  "models_adapter": {
+   "adapter_id": "93bc577962b9f82f0a03c40a012fc6b0d8d3f8d2d42b595b1eb14e3e3a819e53",
+   "manifest_sha256": "5f17ae942358be84e48e462a1ded24ea80d140b85c068cc59480aaaef5eca099",
+   "base_revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+   "base_match": {
+    "attention": "exact by construction (up to the measured merge rounding)",
+    "experts": "unverified (backend-adapter/1 records no expert absmax form; training defaults to the double-quantized absmax, the NF4 arena stores fp32 (docs/ADAPTER_PORTABILITY.md F1))",
+    "lm_head": "int8 weight-only (base-serving property, identical to the base server)"
+   }
+  },
+  "base_name_status": 404
+ },
+ "cost": {
+  "W1": {
+   "ttft_ms": 236.282,
+   "itl_ms": 3.8707,
+   "tok_s": 175.764,
+   "requests": 8,
+   "batch": 1,
+   "tokens": 1024,
+   "ttft_any_ms": 236.282,
+   "itl_wall_ms": 3.8737
+  },
+  "W16": {
+   "ttft_ms": 2459.264,
+   "itl_ms": 27.4506,
+   "tok_s": 336.668,
+   "requests": 32,
+   "batch": 16,
+   "tokens": 4096,
+   "ttft_any_ms": 2459.264,
+   "itl_wall_ms": 27.4526
+  }
+ },
+ "peak_vram_mib": 26634.5,
+ "ok": true
+}

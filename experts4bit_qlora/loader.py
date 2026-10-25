@@ -1270,7 +1270,7 @@ def _release_cached_pinned_blocks(device) -> int | None:
 def load_moe_4bit_streaming(
     model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
     trust_remote_code=None, arena=None, quantize_layers=None, arena_train=False,
-    revision=None, blocksize=64,
+    revision=None, blocksize=64, merged_arena=None,
 ):
     """Stream the checkpoint onto the GPU, quantizing fused experts to Experts4bit on the way.
 
@@ -1319,6 +1319,10 @@ def load_moe_4bit_streaming(
     log; a full-sha ``revision`` whose snapshot resolves to a different commit is refused
     (``ValueError``) instead of loading other bytes. A local directory has no hub revision: the
     argument is noted and ignored there. Default ``None`` = ``main``, as before (#404).
+
+    A merged arena (``bake_mode: "nf4-merged"``, :mod:`experts4bit_qlora.merged_arena`) is refused right after its index
+    is read, unless ``merged_arena`` is that arena's own ``merge`` block, as the paged server passes it once refusal 13
+    has matched it to its adapter. Nothing else reads a merged arena.
     """
     # Validate + canonicalize the scheme FIRST: a bad quant_type must fail here, before any config
     # fetch, snapshot download, or shard read — and the Experts4bit-vs-ExpertsNbit class dispatch
@@ -1345,7 +1349,12 @@ def load_moe_4bit_streaming(
     arena_index = None
     if arena is not None:
         from nvme_arena import load_index
+
+        from .merged_arena import refuse_merged
         arena_index = load_index(arena)
+        # a merged arena is never read as a base: only the paged server's verified merge block (refusal 13) lets one
+        # through, as `merged_arena` (bench/d0/ARENA-DESIGN.md)
+        refuse_merged(arena_index, arena, merged_arena)
     if prefetch and not offload:
         raise ValueError(
             "prefetch=True requires offload=True: prefetch overlaps the H2D copy of offloaded "

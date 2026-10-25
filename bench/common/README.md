@@ -51,6 +51,92 @@ FIT=$((INSTALL_TO_GATE_S + NEED_X + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PC
   only boot + fit x 1.25 <= guard (300 s + 4937 s = 5237 s for P155); the static form is the stricter of the two,
   keeping the headroom on the boot as well, since the boot varies by host. No PREREG is parsed.
 
+## Registration rules (new lanes)
+
+Each rule below was added to a lane by a pre-data amendment on 2026-10-23, after a box hit the gap it closes. Every
+lane registered after this section merges states all seven in its PREREG. Existing lanes keep their registered text,
+including their own classification rules (P225's hand reading of a refused classify, for one), and amend it only if they
+hit one of these gaps.
+
+1. **One launch commit, and one pinned stack.** The PREREG names both, and later merges to main can change neither:
+   - the **launch commit**: the commit every box's kit and driver launch from (the registration's merge, or the latest
+     amendment's). SC2 at 36cdd2d4, P225 at 8fe4cd2d, P227/P229 at b7146363, P228 at 67faee63;
+   - the **stack under test**: the e4b, kernel and loggetta commits (and the versions) the box installs. Usually it is
+     the launch commit itself. A replication pins the replicated lane's stack instead, so its boxes differ only in the
+     machine.
+   A lane that moves to a newer launch commit or stack first lists, in a pre-run note, every change to the default path
+   it measures since the old one, with why the reading still stands.
+2. **Run ids.**
+   - Every box has its own id and receipt, and an id is never reused, because the ledger holds one row per run.
+   - Register a reading id for EVERY box the cap allows to start (`<lane>-<card>-1` to `-N`, with N at least the cap),
+     so a re-run after a started box that was not read has its own id. Also register retry ids (`-r1` to `-r8`) for any
+     box that follows one that was created but did not start (NOT_RUN, or a refusal before the install). A refusal at
+     create uses no id: the launcher receipts it under `<id>-refused-<ns>-<pid>` (with `environment.requested_run_id` =
+     the id), and the next attempt takes the same id again. An ALARM (a possible orphan), or a create already sent to a
+     provider the sweeper tracks, keeps the id: its receipt is that id's record.
+   - Ids are labels, not budget. No code may parse an id's number; the caps below govern alone.
+   - If boxes that did not start ever use up `r8`, that is a launcher or market fault to fix, not a reason to add ids.
+3. **Outcome classes, and what each counts toward.** Each class is decided from the launcher's receipt and the
+   runner's exit, never classified by hand:
+
+   | outcome | when | started? | counts toward |
+   |---|---|---|---|
+   | refused at create | the provider refused; nothing was created ($0). Its receipt is `<id>-refused-*`, and it uses no id | no | nothing |
+   | NOT_RUN | the launcher's pre-flight tore the instance down before the runner ran (no RUN_ID, exit file or marker) | no | nothing |
+   | refused before the install | the runner's own refusal before its first install: the power floor (rc 17), the guard fit (rc 41), a host refusal | no | a host refusal counts toward the lane's refusal cap, if it registers one. A single rc 41 is no strike; two consecutive rc 41 count as one strike toward the stop (Guard fit) |
+   | started | the runner passed those refusals and began its install | yes | the started-box cap, always; the stop only when NOT read (HARNESS_ERROR, VOID, a fault mid-install or mid-run). A read ends or advances the lane by its own rule |
+
+4. **A started-box cap, a stop, and a bounded worst.**
+   - The PREREG states the most boxes that may START (the cap) and each box's worst case. Retry ids never add a started
+     box: they only replace ids used by boxes that did not start.
+   - The stop ends a lane that keeps failing to produce a reading. It counts STRIKES: a started box that was not read is
+     one strike, and two consecutive rc 41 are one strike (Guard fit). A read box is never a strike. The PREREG states
+     how many strikes stop the lane. A capped host therefore cannot end a lane, and alternating faults cannot dodge
+     the stop.
+   - The lane's worst is bounded by its ids: at most N + 8 created boxes (N reading ids plus r1 to r8; a refusal at
+     create uses no id and costs $0, so it is not among them), of which at most the cap start. So the lane worst =
+     cap x the box worst + (N + 8 - cap) x the worst of a box that does not start. That is its time to the refusal at
+     the box rate (at most rule 5's boot term, plus the fit check), plus any download before it. A NOT_RUN or rc 17/41
+     box costs its time to the refusal.
+5. **Boot slack.** A box's deadline runs from the create, and the launcher alone may wait `ssh_ready_s` (420 s on
+   Vast) for ssh before it stages the kit. So the boot term in Guard fit's static check is at least `ssh_ready_s` plus
+   a staging margin of 120 s or more: guard - FIT_NEED >= 540 s on Vast. The lane's test asserts it. A boot term below
+   the launcher's own ssh wait halts the lane on any slow-ssh host. P225's 300 s term did, at 443 s from launch.
+6. **Pins at the frozen commit, once closed.** When a lane records its verdict, its tests assert its own literal pins
+   (staged hashes, the runner's kernel pin against CI's) against its FROZEN commit, never the live tree:
+   - read with `git show <frozen>:<path>`, where `<frozen>` is the commit at which those pins were last asserted
+     equal, usually the read's merge;
+   - an unreadable frozen commit fails under `CI=true` and skips in a shallow clone;
+   - the test names the frozen commit in a constant with a comment, as `tests/test_p224.py`'s `P224_FROZEN` does
+     (`HO2_FROZEN` follows with e4b#2030).
+
+   A later move of a shared pin (CI's kernel pin, a shared staged file) then neither re-pins nor fails a closed lane.
+   A lane still OPEN that a shared move would break needs an amendment, not a frozen read.
+7. **Every reducer gate fails closed.** A missing, `None` or empty input reads VOID or UNREAD, never a pass. Each gate
+   has a self-test with its evidence removed. Where the registered text separates the two, say which input reads which.
+   For example, SC2j reads a server with no end `/health` as UNREAD only when the runner recorded a deadline skip for it,
+   and as VOID otherwise (a crash or a lost server). Added 2026-10-23, from P230's bucket-16 control and SC2j's plans and
+   `kv_blocks_waits`.
+8. **A fetch never imports links.** A rented box is a third-party host, and root on it: it can leave a relative link in
+   its work dir that resolves, on the controller, to a file outside the run dir, and it can make its own rsync fail on
+   purpose to force a fallback. So the rule covers every pull from a box, not only rsync:
+   - an `rsync` carries `--no-links` after `-a` (`rsync -az --no-links ...`), or uses flags with neither `-a` nor `-l`
+     (`rsync -rtz ...`); rsync then skips each link ("skipping non-regular file");
+   - any other pull (tar over ssh, `ssh ... "tar -cf - ." | tar -xf -`; `scp` from `root@host:`; any `ssh` whose
+     stdout goes to a file, such as `ssh ... cat x > f` or `$SSH "tar -cf - ." > x.tar` before a local `tar -xf x.tar`)
+     is followed by a post-fetch link refusal before anything reads the tree: `find <dir> -type l` printing anything
+     exits 22. Simpler still: drop a fallback path, so a failed fetch is a fetch failure.
+
+   The receipt commit guards against links too (it never follows one into the store), so this rule is the second
+   layer, not the only one. It applies to a driver at its next edit or launch. Closed drivers are not swept:
+   `tests/test_fetch_no_links.py` freezes every script
+   that broke the rule on 2026-10-23 by its sha256, and a new script, or a frozen one whose bytes change, must pass. The
+   test finds each pull in any command position (`if ! rsync ...`, `$(rsync ...)`, inside a function body), reads
+   rsync's flags in order (`--no-links -a` still keeps links), and treats a quoted remote `tar -x` as a push, not a pull.
+   It does NOT check where the refusal sits: any later `find ... -type l` passes, even one after the tree is read, on
+   another directory, or with no exit. Nor does it expand variable flags (`rsync $FLAGS ...`, `"${OPTS[@]}"`), so those
+   must be read by eye. Added 2026-10-23.
+
 ## Host facts
 
 `host_facts.py OUT` writes the box's own measured host facts as `host_facts.json`, for the host registry. A runner calls it once on the box and leaves the file beside its receipt: `python3 host_facts.py "$OUT_DIR/host_facts.json"`. With `-` instead of a path it prints one `HOST_FACTS_JSON {...}` line.

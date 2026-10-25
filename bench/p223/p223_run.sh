@@ -31,9 +31,9 @@ SHORT=32; LONG=160; REPS=5
 # the registration's fit table: the allowances every time-left check uses (s); boot (300) is spent before this runs
 INSTALL=450; NEED_FETCH=3000; NEED_BAKE=1500; NEED_ARM=480; NEED_REDUCE=120
 RESERVE=600
-GPU_CLASS=5090; MIN_RAM_GB=60; MIN_DISK_GB=200; MIN_POWER_W=575
+GPU_CLASS=5090; MIN_RAM_GB=60; MIN_DISK_GB=200; MIN_POWER_W=575; MIN_DL_MB_S=40   # Amendment 3: the probe's floor
 case "$P223_RUN_ID" in
-  p223-5090-1|p223-5090-2|p223-5090-3) SHAKE=0;;
+  p223-5090-1|p223-5090-2|p223-5090-3|p223-5090-r1|p223-5090-r2|p223-5090-r3|p223-5090-r4|p223-5090-r5|p223-5090-r6|p223-5090-r7|p223-5090-r8) SHAKE=0;;   # Amendment 3: the retry ids r1..r8 (bench/common rule 2)
   p223-shake-1|p223-shake-2|p223-shake-3|p223-shake-4|p223-shake-5|p223-shake-6) SHAKE=1;;   # Amendments 1 and 2: instrument runs on a 1-layer cut, never a reading
   *) say "unregistered run ID: $P223_RUN_ID"; finish 78;;
 esac
@@ -43,7 +43,7 @@ if [ "$SHAKE" = 1 ]; then   # the shake table (Amendment 1): two shards, one lay
   NEED_FETCH=900; NEED_BAKE=600; NEED_ARM=240; MIN_DISK_GB=60; REPS=2
 fi
 RS=""; [ "$SHAKE" = 1 ] && RS=--shake
-[ -z "${P223_GPU_CLASS:-}${P223_MIN_DISK_GB:-}${P223_MIN_RAM_GB:-}${P223_REHEARSAL:-}${P223_SHORT:-}${P223_LONG:-}${P223_REPS:-}${P223_MIN_POWER_W:-}" ] || { say 'reading knobs are frozen'; finish 78; }
+[ -z "${P223_GPU_CLASS:-}${P223_MIN_DISK_GB:-}${P223_MIN_RAM_GB:-}${P223_REHEARSAL:-}${P223_SHORT:-}${P223_LONG:-}${P223_REPS:-}${P223_MIN_POWER_W:-}${P223_MIN_DL_MB_S:-}" ] || { say 'reading knobs are frozen'; finish 78; }
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 # every serving lever and engine knob starts unset: the default server is the subject (the arms set their knobs alone)
 unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_SERVE_ATTN_INT4 E4B_FUSE_T1_GLUE E4B_FUSE_T1_GLUE_R2 \
@@ -57,7 +57,7 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       GNF4_GEMV_SPLITK GNF4_GEMV_BW GNF4_GEMV_BW_PLAN GNF4_GEMV_BW_DECODE TRITON_INTERPRET E4B_ATTN_SPLIT_CAP \
       E4B_SERVE_ATTN_INT8 E4B_DENSE_GEMV_BW E4B_INT8_HEAD_BW
 : > summary.txt; : > phases.jsonl; echo "$P223_INSTANCE_ID" > INSTANCE_ID; echo "$P223_RUN_ID" > RUN_ID
-echo "KNOBS run=$P223_RUN_ID shake=$SHAKE e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MODEL@$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB min_power_w=$MIN_POWER_W short=$SHORT long=$LONG reps=$REPS" | tee -a summary.txt
+echo "KNOBS run=$P223_RUN_ID shake=$SHAKE e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MODEL@$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB min_power_w=$MIN_POWER_W min_dl_mb_s=$MIN_DL_MB_S short=$SHORT long=$LONG reps=$REPS" | tee -a summary.txt
 # ---- staged pieces, byte-for-byte
 for f in p223_box.py p223_reduce.py p149_slice.py p109_box.py k8_bake.py calib.json test_dense_i8.py test_int8_attn_interp.py phases.sh \
          staged-p223.sha256; do
@@ -104,6 +104,58 @@ EPL=$(nvidia-smi --query-gpu=enforced.power.limit --format=csv,noheader,nounits 
 [ -n "$PL" ] && [ -n "$EPL" ] || { say "REFUSED: power.limit or enforced.power.limit unreadable"; echo "refused: power limits unreadable" > REFUSAL; finish 15; }
 echo "POWER_LIMIT_W $PL ENFORCED_W $EPL (floor $MIN_POWER_W)" | tee -a summary.txt
 [ "$PL" -ge "$MIN_POWER_W" ] && [ "$EPL" -ge "$MIN_POWER_W" ] || { say "REFUSED: power.limit ${PL} W / enforced ${EPL} W < ${MIN_POWER_W} W (host-limited power cap)"; echo "refused: power.limit ${PL} W enforced ${EPL} W" > REFUSAL; finish 17; }
+# Amendment 3: the download probe (P231's approved method): one sustained GET of the checkpoint's first shard from the
+# endpoint the fetch uses, until 256 MiB AND 20 s, or 60 s. A host below MIN_DL_MB_S, a non-2xx status or an error is
+# refused with rc 14 (HOST_REFUSED, never a strike; P223's rc 19 is the guard fit): 93.4 GB at 40 MB/s is 2,335 s,
+# inside NEED_FETCH's 3,000 s. download_probe.json is written on EVERY box, refused or not, and travels with the receipt.
+# The staged token goes to the resolve endpoint only (an unredirected header), never to the CDN, never on a command line.
+rm -f $W/download_probe.json
+DL=$(PMODEL=$MODEL PREV=$REV FLOOR=$MIN_DL_MB_S OUT=$W/download_probe.json timeout 120 python - <<'PYD' 2>/dev/null | tail -1
+import json, os, time, urllib.request
+m, rev, tok = os.environ["PMODEL"], os.environ["PREV"], ""
+rec = {"model": m, "revision": rev, "floor_mb_s": int(os.environ["FLOOR"]), "status": None, "bytes": 0, "seconds": None,
+       "mb_s": None, "shard": None, "error": None, "when": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+try:
+    tok = open("/root/.cache/huggingface/token").read().strip()
+except OSError:
+    pass
+def get(url, t):
+    req = urllib.request.Request(url)
+    if tok:
+        req.add_unredirected_header("Authorization", f"Bearer {tok}")
+    return urllib.request.urlopen(req, timeout=t)
+t0 = None
+try:
+    meta = json.load(get(f"https://huggingface.co/api/models/{m}/revision/{rev}", 30))
+    rec["shard"] = sorted(s["rfilename"] for s in meta["siblings"] if s["rfilename"].endswith(".safetensors"))[0]
+    t0 = time.time()
+    with get(f"https://huggingface.co/{m}/resolve/{rev}/{rec['shard']}", 60) as r:
+        rec["status"] = r.status
+        while True:
+            dt = time.time() - t0
+            if (rec["bytes"] >= 256 << 20 and dt >= 20) or dt >= 60:
+                break
+            b = r.read(1 << 20)
+            if not b:
+                break
+            rec["bytes"] += len(b)
+except Exception as e:  # noqa: BLE001 -- a refusal reason, recorded by name
+    rec["status"] = rec["status"] or getattr(e, "code", None)
+    rec["error"] = f"{type(e).__name__}: {str(e)[:120]}"
+finally:
+    if t0 is not None:
+        rec["seconds"] = round(time.time() - t0, 2)
+        if rec["seconds"] and rec["error"] is None:
+            rec["mb_s"] = round(rec["bytes"] / rec["seconds"] / 1e6, 1)
+    json.dump(rec, open(os.environ["OUT"], "w"), indent=1)
+print(f"status={rec['status']} bytes={rec['bytes']} seconds={rec['seconds']} mb_s={rec['mb_s'] if rec['mb_s'] is not None else 'none'}")
+PYD
+)
+[ -s $W/download_probe.json ] || printf '{"status": null, "bytes": null, "mb_s": null, "error": "the probe wrote no record (killed at 120 s or did not run)"}\n' > $W/download_probe.json
+echo "DOWNLOAD ${DL:-none}" | tee -a summary.txt
+DL_MB_S=${DL##*mb_s=}; DL_MB_S=${DL_MB_S%%.*}
+case "$DL" in status=2[0-9][0-9]\ *) ;; *) DL_MB_S=0;; esac
+[ "${DL_MB_S:-0}" -ge "$MIN_DL_MB_S" ] 2>/dev/null || { say "REFUSED: download ${DL:-none} -- below ${MIN_DL_MB_S} MB/s"; echo "refused: download ${DL:-none}" > REFUSAL; finish 14; }
 # the registration's fit, before the install, in the cross-lane form (bench/common/README.md, "Guard fit"): everything
 # from here to the verdict at its allowance, plus the reserve, with 25 % headroom: 9,510 x 1.25 = 11,887 s in the canonical
 # integer form, 1 s under the registration's 11,888 (which rounds the half second up)

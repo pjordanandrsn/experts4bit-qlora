@@ -1,0 +1,6 @@
+# Files of d0-p224s3 kept only in the private receipt store or the run host, by sha256. No number in RESULTS-d0.md reads them.
+# The two resume checkpoints are the pass's own state after each layer (tensors; about 0.95 GB each), not outputs.
+# DEVIATIONS.md is the private deviation record; its content is restated in README.md without internal references.
+f0fca20453a1d9be5a9638b8d6215eb4b683970bdae9994be9adaff204a93641  dq/pass/resume.pt
+e2ffd06a0b910a25b0783fbc5a60c50d1560bd97c165a89f8e593dc1e34fc95b  nodq/pass/resume.pt
+6be6cd7c3b9cb56fd60663d30e32e732452e7c979f8913fefb15ae1f1d979476  DEVIATIONS.md

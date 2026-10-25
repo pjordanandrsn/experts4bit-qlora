@@ -187,3 +187,127 @@ head. K2b routes 2..N rows to K37's `linear_i8` over the same codes.
 - No command on the box, threshold, cost or output changes. The drive is not a staged file, so no pin moves; the
   shakedowns ran through a direct launcher that set `E4B_SHA`, which is why they did not see it.
 
+## Amendment 4 (2026-10-23, before any reading): retry run ids for boxes that did not start
+
+- The registration names three reading ids, `p229-5090-1` to `-3`. Every box needs its own id and receipt (the ledger
+  holds one row per run, so an id is never reused), but a box that does not start uses an id without being read.
+  `p229-5090-1` refused itself on the box before the install (rc 17: the board's power limit read 525 W against the
+  575 W floor; not a strike, under the registered rc 17 rule). `p229-5090-2` was refused at create (the provider still
+  listed the offer; nothing was created, $0), recorded under the row below. So `-1` to `-3` can run out before a box
+  has started.
+- This amendment adds the retry ids **`p229-5090-r1` to `p229-5090-r8`**, for ANY box that follows one that did not
+  start, at the same tier and terms. A box that did not start is one of:
+  - a refusal at create (nothing created);
+  - a pre-flight teardown (the launcher tore a created instance down before the runner ran; P225's NOT_RUN);
+  - the box's own refusal before the install (rc 17 and the like).
+- The runner's and the drive's id cases accept them. This PREREG states no allowance for boxes that do not start, so N
+  is 8, P225's.
+- **The ids are labels, not budget.**
+  - Started-box accounting is by outcome, never by id: no code parses an id's number.
+  - The registered caps, the strike rules and the stop govern alone. Nothing is widened.
+- **A box STARTS when its runner passes the refusals before the install (rc 17, rc 41, and the host refusals rc 10,
+  13, 15, 16, 18 and 28) and begins the install**, whatever its outcome after that (read, HARNESS_ERROR, VOID, a
+  mid-install or mid-run fault). One definition serves the cap and the stop. **Only started boxes count toward the cap
+  and toward any stop; a box that did not start (a refusal at create, a pre-flight teardown, rc 17, a single rc 41)
+  counts toward none of them; the registered rc 41 pair rule is unchanged.**
+- **At most three boxes start.** The retry ids never add a started box; they only replace ids used by boxes that did
+  not start. This keeps the registered budget: 3 x $1.45.
+- **What the stop counts (line 125's text did not settle rc 17, so this settles it):**
+  - "Two consecutive runs that are not read stop the lane" (Budget) counts started boxes only. A started box that is
+    not read counts, including one that faults mid-install, so alternating faults cannot dodge the stop.
+  - An rc 17 box never counts toward the stop, whatever label the launcher's receipt carries.
+  - A single rc 41 is not a strike; two consecutive rc 41 count as one strike under the cross-lane rule (line 174),
+    unchanged.
+  - A refusal at create and a pre-flight teardown count toward nothing.
+  - `p229-5090-1` (rc 17) counts 0.
+  - Decided pre-data (no reading exists), after `-1`'s rc 17. Why: rc 17 is the host's power floor and rc 41 the guard
+    fit, both refusals before any install; the stop exists to end a lane whose kit cannot produce a reading, not to let
+    capped hosts end it.
+- **A new outcome row, decided from the launcher's receipt and never classified:**
+
+  | outcome | when | a reading? | a strike? |
+  |---|---|---|---|
+  | **refused at create** (Amendment 4) | the provider refused the create, so nothing was created ($0) | no | no; counts toward no cap, uses one id |
+
+- If boxes that did not start ever use up `r8`, that is a launcher or market fault to fix, not a reason to add ids.
+- **The slack, checked (a test, no kit change):** the box's deadline runs from the create, so a slow-ssh host must not
+  halt the lane at the fit check. guard - FIT_NEED = 3600 - 2625 = 975 s, at least pod-launch's longest ssh wait
+  (420 s) plus a 120 s staging margin. `tests/test_p229.py` asserts it.
+- Pre-data: no reading exists. The runner's bytes change (the id case only), so its staged pin moves. A box launched
+  before this amendment merges uses `-1` to `-3` from the earlier commit; a box launched after it launches from its
+  merge commit.
+
+## Amendment 5 (2026-10-23, before any reading): the pin screen admits by each machine's latest power record
+
+- **Why (a market read; this lane has no data):** the pin screen admitted only RTX 5090 machines whose host registry
+  holds a power cap of at least 575 W read within the last 3 days (P222's screen term). By each machine's LATEST
+  record, the registry at HEAD holds 58 machines at 575 W or more (6 of them read within 3 days), 60 below 575 W, and
+  103 with no record. Machines the registry has never seen have no record either. The P229 window that closed at
+  15:00Z on 2026-10-23 pinned nothing. A read-only census runs the screen's own terms on one offer search every
+  30 minutes.
+  - Under the old admission, the recorded-cap term failed every listed offer.
+  - Under this amendment's admission, at 15:41Z: 29 offers listed; 1 admitted (a machine with no record, $0.944/h);
+    16 fail only the price cap, and 23 fail it at all.
+  - So with the floor admitting by the latest record, the price cap ($1.05/h with the disk) is the term that binds
+    next. The cap is not changed here; the full-window tally is reported on the bus.
+- **The admission, from this amendment:**
+  - A machine whose LATEST recorded power cap (the host registry at the receipt store's HEAD) is below 575 W is never
+    pinned, whatever the record's age. That is the launcher's own exclusion (`vast_min_power_limit_w`).
+  - A machine whose latest record is 575 W or more, at any age, is admitted, and so is a machine with no record. A
+    stale positive record is better evidence than none, and the box's own read decides either way. The ranking is: read
+    within 3 days first, then older records at 575 W or more, then no record.
+  - The launcher admits the same way. pod-launch applies the 575 W floor itself, and each reading template
+    (`template_read.json`) today sets `vast_power_limit_unknown` to `"exclude"`, which rents only machines whose
+    recorded cap clears the floor. From this amendment, each template sets it to `"eligible"` (pod-launch's default),
+    keeps the rule `"latest"`, and sets no `max_age_days`.
+  - The box reads its own power limit before the install and refuses below 575 W (rc 17), as registered; an
+    unreadable cap is rc 15. For a host whose record is stale or missing, that refusal is how the floor is enforced.
+- **Unchanged:** the 575 W floor, the measurement, the rows, the rule, every screen term except this admission, and
+  every cap: at most $1.05/h, guard 1.0 h, $1.45 worst for a started box, and at most three started boxes
+  (Amendment 4).
+- **rc 17 boxes, now expected.** An rc 17 box does not start, so it counts toward no cap and no stop
+  (Amendment 4), unchanged.
+  - **The stop for them (new): three consecutive rc 17 boxes stop the lane.** The owner posts the three machines and
+    the caps they read, and the lane resumes only on a ruling. "Consecutive" counts boxes whose runner ran. A refusal
+    at create or a pre-flight teardown neither adds to the count nor resets it; any other runner outcome resets it.
+  - **Who counts:** the lane's owner, from each box's receipt (the runner's exit code). The pin loop exits after every
+    launch, so no box follows another without the owner reading the last one. No code enforces the count; the
+    lane's test models it.
+  - **What one costs:** the boot plus the runner's checks before the install, at the offer's rate (at most $1.05/h),
+    plus the image pull when the host has not cached the image.
+    - Compute, priced conservatively at 600 s x $1.05/h: **$0.18**.
+    - The image pull: the pinned image (`pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`, digest `a7103283...`) is
+      9.4 GB compressed. Uncached, at the template's <= $0.04/GB, that is at most **$0.38**.
+    - So at most **$0.56** a box, and three in a row cost at most **$1.68** (3 x $0.56) before the stop. That is
+      outside the started-box budget, as rc 17 always was.
+    - Measured: `p229-5090-1`, the one rc 17 box so far, ran 195 s from create to teardown, and its ledger row
+      (download included) is $0.002.
+  - **The registry learns each one.** The runner prints `POWER_LIMIT_W <n> (floor 575)` before it refuses. Committing
+    the box's receipt (`tools/commit-receipt`, which appends the host line) records that machine's cap. From then on
+    the machine is excluded if it is below 575 W.
+- **Where the change lives:** the pin screen and the reading template are controller-side files on the mini, not
+  staged kit files. Their admission change gets its own review (the diff posted on the bus) and is installed only
+  after this amendment merges. No staged pin moves and no runner byte changes. Until then, both run as they are.
+- Decided pre-data: no P229 box has read. `p229-5090-1` was a host with no record that read 525 W
+  (rc 17); the registry now records its cap (machine 140733, 525 W).
+
+## Amendment 6 (2026-10-23, before any reading): the fetch never imports a link
+
+- **Why:** a security rule for the whole bench (bench/common rule 8). The receipt store's writer hashes a linked file's
+  TARGET, and the drive fetched the box tree with `rsync -az`, which keeps symbolic links. A rented box is a
+  third-party host, so a relative link left in its work directory could have brought a controller-side file into the
+  store. No P229 box has created, so nothing was fetched.
+- **The change:** the drive's one fetch is now `rsync -az --no-links`. A link in the box tree is skipped and never
+  reaches the controller. Every regular file is fetched as before, and the runner writes no link into `$W`.
+- **Unchanged:** every command on the box, every staged file (no pin moves), the measurement, every threshold, every
+  cap and every output. Only the drive's fetch line moved.
+- **The launch commit is this amendment's merge.** Between the previous launch commit (`8d58cdc4`, Amendment 5) and
+  this amendment's base, main merged three changes. None is on this lane's default path:
+  - a training-only gather in `engines/fast.py` that is off unless `E4B_TRAIN_DET_GATHER=1`, which no P229 box sets.
+    The runner's engine (`engines/int8_head_bw.py`) does not import it;
+  - HO3's Amendment 2 (`bench/ho3/` and its test);
+  - P225's results (receipts and docs).
+- **Checked:** the lane's test asserts that every rsync in the drive carries `--no-links`, and that a drive with no
+  rsync fails. Where rsync is installed, the test also runs the drive's own flags on a tree holding a file link and a
+  directory link, and asserts that neither arrives.
+- Decided pre-data: no P229 box has read.

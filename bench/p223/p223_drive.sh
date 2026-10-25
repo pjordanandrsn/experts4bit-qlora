@@ -62,9 +62,9 @@ PASS="P223_RUN_ID=$RUN_ID P223_RUN_NONCE=$NONCE P223_DEADLINE_EPOCH=$DEADLINE P2
 # Explicit IDs only: the reading (-1) and two spares for pre-create and host refusals (-2, -3); Amendment 1's shake ids
 # (-1 to -3: instrument runs on a 1-layer cut, never a reading) carry P223_SHAKE=1, which the runner matches to the id.
 case "$RUN_ID" in
-  p223-5090-1|p223-5090-2|p223-5090-3) :;;
+  p223-5090-1|p223-5090-2|p223-5090-3|p223-5090-r1|p223-5090-r2|p223-5090-r3|p223-5090-r4|p223-5090-r5|p223-5090-r6|p223-5090-r7|p223-5090-r8) :;;   # Amendment 3: the retry ids r1..r8
   p223-shake-1|p223-shake-2|p223-shake-3|p223-shake-4|p223-shake-5|p223-shake-6) PASS="$PASS P223_SHAKE=1";;
-  *) say "refusing unregistered run ID: $RUN_ID (is not p223-5090-N or p223-shake-N)"; exit 78;;
+  *) say "refusing unregistered run ID: $RUN_ID (is not p223-5090-N, p223-5090-rN or p223-shake-N)"; exit 78;;
 esac
 if [ "${P223_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p223_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p223"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/p223; deadline $DEADLINE"
@@ -141,7 +141,9 @@ done
 mkdir -p "$RUN_DIR/p223" && [ -z "$(find "$RUN_DIR/p223" -mindepth 1 -maxdepth 1 -print -quit)" ] || { say "fetch failed: local dir"; exit 22; }
 # The checkpoint stays on the box (the hub cache, outside $W), and so do the NF4 snapshot and the arena (work/: only
 # its bake.json travels) and a shake's one-layer cut (slice/); records, logs, the prompts and the verdict travel.
-rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
+# Amendment 3: --no-links, so the fetch never imports a symbolic link from the box (a rented host is untrusted, and the
+# receipt writers follow links: bench/common rule 8).
+rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
   --include 'work/' --include 'work/bake.json' --exclude 'work/*' \
   --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' --exclude '/slice' \
   "root@$HOST:$W/" "$RUN_DIR/p223/" || { say "fetch failed: rsync"; exit 22; }

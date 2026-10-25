@@ -39,7 +39,9 @@ case " ${TC1_FAMILIES:-} " in *" qwen3axo1767 "*|*" qwen3axo1767b "*) STAGE="$ST
 case " ${TC1_FAMILIES:-} " in *" qwen3hbd "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_trunc.py $REPO/bench/hp1/hp1_caltokens.py $REPO/bench/hbd/hbd_probe.py $REPO/bench/hbd/hbd_reduce.py";; esac
 # HP3 (the qwen3hp3 / qwen3hp3shake tokens; bench/hp3/HP3-PREREG.md): HP1's library, cut, tokens, evaluator and reducer (hp3_reduce reuses
 # it), AXO1767's reducer (the engagement check), the build probe and HP3's reducer
-case " ${TC1_FAMILIES:-} " in *" qwen3hp3 "*|*" qwen3hp3shake "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_trunc.py $REPO/bench/hp1/hp1_caltokens.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/tc1/axo1767_reduce.py $REPO/bench/hp3/hp3_build.py $REPO/bench/hp3/hp3_reduce.py";; esac
+case " ${TC1_FAMILIES:-} " in *" qwen3hp3 "*|*" qwen3hp3shake "*|*" qwen3hp3r "*|*" qwen3hp3rshake "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_trunc.py $REPO/bench/hp1/hp1_caltokens.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/tc1/axo1767_reduce.py $REPO/bench/hp3/hp3_build.py $REPO/bench/hp3/hp3_reduce.py";; esac
+# TC1 amendment 79: the release proof (bench/tc1/release_proof.py, byte-identical to loggetta's, its sha256 pinned in the PREREG and the tests)
+case " ${TC1_FAMILIES:-} " in *" qwen3pos79 "*) STAGE="$STAGE $HERE/release_proof.py";; esac
 STAGE="$STAGE ${TC1_EXTRA_STAGE:-}"; RUNNER=${TC1_RUNNER:-tc1_run.sh}
 case " $STAGE " in *"/$RUNNER "*) ;; *) say "refusing: TC1_RUNNER=$RUNNER is not a staged file"; exit 78;; esac
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
@@ -72,6 +74,18 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not a 40-char hex s
 # would fail against the tag object's id.
 GNF4_SHA=${GNF4_SHA:-846b512b905468c08f5748943d08769b572affa2}
 [ ${#GNF4_SHA} -eq 40 ] || { say "refusing: GNF4_SHA is not a 40-char hex sha ($GNF4_SHA)"; exit 78; }
+# TC1 amendment 79: the qwen3pos79 token runs only at its kit's pins, which tc1_run.sh holds (POS79_*); a mismatch refuses HERE, before any
+# box is rented, rather than on a booted one (the box's own gate refuses the same, rc 78)
+case " ${TC1_FAMILIES:-} " in *" qwen3pos79 "*)
+  p79(){ sed -n "s/^$1=\([0-9a-f.]*\).*/\1/p; s/.*; $1=\([0-9a-f.]*\).*/\1/p" "$HERE/tc1_run.sh" | head -1; }
+  P79_WHY=""
+  [ "$E4B_SHA" = "$(p79 POS79_E4B_SHA)" ] || P79_WHY="E4B_SHA $E4B_SHA is not the kit's $(p79 POS79_E4B_SHA)"
+  [ "$GNF4_SHA" = "$(p79 POS79_GNF4_SHA)" ] || P79_WHY="${P79_WHY:+$P79_WHY; }GNF4_SHA $GNF4_SHA is not the kit's $(p79 POS79_GNF4_SHA)"
+  [ "${TC1_UNSLOTH_VERSION:-}" = "$(p79 POS79_UNSLOTH)" ] || P79_WHY="${P79_WHY:+$P79_WHY; }TC1_UNSLOTH_VERSION ${TC1_UNSLOTH_VERSION:-unset} is not $(p79 POS79_UNSLOTH)"
+  [ "${TC1_UNSLOTH_ZOO_VERSION:-}" = "$(p79 POS79_UNSLOTH_ZOO)" ] || P79_WHY="${P79_WHY:+$P79_WHY; }TC1_UNSLOTH_ZOO_VERSION ${TC1_UNSLOTH_ZOO_VERSION:-unset} is not $(p79 POS79_UNSLOTH_ZOO)"
+  [ -z "${TC1_E4B_ENV:-}" ] && [ -z "${TC1_ARM_EXTRA_ENV:-}" ] || P79_WHY="${P79_WHY:+$P79_WHY; }TC1_E4B_ENV / TC1_ARM_EXTRA_ENV must be empty"
+  [ -z "$P79_WHY" ] || { say "refusing (amendment 79 pins): $P79_WHY"; exit 78; };;
+esac
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
 SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
 SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
@@ -91,7 +105,7 @@ for v in TC1_FAMILIES TC1_SKIP TC1_UNSLOTH_VERSION TC1_UNSLOTH_ZOO_VERSION TC1_P
          TC1_CURVE_STEPS TC1_CURVE_EVAL_EVERY TC1_CURVE_EVAL_N TC1_T1_MB TC1_T1_ACCUM TC1_R64_R TC1_R64_ALPHA \
          TC1_SMALL_STEPS TC1_SMALL_EVAL_N TC1_SMALL_EVAL_EVERY TC1_E4B_ENV TC1_PACK TC1_FREE_OUTPUTS TC1_PAD_CENSUS \
          TC1_HP1_EVAL_N TC1_HP1_EVAL_EVERY TC1_HP1_SEL_SEEDS TC1_HP1_CONF_SEEDS TC1_HP1_SHAKE_LAYERS TC1_HP1_SHAKE_STEPS TC1_HP1_DROP_AXOLOTL TC1_HP1_ZERO_TOL \
-         TC1_HP1_K_EVAL_SHA256 TC1_HP1_K_SELECT_SHA256 TC1_HP1_K_MANIFEST_SHA256 \
+         TC1_HP1_K_EVAL_SHA256 TC1_HP1_K_SELECT_SHA256 TC1_HP1_K_MANIFEST_SHA256 TC1_STEP_MEM \
          MG1_FAMILIES MG1_STEPS MG1_PROVE MG1_LADDER_ONLY MG1_LADDER_ARGS MG1_P2_ARM RD1_PROVE DQ11_REQUIRED_DRIVER; do   # TC1b (tc1_run.sh's curve / t1 / r64 knobs); TC2 (the small families' instrument); TC1 amendment 39 (TC1_PACK: the packed regime; TC1_FREE_OUTPUTS: each micro-batch's output released); MG1 (bench/moegen/mg1_run.sh; never MG1_REHEARSAL)
   # Quoted: run tp4-b-p46cut-3 passed TC1_FAMILIES='qwen3 qwen3_5' and the remote `env ... bash tc1_run.sh` saw the second
   # word as the COMMAND -- rc=127 before the nonce was bound, a HARNESS_ERROR row. %q survives the remote shell's re-parse.
@@ -186,7 +200,7 @@ fi
 tc1_partial_fetch() {  # dest_dir -> rc of rsync; never exits the caller
   mkdir -p "$1" || return 1
   # /bin/bash 3.2 on the controller treats an empty array's [@] as unbound under set -u.
-  rsync -az --timeout=120 -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" ${TC1_PARTIAL_EXCLUDES[@]+"${TC1_PARTIAL_EXCLUDES[@]}"} "root@$HOST:$W/" "$1/" >/dev/null 2>&1
+  rsync -az --no-links --timeout=120 -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" ${TC1_PARTIAL_EXCLUDES[@]+"${TC1_PARTIAL_EXCLUDES[@]}"} "root@$HOST:$W/" "$1/" >/dev/null 2>&1
 }
 
 say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s of no change, idle GPU AND no disk movement; never acted on)"
@@ -246,7 +260,7 @@ if [ "${TC1_L_CENSUS:-}" = 1 ]; then
   }
 fi
 rm -rf "$RUN_DIR/tc1" && mkdir -p "$RUN_DIR/tc1" || { say "fetch failed: local dir"; exit 22; }
-if ! rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" "root@$HOST:$W/" "$RUN_DIR/tc1/"; then
+if ! rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" "root@$HOST:$W/" "$RUN_DIR/tc1/"; then
   if [ -n "$(ls -A "$RUN_DIR/tc1.partial" 2>/dev/null)" ]; then
     # keep whatever the final rsync did bring, and add the partial copy's files it did not (-n never overwrites). cp -n's
     # exit status on a skipped file differs between BSD and GNU cp, so the merge is checked file by file instead.

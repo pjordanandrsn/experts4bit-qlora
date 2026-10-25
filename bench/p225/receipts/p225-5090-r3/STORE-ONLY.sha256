@@ -1,0 +1,27 @@
+# Files kept only in the private receipt store (sha256 as committed there). The launcher's records name the provider's
+# instance; the box logs carry carriage returns from progress bars; the adapter weights are never committed (their
+# hashes are also in run/adapter_REF/tensors.sha256).
+21bcc5a6327827495fecd11f5897a139acf030fe0c6ee7961f1940409f60e8d7  receipt.json
+9e1aab4d161a7bcb3668fc3cd0c4b09774167d15fd8130049f8a32feda64f7c9  guard-armed.json
+4cece1384caa9db0dc73eb6050a01d43dc21403605b5da7ae1a1122bfada7c10  guard.log
+0bfc239fac874eb436223bf47c9d7b679567df7b6b791633076f63b80faf297b  heartbeat
+030c266a5a5c9a080d664af44ec488fcb35d433116f9ac99bfac2824ba267874  host_facts.json
+3d4e105682b993aa907e6df3f219781e6bd77a36dff8fab7d044672951697c1c  instance.json
+43a5f2df2a21eb71b93137e66e2ec4b21222e66d97455f2bf66c89964969e0be  known_hosts
+643523b4e37fde3dc2e772ffd270ad82b080c65342a6d9cf6c1c5920ce33608e  teardown-proof.json
+93bc577962b9f82f0a03c40a012fc6b0d8d3f8d2d42b595b1eb14e3e3a819e53  run/adapter_REF/adapter.safetensors
+be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506  run/adapter_REF/tokenizer.json
+a128747cf750cfeaf9e8e2d6b03cd9817960eb22edfefbbe0d892fd6b1a37451  logs/fetch.log
+7cb38ba5b23447ad4585eb5651c67f53d50a99984b8b590ed4ac9ea5138acaa5  logs/ref_REF.log
+c881f5ce502ddffb433c9878b6c0e6beb52d9c4b40df65112d420cfcd736467f  logs/slot_b0A1.log
+1a97cc7e2c47bb360c3cfd47b1ca38d0384cfdb48b4502c9b6512cb1fdf600d8  logs/slot_b0A2.log
+394ee7a75af0ebaa2d477f2f11357038fc059dd29ed883ef0a4e0e92a36cadde  logs/slot_b0B.log
+4f6809de62e7173b6c26f4340cdd755bf19506dca9e0586fd4863eafcb681f17  logs/slot_b1A1.log
+51f7398c95ad37d0db89cace245151ecb73660b0b7d94879cec32dd76e6d98fb  logs/slot_b1A2.log
+61163a11286103839816e798ea18736a3fa5eae37eb55168e36c4542c8a1fd3e  logs/slot_b1B.log
+f57ad2e1c83bb31f59869e41ec61cccc99205b6d68bd5c962e951d18eec644f1  logs/train_REF.log
+# Added 2026-10-24: files that carry the rented card's GPU UUID (nvidia-smi's uuid), kept only in the private
+# receipt store, byte-exact. The public tree carries no GPU UUID (the receipts rule since 2026-10-20).
+3715b55b01644caf0fc6e90dbf7d6eb5c8f971bd61cb8e7da5abebb2b8fc4621  forensics.txt
+cda29296eb98d580bd4af27e44b03d77eef51d5cf4f4cc9686c33c0928fe3cae  outer.log
+a45ac35b0f957a570dc1dcbc41bdbf9ba30ab767f2075a10f3a7ba4d424b7502  run/receipts_REF/Qwen3-30B-A3B-device-reference-t512-20261023T154048Z-8dde0c2b.json

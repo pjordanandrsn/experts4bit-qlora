@@ -284,6 +284,28 @@ out_len, finish_reason -- server-side TTFT/ITL beside the client's), `E4B_PAGED_
 as above. `GET /stats` returns the scheduler's `stats()` (TTFT p50/p99 **from arrival**, queue wait,
 per-stream rate) and the runner's graph statistics.
 
+**The cold tier's floor at `E4B_PAGED_PLACEMENT=solver`.** The solver places experts across VRAM, DRAM and NVMe, and
+`E4B_PAGED_HOT_ROWS` (64) is how many NVMe-tier expert rows stay pinned in host RAM. A forward asks the cold tier for
+every unique NVMe expert it routes in one request, so the build refuses a `hot_rows` below
+`min(F x top_k, the most NVMe experts in any MoE layer)`, where `F = max(E4B_PAGED_CHUNK_TOKENS, max_seqs)` is the most
+tokens one forward carries (a prefill chunk is its own forward; decode at `solver` is eager, one token per sequence).
+Below it, a long prompt would fail mid-request. The refusal names the floor and every input to it, and `/health`
+records them under `levers.hot_rows_floor`. VRAM and DRAM experts never reach the cold tier, so they do not count. On
+Qwen3-30B-A3B (128 experts, top-8) at the default chunk of 512, the floor is the busiest layer's NVMe count, so
+`E4B_PAGED_HOT_ROWS=128` always meets it. At `all-vram` there is no floor. The default stays 64: raising it pins more
+host RAM, which is the operator's choice.
+
+**Quality at `E4B_PAGED_PLACEMENT=solver` (lane P233; opt-in only, never a default).** On Qwen3-30B-A3B at 8.0 GiB VRAM
+/ 3.0 GiB DRAM with `E4B_PAGED_HOT_ROWS=128` (23 of 48 MoE layers on the tiered forward), teacher-forced quality against
+the same server at `all-vram` reads SOLVER_SANE at group 1 and 8 inside P153's bars (NLL gap +0.0021 and -0.00005 nats,
+argmax agreement 0.974 at both, KL 0.0039 and 0.0037), with the TRIPWIRE fired: the agreement is below its 0.98
+look-bar and the KL above 0.002. The read's written look finds the disagreement smaller in every window than the
+all-vram server's own chunked-prefill floor (KL 0.0100, agreement 0.964), unbiased in NLL, and matched in size at
+group 8 by a placement with no DRAM tier. A deployment may run `solver` as an opt-in placement citing this read, with
+the agreement below 0.98 stated. One host CPU (AVX2) and one split were read, and no speed was read
+(`e4b.serve.p233.solver-placement-quality.qwen3.5090.2026-10-24`,
+[`bench/p233/RESULTS-p233.md`](../bench/p233/RESULTS-p233.md)).
+
 **Slots: `E4B_PAGED_MAX_SEQS=auto` by default (lane SC2e, #846; `16` restores the old default).** When the engine
 builds, before any weight is read, `auto` takes the widest width lane SC2e read that the serve estimate fits in the
 device's free memory (`serve_recipe.choose_max_seqs`):
@@ -385,22 +407,49 @@ RTX 5090 at a 400 W limit, each the smaller of two ABBA pairs, `e4b.serve.p134.g
 the smaller of two ABBA pairs, `e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`). The shapes are licensed, not the
 families. Every other shape, and every other GPU below 160 SMs, keeps the previous route.
 
-**The same GEMV at 2 to 8 requests (`E4B_NF4_SMALLM_BW=1`; opt-in, not yet read).** Steps of 2 to 8 tokens normally
-leave the GEMV for K25, the grouped small-M GEMM. With this knob, on the NF4 store with every expert resident, those
-steps take one group per (token, slot) row, so each row runs through the bandwidth GEMV exactly as it would at one
-request, bitwise. Rows that share an expert each read its weights. No speed is claimed: a registered read decides
-whether it is faster than K25, and the tokens differ from K25's (within the kernels' tolerance contract), so a default
-would need a quality bar. Startup refuses it, naming the reason, beside `E4B_NF4_GROUPED_SMALLM=1`, with an int4 or
-MXFP4 expert store, on a placement that is not all-resident, and at any expert shape where the bandwidth GEMV does not
-engage on the device. Reported in `nf4_smallm_bw`; which token counts it routed is
-`prefill_routes.seen.moe_nf4_smallm_bw`.
+**The same GEMV at 2 to 8 requests (`E4B_NF4_SMALLM_BW`; the default on Mixtral at 2 to 4 tokens).** Steps of 2 to 8
+tokens otherwise leave the GEMV for K25, the grouped small-M GEMM. On this route, on the NF4 store with every expert
+resident, those steps take one group per (token, slot) row, so each row runs through the bandwidth GEMV exactly as it
+would at one request, bitwise. Rows that share an expert each read its weights. The tokens differ from K25's (within
+the kernels' tolerance contract).
+- **Unset (the default):** Mixtral's NF4 store routes calls of 2 to 4 tokens (buckets 2 and 4), on the RTX 5090 only
+  (sm_120 at 170 SMs). Lane P234 read it on one RTX 5090: two requests decode 2.12452× and four 1.76481× as fast,
+  within P110's quality bars at group 4 (`e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24`). Served tokens at
+  two and four requests change. The default also needs Mixtral-8x7B's expert shapes, (28672, 4096) and (4096, 14336),
+  and its routing, 8 experts with top-2, as read from the model's config; checkpoints with the same shapes and routing
+  (fine-tunes of Mixtral-8x7B) inherit it unread. Every other family, part (including parts where the bandwidth GEMV
+  engages), shape or routing keeps K25 until a read of its own, and `nf4_smallm_bw` names what it saw. Where an
+  explicit `1` would refuse (below), the default resolves off instead, naming the reason, and never stops startup.
+- **`E4B_NF4_SMALLM_BW=0`:** off on every family, the way back.
+- **`E4B_NF4_SMALLM_BW=1`:** 2 to 8 tokens on any family; calls of 5 to 8 tokens are not read for speed. Startup
+  refuses it, naming the reason, beside `E4B_NF4_GROUPED_SMALLM=1`, with an int4 or MXFP4 expert store, on a
+  placement that is not all-resident, and at any expert shape where the bandwidth GEMV does not engage on the device.
 
-**Pinned dense GEMMs at 2 to 8 rows (`E4B_DENSE_LT_PIN=o_proj[,router]`; opt-in, not yet read).** At 2 to 8 rows,
+Reported in `nf4_smallm_bw` (its `source`: `explicit`, `default-allowlisted`, or `default-off:` with the reason); which
+token counts it routed is `prefill_routes.seen.moe_nf4_smallm_bw`.
+
+**A fixed attention split count (`E4B_ATTN_SPLIT_FIXED=S`, `1` to `32`; opt-in, not yet read).** By default the paged
+FP8 attention decode picks its split count from the batch's row count, so a sequence's attention is reduced in a
+different grouping at each graph bucket, and its tokens can depend on what else is decoding (lane P223,
+[`bench/p223/RESULTS-p223.md`](../bench/p223/RESULTS-p223.md)). With this knob every decode call runs S splits and
+passes every other per-call choice of the kernel explicitly (compute mode, fused combine, warps, K tile, stages), so a
+call differs across buckets only in its row count. The kernel's split boundaries depend only on a sequence's own length
+and S, and its fused combine reduces the splits in a fixed order. P223 read `E4B_ATTN_SPLIT_CAP=1` with
+`E4B_PAGED_BUCKETS=2,4,8,16` schedule-invariant at about 3.5× the one-request decode time; a fixed S above 1 is the same
+equal-split property at more of a lone sequence's parallelism. No speed or invariance is claimed until a read. It
+replaces any split cap, a per-family default included, and is refused beside an explicit `E4B_ATTN_SPLIT_CAP`; never
+on speculative verify. Reported in `attn_split_fixed`, per captured bucket.
+
+**Pinned dense GEMMs at 2 to 8 rows (`E4B_DENSE_LT_PIN=o_proj[,router]`; opt-in; selection read, table not yet filled).** At 2 to 8 rows,
 cuBLAS's own kernel choice for some dense projections is slower than at one row. This knob routes the named projections'
 2..8-row calls through one cuBLASLt algorithm pinned per (cuBLASLt version, compute capability, SM count, shape, rows),
 called on the library torch already loaded. The pin table is filled by a registered selection; until then the knob is
 refused for want of a pin. Calls without a pin for their row count pass to `F.linear` and are counted; one row and more
-than 8 rows are untouched.
+than 8 rows are untouched. The selection has been read (lane P228, one RTX 5090, cuBLASLt 120804): in a captured
+microbench, its pin runs `o_proj` in a median 0.60 and the router gate in a median 0.28 of `F.linear`'s time at 2 and 4
+rows; the router reads 0.88 at 8 rows, where cuBLAS's own choice goes split-K
+(`e4b.kernel.p228.dense-lt-pin.o-proj.qwen3.5090.2026-10-23`, [`bench/p228/RESULTS-p228.md`](../bench/p228/RESULTS-p228.md)).
+The table is filled by a separate code PR, and no served read has run, so this is not a served speed or quality claim.
 - **Refused by name, never degraded silently:**
   - a captured decode bucket without a pin;
   - another cuBLASLt version or device;
@@ -413,13 +462,13 @@ than 8 rows are untouched.
 - **Reported** in `dense_lt_pin`, with calls counted by site, row count and prefill or decode. Design:
   [`bench/dense-small-m/DESIGN.md`](../bench/dense-small-m/DESIGN.md).
 
-**Qwen3 decode defaults by family (lanes P143, P153, P158).** Three settings resolve per family at startup, before any
-weight loads. Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
+**Qwen3 decode defaults by family (lanes P143, P153, P158, P161, P232).** These settings resolve per family at startup.
+Unset, `qwen3_moe` takes each one as read on Qwen3-30B-A3B on one RTX 5090; every other family keeps the
 old behaviour until a read of its own. Other `qwen3_moe` checkpoints, Qwen3-235B-A22B among them, take the split cap
 and the K25 decode by family without a read of their own. `/health`'s `levers` block reports each resolution and its
-source (`default-allowlisted`, `default-off` with the reason where one applies, or `explicit`). Two of them need a
-newer grouped-nf4-gemm than `[fast]` requires (0.43.0): the int8 head's GEMV ships in 0.48.0 and K25's byte-permute
-decode in 0.50.0. On an older package each resolves off, recorded.
+source (`default-allowlisted`, `default-off` with the reason where one applies, or `explicit`). Some need a newer
+grouped-nf4-gemm than `[fast]` requires (0.43.0): the int8 head's GEMV ships in 0.48.0, its multi-row kernel in 0.49.0,
+K25's byte-permute decode in 0.50.0 and K25's `c1` plan in 0.56.1. On an older package each resolves off, recorded.
 - **Attention split cap (`E4B_ATTN_SPLIT_CAP`, 16 on `qwen3_moe`).** It caps the paged FP8 attention decode at 16
   splits, so buckets 1, 2 and 4 use 16 instead of 32 / 32 / 23 at 4,096-token slots. It is bitwise-identical to the plan
   at contexts up to 1,024 tokens. One request decodes 1.0442× as fast (the smallest of four ABBA pairs) and sixteen are
@@ -434,15 +483,24 @@ decode in 0.50.0. On an older package each resolves off, recorded.
   off. Unset, a head the swap refuses (tied, biased, int4, not bf16) or a kernel package without the int8 GEMV resolves
   it off, recorded, never a crash; an explicit `1` refuses them at startup. `0` restores the bf16 head. Reported in
   `levers.int8_head_bw`.
-  - **Opt-in: the int8 head at 2 to 8 rows (`E4B_INT8_HEAD_ROWS`, `1` to `8`; unset is `1`).** Without it, a call of
-    2 to 8 rows runs `F.linear` on the bf16 rounding of the grid, which reads twice the int8 bytes. With it, those
-    calls run grouped-nf4-gemm's int8 multi-row kernel (`dense_i8.linear_i8`, K37, 0.49.0 or later) over the same
-    codes and scales; one row keeps the int8 GEMV, and more rows keep `F.linear`. **Outputs change** at 2 to 8
-    requests, within bf16's output rounding of the same grid. No served read has run yet, so this is not a speed or
-    quality claim ([`bench/dense-small-m/DESIGN-K2.md`](../bench/dense-small-m/DESIGN-K2.md)). It is refused at startup
-    when the head is not on its int8 grid or the kernel package lacks K37, and together with speculative decode
-    (`E4B_PAGED_SPEC`), whose gate and draft were read with the head on `F.linear`, until a read covers the pair.
-    Unset imports nothing. Reported in `levers.int8_head_bw.rows`; which kernel each row count took is
+  - **The int8 head at 2 to 8 rows (`E4B_INT8_HEAD_ROWS`, 8 on `qwen3_moe` at the 151,936 × 2,048 head; `1` to
+    `8`).** At `1`, a call of 2 to 8 rows runs `F.linear` on the bf16 rounding of the grid, which reads twice the int8
+    bytes. Above it, those calls run grouped-nf4-gemm's int8 multi-row kernel (`dense_i8.linear_i8`, K37, 0.49.0 or
+    later) over the same codes and scales; one row keeps the int8 GEMV, and more rows keep `F.linear`. **Outputs
+    change** at 2 to 8 requests: K37 and `F.linear` round differently within bf16's output rounding of the same grid,
+    so greedy text can differ (76 of 112 greedy rows matched in the served read). A captured microbench of the head
+    call (lane P229) read GO_ROWS_8: K37 runs the head in a median 0.51 of `F.linear`'s time at 2, 4 and 8 rows
+    (`e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23`, [`bench/p229/RESULTS-p229.md`](../bench/p229/RESULTS-p229.md)).
+    A served read on Qwen3-30B-A3B's default server (lane P232) read FLIP_ROWS_8, TRIPWIRE none: 2, 4 and 8 requests
+    decode 1.0311×, 1.0243× and 1.0165× as fast as at `1` (the smallest of four ABBA pairs at each), inside P153's
+    quality bars at every group size (NLL gap at most 0.0001 nats, argmax 3,064 to 3,066 of 3,072)
+    (`e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24`, [`bench/p232/RESULTS-p232.md`](../bench/p232/RESULTS-p232.md);
+    design: [`bench/dense-small-m/DESIGN-K2.md`](../bench/dense-small-m/DESIGN-K2.md)). Same-shape checkpoints inherit
+    the default unread; other head shapes and every other family stay at `1`. Unset, it also resolves to `1`,
+    recorded, never a crash, when the head is not on its int8 grid, when the kernel package lacks K37, and with
+    speculative decode (`E4B_PAGED_SPEC`), whose gate and draft were read with the head on `F.linear`. An explicit `2`
+    to `8` is refused at startup in each of those cases (with speculative decode, until a read covers the pair). `1`
+    opts out. Reported in `levers.int8_head_bw.rows` (`rows_max` and `source`); which kernel each row count took is
     `levers.int8_head_bw.engagement`.
 - **K25's codebook decode (`E4B_K25_LUT`, `prmt` on `qwen3_moe`).** The batched-decode expert GEMM (K25) decodes NF4
   codes through byte-permute table lookups (grouped-nf4-gemm K39, from 0.50.0) instead of the select tree. It is

@@ -421,6 +421,9 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
     ``[fast]`` extra, a CUDA device, local NVMe. See
     ``docs/solutions/offload-moe-experts-to-cpu-or-nvme.md``.
     """
+    # A merged arena (bench/d0/ARENA-DESIGN.md) is never read as a base: refused before any tier opens it.
+    from ..merged_arena import refuse_merged_path
+    refuse_merged_path(arena_path)
     # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
     from ..absmax_dq import refuse_compressed_absmax
     refuse_compressed_absmax(model, "enable_nvme_residency")
@@ -579,6 +582,8 @@ def enable_mxfp4_nvme_residency(model, arena_path: str, *, k_slots: int,
 
     engine_cls = engine_cls or Mxfp4NvmeResidencyV4
     index = load_index(arena_path)
+    from ..merged_arena import refuse_merged
+    refuse_merged(index, arena_path)          # a merged arena is never read as a base (bench/d0/ARENA-DESIGN.md)
     mods = target_modules(model)
     if not mods:
         raise RuntimeError(

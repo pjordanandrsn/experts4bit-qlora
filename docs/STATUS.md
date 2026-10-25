@@ -1,6 +1,6 @@
 # Status — what this package does, what is current, what is open
 
-**As of 2026-10-23, version 0.57.0** (the version of record is `pyproject.toml`'s). This page states the current
+**As of 2026-10-24, version 0.58.1** (the version of record is `pyproject.toml`'s). This page states the current
 position in each area, with the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full
 text and evidence. The dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
@@ -107,10 +107,14 @@ descriptive, one draw a side). `e4b.train.memory-census.field.5090.2026-10-22`
 2.348 GB of it at the peak, but the peak falls only 0.639 GB, to 25.861 GB, because the LM loss backward then sets it (TC1 amendment 74,
 descriptive, one draw a side; by its registered rule no switch is a default candidate). `e4b.train.padded-delta-switches.field.5090.2026-10-22`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos74pd.md)).
-**The 4090 fit is not reached yet:** with grouped-nf4-gemm's compact delta and the chunked LM loss both on, the field recipe's
+**Amendment 75's arms do not fit a 4090:** with grouped-nf4-gemm's compact delta and the chunked LM loss both on, the field recipe's
 nvidia-smi peak is 25,727 MiB on an RTX 5090, 1,163 MiB over a 4090's total (TC1 amendment 75, descriptive, one draw a side; its rule
 credits both savings, and no arm fits). The compact delta's own backward is the next transient. `e4b.train.4090-fit-read.field.5090.2026-10-22`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos75cl.md)).
+**TC1's field recipe fits a 24 GiB RTX 4090** with the opt-in pb1cl256 levers (`NF4_QLORA_COMPACT_DELTA=1`, `NF4_QLORA_PAD_BUCKETS=1`,
+`E4B_CHUNKED_LM_LOSS=256`). Two RTX 4090s on two machines trained all 60 steps with no out-of-memory error, with 586 MiB of the card's
+total left at the fullest step (TC1 amendment 78, FIT for this fixture only; the levers stay opt-in until a default-change PR).
+`e4b.train.4090-fit.field.4090.2026-10-24` ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos78fit.md)).
 
 **On packed 4,096-token rows, Unsloth 2026.9.14 spends 1.160× e4b's GPU time per step (medians of two draws).** The
 wall-clock ratio follows the host: 1.472 on the profiled host, 1.287 and 1.773 on two others. At e4b's defaults its
@@ -261,6 +265,14 @@ pairs; `e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw
   shapes are licensed, not the families: any model with those expert shapes takes them. Every other shape and smaller
   GPU keeps dot-pad; `GNF4_GEMV_BW=0` restores it.
 
+**Against bitsandbytes, op level and eager** (lane P236, 2026-10-24; **measured**, descriptive:
+[`bench/p236/RESULTS-p236.md`](../bench/p236/RESULTS-p236.md), `e4b.kernel.p236.nf4-gemv-vs-bnb.moe-experts.5090.2026-10-24`):
+on the same NF4 bytes and one RTX 5090, bitsandbytes 0.50.2's `gemm_4bit` is faster than grouped-nf4-gemm 0.51.0's
+decode GEMV at all 30 cells (six MoE expert projections of Mixtral-8x7B, Qwen3-30B-A3B and OLMoE-1B-7B, at M = 1 to
+16): the ratio (bitsandbytes' time over gnf4's) runs 0.30 to 0.92, and 0.49 to 0.87 at M = 1. These are eager calls
+that include each library's Python dispatch, not the served decode path, which runs under captured graphs, and not
+K33's device time; the served reads above stand. No default moves.
+
 **The B=1 fused stack is the default on Qwen3-MoE, Qwen3.5/3.6-MoE and Mixtral.** On top of grouped-nf4-gemm 0.43.0's
 bandwidth GEMV, fused q/k/v plus three glue folds decode one request 1.5902× and 16 requests 1.1644× as fast on
 Qwen3-30B-A3B NF4, and P115 Phase D's SANE read at T == 1 passes (bias +0.00541 nats, argmax agreement 0.9674). The four
@@ -323,6 +335,35 @@ GEMV, which reads half the head's bytes.
   untuned default plan, and other cards are not read.
 
 `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` ([P153](../bench/p153/RESULTS-p153.md)).
+
+**The int8 head at 2 to 8 rows (`E4B_INT8_HEAD_ROWS`, 8 by default on `qwen3_moe`).** In a captured microbench of the
+head call (one RTX 5090, lane P229), grouped-nf4-gemm K37's `linear_i8` runs Qwen3-30B-A3B's 151936 x 2048 int8 head at
+2, 4 and 8 rows in a median 0.51 of `F.linear`'s time on the grid's bf16 rounding (upper bounds 0.5109, 0.5148 and
+0.5085 against 0.70), and within a median 1.01-1.03 of the one-row int8 GEMV. The verdict is GO_ROWS_8, so the knob is
+licensed to its maximum of 8 rows. `e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23`
+([P229](../bench/p229/RESULTS-p229.md)).
+- **Served (lane P232, one RTX 5090 at 575 W):** on Qwen3-30B-A3B's default server, `E4B_INT8_HEAD_ROWS=8` decodes 2, 4
+  and 8 requests **1.0311×, 1.0243× and 1.0165×** as fast as `1` (the smallest of four ABBA pairs at each), inside
+  P153's quality bars at every group size (NLL gap at most 0.0001 nats, argmax 3064-3066 of 3072), TRIPWIRE none. The
+  verdict is FLIP_ROWS_8. `e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24`
+  ([P232](../bench/p232/RESULTS-p232.md)).
+- **Outputs change** at 2 to 8 requests: K37 and `F.linear` round differently within bf16's output rounding of the same
+  grid, so near-ties can flip (76 of 112 greedy rows matched in P232).
+- **Default:** 8 for `qwen3_moe` at this head shape (151936 x 2048), where the int8 head is on (`E4B_INT8_HEAD_BW`
+  resolved 1). It needs K37, first released in grouped-nf4-gemm 0.49.0. With an older release, with the head off, and
+  with speculative decode (`E4B_PAGED_SPEC`) the default resolves to 1, recorded in `/health`'s
+  `levers.int8_head_bw.rows.source`. Every other family and head shape stays at 1. `E4B_INT8_HEAD_ROWS=1` opts out.
+- **Quality basis:** read on Qwen3-30B-A3B. Same-shape checkpoints inherit the default unread.
+
+**Pinned cuBLASLt GEMMs for o_proj and the router at 2 to 8 rows (`E4B_DENSE_LT_PIN`, opt-in).** In a captured
+microbench of the two dense sites (one RTX 5090, lane P228), the cuBLASLt configuration selected on the card (algo 21,
+split_k 16) runs Qwen3-30B-A3B's `o_proj` in a median 0.60 of `F.linear`'s time at 2 and 4 rows (upper bounds 0.5981
+and 0.6009 against 0.85), and the router gate in a median 0.28 (upper bounds 0.2832 and 0.2843). Both sites PASS. At 8
+rows, which never rules, the router reads 0.88: there cuBLAS's own choice goes split-K and closes most of the gap. The
+selected pins fill K1's table next, with no speed claim. No served speed or quality is claimed: a served read with B3's
+quality bar comes first, and the knob stays off by default.
+`e4b.kernel.p228.dense-lt-pin.o-proj.qwen3.5090.2026-10-23`, `e4b.kernel.p228.dense-lt-pin.router.qwen3.5090.2026-10-23`
+([P228](../bench/p228/RESULTS-p228.md)).
 
 **Qwen3-30B-A3B's batched decode runs K25 with K39's byte-permute decode (on by default).** `E4B_K25_LUT=prmt` swaps
 K25's select-tree codebook decode for grouped-nf4-gemm K39's (`lut="prmt"`), which yields the same values bit for bit.
@@ -410,6 +451,32 @@ small: 1.0198× at one request (the smaller of two ABBA pairs), SLOWER against i
 projects only the final prompt position through the LM head (#1337).
 `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`.
 
+**Serving past VRAM: `E4B_PAGED_PLACEMENT=solver` keeps quality inside P153's bars (opt-in, quality only).** On
+Qwen3-30B-A3B at 8.0 GiB VRAM / 3.0 GiB DRAM (one RTX 5090, lane P233), teacher-forced quality against the same server
+at `all-vram` reads SOLVER_SANE at group 1 and 8: NLL gap +0.0021 and -0.00005 nats, argmax agreement 0.974, KL 0.0039
+and 0.0037. The TRIPWIRE fired, since the agreement is below its 0.98 look-bar. The read's written look finds the
+disagreement smaller in every window than the all-vram server's own chunked-prefill floor and unbiased in NLL. It is
+an opt-in placement, never a default, and no speed is read (decode at `solver` is eager).
+`e4b.serve.p233.solver-placement-quality.qwen3.5090.2026-10-24` ([P233](../bench/p233/RESULTS-p233.md)).
+
+**The per-row expert GEMV at 2-8 decode tokens (`E4B_NF4_SMALLM_BW`: the default on Mixtral at 2-4 tokens; `1` on any family at 2-8).** In a captured microbench of the expert
+call (one RTX 5090, lane P227), the per-row route runs Mixtral-8x7B's experts in a median 0.36 and 0.46 of K25's time
+at two and four tokens (upper bounds 0.3601 and 0.4655, PASS against 0.70), and Qwen3-30B-A3B's in a median 0.74 and
+0.90 (upper bounds 0.7478 and 0.9047, MISS).
+`e4b.kernel.p227.per-row-gemv.mixtral.5090.2026-10-23`, `e4b.kernel.p227.per-row-gemv.qwen3.5090.2026-10-23`
+([P227](../bench/p227/RESULTS-p227.md)).
+**Served on Mixtral-8x7B's default NF4 server** (lane P234, 2026-10-24; **measured**:
+[`bench/p234/RESULTS-p234.md`](../bench/p234/RESULTS-p234.md), `e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24`):
+the switch decodes two requests 2.12452× and four requests 1.76481× as fast as unset (73.2 → 155.7 and 107.3 → 189.4
+tok/s). One request is unchanged, with identical tokens; sixteen requests decode at the same speed (1.00013), with
+tokens that differ in some rows (reported). Quality at group 4 is
+within P110's bars on both texts. LICENSED for buckets 2 and 4, and the default there (see the defaults table):
+unset, Mixtral's NF4 store sends calls of 2 to 4 tokens through the per-row GEMV on the RTX 5090 only (sm_120 at 170
+SMs, the part read) and at Mixtral-8x7B's expert shapes and 8-expert top-2 routing (same-shape, same-routing
+checkpoints inherit it unread), so served tokens at two and four requests change there; `E4B_NF4_SMALLM_BW=0` is the
+way back. Calls of 5 to 8 tokens stay opt-in (`=1`). P231's earlier read of the same question was FUNCTION_FAIL, on its sixteen-request token-identity
+check, whose admission ramp runs the switched buckets.
+
 **The tile table over 4 programs.** `E4B_INT4_TILE_PROGRAMS=4` splits the one-launch cumsum tile table over 4 programs
 (#1433, grouped-nf4-gemm #524). On Qwen3-30B-A3B int4 it makes the captured 64-row step about 15.5 % faster with identical
 tokens: P126 read DEFAULT_ON_4 on attempt 2, under its Amendment 1. It is the default (`auto`) since #1476; see the
@@ -425,8 +492,12 @@ e4b's own NF4 control on the same box.
 
 **Against vLLM, vLLM is ahead: 1.087 at B=1 and 1.396 at B=16** (P58: one box, identical prompt ids; vLLM 0.30.0 on
 Qwen's GPTQ-Int4 checkpoint against e4b's int4 stack). The B=16 gap is mostly the experts (P86); K19 and K23's lean
-glue have since taken the int4 B=16 step to 0.905× and a further 0.950×. No later same-box vLLM reading is in the
-register. `e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22`,
+glue have since taken the int4 B=16 step to 0.905× and a further 0.950×. At the 0.58.0 release (P235, P58's harness
+on another box, one RTX 5090 at a 470 W limit), vLLM 0.32.0 / e4b int4 reads **1.038 at B=1 and 1.203 at B=16**, vLLM
+still ahead, with every distribution proven to be its published release; it sits beside P58's figures and is not
+divided into them, since the box differs. `e4b.serve.h2h.vllm-0.32.0.p235.qwen3.b1.5090.2026-10-24`,
+`e4b.serve.h2h.vllm-0.32.0.p235.qwen3.b16.5090.2026-10-24` ([P235](../bench/p235/RESULTS-p235.md)).
+`e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22`,
 `e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22`,
 `e4b.serve.p86.qwen3.b16.kernel-census-vs-vllm-0.30.0.5090.2026-10-01` ([P58](../bench/p58/RESULTS-p58.md)).
 
@@ -477,7 +548,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | K19's lean dispatch on prefill rows (`auto`: wherever the installed K19 takes `scatter=` / `gather_div=`; bitwise) | serving | `E4B_PREFILL_LEAN_DISPATCH=0` | `e4b.serve.p130.prefill-lean-dispatch.qwen3.5090.2026-10-10` |
 | the decode folds on prefill rows (`qwen3_moe` only; changes prefill arithmetic, read at parity) | `serve_paged` | `E4B_FUSE_PREFILL_GLUE=0` | `e4b.serve.p130.prefill-glue-speed.qwen3.5090.2026-10-10`, `e4b.serve.p130.prefill-glue-quality.qwen3.5090.2026-10-10` |
 | one KV-table selection per step | decode graphs | `E4B_KV_STEP_SELECT=0` | `e4b.serve.p111.kv-step-select.qwen3.5090.2026-10-04` |
-| programmatic dependent launch, capped at 8 rows | grouped-nf4-gemm | `GNF4_PDL=0` | `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` |
+| programmatic dependent launch, capped at 8 rows | grouped-nf4-gemm | `GNF4_PDL=0` | `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04`, `e4b.serve.p230.gnf4-pdl.qwen3-nf4.5090.2026-10-23` |
 | bandwidth-targeted NF4 decode GEMV | grouped-nf4-gemm | `GNF4_GEMV_BW=0` | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07` |
 | grouped small-M routes above T == 1 (K19, K23, K21, K25; K25 read on Granite, OLMoE and Qwen3's W16 step) | serving | `E4B_INT4_GROUPED_SMALLM=0`, `E4B_INT4_LEAN_GLUE=0`, `E4B_MXFP4_GROUPED_SMALLM=0`, `E4B_NF4_GROUPED_SMALLM=0` | `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`, `e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, `e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`, `e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02`, `e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08` |
 | the one-launch tile table above 256 routed rows, up to the size read (`next_pow2(E) × next_pow2(R) ≤ 128 × 512`; takes effect with a grouped-nf4-gemm release carrying #519's chunked table; the one-piece table read 1.44× slower (median of 256 captured replays)) | serving | `E4B_INT4_WIDE_TILES=0` | `e4b.serve.p122.wide-tiles-chunked.qwen3-int4.5090.2026-10-08`, `e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08` |
@@ -485,10 +556,12 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | attention projections of 17–64 decode rows on the int4 small-M GEMM, from the int4 grid instead of a cached bf16 copy (with the K16 route on; takes effect with a grouped-nf4-gemm release carrying #522's `block_m=`; Qwen3-30B-A3B's 64- and 32-row steps 3.2–3.8 % faster) | `Int4Linear` (serving) | `E4B_ATTN_INT4_WIDE=0` | `e4b.serve.p124.attn-int4-wide.qwen3-int4.5090.2026-10-09` |
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
 | the paged FP8 attention decode capped at 16 splits (`qwen3_moe` only; buckets 1, 2 and 4 move, 32 / 32 / 23 -> 16; bitwise-identical to the plan at contexts ≤ 1024; one request 1.044× as fast (the smallest of four ABBA pairs), 16 unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) and other cards (the cap moves B 1–6 on a PRO 6000, B 1–4 on a 4090) take it by family without a read of their own) | `serve_paged` | `E4B_ATTN_SPLIT_CAP=0` | `e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19` |
+| the int8 lm_head's 2 to 8 rows through grouped-nf4-gemm K37's `linear_i8` instead of `F.linear` (`qwen3_moe` at the 151936 x 2048 head only, where the int8 head is on; needs grouped-nf4-gemm 0.49.0 or later, else it resolves to 1, recorded, as it does with `E4B_PAGED_SPEC`; outputs change at 2 to 8 requests, within bf16's output rounding; 2, 4 and 8 requests 1.0311×, 1.0243× and 1.0165× as fast (the smallest of four ABBA pairs), inside P153's quality bars, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); same-shape checkpoints inherit the default unread; other head shapes and families stay at 1; the served read is P232, `bench/p232/RESULTS-p232.md`) | `serve_paged` | `E4B_INT8_HEAD_ROWS=1` | `e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24`, `e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23` |
 | the lm_head on its per-row int8 grid, its one-row decode GEMV through grouped-nf4-gemm K36 (`qwen3_moe` at the 151936 x 2048 head only; needs grouped-nf4-gemm 0.48.0 or later, else it resolves off, recorded; one request 1.052× as fast (the smallest of four ABBA pairs), 16 requests 0.992, an observed cost not attributed, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); quality read on Qwen3-30B-A3B @ad44e777, same-shape checkpoints inherit the default unread; other head shapes, e.g. Qwen3-235B-A22B's 151936 x 4096, stay off) | `serve_paged` | `E4B_INT8_HEAD_BW=0` | `e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19` |
 | K25's codebook decode by grouped-nf4-gemm K39's byte permute (`lut="prmt"`; `qwen3_moe` only; bit-identical to the select tree, every token identical on one schedule; needs grouped-nf4-gemm 0.50.0 or later and an NVIDIA device, else it resolves to the tree, recorded in `info["k25_lut"]`; sixteen requests 1.0925× as fast (the smallest of four ABBA pairs), one request unchanged, measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs) at the `today` plan; other `qwen3_moe` checkpoints (e.g. Qwen3-235B-A22B) take it by family with no speed claimed; other families stay on the tree) | `serve_paged` | `E4B_K25_LUT=tree` | `e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20` |
 | K25's tile plan `c1` under K39's decode (from 0.56.1; `qwen3_moe` only, where K25's decode resolved to `prmt`, else `today`, recorded in `info["k25_plan"]["source"]`; bit-identical to `today`'s plan, every token identical on one schedule; sixteen requests 1.4654× as fast (the smallest of four ABBA pairs), one request unchanged (0.9966), measured on Qwen3-30B-A3B on an RTX 5090 (170 SMs); other `qwen3_moe` checkpoints take it by family with no speed claimed; other families stay on `today`) | `serve_paged` | `E4B_K25_PLAN=today` | `e4b.serve.p161.k25-plan-c1.qwen3.5090.2026-10-20` |
 | B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE; its router epilogue, the only fold that engages, on Qwen3.5/3.6-MoE; its three glue folds on Mixtral | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`, `e4b.serve.fam.router-epilogue-speed.qw36.5090.2026-10-09`, `e4b.serve.p135.fold-speed.mixtral.5090.2026-10-18` |
+| Mixtral's NF4 expert calls of 2 to 4 decode tokens (buckets 2 and 4) through K33's per-row bandwidth GEMV (`mixtral` only, on the RTX 5090 only (sm_120 at 170 SMs; any other part resolves off, named), at Mixtral-8x7B's expert shapes (28672, 4096) and (4096, 14336) and 8-expert top-2 routing only (same-shape, same-routing checkpoints inherit it unread; any other resolves off, named), on the all-resident collapse; two requests 2.12452× and four 1.76481× as fast, served tokens at two and four requests change, quality within P110's bars at group 4; 5 to 8 tokens stay opt-in with `E4B_NF4_SMALLM_BW=1`; wherever an explicit `1` would refuse, it resolves off, recorded in `nf4_smallm_bw["source"]`) | `serve_paged` | `E4B_NF4_SMALLM_BW=0` | `e4b.serve.p234.nf4-smallm-bw.mixtral-nf4.5090.2026-10-24` |
 
 ---
 

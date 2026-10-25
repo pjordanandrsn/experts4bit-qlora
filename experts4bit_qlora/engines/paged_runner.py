@@ -429,7 +429,7 @@ class PagedModelRunner(StepRunner):
             # claim-all: every reachable block; incremental: the prompt's blocks and the one its first decode writes
             last = (min(self.kv.blocks_per_seq - 1, len(self.tokens[rid]) // self.kv.bt)
                     if getattr(self, "incremental_claims", False)
-                    else self.kv.blocks_per_seq - 1)
+                    else self._claim_all_last())
             self.kv.claim_blocks(slot, last, self.pool_layers)
             self._graph_ready.add(slot)
             self._kv_counts["ready_at_flush"] += 1
@@ -738,6 +738,14 @@ class PagedModelRunner(StepRunner):
         self.kv.claim_many({slot: min(cap, int(pos) // self.kv.bt) for slot, pos in write_pos.items()}, self.pool_layers)
         self._graph_ready.update(write_pos)
 
+    def _claim_all_last(self) -> int:
+        """The last block a claim-all slot claims: every block it can reach. A pool smaller than its slots can reach
+        (``Fp8PagedKV(pool_rows=...)``, lever G3) refuses: only incremental claims may draw on it."""
+        if getattr(self.kv, "shared_pool", False):
+            raise RuntimeError(f"the KV pool holds {self.kv._n_rows} rows, fewer than its slots can reach "
+                               f"({self.kv.claim_all_rows}): claim-all would run it dry; it needs incremental_claims")
+        return self.kv.blocks_per_seq - 1
+
     def _ensure_graph_ready(self, slot: int) -> None:
         """A graph step addresses KV blocks from the device table and never
         allocates, so every block a decoding slot can reach is claimed once,
@@ -747,7 +755,7 @@ class PagedModelRunner(StepRunner):
             return
         if slot in self._graph_ready:
             return
-        last = self.kv.blocks_per_seq - 1
+        last = self._claim_all_last()
         if self.bulk_kv:
             self.kv.claim_blocks(slot, last, self.pool_layers)
             self._kv_counts["ready_bulk"] += 1
@@ -761,6 +769,13 @@ class PagedModelRunner(StepRunner):
         got: dict[int, int] = {}
         kv = self.kv
         tr = self.tracer
+        if getattr(self, "incremental_claims", False):
+            # ONE claim for the whole step, every piece's slots, before the first piece: one staging buffer and one
+            # table write, so a step wider than the largest bucket never claims per piece. Its first decodes are
+            # counted here; the claim marks the slots ready, so the per-piece count below adds none
+            if tr is not None:
+                tr.count("first_decodes", sum(1 for r in rids if self.slot_of[r] not in self._graph_ready))
+            self._claim_step({self.slot_of[r]: self.pos_of[r] - 1 for r in rids})
         for chunk in chunk_rows(rids, self._buckets[-1]):
             n = len(chunk)
             b = bucket_for(n, self._buckets)
@@ -770,7 +785,7 @@ class PagedModelRunner(StepRunner):
                 tr.count("first_decodes", sum(1 for s_ in slots if s_ not in self._graph_ready))
                 tr.count("dec_pieces")             # > 1: the step ran as consecutive replays of the largest bucket
             if getattr(self, "incremental_claims", False):
-                self._claim_step({s_: self.pos_of[r] - 1 for r, s_ in zip(chunk, slots)})
+                pass                               # the step's claim was made before the first piece
             else:
                 for s_ in slots:
                     self._ensure_graph_ready(s_)
@@ -890,6 +905,13 @@ class PagedModelRunner(StepRunner):
         if ring["event"] is not None:
             ring["event"].synchronize()        # collected already, so its copies have run: this never waits
         pieces, off = [], 0
+        if getattr(self, "incremental_claims", False):
+            # ONE claim per step over every piece's slots, before the first piece. Per piece, the claims took
+            # alternate buffers of the two-buffer staging ring, so the next step's second piece waited on an event
+            # recorded after this step's first replay: the overlap the lookahead exists for was lost
+            if tr is not None:
+                tr.count("first_decodes", sum(1 for r in rids if self.slot_of[r] not in self._graph_ready))
+            self._claim_step({self.slot_of[r]: self.pos_of[r] - 1 + inflight.get(r, 0) for r in rids})
         for chunk in chunk_rows(rids, self._buckets[-1]):
             n = len(chunk)
             b = bucket_for(n, self._buckets)
@@ -900,7 +922,7 @@ class PagedModelRunner(StepRunner):
                 tr.count("first_decodes", sum(1 for s_ in slots if s_ not in self._graph_ready))
                 tr.count("dec_pieces")
             if getattr(self, "incremental_claims", False):
-                self._claim_step({s_: self.pos_of[r] - 1 + inflight.get(r, 0) for r, s_ in zip(chunk, slots)})
+                pass                               # the step's claim was made before the first piece
             else:
                 for s_ in slots:
                     self._ensure_graph_ready(s_)
@@ -1049,7 +1071,8 @@ class PagedModelRunner(StepRunner):
         # forward returned is reusable while the pool holds it): count its bound, at the slot's capacity
         pg["bulk_flush_bytes"] = (self.kv.append_prompt_peak_bytes(self.kv.blocks_per_seq * self.kv.bt, self.pool_layers)
                                   if self.bulk_kv and hasattr(self.kv, "append_prompt_peak_bytes") else 0)
-        if require_headroom and pg["free_after_bytes"] < pg["pool_bytes"] + pg["bulk_flush_bytes"]:
+        from ..serve_recipe import prefill_graph_headroom_bytes      # the one rule the shared pool's sizing holds back
+        if require_headroom and pg["free_after_bytes"] < prefill_graph_headroom_bytes(pg["pool_bytes"], pg["bulk_flush_bytes"]):
             pool_mib, free_mib = pg["pool_bytes"] / 2**20, pg["free_after_bytes"] / 2**20
             flush_mib = pg["bulk_flush_bytes"] / 2**20
             del pg

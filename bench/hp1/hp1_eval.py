@@ -286,6 +286,13 @@ def evaluate(arms, base_dirs, rows, open_base, make_scorer, load_adapter, file_s
     return bases, arms
 
 
+def plan_binding(path):
+    """HP3 Amendment 1 part 7: the sha256 of the seed plan's raw bytes, read at the evaluator's START, so its output proves the plan
+    was fixed before this pass ran (a content binding; no clock or mtime is trusted). An unreadable plan stops the evaluator."""
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--receipts", nargs="+", required=True)
@@ -305,9 +312,12 @@ def main():
                     help="the 6(b) round-trip tolerance (HP2: the calibrated mean-level bound; default TC1b's 0.02)")
     ap.add_argument("--zero-tol", type=float, default=ZERO_ADAPTER_TOL,
                     help="the zero-adapter tolerance (HP1-PREREG Amendment 4: set by the 48-layer calibration; default the 2-layer 0.005)")
+    ap.add_argument("--seed-plan", default=None,
+                    help="HP3 Amendment 1 part 7: the runner's hp3/seed_plan.json; its sha256 goes into the output as plan_sha256 (never given by HP1/HP2/HPN)")
     ap.add_argument("--require-all-scored", type=int, default=0,
                     help="the box-side shakedown: exit 3 unless every arm is SCORED by this evaluator and every base is OK")
     a = ap.parse_args()
+    plan_sha = plan_binding(a.seed_plan) if a.seed_plan else None     # read FIRST, before any model or base is touched
     tc1 = load_tc1_arm()
     tc1.DEV = DEV
     tk = json.load(open(a.tokens))
@@ -320,6 +330,8 @@ def main():
            "torch": torch.__version__, "zero_adapter_tol": a.zero_tol, "roundtrip_tol": a.roundtrip_tol,
            "zero_adapter_report_only": bool(a.zero_report_only), "roundtrip_zero_centred_tol": a.roundtrip_zero_centred,
            "expect_trainable": a.expect_trainable or None, "bases": [], "arms": []}
+    if plan_sha is not None:
+        out["plan_sha256"] = plan_sha
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
 
     def write(bases, arms_now):                     # after every base, so a deadline mid-pass keeps what was scored

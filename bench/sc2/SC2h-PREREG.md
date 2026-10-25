@@ -274,3 +274,31 @@ entry that box O stages, the shared `bench/sc1/sc1_run.sh` included, must be byt
 
 **Unchanged:** every constant, threshold and cost, and everything Amendment 1 left unchanged.
 
+
+### Amendment 3 (registered before any SC2h run): the kit is held at e4b#2041's merge, for the harness's brotli pin and fetch retry
+
+As SC2f Amendment 5, for box O. The kit is held at `7b8f1f69` (e4b#2041's merge), replacing `1a25b209` for the KIT only.
+At the launch commit, every `bench/sc1/staged.sha256` entry, plus `bench/sc1/sc1_drive.sh` and `bench/sc1/make_pin.sh`,
+must be byte-identical to `7b8f1f69`'s. The stack under test stays `36cdd2d4`: the launch command sets `E4B_SHA=36cdd2d4e031e8365ab52e495c40cd79043edd49`.
+Against `1a25b209` the kit differs as SC2f Amendment 5 declares. In `sc1_run.sh`: the `"brotli>=1.2.0"` pin and the
+single fetch retry, both behavioural, and box Q's wiring, none of it reachable with `SC1_BOX` = O. Seven new box Q
+files are staged on box O, and nothing box O runs sources or calls them. Before the create,
+`bench/sc2/sc2_kit_hold.py check --at <launch commit>` runs from a `main` checkout that
+carries this amendment, with `--e4b-sha "$E4B_SHA"` (its STACK gate refuses any launch whose `E4B_SHA` is not
+`36cdd2d4` in full), fails closed, and its record is kept with the run.
+
+
+**The stack is a VOID condition of the rule**, as in SC2f Amendment 5. A box O verdict stands only when
+`sc2_kit_hold.py verdict-stack` reads OK on the fetched run (`versions.txt`'s installed e4b commit and every
+`KNOBS ... e4b=` line of `summary.txt` both `36cdd2d4`); otherwise the read is VOID. `verdict_stack.json` is a
+required results file: a results PR or re-derivation without it, or with it not OK, reads VOID.
+**Unchanged:** every constant, threshold and cost, and everything Amendments 1 and 2 left unchanged.
+
+### Amendment 4 (registered before any SC2h run): the HOLD gate's declared exceptions
+
+As SC2f Amendment 6, for box O, which names the full list in one place. Rule 8's one `--no-links` on
+`pull_box`'s rsync line. Box Q's own `sc2j_<name>` files, changed or added and staged by name, with INERT re-run
+at the launch commit. A staging checkout that is dirty, or whose `HEAD` is not the launch commit, refuses. Anything else refuses. The staged kit's meaning for box O and
+the stack under test (`36cdd2d4`) are unchanged.
+
+**Unchanged:** everything else.

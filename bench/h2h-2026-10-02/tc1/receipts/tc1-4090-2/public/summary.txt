@@ -1,0 +1,18 @@
+FIXTURE field: template=alpaca steps=60 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407 pack=0
+GPU_MEMORY_TOTAL 24564 MiB (a 24 GiB card: 23500-24600; amendment 78)
+OMP_NUM_THREADS=32 (physical cores) box_class=RTX 4090
+CPU allotment 31 (cgroup quota capped by affinity; physical cores 32)
+CUDA_PROBE ok
+DRIVER 580.119.02 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PRECHECK qwen3pos78fit OK 292 passed, 60 skipped in 3.90s
+PADBUCKETS_PROBE qwen3pos78fit 1 True True True (want: 1 True True True)
+PIN OK qwen3pos78fit staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3pos78fit alpaca sha=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac eval_n=8 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+TOKENS MATCH tc1-5090-155 (sha and train-only sha)
+qwen3pos78fit/e4b/fused_attn4_m_fd_pb1cl256 PROLOGUE {"phase_seconds": {"preamble": 3.307, "load_weights": 18.713, "verify": 0.001, "attn4": 4.358, "lora": 0.029, "enable": 2.216, "tokenizer": 0.449, "census": 2.213, "frozen_probe": 0.064, "trainable_sha": 1.716, "counters": 0.0, "c1_before": 48.716, "eval0": 11.618, "optimizer": 0.176, "mem_census": 0.013}, "phase_budget_s": 1260.0, "prologue_s": 95.722, "prologue_unattributed_s": 2.133}
+qwen3pos78fit/e4b/fused_attn4_m_fd_pb1cl256 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3pos78fit", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "weights_commit": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_fd_pb1cl256", "status": "ok", "steps": 60, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast
+
+LOADGATE qwen3pos78fit/e4b/fused_attn4_m_fd_pb1cl256 attempt 0 load1_median 1.41 gate 6.0 status ok over 0
+QWEN3POS78FIT DONE

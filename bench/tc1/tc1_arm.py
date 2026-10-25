@@ -634,6 +634,9 @@ _PHASE_PEAKS = None
 #: --phase-peaks: the max since reset_peak(). That reset falls after setup and eval0, so neither enters it. Folding every phase back in
 #: would quietly add setup and eval0 to peak_vram_gb whenever they peak higher than training (maintainer review of #1290).
 _RUN_PEAKS = None
+#: The allocator's RESERVED maxima folded at each phase boundary (--phase-peaks 1), beside _RUN_PEAKS: reset_peak_memory_stats() resets
+#: the reserved peak too, so step_mem_row folds these back to keep its max_reserved a running maximum (review of #2003).
+_RUN_RESERVED = None
 
 
 def _absmax_compressed(model):
@@ -663,7 +666,58 @@ def phase_mark(name):
     _PHASE_PEAKS[name] = max(_PHASE_PEAKS.get(name, 0), v)
     if _RUN_PEAKS is not None:
         _RUN_PEAKS.append(v)
+    if _RUN_RESERVED is not None:
+        _RUN_RESERVED.append(int(torch.cuda.max_memory_reserved()))
     torch.cuda.reset_peak_memory_stats()
+
+
+def thread_facts():
+    """The CPU pools this arm ran with, beside the container's limits -- RECORDED ONLY, never gated: torch's intra- and inter-op pools,
+    OMP / MKL / OpenBLAS as set, the affinity CPUs, the cgroup quota in CPUs, and the cgroup's throttled-period count so far. A field
+    that cannot be read is None."""
+    out = {"torch_num_threads": int(torch.get_num_threads()), "torch_interop_threads": int(torch.get_num_interop_threads()),
+           "omp": os.environ.get("OMP_NUM_THREADS"), "mkl": os.environ.get("MKL_NUM_THREADS"), "openblas": os.environ.get("OPENBLAS_NUM_THREADS"),
+           "affinity_cpus": len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count(), "quota_cpus": None,
+           "nr_throttled": None}
+    try:
+        q, per = open("/sys/fs/cgroup/cpu.max").read().split()[:2]
+        out["quota_cpus"] = None if q == "max" else round(int(q) / int(per), 3)
+    except Exception:
+        try:
+            q = int(open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read())
+            out["quota_cpus"] = round(q / int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read()), 3) if q > 0 else None
+        except Exception:
+            pass
+    for path in ("/sys/fs/cgroup/cpu.stat", "/sys/fs/cgroup/cpu/cpu.stat"):
+        try:
+            for ln in open(path):
+                k, v = ln.split()[:2]
+                if k == "nr_throttled":
+                    out["nr_throttled"] = int(v)
+            break
+        except Exception:
+            continue
+    return out
+
+
+def step_mem_row(step):
+    """TC1_STEP_MEM=1: the allocator at an optimizer step's end, peak stats NEVER reset here (the census and the record's window peaks
+    read them). The running maxima are monotone, under --phase-peaks 1 too: both are folded back over the phases that phase_mark reset
+    (_RUN_PEAKS, _RUN_RESERVED). So the row at which one first rises bounds the step that set the window peak. Rows are written at a
+    step's end and in-loop evals run AFTER the row, so a rise first seen at row N+1 may have been set by the eval after step N, not by
+    step N+1. The current allocated and reserved give the step-end gap; device_used is the card's used bytes (mem_get_info). All None
+    off CUDA."""
+    if DEV != "cuda":
+        return {"step": step, "max_allocated": None, "max_reserved": None, "allocated": None, "reserved": None, "device_used": None}
+    free, total = torch.cuda.mem_get_info()
+    mx = int(torch.cuda.max_memory_allocated())
+    if _RUN_PEAKS:                                     # amendment 56's phase folding (--phase-peaks 1) resets per phase: fold it back
+        mx = max([mx] + _RUN_PEAKS)
+    mr = int(torch.cuda.max_memory_reserved())
+    if _RUN_RESERVED:                                  # the same reset drops the reserved peak: fold it back the same way
+        mr = max([mr] + _RUN_RESERVED)
+    return {"step": step, "max_allocated": mx, "max_reserved": mr, "allocated": int(torch.cuda.memory_allocated()),
+            "reserved": int(torch.cuda.memory_reserved()), "device_used": int(total - free)}
 
 
 def peak_gb():
@@ -681,6 +735,8 @@ def reset_peak():
         torch.cuda.reset_peak_memory_stats()
     if _RUN_PEAKS is not None:                         # amendment 56: phases folded before this reset stay out of peak_gb()
         _RUN_PEAKS.clear()
+    if _RUN_RESERVED is not None:
+        _RUN_RESERVED.clear()
 
 
 def autocast_ctx(enabled):
@@ -691,6 +747,40 @@ def autocast_ctx(enabled):
 
 def is_oom(e):
     return isinstance(e, torch.cuda.OutOfMemoryError) or "out of memory" in str(e).lower()
+
+
+# TC1 amendment 78: an OOM row reads NOT_FIT only when it proves its arm ran as registered, so an e4b OOM row carries the knobs as the
+# process saw them and grouped-nf4-gemm's and the chunked loss's counters up to the OOM, read the way the trained row reads them.
+OOM_PATH_ENV = ("NF4_QLORA_PAD_BUCKETS", "NF4_QLORA_PAD_BUCKETS_LADDER", "NF4_QLORA_COMPACT_DELTA", "NF4_QLORA_COMPACT_BUCKETS",
+                "E4B_CHUNKED_LM_LOSS")
+
+
+def oom_path_record():
+    try:
+        import nf4_qlora as nq
+    except Exception:
+        nq = None
+
+    def call(name):
+        f = getattr(nq, name, None)
+        try:
+            return f() if callable(f) else None
+        except Exception:
+            return None
+    cmp_ = call("_compact_delta_enabled")
+    cb = getattr(nq, "COMPACT_BUCKETS_STATS", None)
+    rec = {"env": {k: os.environ.get(k) for k in OOM_PATH_ENV}, "gnf4_imported": nq is not None,
+           "lora_path_calls": {k: int(v) for k, v in (getattr(nq, "LORA_PATH_STATS", None) or {}).items()},
+           "gnf4_pad_buckets_mode": call("_pad_buckets_mode"), "gnf4_pad_ladder": call("_pad_ladder_enabled"),
+           "gnf4_compact_delta": ("1" if cmp_ else "0") if cmp_ is not None else None,
+           "gnf4_has_compact_buckets": cb is not None, "compact_bucket_calls": int((cb or {}).get("calls", 0))}
+    try:
+        from experts4bit_qlora.engines import chunked_lm_loss as clm
+        cst = dict(getattr(clm, "CHUNKED_LM_LOSS_STATS", None) or {})
+        rec["chunked_lm_loss"] = {k: int(cst.get(k, 0)) for k in ("patched", "chunked_calls", "small_calls", "stock_calls", "runtime_refusals")}
+    except Exception:
+        rec["chunked_lm_loss"] = None
+    return rec
 
 
 # ----------------------------------------------------------------------------- #548: where the time before step 1 goes
@@ -4004,6 +4094,7 @@ def run_arm(a, load_fn, sampler=True):
            "gpu": torch.cuda.get_device_name(0) if DEV == "cuda" else "cpu", "cap": list(torch.cuda.get_device_capability()) if DEV == "cuda" else None,
            "host": host_fingerprint(), "anchor_json": os.environ.get("TC1_ANCHOR_JSON"), "box_class": os.environ.get("TC1_BOX_CLASS"),
            "hf_hub_offline": os.environ.get("HF_HUB_OFFLINE"), "unsloth_loader": a.unsloth_loader if a.framework == "unsloth" else None,
+           "pytorch_cuda_alloc_conf": os.environ.get("PYTORCH_CUDA_ALLOC_CONF"),      # the allocator setting the arm ran under (tc1_run.sh sets it)
            "unsloth_env": {k: v for k, v in os.environ.items() if k.startswith("UNSLOTH_")}}
     for pkg in ("transformers", "experts4bit-qlora", "grouped-nf4-gemm", "bitsandbytes", "peft", "unsloth", "unsloth_zoo", "triton", "huggingface_hub"):
         try:
@@ -4016,10 +4107,10 @@ def run_arm(a, load_fn, sampler=True):
     host_ram0 = host_ram_report()                   # TC3: the cgroup peak BEFORE this arm, so a container-lifetime number is never credited to it
     lever = lever_of(a)                             # TC3: the memory lever this arm engages (None = resident), on every row it writes
     mcen = MemCensus() if getattr(a, "mem_census", 0) else None   # TC1 amendment 23: the allocator history records from here, before the load
-    global _PHASE_PEAKS, _RUN_PEAKS
+    global _PHASE_PEAKS, _RUN_PEAKS, _RUN_RESERVED
     if getattr(a, "phase_peaks", 0):                # TC1 amendment 56: resets the allocator's max at each phase boundary, which the census reads
         assert mcen is None, "--phase-peaks 1 resets the allocator's max at each phase, which --mem-census 1 reads: one or the other"
-        _PHASE_PEAKS, _RUN_PEAKS = {}, []
+        _PHASE_PEAKS, _RUN_PEAKS, _RUN_RESERVED = {}, [], []
     if mcen is not None:
         mcen.start()
     torch.manual_seed(a.seed)
@@ -4118,6 +4209,7 @@ def run_arm(a, load_fn, sampler=True):
                  "cpu_model": (env.get("host") or {}).get("cpu"), "lora_delta_dtype": LORA_DELTA_DTYPE.get(a.framework),
                  "unsloth_zoo": env.get("unsloth_zoo") if a.framework == "unsloth" else None,
                  "unsloth_zoo_note": ("unsloth_zoo main's #1529 is not in the 2026.9.9 release (phase-3 instruction; not verified here)" if a.framework == "unsloth" else None)}
+    arm_facts["threads"] = thread_facts()                       # recorded only, never gated; the throttle count at the end is added below
     with PH("counters"):
         counter = Counters()
         if a.framework == "e4b":
@@ -4179,6 +4271,7 @@ def run_arm(a, load_fn, sampler=True):
     profile_summary = None                                              # P45
     microbatch_ms = []                                                # T17: per step, one entry per micro-batch (only with --microbatch-timing)
     train_wall, steps_done = 0.0, 0
+    step_mem = [] if os.environ.get("TC1_STEP_MEM") == "1" else None          # opt-in: no key on the default path
     common_stub = lambda: {"n_patched": n_patched, "n_attn4": n_attn4, "init_sha": init_sha, "load_s": round(load_s, 1),
                            "trainable_params": n_trainable, "census": census, "n_layers": x.get("n_layers"), "model_type": x.get("model_type"),
                            "micro_batch": M, "optimizer": optimizer_str,
@@ -4260,6 +4353,8 @@ def run_arm(a, load_fn, sampler=True):
                 after = counter.snapshot()
                 kcalls.append({k: after[k] - before[k] for k in after})
                 steps_done = i + 1
+                if step_mem is not None:
+                    step_mem.append(step_mem_row(steps_done))
                 if steps_done % max(1, int(a.log_every)) == 0:
                     mb = f" mb_ms {mb_ms}" if a.microbatch_timing else ""
                     print(f"    step {steps_done}/{a.steps} loss {losses[-1]} {step_ms[-1]} ms{mb} kcalls {kcalls[-1]}", flush=True)
@@ -4284,9 +4379,15 @@ def run_arm(a, load_fn, sampler=True):
                         "hf_offload": x.get("hf_offload"), "axolotl_layer_offload": x.get("axolotl_layer_offload")}
         if mcen is not None:                      # TC1 amendment 23: an OOM / refused row carries the census up to where it died
             lever_fields["mem_census"] = mcen.finish(model, opt)
-        if is_oom(e):
-            stub(a, "oom", f"OOM at step {steps_done + 1}: {str(e)[:200]}",
-                 dict(common_stub(), phase="train", steps_done=steps_done, losses=losses, step_ms=step_ms, microbatch_ms=microbatch_ms, peak_vram_gb=peak_gb(), **lever_fields), code=5)
+        if is_oom(e):                             # the env block and arm_facts as on a trained row; 700 chars keep the allocator's split
+            arm_facts["threads"]["nr_throttled_end"] = thread_facts()["nr_throttled"]
+            if step_mem is not None:
+                lever_fields["step_mem"] = step_mem
+            if a.framework == "e4b":
+                lever_fields["oom_path"] = oom_path_record()     # TC1 amendment 78: the knobs and path counters up to the OOM
+            stub(a, "oom", f"OOM at step {steps_done + 1}: {str(e)[:700]}",
+                 dict(common_stub(), phase="train", steps_done=steps_done, losses=losses, step_ms=step_ms, microbatch_ms=microbatch_ms, peak_vram_gb=peak_gb(),
+                      microbatch_padded_len=mb_padded_len, env=env, arm_facts=arm_facts, **lever_fields), code=5)
         if lever is not None:
             # TC3 (TC3-PREREG-draft arm 8): a memory lever whose training loop raises something other than an OOM -- accelerate's offloaded-weight
             # NotImplementedError / RuntimeError, a hook that cannot run backward -- is the arm's FINDING: a `refused` row carrying the exception text,
@@ -4596,6 +4697,7 @@ def run_arm(a, load_fn, sampler=True):
             _route, _rstats = None, {}
         route_ab = {"gnf4_train_gemm": _route, "gnf4_train_gemm_env": os.environ.get("GNF4_TRAIN_GEMM"), "gnf4_has_route": _route is not None,
                     "stats": {k: int(v) for k, v in _rstats.items()}}
+    arm_facts["threads"]["nr_throttled_end"] = thread_facts()["nr_throttled"]
     steady = step_ms[10:] if len(step_ms) > 10 else step_ms
     cell = {
         "framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "model_type": x.get("model_type"), "n_layers": x.get("n_layers"),
@@ -4661,6 +4763,7 @@ def run_arm(a, load_fn, sampler=True):
         "unsloth_grouped_mm_calls_per_step_min": gmm_min, "unsloth_grouped_mm_calls_per_step_max": gmm_max,            # [F15]
         "unsloth_manual_grouped_mm_calls_per_step_max": manual_max,
         "arm_facts": arm_facts, "dynamo_counters": dyn, "microbatch_padded_len": mb_padded_len,                        # [F6/F9/F16/F19/F20]
+        **({"step_mem": step_mem} if step_mem is not None else {}),                                                    # TC1_STEP_MEM=1 only
         "sync_ab": sync_ab,                                                                                              # TC1 amendment 10 (#945)
         "lean_ab": lean_ab,                                                                                              # TC1 amendment 13 (#945)
         "pad_census": pad_census,                                                                                        # TC1 amendment 49's re-ask
@@ -5954,6 +6057,63 @@ def selftest(a):
     except SystemExit as e:
         assert e.code == 13, e.code
     a.tokens_sha = rec["sha256"]
+    # TC1_STEP_MEM=1 (opt-in): the fused arm again with one allocator row per optimizer step (None off CUDA) and otherwise the default
+    # arm's record keys (the default arm carries no step_mem key); then an OOM mid-training: its row carries the env block, arm_facts,
+    # the padded lengths and the per-step rows up to the failure, and the allocator's text to 700 characters. Their own tags; the R-wide
+    # assertions below hold for them too (no census, no order).
+    a.framework, a.arm, a.tag, a.attn_4bit, a.note, a.expect_trainable = "e4b", "fused", "fused_attn4_sm", 1, None, None
+    os.environ["TC1_STEP_MEM"] = "1"
+    try:
+        sm = run_arm(a, _selftest_load_e4b, sampler=False)
+
+        def _load_oom(a_):
+            m, x = _selftest_load_e4b(a_)
+            orig, calls = m.forward, [0]
+
+            def fwd(*args, **kw):
+                if m.training:
+                    calls[0] += 1
+                    if calls[0] == 2 * a_.accum + 1:          # the first micro-batch of step 3: two steps done
+                        raise RuntimeError("CUDA out of memory. Tried to allocate 446.00 MiB. GPU 0 has a total capacity of 23.52 GiB of which "
+                                           "435.75 MiB is free. Of the allocated memory 22.45 GiB is allocated by PyTorch, and 0.15 GiB is "
+                                           "reserved by PyTorch but unallocated. " + "(selftest) " * 40)
+                return orig(*args, **kw)
+            m.forward = fwd
+            return m, x
+        a.tag = "fused_attn4_oom"
+        try:
+            run_arm(a, _load_oom, sampler=False)
+            raise AssertionError("the injected OOM did not exit")
+        except SystemExit as e:
+            assert e.code == 5, e.code
+    finally:
+        os.environ.pop("TC1_STEP_MEM", None)
+    ro = json.load(open(receipt_path(a, "e4b", "fused_attn4_oom")))
+    a.tag = "fused_attn4"
+    fu = got["e4b_fused_attn4"]
+    assert "step_mem" not in fu and [r["step"] for r in sm["step_mem"]] == list(range(1, a.steps + 1)), sm.get("step_mem")
+    assert all(r["max_allocated"] is None and r["reserved"] is None for r in sm["step_mem"]), sm["step_mem"][:2]    # CPU: no allocator
+    assert set(sm) - {"step_mem"} == set(fu) and sm["peak_vram_gb"] == fu["peak_vram_gb"] and sm.get("mem_census") == fu.get("mem_census")
+    # the default path adds exactly two documented keys to a trained row -- arm_facts.threads and env.pytorch_cuda_alloc_conf -- and no
+    # per-step key; both are recorded only, and no reading reads them (tests/test_tc1_reduce.py feeds real receipts with and without them)
+    facts_before = {"attn_implementation", "cpu_model", "free_outputs", "lora_delta_dtype", "loss_class", "omp_num_threads",
+                    "output_router_logits", "torch_num_threads", "unsloth_zoo", "unsloth_zoo_note"}
+    env_before = {"anchor_json", "bitsandbytes", "box_class", "cap", "device", "experts4bit-qlora", "framework", "gnf4_code", "gpu",
+                  "grouped-nf4-gemm", "hf_hub_offline", "host", "huggingface_hub", "peft", "torch", "transformers", "triton", "unsloth",
+                  "unsloth_env", "unsloth_loader", "unsloth_zoo"}
+    assert set(fu["arm_facts"]) - facts_before == {"threads"} and facts_before <= set(fu["arm_facts"]), sorted(fu["arm_facts"])
+    assert set(fu["env"]) - env_before == {"pytorch_cuda_alloc_conf"} and env_before <= set(fu["env"]), sorted(fu["env"])
+    assert set(fu["arm_facts"]["threads"]) == {"torch_num_threads", "torch_interop_threads", "omp", "mkl", "openblas", "affinity_cpus",
+                                              "quota_cpus", "nr_throttled", "nr_throttled_end"}, fu["arm_facts"]["threads"]
+    assert "threads" in ro["arm_facts"] and "nr_throttled_end" in ro["arm_facts"]["threads"], ro["arm_facts"]
+    assert ro["status"] == "oom" and "reserved by PyTorch but unallocated" in ro["reason"] and len(ro["reason"]) > 300, ro["reason"][:80]
+    assert ro["env"]["framework"] == "e4b" and "pytorch_cuda_alloc_conf" in ro["env"] and ro["arm_facts"]["torch_num_threads"] >= 1, sorted(ro)
+    assert len(ro["microbatch_padded_len"]) == ro["steps_done"] == len(ro["step_mem"]) == 2, (ro["steps_done"], ro.get("step_mem"))
+    op = ro["oom_path"]                           # TC1 amendment 78: an e4b OOM row carries its knobs and path counters (a trained row does not)
+    assert op["env"] == {k: os.environ.get(k) for k in OOM_PATH_ENV} and "oom_path" not in fu, op
+    assert set(op) == {"env", "gnf4_imported", "lora_path_calls", "gnf4_pad_buckets_mode", "gnf4_pad_ladder", "gnf4_compact_delta",
+                       "gnf4_has_compact_buckets", "compact_bucket_calls", "chunked_lm_loss"}, sorted(op)
+    assert all(isinstance(v, int) for v in op["lora_path_calls"].values()) and isinstance(op["compact_bucket_calls"], int), op
 
     # ---- assertions on the receipts
     R = {os.path.basename(p)[:-5]: json.load(open(p)) for p in glob.glob(os.path.join(d, "tiny*_*.json"))}

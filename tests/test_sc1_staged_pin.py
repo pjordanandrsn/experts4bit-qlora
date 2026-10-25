@@ -18,13 +18,15 @@ PIN = LANE / "staged.sha256"
 OWN = ("sc1_run.sh", "sc1_e4b_sched.py", "sc1_prompts.py", "sc1_sampler.sh")
 COMP_DIRS = ("vllm", "sglang", "llamacpp", "exl3", "lmdeploy", "sc1g_ref")   # sc1g_ref: SC1g box R's registered artifacts (A5), once the sha-registration PR lands
 SC1B = tuple("sc1b_census.py sc1b_e4b_census.py sc1b_vllm_census.py sc1b_serve_census.py sc1b_toy.py kernel_classes.json sc1b_box_d.sh".split())                         # bench/sc1b, staged flat on every box
-SC2 = tuple("sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc1g_kl.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py sc2e_box_l.sh sc2e_reduce.py sc2e_census.py sc2e_basis.py sc2f_box_n.sh sc2f_reduce.py sc2f_basis.py sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py".split())                                                                                            # bench/sc2, staged flat on every box
+SC2 = tuple("sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc1g_kl.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py sc2e_box_l.sh sc2e_reduce.py sc2e_census.py sc2e_basis.py sc2f_box_n.sh sc2f_reduce.py sc2f_basis.py sc2h_box_o.sh sc2h_reduce.py sc2h_basis.py sc2i_box_p.sh sc2i_reduce.py sc2j_box_q.sh sc2j_reduce.py sc2j_contract.py sc2j_prompts.py sc2j_quality.py".split())                                                                                            # bench/sc2, staged flat on every box
 P39 = ("step_decomp.py", "k8_bake.py", "calib.json")
 P98 = ("p98_bake.py",)                                     # bench/p98: P98's Qwen3.6 arena bake, staged flat (SC2d, box K)
 SC5 = tuple("sc5_box_m.sh sc5_driver.py sc5_quality.py sc5_e4b_quality.py sc5_ref.py sc5_windows.py sc5_reduce.py sc5_record.py sc5_windows_w64.json".split())   # bench/sc5, staged flat on every box (SC5, box M)
 SC5_LOCKS = ("vllm.lock.txt", "sglang.lock.txt", "e4b-wheels.lock")   # bench/sc5/locks: SC5's provenance locks
 SC5_REF = ("sc5_ref.json", "sc5_ref_chunked.json")   # bench/sc5/ref: pinned and staged once the amendment commits them
 PBOX = {"p117_box.py": "p117", "p108_box.py": "p108", "p97_box.py": "p97"}   # SC5's decode-shaped quality pass and its imports
+SC2J_EXTRA = {"p117_reduce.py": REPO / "bench" / "p117", "test_decode_graph_buckets.py": REPO / "tests",
+              "g3_smoke.py": REPO / "bench" / "kv-pool-g" / "g3-smoke"}   # SC2j (box Q): QUALITY's reducer and premise; the contract's drive
 
 
 def resolve(name: str) -> pathlib.Path:
@@ -51,6 +53,8 @@ def resolve(name: str) -> pathlib.Path:
         return REPO / "bench" / "sc5" / "locks" / name
     if name in PBOX:
         return REPO / "bench" / PBOX[name] / name
+    if name in SC2J_EXTRA:
+        return SC2J_EXTRA[name] / name
     return REPO / "bench" / "p39" / name
 
 
@@ -64,7 +68,7 @@ def _entries(pin=PIN):
 def staged_names() -> set:
     """What make_pin.sh pins and sc1_drive.sh stages: the lane's own files, the reducer when present, P39's pieces, the hook,
     the premise test, and every file under each comparator directory that exists."""
-    names = (set(OWN) | set(P39) | set(P98) | set(SC1B) | set(SC2) | set(SC5) | set(SC5_LOCKS) | set(PBOX)
+    names = (set(OWN) | set(P39) | set(P98) | set(SC1B) | set(SC2) | set(SC5) | set(SC5_LOCKS) | set(PBOX) | set(SC2J_EXTRA)
              | {"hook/usercustomize.py", "test_k19_row_exact_gpu.py"})
     names |= {n for n in SC5_REF if (REPO / "bench" / "sc5" / "ref" / n).is_file()}
     if (LANE / "sc1_reduce.py").is_file() and any(n == "sc1_reduce.py" for _w, n in _entries()):
@@ -105,15 +109,17 @@ def test_every_pinned_name_is_staged_by_the_driver_and_resolves_the_same_way():
     assert "sc1_run.sh|sc1_e4b_sched.py|sc1_prompts.py|sc1_sampler.sh|sc1_reduce.py) src=\"$HERE/$name\"" in case
     assert "vllm/*|sglang/*|llamacpp/*|exl3/*|lmdeploy/*|sc1g_ref/*) src=\"$HERE/$name\"" in case
     assert case.index("|sc1g_ref/*)") < case.index("|sc1g_*|")   # sc1g_ref/ resolves before bench/sc2's flat sc1g_* files
-    assert 'hook/usercustomize.py) src="$P42/hook/usercustomize.py"' in case and 'test_k19_row_exact_gpu.py) src="$TESTS/$name"' in case
+    assert 'hook/usercustomize.py) src="$P42/hook/usercustomize.py"' in case and 'test_k19_row_exact_gpu.py|test_decode_graph_buckets.py) src="$TESTS/$name"' in case
     assert 'sc1b_*|kernel_classes.json) src="$SC1B/$name"' in case
-    assert 'sc2_*|sc2b_*|sc2g_*|sc1g_*|sc2c_*|sc2d_*|sc2e_*|sc2f_*|sc2h_*|sc2i_*) src="$SC2/$name"' in case
+    assert 'sc2_*|sc2b_*|sc2g_*|sc1g_*|sc2c_*|sc2d_*|sc2e_*|sc2f_*|sc2h_*|sc2i_*|sc2j_*) src="$SC2/$name"' in case
+    assert 'g3_smoke.py) src="$REPO/bench/kv-pool-g/g3-smoke/$name"' in case and 'p117_box.py|p117_reduce.py)' in case
     assert 'p98_bake.py) src="$P98/$name"' in case
     assert 'sc5_ref.json|sc5_ref_chunked.json) src="$SC5/ref/$name"' in case and 'sc5_*) src="$SC5/$name"' in case
     assert case.index("sc5_ref.json|") < case.index("sc5_*)")   # the reference files resolve before the flat sc5_* files
     assert 'vllm.lock.txt|sglang.lock.txt|e4b-wheels.lock) src="$SC5/locks/$name"' in case
     for n, d in PBOX.items():
-        assert f'{n}) src="$REPO/bench/{d}/$name"' in case, n
+        assert (f'{n}) src="$REPO/bench/{d}/$name"' in case
+                or f'{n}|p117_reduce.py) src="$REPO/bench/{d}/$name"' in case), n
     assert '*) src="$P39/$name"' in case
     # the box checks the same file with sha256sum -c (strict: a pinned file missing on the box is a stop)
     run = (LANE / "sc1_run.sh").read_text()
@@ -165,7 +171,7 @@ def test_the_driver_refuses_without_a_box_or_with_a_bad_one(tmp_path):
     out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=env)
     assert out.returncode == 78 and "SC1_BOX is not set" in out.stdout
     out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=_dry_env(tmp_path, SC1_BOX="Z"))   # a letter no lane will take next (H, then J, collided)
-    assert out.returncode == 78 and "SC1_BOX must be A, B, C, D, E, F, G, H, I, J, K, L, M, N, O or P" in out.stdout    # D SC1b, E SC2, F SC2b, G SC2g, H SC2c, I SC1g, J SC1g-diag, K SC2d, L SC2e
+    assert out.returncode == 78 and "SC1_BOX must be A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P or Q" in out.stdout    # D SC1b, E SC2, F SC2b, G SC2g, H SC2c, I SC1g, J SC1g-diag, K SC2d, L SC2e
 
 
 def test_the_receipt_fetch_leaves_the_staged_reference_rows_on_the_box(tmp_path):

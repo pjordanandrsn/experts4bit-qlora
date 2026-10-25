@@ -1,0 +1,2356 @@
+{
+ "mode": "quality",
+ "arm": "R",
+ "shakedown": true,
+ "e4b_sha": "65a33362608169e1df61fa56f879baef263fd0ba",
+ "gnf4_sha": "41ef086e6a3e2be5b158ff1bb38e0de67862a949",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "knobs": {
+  "E4B_INT8_HEAD_ROWS": null,
+  "E4B_INT8_HEAD_BW": null,
+  "E4B_ATTN_SPLIT_CAP": null,
+  "E4B_DENSE_GEMV_BW": null,
+  "E4B_PAGED_SPEC": null,
+  "E4B_PAGED_FUSE_QKV": null,
+  "E4B_FUSE_T1_GLUE": null,
+  "E4B_FUSE_T1_GLUE_R2": null,
+  "E4B_FUSE_ROUTER_EPI": null,
+  "GNF4_GEMV_BW": null,
+  "GNF4_GEMV_BW_PLAN": null,
+  "GNF4_GEMV_BW_DECODE": null
+ },
+ "torch": "2.8.0+cu128",
+ "sm_count": 170,
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "load_s": 29.03,
+ "fusions": {
+  "fuse_qkv_n": 48,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48
+ },
+ "fusion_modes": {
+  "E4B_PAGED_FUSE_QKV": "auto",
+  "E4B_FUSE_T1_GLUE": "auto",
+  "E4B_FUSE_T1_GLUE_R2": "auto",
+  "E4B_FUSE_ROUTER_EPI": "auto"
+ },
+ "fusion_sources": {
+  "E4B_PAGED_FUSE_QKV": "default-allowlisted",
+  "E4B_FUSE_T1_GLUE": "default-allowlisted",
+  "E4B_FUSE_T1_GLUE_R2": "default-allowlisted",
+  "E4B_FUSE_ROUTER_EPI": "default-allowlisted"
+ },
+ "attn_split_cap": {
+  "cap": 16,
+  "source": "default-allowlisted",
+  "plans": {}
+ },
+ "dense_gemv_bw": {
+  "mode": "0",
+  "modules": 0,
+  "engagement": {
+   "modules": 0,
+   "routed_modules_by_rows": {},
+   "passed_modules_by_rows": {}
+  }
+ },
+ "int8_head_bw": {
+  "mode": "1",
+  "modules": 1,
+  "shape": [
+   151936,
+   2048
+  ],
+  "int8_bytes": 311164928,
+  "grid": "quantize_rows_int8 (K36); the weight rounded in place to bf16(q * s), P150's I8HEAD",
+  "source": "default-allowlisted",
+  "rows": {
+   "rows_max": 1
+  },
+  "engagement": {
+   "modules": 1,
+   "routed_modules_by_rows": {},
+   "passed_modules_by_rows": {}
+  }
+ },
+ "model_type": "qwen3_moe",
+ "max_tokens_per_seq": 4096,
+ "graph_status": null,
+ "grouping": {
+  "device_grouping": false,
+  "force_singleton_groups": false
+ },
+ "max_seqs": 16,
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16
+ ],
+ "transformers": "5.17.0",
+ "dispatch_build": {
+  "dotpad": 0,
+  "dotpad_splitk": 0,
+  "scalar": 0,
+  "scalar_splitk": 0,
+  "bw_tree": 0,
+  "bw_prmt32": 300,
+  "bw_splitk": 0
+ },
+ "phases": {
+  "2": {
+   "phase": "off",
+   "arms": [
+    "R",
+    "rep"
+   ],
+   "windows": {
+    "wikitext": 24
+   },
+   "windows_sha256": {
+    "wikitext": "60d1c10230c459d35ee1da5fb4c06b9ab7d9d587d89531f3f360fc3a95e06363"
+   },
+   "group": 2,
+   "prompt": 512,
+   "cont": 128,
+   "chunk": 512,
+   "floor_chunk": 512,
+   "layers": 48,
+   "ref_kw": {
+    "device_grouping": true,
+    "padded": true
+   },
+   "rep_identical": {
+    "wikitext": true
+   },
+   "counters_wrapped": [
+    "rmsnorm_rows",
+    "rmsnorm_resid_rows",
+    "scaled_resid_add_rows",
+    "rope_norm_heads",
+    "rope_heads",
+    "router_epilogue"
+   ],
+   "qkv_modules": 48,
+   "rehearsal": {
+    "stand_in_attention": false
+   },
+   "per_window": {
+    "wikitext": {
+     "R": [
+      {
+       "window": 0,
+       "nll": 2.2795953414014596,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 1,
+       "nll": 2.84917614137089,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 2,
+       "nll": 1.836525648068985,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 3,
+       "nll": 1.936257602848746,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 4,
+       "nll": 2.6667308746920355,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 5,
+       "nll": 1.7512139919607597,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 6,
+       "nll": 1.9873307781728706,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 7,
+       "nll": 2.26393064586676,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 8,
+       "nll": 2.6735480821082263,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 9,
+       "nll": 1.8944148797207274,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 10,
+       "nll": 2.271996880852408,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 11,
+       "nll": 1.5985141690750915,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 12,
+       "nll": 2.2478421239138333,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 13,
+       "nll": 2.2707042759020872,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 14,
+       "nll": 2.920621330555612,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 15,
+       "nll": 2.2118413447194873,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 16,
+       "nll": 1.3786498105161187,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 17,
+       "nll": 1.7776721234239077,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 18,
+       "nll": 1.9364214399884412,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 19,
+       "nll": 1.620023857048819,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 20,
+       "nll": 1.8106727171159331,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 21,
+       "nll": 2.6274525834872637,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 22,
+       "nll": 3.1921166828466,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 23,
+       "nll": 1.8919764848538385,
+       "argmax_agree": 1.0
+      }
+     ],
+     "rep": [
+      {
+       "window": 0,
+       "nll": 2.2795953414014596,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 1,
+       "nll": 2.84917614137089,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      }
+     ]
+    }
+   },
+   "engagement": {
+    "wikitext": {
+     "R": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 73.27,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 68.22,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 68.79,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 70.29,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 69.44,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 67.73,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 68.94,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 69.3,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 69.82,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 68.38,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 67.97,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 70.49,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      }
+     ],
+     "rep": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 71.56,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 254,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      }
+     ]
+    }
+   },
+   "seconds": 127.7,
+   "attn_split_cap": {
+    "cap": 16,
+    "source": "default-allowlisted",
+    "plans": {
+     "2": {
+      "calls": 79248,
+      "plan": 32,
+      "n_split": 16
+     }
+    }
+   },
+   "quality_kv": {
+    "passes": 13,
+    "asked": [
+     656
+    ],
+    "max_tokens_per_seq": [
+     4096
+    ],
+    "blocks_per_seq": [
+     256
+    ],
+    "split_cap": 16,
+    "plan_clash": [],
+    "plan_bT": 32
+   },
+   "head_calls": {
+    "routed": {},
+    "passed": {
+     "2": 1651,
+     "512": 26
+    }
+   },
+   "int8_head_bw_measure": {
+    "modules": 1,
+    "routed_modules_by_rows": {},
+    "passed_modules_by_rows": {
+     "2": 1,
+     "512": 1
+    }
+   },
+   "dispatch_measure": {
+    "dotpad": 0,
+    "dotpad_splitk": 0,
+    "scalar": 0,
+    "scalar_splitk": 0,
+    "bw_tree": 0,
+    "bw_prmt32": 0,
+    "bw_splitk": 0
+   }
+  },
+  "4": {
+   "phase": "off",
+   "arms": [
+    "R",
+    "rep"
+   ],
+   "windows": {
+    "wikitext": 24
+   },
+   "windows_sha256": {
+    "wikitext": "60d1c10230c459d35ee1da5fb4c06b9ab7d9d587d89531f3f360fc3a95e06363"
+   },
+   "group": 4,
+   "prompt": 512,
+   "cont": 128,
+   "chunk": 512,
+   "floor_chunk": 512,
+   "layers": 48,
+   "ref_kw": {
+    "device_grouping": true,
+    "padded": true
+   },
+   "rep_identical": {
+    "wikitext": true
+   },
+   "counters_wrapped": [
+    "rmsnorm_rows",
+    "rmsnorm_resid_rows",
+    "scaled_resid_add_rows",
+    "rope_norm_heads",
+    "rope_heads",
+    "router_epilogue"
+   ],
+   "qkv_modules": 48,
+   "rehearsal": {
+    "stand_in_attention": false
+   },
+   "per_window": {
+    "wikitext": {
+     "R": [
+      {
+       "window": 0,
+       "nll": 2.2795953414014596,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 1,
+       "nll": 2.84917614137089,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 2,
+       "nll": 1.836525648068985,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 3,
+       "nll": 1.936257602848746,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 4,
+       "nll": 2.6667308746920355,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 5,
+       "nll": 1.7512139919607597,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 6,
+       "nll": 1.9873307781728706,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 7,
+       "nll": 2.26393064586676,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 8,
+       "nll": 2.6735480821082263,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 9,
+       "nll": 1.8944148797207274,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 10,
+       "nll": 2.271996880852408,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 11,
+       "nll": 1.5985141690750915,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 12,
+       "nll": 2.2478421239138333,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 13,
+       "nll": 2.2707042759020872,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 14,
+       "nll": 2.920621330555612,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 15,
+       "nll": 2.2118413447194873,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 16,
+       "nll": 1.3786498105161187,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 17,
+       "nll": 1.7776721234239077,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 18,
+       "nll": 1.9364214399884412,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 19,
+       "nll": 1.620023857048819,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 20,
+       "nll": 1.8106727171159331,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 21,
+       "nll": 2.6274525834872637,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 22,
+       "nll": 3.1921166828466,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 23,
+       "nll": 1.8919764848538385,
+       "argmax_agree": 1.0
+      }
+     ],
+     "rep": [
+      {
+       "window": 0,
+       "nll": 2.2795953414014596,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 1,
+       "nll": 2.84917614137089,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 2,
+       "nll": 1.836525648068985,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 3,
+       "nll": 1.936257602848746,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      }
+     ]
+    }
+   },
+   "engagement": {
+    "wikitext": {
+     "R": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 71.22,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 508,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6419,
+        "rmsnorm_resid_rows": 6288,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 131,
+       "qkv_calls": 6288
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 69.67,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 508,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6419,
+        "rmsnorm_resid_rows": 6288,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 131,
+       "qkv_calls": 6288
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 70.32,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 508,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6419,
+        "rmsnorm_resid_rows": 6288,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 131,
+       "qkv_calls": 6288
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 71.41,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 508,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6419,
+        "rmsnorm_resid_rows": 6288,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 131,
+       "qkv_calls": 6288
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 71.9,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 508,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6419,
+        "rmsnorm_resid_rows": 6288,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 131,
+       "qkv_calls": 6288
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 71.5,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 508,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6419,
+        "rmsnorm_resid_rows": 6288,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 131,
+       "qkv_calls": 6288
+      }
+     ],
+     "rep": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 70.89,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 508,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6419,
+        "rmsnorm_resid_rows": 6288,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 131,
+       "qkv_calls": 6288
+      }
+     ]
+    }
+   },
+   "seconds": 74.9,
+   "attn_split_cap": {
+    "cap": 16,
+    "source": "default-allowlisted",
+    "plans": {
+     "4": {
+      "calls": 42672,
+      "plan": 23,
+      "n_split": 16
+     }
+    }
+   },
+   "quality_kv": {
+    "passes": 7,
+    "asked": [
+     656
+    ],
+    "max_tokens_per_seq": [
+     4096
+    ],
+    "blocks_per_seq": [
+     256
+    ],
+    "split_cap": 16,
+    "plan_clash": [],
+    "plan_bT": 23
+   },
+   "head_calls": {
+    "routed": {},
+    "passed": {
+     "4": 889,
+     "512": 28
+    }
+   },
+   "int8_head_bw_measure": {
+    "modules": 1,
+    "routed_modules_by_rows": {},
+    "passed_modules_by_rows": {
+     "2": 1,
+     "4": 1,
+     "512": 1
+    }
+   },
+   "dispatch_measure": {
+    "dotpad": 0,
+    "dotpad_splitk": 0,
+    "scalar": 0,
+    "scalar_splitk": 0,
+    "bw_tree": 0,
+    "bw_prmt32": 0,
+    "bw_splitk": 0
+   }
+  },
+  "8": {
+   "phase": "off",
+   "arms": [
+    "R",
+    "rep"
+   ],
+   "windows": {
+    "wikitext": 24
+   },
+   "windows_sha256": {
+    "wikitext": "60d1c10230c459d35ee1da5fb4c06b9ab7d9d587d89531f3f360fc3a95e06363"
+   },
+   "group": 8,
+   "prompt": 512,
+   "cont": 128,
+   "chunk": 512,
+   "floor_chunk": 512,
+   "layers": 48,
+   "ref_kw": {
+    "device_grouping": true,
+    "padded": true
+   },
+   "rep_identical": {
+    "wikitext": true
+   },
+   "counters_wrapped": [
+    "rmsnorm_rows",
+    "rmsnorm_resid_rows",
+    "scaled_resid_add_rows",
+    "rope_norm_heads",
+    "rope_heads",
+    "router_epilogue"
+   ],
+   "qkv_modules": 48,
+   "rehearsal": {
+    "stand_in_attention": false
+   },
+   "per_window": {
+    "wikitext": {
+     "R": [
+      {
+       "window": 0,
+       "nll": 2.28375942009885,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 1,
+       "nll": 2.8300113026971587,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 2,
+       "nll": 1.8501250119916222,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 3,
+       "nll": 1.9478751020728744,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 4,
+       "nll": 2.6478481399584295,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 5,
+       "nll": 1.7727329518233788,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 6,
+       "nll": 2.0085609803026303,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 7,
+       "nll": 2.2818138909699526,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 8,
+       "nll": 2.7020012959341813,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 9,
+       "nll": 1.8928893818892618,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 10,
+       "nll": 2.2836519418215446,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 11,
+       "nll": 1.5983036019644965,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 12,
+       "nll": 2.235412775543468,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 13,
+       "nll": 2.2843405563360264,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 14,
+       "nll": 2.9218864044550763,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 15,
+       "nll": 2.208500649069335,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 16,
+       "nll": 1.4043654915822228,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 17,
+       "nll": 1.7459369900975552,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 18,
+       "nll": 1.9123074539007774,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 19,
+       "nll": 1.6432788453560216,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 20,
+       "nll": 1.8039776083800836,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 21,
+       "nll": 2.6205194623199586,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 22,
+       "nll": 3.180795594576212,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 23,
+       "nll": 1.8987375965385294,
+       "argmax_agree": 1.0
+      }
+     ],
+     "rep": [
+      {
+       "window": 0,
+       "nll": 2.28375942009885,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 1,
+       "nll": 2.8300113026971587,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 2,
+       "nll": 1.8501250119916222,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 3,
+       "nll": 1.9478751020728744,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 4,
+       "nll": 2.6478481399584295,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 5,
+       "nll": 1.7727329518233788,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 6,
+       "nll": 2.0085609803026303,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 7,
+       "nll": 2.2818138909699526,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      }
+     ]
+    }
+   },
+   "engagement": {
+    "wikitext": {
+     "R": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 76.55,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 1016,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6615,
+        "rmsnorm_resid_rows": 6480,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 135,
+       "qkv_calls": 6480
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 76.24,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 1016,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6615,
+        "rmsnorm_resid_rows": 6480,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 135,
+       "qkv_calls": 6480
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 75.34,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 1016,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6615,
+        "rmsnorm_resid_rows": 6480,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 135,
+       "qkv_calls": 6480
+      }
+     ],
+     "rep": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 77.78,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 1016,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6615,
+        "rmsnorm_resid_rows": 6480,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 135,
+       "qkv_calls": 6480
+      }
+     ]
+    }
+   },
+   "seconds": 51.5,
+   "attn_split_cap": {
+    "cap": 16,
+    "source": "default-allowlisted",
+    "plans": {
+     "8": {
+      "calls": 24384,
+      "plan": 11,
+      "n_split": 11
+     }
+    }
+   },
+   "quality_kv": {
+    "passes": 4,
+    "asked": [
+     656
+    ],
+    "max_tokens_per_seq": [
+     4096
+    ],
+    "blocks_per_seq": [
+     256
+    ],
+    "split_cap": 16,
+    "plan_clash": [],
+    "plan_bT": 11
+   },
+   "head_calls": {
+    "routed": {},
+    "passed": {
+     "8": 508,
+     "512": 32
+    }
+   },
+   "int8_head_bw_measure": {
+    "modules": 1,
+    "routed_modules_by_rows": {},
+    "passed_modules_by_rows": {
+     "2": 1,
+     "4": 1,
+     "8": 1,
+     "512": 1
+    }
+   },
+   "dispatch_measure": {
+    "dotpad": 0,
+    "dotpad_splitk": 0,
+    "scalar": 0,
+    "scalar_splitk": 0,
+    "bw_tree": 0,
+    "bw_prmt32": 0,
+    "bw_splitk": 0
+   }
+  }
+ },
+ "max_mem_gb": 23.78,
+ "status": "ok",
+ "bucket_stability": {
+  "2": {
+   "rows_identical": 4,
+   "rows": 4,
+   "max_abs_diff": 0.0,
+   "steps": 2
+  },
+  "4": {
+   "rows_identical": 8,
+   "rows": 8,
+   "max_abs_diff": 0.0,
+   "steps": 2
+  },
+  "8": {
+   "rows_identical": 16,
+   "rows": 16,
+   "max_abs_diff": 0.0,
+   "steps": 2
+  }
+ }
+}

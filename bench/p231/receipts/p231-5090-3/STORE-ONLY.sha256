@@ -1,0 +1,25 @@
+# p231-5090-3: files kept only in the private receipt store, byte-exact. The launcher's receipt, guard record and log,
+# heartbeat, host facts, known_hosts, instance record and teardown proof, and the box's INSTANCE_ID, name the provider's
+# instance or host; the four arm logs and the fetch, fit, prompts and two quality logs carry progress bars' carriage
+# returns. Receipts are never rewritten, so they are not committed here. sha256, then the file's path within this run's receipt.
+# forensics.txt and outer.log carry the card's GPU UUID (the nvidia-smi line), so they are store-only too.
+59653c6311cc539ffccc33258aa2433e0ffc24c2f7249027d1f35bf78d5040f7  receipt.json
+9b3997f12fdcab68f883b89b6dc0b6f0fd3f8f654ea17d6f3e946145d282dcfa  guard-armed.json
+0a67b5a078de78743fee08e495dcce7296c15de84f26834980b23423dc308f40  guard.log
+e1726c688d343fb24ccd49b11a01fc4d2eca9a884deaf1a9f3a1e5ca15a43282  heartbeat
+fed1e4b3d8cfe67a2295d0edb2d19278b01a02ab43efbc46bee30a8525243728  host_facts.json
+e8cfb5bdb1f0bc5ee973a10747e6359f34237b9c423fba9979dcc32e9f438a45  instance.json
+6eb5f934dc2baab8a7d7f518a915215c3570f29cb698ac4c8c7546982584c77c  known_hosts
+c5c93b64cc77bc6e7ae5dd7e55296d820c553fee0f236042698268c152694ccc  teardown-proof.json
+e8fa7cea02675b7ce22b7ca2ceaf2bf31cdcf904ed39fd76555e1f8c577b8024  p231/INSTANCE_ID
+a0c4b68709da452cec60f451942b12eab2da8175a431a7044c1c91ad3b6b249d  p231/logs/arm_B0a.log
+ed0964262654eae4db9764b43e1ceb7281329ad9961c2b83e67531e0eedee009  p231/logs/arm_B1a.log
+00bed16fc6403b5889ead95a6d4ab95699410fe38ec7964798b59f3fc7ef7540  p231/logs/arm_B1b.log
+134418a31a914e3942dc114cb5c2f5472ed140acc3ef782dffe0949ab1536178  p231/logs/arm_B0b.log
+3cb2e105a3384440040ea9ce27df547ffb7b9c56be8319145555700e0db047f6  p231/logs/fetch.log
+0cd92883afad3a87940273f86cfd3f7262289412b50272c06b8e3eefe2b2b1e0  p231/logs/fit.log
+be41a3416e3800c526c3dc0b4eea0548aba9ba91cf6d4d1b8516d7b70da7b316  p231/logs/prompts.log
+e8ea1d5e4ab1697857b5637f13c708ee9ed8c121c287c889575ed8be601d92bf  p231/logs/quality_off.log
+3a143702a081645d2779974d97e1c055c8542b3c24f183e68a1064204f79f13a  p231/logs/quality_on.log
+cab16bc0c8e2bc5af008406c8f9026343b32e5eae165a2b0d596c94d2c6cfd2d  p231/forensics.txt
+ca37488d5c2199cb1fdf86349fb4b9776e6d2542d3379892834e5f26980cc09e  p231/outer.log

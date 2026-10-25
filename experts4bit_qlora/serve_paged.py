@@ -143,7 +143,13 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
     load and before the merge (no override);
   - 12: a backend-adapter/2 expert fingerprint the served arena does not match (PA-1; opt-in
     ``E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH=experts``, reported in ``/health`` as a served mismatch). A /2 manifest with
-    an expert fingerprint is compared instead of refused by 9.
+    an expert fingerprint is compared instead of refused by 9. On a merged arena the served experts are compared with
+    the merged arena's own fingerprint instead (``merge.merged_qfp_v1``; no override);
+  - 13: a merged arena (``bake_mode: "nf4-merged"``, :mod:`.merged_arena`) not served as written, decided before the
+    load for EVERY config: without the opt-in ``E4B_PAGED_MERGED_ARENA=1``, without an adapter, or with an adapter
+    other than the one it was merged from (id, expert tensors, recorded base, scale). When 13 passes, the adapter's live
+    expert LoRA is not refusal 1: the delta is already in the arena's rows and nothing of the adapter's expert tensors
+    is applied; its attention LoRA merges once at load, as for any adapter.
   The served name becomes ``<model>+<adapter_id[:12]>``, and ``/health`` and ``/v1/models`` carry the adapter's id,
   manifest hash, base revision, merge report and ``base_match``.
 
@@ -226,12 +232,14 @@ ADAPTER_NEUTRAL_KNOBS = {
     "E4B_DENSE_LT_PIN": ("a pinned cuBLASLt algorithm for named bf16 projections at 2..8 rows (K1): it reads the merged "
                          "weight as stored, re-quantizes nothing and reads no calibration; its outputs move within the "
                          "served tolerance exactly as on the base server"),
-    "E4B_INT8_HEAD_ROWS": ("routes the int8 head's 2..8 rows to K37 over the head's own codes and scales (K2b): it "
-                           "quantizes nothing and reads no calibration, and the head it widens is the allowed "
-                           "base-serving lever E4B_INT8_HEAD_BW"),
+    "E4B_INT8_HEAD_ROWS": ("routes the int8 head's 2..8 rows to K37 over the head's own codes and scales (K2b; unset, "
+                           "8 on qwen3_moe at the 151936 x 2048 head, lane P232): it quantizes nothing and reads no "
+                           "calibration, and the head it widens is the allowed base-serving lever E4B_INT8_HEAD_BW"),
 }
 ADAPTER_ALLOW_ARENA_ENV = "E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA"
 ADAPTER_ACCEPT_BASE_ENV = "E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE"
+#: refusal 13's opt-in: serve a merged arena (bench/d0/ARENA-DESIGN.md) with the adapter it was merged from
+MERGED_ARENA_ENV = "E4B_PAGED_MERGED_ARENA"
 FUSE_QKV_ENV = "E4B_PAGED_FUSE_QKV"
 FUSION_KNOBS = (FUSE_QKV_ENV,) + FUSION_ENV
 # Lane P115's family-scoped default (PREREG-p115.md Amendment 3, mechanism (B)): an UNSET fusion knob resolves to
@@ -279,6 +287,12 @@ ATTN_SPLIT_CAP_ENV = "E4B_ATTN_SPLIT_CAP"
 ATTN_SPLIT_CAP_DEFAULT_FAMILIES: dict = {
     "qwen3_moe": 16,      # e4b.serve.p143.attn-split-cap.qwen3.5090.2026-10-19 (bench/p143/RESULTS-p143.md)
 }
+#: P223's follow-up (opt-in; no read licenses it): a FIXED split count S for the paged FP8 attention decode at every row
+#: count, with every other per-call choice of the kernel wrapper pinned (engines/fp8_paged_kv.SPLIT_FIXED_PINS). P223
+#: read the decode schedule-invariant under E4B_ATTN_SPLIT_CAP=1 (one split at every bucket) and E4B_PAGED_BUCKETS=2,4,8,16,
+#: at about 3.5x the one-request decode time; a fixed S is the same equal-split-count property at a lone row's
+#: parallelism. Unset or 0 is off (today's plan, or the cap); 1..32 fixes S. Refused beside an explicit E4B_ATTN_SPLIT_CAP.
+ATTN_SPLIT_FIXED_ENV = "E4B_ATTN_SPLIT_FIXED"
 #: P151 (grouped-nf4-gemm K35): route the attention projections' single-row decode GEMVs through dense_gemv's
 #: gemv_bf16_bw (engines/dense_gemv_bw.py). 0 (the default) or 1; nothing chooses it by family until a read licenses it.
 DENSE_GEMV_BW_ENV = "E4B_DENSE_GEMV_BW"
@@ -287,7 +301,8 @@ DENSE_GEMV_BW_ENV = "E4B_DENSE_GEMV_BW"
 #: (engines/int8_head_bw.py). 0 or 1; unset resolves per family and head shape (INT8_HEAD_BW_DEFAULT_FAMILIES).
 INT8_HEAD_BW_ENV = "E4B_INT8_HEAD_BW"
 #: K2b (bench/dense-small-m/DESIGN-K2.md; engines/int8_head_bw.py): the int8 head's 2..value rows on grouped-nf4-gemm
-#: K37's linear_i8. 1 to 8; unset is 1, today's route (opt-in: no read has licensed a default)
+#: K37's linear_i8. 1 to 8 (1: one row on K36, more on F.linear); unset resolves per family and head shape
+#: (INT8_HEAD_ROWS_DEFAULT_FAMILIES, lane P232)
 INT8_HEAD_ROWS_ENV = "E4B_INT8_HEAD_ROWS"
 # Lane P153's default for ``E4B_INT8_HEAD_BW`` (bench/p153/RESULTS-p153.md): an UNSET knob resolves to ``1`` on a
 # model_type here whose output head has a listed [N, K] shape, the shapes grouped-nf4-gemm K36 has a tuned plan for
@@ -300,6 +315,23 @@ INT8_HEAD_ROWS_ENV = "E4B_INT8_HEAD_ROWS"
 # resolve the default off, recorded, never a crash; an explicit ``1`` still refuses them. ``0`` opts out.
 INT8_HEAD_BW_DEFAULT_FAMILIES: dict = {
     "qwen3_moe": ((151936, 2048),),   # e4b.serve.p153.int8-head-bw.qwen3.5090.2026-10-19 (bench/p153/RESULTS-p153.md)
+}
+# Lane P232's default for ``E4B_INT8_HEAD_ROWS`` (bench/p232/RESULTS-p232.md): an UNSET knob resolves to the row bound
+# listed here for a model_type and its output head's [N, K] shape, and to ``1`` (one row on K36, more on F.linear)
+# everywhere else, with the reason recorded. qwen3_moe at 151936 x 2048 takes 8 on P232's served read (p232-5090-1:
+# FLIP_ROWS_8, TRIPWIRE none; with the head on its int8 grid, 2, 4 and 8 requests decode 1.0311x, 1.0243x and 1.0165x
+# as fast as 1, the min of four ABBA pairs at each; inside P153's quality bars at every group size, NLL gap at most
+# 0.0001 nats, argmax 3064-3066 of 3072), after P229's captured microbench of the head call (GO_ROWS_8: K37's
+# linear_i8 at a median 0.51 of F.linear's time at 2, 4 and 8 rows). Outputs change at 2..8 requests: K37 and F.linear
+# round differently within bf16's output rounding of the same grid. Quality was read on Qwen3-30B-A3B; same-shape
+# checkpoints inherit the default unread. The default holds only where the int8 head is on (E4B_INT8_HEAD_BW resolved
+# 1, so the head is an Int8HeadLinear), K37 imports (grouped-nf4-gemm 0.49.0 or later) and speculative decode is off
+# (E4B_PAGED_SPEC: its gate and draft were read with the head on F.linear); otherwise it resolves to 1, recorded,
+# never a crash or a refusal. An explicit 2..8 keeps every refusal; ``1`` opts out.
+INT8_HEAD_ROWS_DEFAULT_FAMILIES: dict = {
+    # e4b.serve.p232.int8-head-rows.qwen3.5090.2026-10-24 (bench/p232/RESULTS-p232.md), after
+    # e4b.kernel.p229.int8-head-rows.qwen3.5090.2026-10-23 (bench/p229/RESULTS-p229.md)
+    "qwen3_moe": {(151936, 2048): 8},
 }
 _FUSION_WARNED: set = set()
 
@@ -390,24 +422,13 @@ def resolve_max_seqs(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
     output."""
     if str(cfg.max_seqs_requested).strip().lower() != "auto":
         return {}
-    from .serve_recipe import MAX_SEQS_AUTO_WIDTHS, MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS, ServeSetup, choose_max_seqs
-    env = os.environ.get
+    from .serve_recipe import choose_max_seqs
     try:
-        from .arch.topology import describe_moe
-        topo = describe_moe(model_config)
+        topo, setup, widths = _sizing_inputs(cfg, model_config)
     except Exception as e:                                 # a config describe_moe cannot read: today's default
         res = {"max_seqs": 16, "free_bytes": free_bytes, "candidates": [],
                "why": f"the model's topology could not be described ({type(e).__name__}: {str(e)[:160]}): 16"}
     else:
-        req = cfg.buckets_requested if cfg.buckets_requested != "default" else ""
-        b = _buckets_env(req)
-        setup = ServeSetup(placement=cfg.placement, max_seqs=16, max_tokens_per_seq=cfg.max_tokens_per_seq,
-                           chunk_tokens=cfg.chunk_tokens, graphs=cfg.graphs, buckets=b, kv_groups=cfg.kv_groups,
-                           prefill_graph=cfg.prefill_graph, vram_gb=cfg.vram_gb, dram_gb=cfg.dram_gb,
-                           hot_rows=cfg.hot_rows, bulk_kv=cfg.bulk_kv,
-                           exp_int4="1" in (env("E4B_SERVE_EXP_INT4", "0"), env("E4B_SERVE_EXP_INT4_CALIB", "0")),
-                           attn_int4="1" in (env("E4B_SERVE_ATTN_INT4", "0"), env("E4B_SERVE_ATTN_INT4_CALIB", "0")))
-        widths = MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS if str(b).strip().lower() == "auto" else MAX_SEQS_AUTO_WIDTHS
         # the int8 head's codes and scales arrive after the slots are sized: priced in whenever the knob resolves on
         res = choose_max_seqs(topo, setup, free_bytes, widths=widths,
                               extra_bytes=int8_head_copy_bytes(cfg, model_config))
@@ -416,6 +437,58 @@ def resolve_max_seqs(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
     cfg.validate()
     cfg.max_seqs_resolution = res
     log(f"E4B_PAGED_MAX_SEQS=auto -> {cfg.max_seqs} ({res.get('why')}); buckets {list(cfg.buckets)}")
+    return res
+
+
+def _sizing_inputs(cfg: "PagedServeConfig", model_config):
+    """The model's topology, the :class:`~.serve_recipe.ServeSetup` that prices this server, and the widths
+    ``E4B_PAGED_MAX_SEQS=auto`` tries: what :func:`resolve_max_seqs` and :func:`resolve_kv_pool` size from. Raises when
+    the topology cannot be described."""
+    from .arch.topology import describe_moe
+    from .serve_recipe import MAX_SEQS_AUTO_WIDTHS, MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS, ServeSetup
+    env = os.environ.get
+    topo = describe_moe(model_config)
+    req = cfg.buckets_requested if cfg.buckets_requested != "default" else ""
+    b = _buckets_env(req)
+    setup = ServeSetup(placement=cfg.placement, max_seqs=16, max_tokens_per_seq=cfg.max_tokens_per_seq,
+                       chunk_tokens=cfg.chunk_tokens, graphs=cfg.graphs, buckets=b, kv_groups=cfg.kv_groups,
+                       prefill_graph=cfg.prefill_graph, vram_gb=cfg.vram_gb, dram_gb=cfg.dram_gb,
+                       hot_rows=cfg.hot_rows, bulk_kv=cfg.bulk_kv,
+                       exp_int4="1" in (env("E4B_SERVE_EXP_INT4", "0"), env("E4B_SERVE_EXP_INT4_CALIB", "0")),
+                       attn_int4="1" in (env("E4B_SERVE_ATTN_INT4", "0"), env("E4B_SERVE_ATTN_INT4_CALIB", "0")))
+    widths = MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS if str(b).strip().lower() == "auto" else MAX_SEQS_AUTO_WIDTHS
+    return topo, setup, widths
+
+
+def resolve_kv_pool(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
+    """``E4B_PAGED_KV_POOL=shared`` (lever G3, ``bench/kv-pool-g/DESIGN.md``): size the slots (under
+    ``E4B_PAGED_MAX_SEQS=auto``; an explicit width is kept) and the KV pool's rows from the device's free memory before
+    any weight is loaded, by :func:`~.serve_recipe.size_shared_pool`, then re-derive the decode buckets for the width.
+    Sets ``cfg.kv_pool_rows`` (None: the claim-all size) and returns the record /health reports. The claim-all pool
+    (the default) never comes here."""
+    if cfg.kv_pool != "shared":
+        return {}
+    from .serve_recipe import size_shared_pool
+    auto = str(cfg.max_seqs_requested).strip().lower() == "auto"
+    try:
+        topo, setup, widths = _sizing_inputs(cfg, model_config)
+    except Exception as e:                                 # a config describe_moe cannot read: the claim-all pool
+        res = {"max_seqs": 16 if auto else cfg.max_seqs, "pool_rows": None, "free_bytes": free_bytes,
+               "candidates": [], "why": f"the model's topology could not be described "
+                                        f"({type(e).__name__}: {str(e)[:160]}): the claim-all pool"}
+    else:
+        res = size_shared_pool(topo, setup, free_bytes, widths=widths if auto else (cfg.max_seqs,),
+                               extra_bytes=int8_head_copy_bytes(cfg, model_config))
+    cfg.max_seqs = int(res["max_seqs"])
+    cfg.kv_pool_rows = res.get("pool_rows")
+    cfg.buckets = _buckets_env(cfg.buckets_requested if cfg.buckets_requested != "default" else "")
+    cfg.validate()
+    if auto:
+        cfg.max_seqs_resolution = res
+    cfg.kv_pool_resolution = res
+    log(f"E4B_PAGED_KV_POOL=shared -> {cfg.max_seqs} slots, "
+        f"{'the claim-all pool' if cfg.kv_pool_rows is None else f'{cfg.kv_pool_rows} pool rows'} ({res.get('why')}); "
+        f"buckets {list(cfg.buckets)}")
     return res
 
 
@@ -570,10 +643,28 @@ def resolve_attn_split_cap(value: str, model_type) -> tuple:
 
 def apply_attn_split_cap(kv, cfg, model_type) -> tuple:
     """``(cap, source)``, resolved from ``cfg.attn_split_cap`` for ``model_type`` and set on ``kv.split_cap``: the one
-    place :func:`build_engine` turns the knob (or its per-family default) into what the KV hands the kernel."""
+    place :func:`build_engine` turns the knob (or its per-family default) into what the KV hands the kernel. Under
+    ``E4B_ATTN_SPLIT_FIXED`` the fixed split replaces any cap, a per-family default included (an explicit cap beside it
+    is refused by the config), so the cap is ``(None, "superseded: E4B_ATTN_SPLIT_FIXED")``."""
+    fixed = getattr(cfg, "attn_split_fixed", None)
+    kv.split_fixed = fixed
+    if fixed:
+        kv.split_cap = None
+        return None, f"superseded: {ATTN_SPLIT_FIXED_ENV}"
     cap, source = resolve_attn_split_cap(getattr(cfg, "attn_split_cap", FUSION_UNSET), model_type)
     kv.split_cap = cap
     return cap, source
+
+
+def _attn_split_fixed_env(value: str):
+    """``E4B_ATTN_SPLIT_FIXED`` as the server reads it: unset, empty or ``0`` is off (None); ``1..32`` is the fixed split
+    count S. Anything else is refused."""
+    v = (value or "").strip()
+    if not v or (v.isdigit() and int(v) == 0):
+        return None
+    if v.isdigit() and int(v) <= 32:
+        return int(v)
+    raise ValueError(f"{ATTN_SPLIT_FIXED_ENV}={value!r}: expected 0 (off) or a fixed split count 1..32")
 
 
 def _int8_head_bw_env(value: str) -> str:
@@ -588,9 +679,13 @@ def _int8_head_bw_env(value: str) -> str:
     raise ValueError(f"{INT8_HEAD_BW_ENV}={value!r}: expected '0' or '1' (unset: per family and head shape, lane P153)")
 
 
-def _int8_head_rows_env(value: str) -> int:
-    """``E4B_INT8_HEAD_ROWS`` as the server reads it (:func:`~.engines.int8_head_bw.rows_value`): 1 to 8, unset 1."""
+def _int8_head_rows_env(value: str):
+    """``E4B_INT8_HEAD_ROWS`` as the server reads it: ``1`` to ``8`` pass through as ints
+    (:func:`~.engines.int8_head_bw.rows_value`); unset or empty is ``default``, resolved per family and head shape at
+    the build (:data:`INT8_HEAD_ROWS_DEFAULT_FAMILIES`, lane P232). Anything else is refused."""
     from .engines.int8_head_bw import rows_value
+    if not (value or "").strip():
+        return FUSION_UNSET
     return rows_value(value)
 
 
@@ -639,6 +734,58 @@ def apply_int8_head_bw_resolved(model, cfg, *, gemv=None, quantize=None) -> dict
             log(f"{INT8_HEAD_BW_ENV}: the int8 head holds {rec['copy_bytes']} B but E4B_PAGED_MAX_SEQS=auto priced "
                 f"{rec['priced_bytes']} B for it (the config and the head disagree); the width may be too wide")
     return rec
+
+
+def resolve_int8_head_rows(value, model_type, head_shape, *, head_off=None, spec=False, kernel_error=None) -> tuple:
+    """``(rows, source)``: an explicit ``1`` to ``8`` passes through (``explicit``; above 1 the route still refuses a
+    head that is not the int8 head or a package without K37, and the config refuses it with ``E4B_PAGED_SPEC``).
+    ``default`` resolves to the listed bound (``default-allowlisted``) only on a ``model_type`` in
+    :data:`INT8_HEAD_ROWS_DEFAULT_FAMILIES` whose head has a listed shape and is on its int8 grid (no ``head_off``),
+    without speculative decode (``spec``) and with K37 importable (no ``kernel_error``); otherwise to ``1`` with
+    ``default-off: <why>``, never a refusal."""
+    if value != FUSION_UNSET:
+        return value, "explicit"
+    by_shape = INT8_HEAD_ROWS_DEFAULT_FAMILIES.get(model_type)
+    if by_shape is None:
+        return 1, f"default-off: no read licenses model_type {model_type!r}"
+    shape = tuple(int(d) for d in head_shape) if head_shape is not None else None
+    if shape not in by_shape:
+        return 1, (f"default-off: head shape {list(shape) if shape else None} is not one read on {model_type} "
+                   f"({', '.join(str(list(s)) for s in by_shape)})")
+    if head_off:
+        return 1, f"default-off: {head_off}"
+    if spec:
+        return 1, "default-off: E4B_PAGED_SPEC is on: its gate and draft were read with the head on F.linear"
+    if kernel_error:
+        return 1, f"default-off: {kernel_error}"
+    return int(by_shape[shape]), "default-allowlisted"
+
+
+def apply_int8_head_rows_resolved(model, cfg, int8_head=None, *, linear=None, plan=None) -> dict:
+    """The route's record (:func:`~.engines.int8_head_bw.apply_int8_head_rows`) with its ``source``, resolved from
+    ``cfg.int8_head_rows`` for this model's family and output head after the swap (``int8_head``, the record
+    :func:`apply_int8_head_bw_resolved` returned, names why the head is off): the one place :func:`build_engine` turns
+    the knob (or its per-family default) into the route."""
+    from .engines import int8_head_bw as ih
+
+    value = getattr(cfg, "int8_head_rows", FUSION_UNSET)
+    head = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
+    shape = tuple(head.weight.shape) if getattr(head, "weight", None) is not None else None
+    model_type = getattr(getattr(model, "config", None), "model_type", None)
+    unset = value == FUSION_UNSET
+    head_off = None
+    if not isinstance(head, ih.Int8HeadLinear):      # the swap is the truth; its record says why it did not happen
+        rec = int8_head or {}
+        head_off = (f"the int8 head is off ({INT8_HEAD_BW_ENV} resolved {rec.get('mode', '0')}: "
+                    f"{rec.get('source', 'not applied')})")
+    spec = str(getattr(cfg, "spec", "off") or "off") != "off"
+    # K37 is imported only where the default could take it (a listed family, the head on, no spec): an unset knob never
+    # imports dense_i8 on another family
+    listed = model_type in INT8_HEAD_ROWS_DEFAULT_FAMILIES
+    probe = unset and linear is None and head_off is None and not spec and listed
+    rows, source = resolve_int8_head_rows(value, model_type, shape, head_off=head_off, spec=spec,
+                                          kernel_error=ih.rows_kernel_missing() if probe else None)
+    return {**ih.apply_int8_head_rows(model, rows, linear=linear, plan=plan), "source": source}
 
 
 def int8_head_copy_bytes(cfg, model_config) -> int:
@@ -721,7 +868,10 @@ class PagedServeConfig:
     max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
     prefill_every: int = 1               # E4B_PAGED_PREFILL_EVERY: while decoding, prefill on at most 1 step in N
     loaded_chunk_tokens: int = 0         # E4B_PAGED_LOADED_CHUNK_TOKENS: while decoding, chunk + budget cap; 0 = off
-    kv_pool: str = "claim-all"           # E4B_PAGED_KV_POOL: claim-all (default) / shared (lever G1 + G2, opt-in)
+    kv_pool: str = "claim-all"           # E4B_PAGED_KV_POOL: claim-all (default) / shared (levers G1-G3, opt-in)
+    kv_pool_rows: Optional[int] = None   # shared only: the pool's rows per layer, sized by resolve_kv_pool (G3); None
+                                         # = the claim-all size. Derived, never read from the environment
+    kv_pool_resolution: dict = field(default_factory=dict)   # resolve_kv_pool's record, for /health
     graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
     prefill_graph: str = "auto"          # E4B_PAGED_PREFILL_GRAPH: auto (default) / 1 / 0 (_prefill_graph_env)
     last_logits: bool = False            # E4B_PAGED_LAST_LOGITS: opt-in prefill head at one position
@@ -735,9 +885,11 @@ class PagedServeConfig:
     fuse_qkv: bool = False               # E4B_PAGED_FUSE_QKV not 0 (fuse_qkv applies the env-gated folds itself)
     prefill_glue: str = FUSION_UNSET     # E4B_FUSE_PREFILL_GLUE: 0 | 1, or "default" when unset (per family, P130)
     attn_split_cap: str = FUSION_UNSET   # E4B_ATTN_SPLIT_CAP: 0 | 1..32, or "default" when unset (per family, P143)
+    attn_split_fixed: int | None = None  # E4B_ATTN_SPLIT_FIXED: None (off) or a fixed split count 1..32 (opt-in)
     dense_gemv_bw: str = "0"             # E4B_DENSE_GEMV_BW: 0 | 1 (P151; grouped-nf4-gemm K35's gemv_bf16_bw)
     int8_head_bw: str = FUSION_UNSET     # E4B_INT8_HEAD_BW: 0 | 1, or "default" when unset (per family and head shape, P153)
-    int8_head_rows: int = 1              # E4B_INT8_HEAD_ROWS: 1 (today) | 2..8, the int8 head's rows on K37 (K2b)
+    int8_head_rows: int | str = FUSION_UNSET   # E4B_INT8_HEAD_ROWS: 1..8, or "default" when unset (per family and head
+                                               # shape, P232): the int8 head's rows on K37 (K2b)
     fusion_modes: dict = field(default_factory=dict)   # FUSION_KNOBS -> auto | 0 | 1 (_fusion_env), or "default" when
                                                        # unset (resolved per family at the build); a knob not named keeps
                                                        # its old reading: fuse_qkv, or the fold's own env var
@@ -759,6 +911,7 @@ class PagedServeConfig:
     adapter_allow_unverified_arena: bool = False   # E4B_PAGED_ADAPTER_ALLOW_UNVERIFIED_ARENA=1: refusal 3's opt-in
     adapter_accept_unverified_base: frozenset = frozenset()   # E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE: named scopes
     adapter_accept_base_mismatch: frozenset = frozenset()     # E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH: refusal 12's opt-in
+    merged_arena: bool = False           # E4B_PAGED_MERGED_ARENA=1: refusal 13's opt-in (a merged arena, its own adapter)
     adapter_id: str = ""                 # set by the build: sha256 of adapter.safetensors (the served name's suffix)
     device: str = "cuda"
 
@@ -799,6 +952,7 @@ class PagedServeConfig:
             fusion_modes=modes,
             prefill_glue=_prefill_glue_env(env(PREFILL_GLUE_ENV, "")),
             attn_split_cap=_attn_split_cap_env(env(ATTN_SPLIT_CAP_ENV, "")),
+            attn_split_fixed=_attn_split_fixed_env(env(ATTN_SPLIT_FIXED_ENV, "")),
             dense_gemv_bw=env(DENSE_GEMV_BW_ENV, "0").strip() or "0",
             int8_head_bw=_int8_head_bw_env(env(INT8_HEAD_BW_ENV, "")),
             int8_head_rows=_int8_head_rows_env(env(INT8_HEAD_ROWS_ENV, "")),
@@ -820,6 +974,7 @@ class PagedServeConfig:
             adapter_allow_unverified_arena=_zero_one(ADAPTER_ALLOW_ARENA_ENV, env(ADAPTER_ALLOW_ARENA_ENV, "0")),
             adapter_accept_unverified_base=parse_accept_unverified_base(env(ADAPTER_ACCEPT_BASE_ENV, "")),
             adapter_accept_base_mismatch=parse_accept_base_mismatch(env(ACCEPT_BASE_MISMATCH_ENV, "")),
+            merged_arena=_zero_one(MERGED_ARENA_ENV, env(MERGED_ARENA_ENV, "0")),
             device=env("E4B_PAGED_DEVICE", "cuda"),
         )
         cfg.validate()
@@ -847,6 +1002,9 @@ class PagedServeConfig:
             self.buckets = default_buckets(self.max_seqs)
         if not self.buckets or min(self.buckets) < 1:
             raise ValueError(f"E4B_PAGED_BUCKETS must be positive ints, got {self.buckets}")
+        if self.attn_split_fixed and self.attn_split_cap != FUSION_UNSET:
+            raise ValueError(f"{ATTN_SPLIT_FIXED_ENV}={self.attn_split_fixed} and {ATTN_SPLIT_CAP_ENV}="
+                             f"{self.attn_split_cap} both set the attention decode's split count: unset one of them")
         usable = usable_buckets(self.max_seqs, self.buckets)
         if tuple(self.buckets) != usable:
             # a bucket above max_seqs never runs; it costs a graph and scratch slots, and on a hybrid model served for
@@ -861,6 +1019,12 @@ class PagedServeConfig:
             log(f"bucket {max(self.buckets)}: decode rows above 64 leave the T=1 folds; nothing has read them there")
         if self.placement not in ("all-vram", "solver"):
             raise ValueError(f"E4B_PAGED_PLACEMENT must be all-vram or solver, got {self.placement!r}")
+        if self.graphs and self.placement == "solver":
+            raise ValueError("E4B_PAGED_GRAPHS=1 at E4B_PAGED_PLACEMENT=solver would capture nothing: a tiered MoE layer "
+                             "syncs on the host every step (hot_row.nonzero before any branch on the routing), so every "
+                             "bucket's capture raises and runs eagerly. Use E4B_PAGED_GRAPHS=auto or 0 (eager at solver); "
+                             "if every expert fits in VRAM, no layer is tiered, so use E4B_PAGED_PLACEMENT=all-vram for "
+                             "graphs")
         if self.kv_groups != "auto":
             int(self.kv_groups)
         if self.max_queue < 0:
@@ -882,15 +1046,16 @@ class PagedServeConfig:
             if self.decode_lookahead:
                 raise ValueError("E4B_PAGED_SPEC and E4B_PAGED_DECODE_LOOKAHEAD do not combine: each speculative step "
                                  "reads its accepted tokens back before the next is planned")
-            if self.int8_head_rows > 1:
+            # an EXPLICIT bound above 1 only: unset ("default") resolves to 1 under spec at the build, recorded
+            if self.int8_head_rows != FUSION_UNSET and self.int8_head_rows > 1:
                 raise ValueError(f"E4B_PAGED_SPEC and {INT8_HEAD_ROWS_ENV}={self.int8_head_rows} do not combine until "
                                  "a read covers them: SD2's gate and draft were read with the head on F.linear at 2..4 "
-                                 f"rows, and K2b's served read is plain decode ({INT8_HEAD_ROWS_ENV}=1 or "
-                                 "E4B_PAGED_SPEC=off)")
+                                 f"rows, and K2b's served read (P232) is plain decode ({INT8_HEAD_ROWS_ENV} unset or "
+                                 "1, or E4B_PAGED_SPEC=off)")
         if not self.adapter and (self.adapter_allow_unverified_arena or self.adapter_accept_unverified_base
-                                 or self.adapter_accept_base_mismatch):
-            raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} / {ACCEPT_BASE_MISMATCH_ENV} are set "
-                             f"but E4B_PAGED_ADAPTER is not")
+                                 or self.adapter_accept_base_mismatch or self.merged_arena):
+            raise ValueError(f"{ADAPTER_ALLOW_ARENA_ENV} / {ADAPTER_ACCEPT_BASE_ENV} / {ACCEPT_BASE_MISMATCH_ENV} / "
+                             f"{MERGED_ARENA_ENV} are set but E4B_PAGED_ADAPTER is not")
 
     @property
     def prefill_budget(self) -> int:
@@ -1278,6 +1443,50 @@ def _routed_topk(cfg) -> int:
     if v is None:
         raise ValueError("cannot find the routed top-k in this config")
     return v
+
+
+HOT_ROWS_ENV = "E4B_PAGED_HOT_ROWS"
+
+
+def hot_rows_floor(manifest: dict, n_layers: int, n_experts: int, top_k: int, chunk_tokens: int, max_seqs: int) -> dict:
+    """``E4B_PAGED_HOT_ROWS``'s hard floor at this placement (``nvme_experts.enable_nvme_residency``, "Hard floor"): the
+    cold tier's pinned rows must hold every UNIQUE NVMe-tier expert one forward routes, because the cold path fetches
+    them in one ``ColdTier.ensure`` request and protects each slot from eviction; fewer rows raise mid-request. VRAM-hot
+    experts never reach the tier, and neither do DRAM experts (computed in place, or moved to the GPU from the DRAM
+    stacks, never through the tier: ``hybrid._dram_contrib_inner`` and ``_dram_on_gpu``).
+
+    One forward carries at most ``F = max(chunk_tokens, max_seqs)`` tokens at this server: a prefill chunk is its own
+    forward (``paged_runner.run_prefill``), and decode at a tiered placement is eager, one token per live sequence
+    (forced graphs, and so speculative decode and lookahead, are refused at ``solver``). So a layer's request is at most
+    ``min(F * top_k, its NVMe-tier experts)``, and the floor is the largest of those over the layers. At ``all-vram``
+    no expert is on NVMe and the floor is 0. ``manifest`` is :func:`~.engines.placement.solve_placement`'s, before
+    its layers are renumbered to arena ids (layers ``0..n_layers-1``).
+
+    The floor assumes the tier runs WITHOUT prefetch, as :func:`build_engine` builds it (``enable_hybrid_tier``'s
+    ``prefetch`` at its default, off). With prefetch on, the next layer's speculative rows share the same global
+    slots, so one forward could need both layers' rows and this floor would under-count."""
+    tokens = max(int(chunk_tokens), int(max_seqs))
+    nvme = [0] * int(n_layers)
+    for lay, _e in manifest["tiers"].get("nvme") or []:
+        nvme[int(lay)] += 1
+    worst = max(range(len(nvme)), key=lambda i: nvme[i]) if nvme else None
+    worst_n = nvme[worst] if worst is not None else 0
+    return {"floor": min(tokens * int(top_k), worst_n), "tokens_per_forward": tokens, "chunk_tokens": int(chunk_tokens),
+            "max_seqs": int(max_seqs), "top_k": int(top_k), "n_experts": int(n_experts), "worst_layer": worst,
+            "worst_layer_nvme_experts": worst_n}
+
+
+def hot_rows_refusal(hot_rows: int, rec: dict) -> str | None:
+    """None when ``hot_rows`` meets :func:`hot_rows_floor`'s floor, else the startup refusal, naming the knob, the floor
+    and every input to it. No silent raise: the rows are pinned host RAM, the operator's choice."""
+    if int(hot_rows) >= rec["floor"]:
+        return None
+    return (f"{HOT_ROWS_ENV}={hot_rows} is below its floor {rec['floor']} at this placement: one forward carries up to "
+            f"F = max(E4B_PAGED_CHUNK_TOKENS {rec['chunk_tokens']}, max_seqs {rec['max_seqs']}) = {rec['tokens_per_forward']} "
+            f"tokens x top_k {rec['top_k']} = {rec['tokens_per_forward'] * rec['top_k']} routed rows, and MoE layer "
+            f"{rec['worst_layer']} has {rec['worst_layer_nvme_experts']} of its {rec['n_experts']} experts on the NVMe tier, "
+            f"so a forward can ask the cold tier for {rec['floor']} unique rows at once and would fail mid-request. Set "
+            f"{HOT_ROWS_ENV} >= {rec['floor']} (each row is pinned host RAM), or lower E4B_PAGED_CHUNK_TOKENS.")
 
 
 def _kv_geometry(cfg):
@@ -1766,7 +1975,7 @@ def _adapter_refusals(adapter, cfg: PagedServeConfig, arena_index, *, served_rev
                              allow_unverified_arena=cfg.adapter_allow_unverified_arena,
                              accept_unverified_base=cfg.adapter_accept_unverified_base,
                              check_served_revision=check_served_revision, served_model=cfg.model,
-                             spec=cfg.spec)
+                             spec=cfg.spec, merged_opt_in=cfg.merged_arena)
 
 
 def _raise_adapter_refusals(refusals) -> None:
@@ -1785,16 +1994,26 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     for path in (cfg.arena, cfg.arena + ".index.json", cfg.calib):
         if not os.path.exists(path):
             raise FileNotFoundError(path)
+    # The arena's index, read for EVERY config before any weight is read: a merged arena (bench/d0/ARENA-DESIGN.md)
+    # is refusal 13 without its own adapter, and the opt-in without a merged arena is a loose flag
+    from .merged_arena import is_merged, merged_arena_refusals
+    with open(cfg.arena + ".index.json", encoding="utf-8") as f:
+        arena_index = json.load(f)
+    if cfg.merged_arena and not is_merged(arena_index):
+        raise ValueError(f"{MERGED_ARENA_ENV}=1 but {cfg.arena} is not a merged arena")
     # One trained adapter (E4B_PAGED_ADAPTER): verified (refusal 7) and checked against this server (refusals 1-6, 8,
-    # 9) before any weight is read; the served commit is compared once the loader has resolved it, below
-    adapter = adapter_info = arena_index = None
+    # 9, 13) before any weight is read; the served commit is compared once the loader has resolved it, below
+    adapter = adapter_info = None
     if cfg.adapter:
         from .adapter_dir import verify_adapter_dir
         adapter = verify_adapter_dir(cfg.adapter)
-        with open(cfg.arena + ".index.json", encoding="utf-8") as f:
-            arena_index = json.load(f)
         _raise_adapter_refusals(_adapter_refusals(adapter, cfg, arena_index, served_revision=None,
                                                   check_served_revision=False))
+    else:
+        _raise_adapter_refusals(merged_arena_refusals(None, arena_index, opt_in=cfg.merged_arena))
+    # the merge block refusal 13 has matched to the adapter (None: a base arena); the loader, the fingerprint check
+    # and the hybrid tier read a merged arena only when handed it
+    merge = arena_index["merge"] if is_merged(arena_index) else None
     # E4B_K25_LUT's explicit value, checked before the load: a misconfigured knob fails at startup, never on the first
     # request (the per-family default is resolved below, once the model's config is read)
     from .engines.hot_residency import _k25_lut_raw, _k25_plan_raw, resolve_k25_lut, resolve_k25_plan
@@ -1835,13 +2054,16 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # E4B_K25_PLAN: unset, qwen3_moe takes c1 where its decode resolved to prmt (lane P161), every other case today; an
     # explicit c1 runs only under the decode it was read with
     k25_plan = resolve_k25_plan(k25_lut, model_type=getattr(model_config, "model_type", None))
-    if str(cfg.max_seqs_requested).strip().lower() == "auto":
+    if str(cfg.max_seqs_requested).strip().lower() == "auto" or cfg.kv_pool == "shared":
         # sized before any weight is read: the estimate's device total includes the weights
         free = (torch.cuda.mem_get_info(torch.device(cfg.device))[0]
                 if str(cfg.device).startswith("cuda") and torch.cuda.is_available() else None)
-        resolve_max_seqs(cfg, model_config, free)
+        if cfg.kv_pool == "shared":
+            resolve_kv_pool(cfg, model_config, free)       # lever G3: the slots (under auto) and the pool's rows
+        else:
+            resolve_max_seqs(cfg, model_config, free)
     model, _ = load_moe_4bit_streaming(cfg.model, cfg.device, torch.bfloat16, r=8, alpha=16, quant_type="nf4",
-                                       arena=cfg.arena, revision=cfg.revision or None)
+                                       arena=cfg.arena, revision=cfg.revision or None, merged_arena=merge)
     model.eval()
     if adapter is not None:
         # merged right after the load: before the levers, the fusions, the GEMV routes and graph capture, so every one of
@@ -1852,7 +2074,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         # the served base's qfp-v1 against the /2 manifest's (refusals 11 and 12): after the load, BEFORE the merge
         # (which rewrites the attention weights) and before any lever, fusion or route touches a module
         fp_refusals, fingerprints = fingerprint_check(adapter, model, cfg.arena,
-                                                      accept_base_mismatch=cfg.adapter_accept_base_mismatch)
+                                                      accept_base_mismatch=cfg.adapter_accept_base_mismatch,
+                                                      merge=merge)
         _raise_adapter_refusals(fp_refusals)
         for scope, row in fingerprints.items():
             log(f"adapter fingerprint {scope}: {row['status']} (qfp-v1 {row['served'][:16]} served, "
@@ -1868,7 +2091,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                         "merge": report.to_dict(), "base_match": base_match(adapter, fingerprints=fingerprints),
                         "fingerprints": fingerprints,
                         "accepted_unverified_base": sorted(cfg.adapter_accept_unverified_base),
-                        "accepted_base_mismatch": sorted(cfg.adapter_accept_base_mismatch)}
+                        "accepted_base_mismatch": sorted(cfg.adapter_accept_base_mismatch),
+                        "merged_arena": merge}
         log(f"adapter {adapter.adapter_id[:12]}: merged {report.merged} attention projections (scale {adapter.scale:g}, "
             f"max merge error {report.to_dict()['max_err']:.3g}); served as {adapter_info['served_name']!r}")
     mods = target_modules(model)
@@ -1884,12 +2108,18 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         pairs = sorted(tuple(pp) for t in ("vram", "dram", "nvme") for pp in man["tiers"][t])
         man["tiers"] = {"vram": [list(pp) for pp in pairs], "dram": [], "nvme": []}
         man["masses"] = {"vram_frac": 1.0, "dram_frac": 0.0, "nvme_frac": 0.0}
+    # the cold tier's hard floor, refused at startup by name rather than mid-request (P233 shake-1: solver at the
+    # defaults asked for 95 unique rows of hot_rows 64); before the tier pins anything, on the solver's 0..L-1 layers
+    hot_floor = hot_rows_floor(man, L, E, k, cfg.chunk_tokens, cfg.max_seqs)
+    why = hot_rows_refusal(cfg.hot_rows, hot_floor)
+    if why:
+        raise ValueError(why)
     # the arena and the placement are keyed by the arena's layer ids; the solver numbered its layers 0..L-1
     ids = arena_layer_ids(cfg.arena, L)
     if ids != list(range(L)):
         man["tiers"] = {t: [[ids[int(lay)], int(e)] for lay, e in pairs] for t, pairs in man["tiers"].items()}
     n = enable_hybrid_tier(model, cfg.arena, man, hot_rows=cfg.hot_rows, threads=0, pool=True,
-                           dispatch_diet=False, collapse_resident=True, layers=ids)
+                           dispatch_diet=False, collapse_resident=True, layers=ids, merged_arena=merge)
     if n != L:
         raise RuntimeError(f"enable_hybrid_tier patched {n}/{L} MoE layers")
     levers = _apply_levers(model, cfg, tok)
@@ -1911,10 +2141,10 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # (unset: on for qwen3_moe at the head shape P153 read, else off with the reason recorded in info["int8_head_bw"])
     from .engines.int8_head_bw import engagement as int8_head_engagement
     int8_head = apply_int8_head_bw_resolved(model, cfg)
-    # K2b: the int8 head's 2..value rows on K37's linear_i8, before any capture (unset: 1, nothing imported); refused by
-    # name when the head did not resolve to int8 or the package lacks K37
-    from .engines.int8_head_bw import apply_int8_head_rows
-    int8_head_rows = apply_int8_head_rows(model, getattr(cfg, "int8_head_rows", 1))
+    # K2b: the int8 head's 2..value rows on K37's linear_i8, before any capture. Unset: 8 for qwen3_moe at the head
+    # shape P232 read when the head is on, K37 imports and spec is off, else 1 with the reason recorded in
+    # info["int8_head_bw"]["rows"]; an explicit 2..8 is refused by name when the head is off or the package lacks K37
+    int8_head_rows = apply_int8_head_rows_resolved(model, cfg, int8_head)
 
     # proof of execution, the lanes' census (serve_stack.build_served_model) + their refusal rule
     try:
@@ -1932,11 +2162,16 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         raise RuntimeError("int4 attention requested but no projection is Int4Linear")
     if 0 < int4_layers < L:
         log(f"WARNING int4 expert stores on {int4_layers}/{L} MoE layers -- a partial stack; see /health")
-    # E4B_NF4_SMALLM_BW (opt-in; serving roadmap lever B): 2..8-token calls on the NF4 collapse take K33 per row.
-    # Resolved after the levers built any int4 store and before any graph is captured; refused here where it cannot
-    # engage, never left to route silently
+    # E4B_NF4_SMALLM_BW (serving roadmap lever B): calls of 2..8 tokens on the NF4 collapse take K33 per row. Set to 1 on
+    # any family; unset, the per-family default (lane P234: mixtral at 2..4 tokens, buckets 2 and 4); 0 is off.
+    # Resolved after the levers built any int4 store and before any graph is captured; an explicit 1 is refused here
+    # where it cannot engage, and the default stays off there, never left to route silently
     from .engines.hot_residency import resolve_nf4_smallm_bw
-    nf4_smallm_bw = resolve_nf4_smallm_bw(mods, cfg.device)
+    _mc = model_config if model_config is not None else getattr(model, "config", None)
+    _tc = _mc.get_text_config() if hasattr(_mc, "get_text_config") else _mc
+    nf4_smallm_bw = resolve_nf4_smallm_bw(mods, cfg.device, model_type=(
+        getattr(model_config, "model_type", None) or getattr(getattr(model, "config", None), "model_type", None)),
+        routing=(getattr(_tc, "num_local_experts", None), getattr(_tc, "num_experts_per_tok", None)))
 
     hkv, hd = _kv_geometry(model.config)
     spec_k = cfg.spec_k if cfg.spec != "off" else 0
@@ -1945,7 +2180,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # a hybrid model's linear-attention layers keep no K/V: the pool holds its attention layers only
     kv = Fp8PagedKV(kv_layers(model, decoder_layers(model.config)), hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
-                    batched_append=True, device=cfg.device, scratch_slots=scratch, alias_slots=spec_k)
+                    batched_append=True, device=cfg.device, scratch_slots=scratch, alias_slots=spec_k,
+                    pool_rows=cfg.kv_pool_rows if cfg.kv_pool == "shared" else None)
     # P143: the attention split cap, on the KV before any decode graph is captured (a captured graph keeps its n_split)
     split_cap, split_cap_source = apply_attn_split_cap(kv, cfg, getattr(model.config, "model_type", None))
     runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits)
@@ -1969,9 +2205,9 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     if dense_lt.get("on") and torch.cuda.current_stream(torch.device(cfg.device)) != dense_lt.pop("_stream"):
         raise RuntimeError("E4B_DENSE_LT_PIN: the decode graphs were captured for a stream other than the pin's: its "
                            "one workspace must serve one stream")
-    # E4B_PAGED_KV_POOL=shared (bench/kv-pool-g/DESIGN.md): graphed slots claim blocks as they write (G1) and the
-    # scheduler admits by reserved blocks (G2). The pool keeps its claim-all size here, so the reservation never binds;
-    # sizing the pool from free memory (G3) is a separate, later change.
+    # E4B_PAGED_KV_POOL=shared (bench/kv-pool-g/DESIGN.md): graphed slots claim blocks as they write (G1), the
+    # scheduler admits by reserved blocks (G2), and the pool holds the rows free memory left (G3, resolve_kv_pool), so
+    # the reservation binds whenever the pool is smaller than its slots can reach.
     shared = cfg.kv_pool == "shared"
     if shared:
         runner.incremental_claims = True
@@ -1979,7 +2215,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                                 chunk_tokens=cfg.chunk_tokens, max_prefill_tokens_per_step=cfg.prefill_budget,
                                 lookahead=cfg.decode_lookahead, prefill_every=cfg.prefill_every,
                                 loaded_chunk_tokens=cfg.loaded_chunk_tokens,
-                                kv_blocks=(kv.B * kv.blocks_per_seq) if shared else None, block_tokens=kv.bt)
+                                kv_blocks=(kv._n_rows - kv.n_scratch) if shared else None, block_tokens=kv.bt)
     info = {"moe_layers": L, "experts": E, "top_k": k, "model_type": getattr(model.config, "model_type", None),
             "int4_expert_layers": int4_layers, "int4_store_kinds": kinds, "int4_attn_projections": int4_attn,
             "kv": {"n_kv_heads": hkv, "head_dim": hd, "k_groups": cfg.kv_groups, "scratch_slots": scratch,
@@ -1987,6 +2223,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
             "graph_status": graph_status, "spec": spec_info, "grouping": grouping, "moe_residual": moe_resid, "prefill_graph": cfg.prefill_graph, "levers_env": {k_: env(k_) for k_ in LEVER_ENV if env(k_) is not None}}
     info.update(levers)
     info.update(fusions)
+    info["hot_rows_floor"] = {**hot_floor, "hot_rows": cfg.hot_rows}
     info["fusion_modes"] = fusion_report.get("modes")
     info["fusion_sources"] = fusion_report.get("sources")
     info["fusion_report"] = fusion_report.get("folds")
@@ -1995,6 +2232,9 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # grouped-nf4-gemm's own decode_split_plan): the engagement record a served read checks
     info["attn_split_cap"] = {"cap": split_cap, "source": split_cap_source,
                               "plans": {str(b_): dict(r_) for b_, r_ in sorted(kv.split_plans.items())}}
+    # P223's follow-up: the fixed split count, and per captured bucket the split handed over and every pinned choice
+    info["attn_split_fixed"] = {"n_split": kv.split_fixed,
+                                "plans": {str(b_): dict(r_) for b_, r_ in sorted(kv.split_fixed_plans.items())}}
     # P151: what the knob swapped, and per row count which modules routed through the kernel or passed to F.linear
     # during the build's captures and warm-ups: the engagement record a served read checks
     info["dense_gemv_bw"] = {**dense_gemv, "engagement": dense_gemv_engagement(model)}
@@ -2032,6 +2272,24 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
 # ---------------------------------------------------------------------------
 # HTTP
 # ---------------------------------------------------------------------------
+
+
+def _kv_pool_health(cfg, parts):
+    """``E4B_PAGED_KV_POOL=shared`` (levers G1-G3): the pool's rows against the claim-all size, the blocks the
+    scheduler admits against, what it holds reserved and how often its queue head waited on blocks, and
+    :func:`resolve_kv_pool`'s derivation (its inputs and arithmetic). None under claim-all."""
+    if cfg.kv_pool != "shared":
+        return None
+    runner = getattr(parts, "runner", None)
+    kv = getattr(runner, "kv", None)
+    sched = getattr(parts, "scheduler", None)
+    out = {"pool_rows": getattr(kv, "_n_rows", None), "claim_all_rows": getattr(kv, "claim_all_rows", None),
+           "scratch_rows": getattr(kv, "n_scratch", None), "block_tokens": getattr(kv, "bt", None),
+           "kv_blocks": getattr(sched, "kv_blocks", None), "derivation": cfg.kv_pool_resolution or None}
+    if sched is not None and getattr(sched, "kv_blocks", None) is not None:
+        out["kv_blocks_reserved"] = sched.kv_blocks_reserved
+        out["kv_blocks_waits"] = sched.kv_blocks_waits
+    return out
 
 
 def _graph_stats(parts):
@@ -2278,7 +2536,7 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
                 "max_seqs_requested": cfg.max_seqs_requested, "max_seqs_resolution": cfg.max_seqs_resolution or None,
                 "chunk_tokens": cfg.chunk_tokens, "max_prefill_tokens_per_step": cfg.prefill_budget,
                 "prefill_every": cfg.prefill_every, "loaded_chunk_tokens": cfg.loaded_chunk_tokens,
-                "kv_pool": cfg.kv_pool,
+                "kv_pool": cfg.kv_pool, "kv_pool_sizing": _kv_pool_health(cfg, parts),
                 "graphs": cfg.graphs, "buckets": list(cfg.buckets), "buckets_requested": cfg.buckets_requested,
                 "graph_status": info.pop("graph_status", None), "graph_stats": _graph_stats(parts),
                 "placement": cfg.placement, "fuse_qkv": _fuse_qkv_health(cfg, info),

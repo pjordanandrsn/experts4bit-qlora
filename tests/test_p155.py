@@ -15,6 +15,7 @@ import subprocess
 import sys
 
 import pytest
+from guard_outcomes import expect_outcome
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 B = REPO / "bench"
@@ -365,5 +366,5 @@ def test_a_missing_lane_commit_fails_under_ci_and_skips_locally(monkeypatch, ci,
         monkeypatch.setenv("CI", ci)
     else:
         monkeypatch.delenv("CI", raising=False)
-    with pytest.raises(outcome):
+    with expect_outcome(outcome):
         _lib_at_lane()

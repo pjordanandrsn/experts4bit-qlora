@@ -211,6 +211,10 @@ and the chunked LM loss both on, the reserved peak falls 0.482 GB and the alloca
 nvidia-smi peak, 25,727 MiB, is still 1,163 MiB over an RTX 4090's total. Even with no allocator gap the allocated peak plus the CUDA
 context is about 24,735 MiB, so no arm fits. The compact delta's backward then holds the peak: its rebuilt block and that block's grad,
 0.811 GB each, live together.
+**The 4090 fit** (`e4b.train.4090-fit.field.4090.2026-10-24`, TC1 amendment 78, the fit reading on real 24 GiB cards): every LoRA delta
+width-bucketed through the compact bucketed node plus 256-token LM-loss chunks (pb1cl256) trained the field recipe's 60 steps with no
+out-of-memory error on two RTX 4090s on two machines. The least headrooms over both draws: 1,258 MiB usable minus max allocated, 586 MiB
+usable minus max reserved, and 586 MiB of memory.total unused at the fullest step. FIT for this fixture only; the levers stay opt-in.
 **e4b's own host time at the field recipe.** grouped-nf4-gemm's opt-in single-block ladder (`NF4_QLORA_SINGLE_LADDER=1`,
 grouped-nf4-gemm#513) puts the padded LoRA block's batched products on repeating shapes
 (`e4b.train.single-ladder.field.5090.2026-10-08`, TC1 amendment 70). On a host-bound box it stepped e4b's matched arm, with fp32 adapters,
@@ -687,6 +691,10 @@ reading, not a speed one.
   (4.38 → 4.21 ms) and costs the 16-row one, which the cap leaves alone.
 - **Default:** on, capped at 8, from grouped-nf4-gemm 0.37.0 (`GNF4_PDL=0` turns it off). P112, the
   first served read, closed VOID twice (`bench/p112/RESULTS-p112.md`).
+- **On the default NF4 server** (lane P230, 2026-10-23; **measured** —
+  [`bench/p230/RESULTS-p230.md`](../bench/p230/RESULTS-p230.md), `e4b.serve.p230.gnf4-pdl.qwen3-nf4.5090.2026-10-23`):
+  the shipped switch runs 1.00526× the switch off with one request (min over two pairs; 3.707 → 3.687 ms a step), with
+  identical tokens, and leaves 16 requests alone (control pairs 0.99732, 0.99959). KEEP, at the bar's edge (1.005).
 
 **The registered B=1 fused stack decodes 1.43× as fast with one request** (lane P115, Phases A and B, 2026-10-07, one
 rented RTX 5090; **measured** — [`bench/p115/RESULTS-p115.md`](../bench/p115/RESULTS-p115.md),

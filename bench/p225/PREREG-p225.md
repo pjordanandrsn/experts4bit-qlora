@@ -154,7 +154,8 @@ Every fixed phase alarm (fetch, bake, train, ref, each slot, collect) and the to
   the slowest fetch, 806 s, had no probe). A fetch timeout falls after strike-eligibility begins, so the screen must
   not be trusted to bound it.
 - **alarm(phase):** at least 1.25 x need(phase).
-- **The guard:** (the sum of the needs + install 450 + reserve 600) x 1.25 + 300 s of boot.
+- **The guard:** (the sum of the needs + install 450 + reserve 600) x 1.25 + 880 s of boot (Amendment 2; registered
+  as 300).
 
 **The invariant test** parses every alarm and NEED out of the runner's own text (never restated in the test), computes
 need() from the derivation table below, and asserts alarm >= need x 1.25 for every phase at the floors.
@@ -182,8 +183,8 @@ need() from the derivation table below, and asserts alarm >= need x 1.25 for eve
 The 1.75 margin applies to train, the reference process and the fetch only. Every measured first slot (the slowest:
 `p224-5090-2`'s 364 s at 688 rows) sits under need(slot) + need(score) at 688 rows, and `p225_derive.py`'s self-test
 checks it. The needs plus gate 60 and reduce 60 sum to 15,230 s. The guard is (15,230 + install 450 + reserve 600) x
-1.25 + 300 = 20,650 s, **5.74 h**: inside the launcher's 6 h teardown cap (the fill refuses above 5.9 h). The worst
-case is 5.74 x USD 1.05 + 66 x USD 0.011 = **USD 6.75**.
+1.25 + 880 = 21,230 s, **5.90 h** (Amendment 2; registered as + 300 = 20,650 s, 5.74 h): inside the launcher's 6 h
+teardown cap (the fill refuses above 5.9 h). The worst case is 5.897 x USD 1.05 + 66 x USD 0.011 = **USD 6.92**.
 
 **The 30-Mops pricing is CONSERVATIVE.** Every host the screen would admit, measured so far, reads 36.2 or more, so a
 need is a bound, not an expected runtime.
@@ -235,6 +236,7 @@ The paged server must prove that it serves the adapter:
 | **UNRUNNABLE** | the HOST_REFUSED cap trips a second time (8 refusals in all) | no: a lane end, no reading | no |
 | FAMILY_RULE_RETIRED (an event, not an outcome) | a fast-family host reads under 30 on the box | no | no; one log line, and the pin order changes as registered |
 | pre-create refusal | no instance existed ($0) | no | no |
+| **NOT_RUN** (Amendment 1) | the launcher's pre-flight tore down a created instance before the runner ran (no `RUN_ID`, exit file or marker); decided from the launcher's receipt before any fetch, never classified by `--classify` or the hand table, and not PRE_INSTALL_HALT | no | no; counts toward no cap, uses one id (`p225-5090-1`) |
 
 **The strike call is mechanical.** The runner writes `run/STRIKE_ELIGIBLE` once every floor has passed, just before the
 first install. On the renter side, `p225_reduce.py --classify --work W` runs on EVERY fetched box (W is the box's work
@@ -268,8 +270,9 @@ G3 (latency) and the cost are reported with every outcome that reaches the reduc
 
 ## Budget
 
-Worst per box = guard x USD 1.05/h + 66 GB x USD 0.011/GB = **about USD 6.75**, inside the USD 15 per-box rule. Lane
-worst: 3 boxes plus 8 host refusals, about 3 x 6.75 + 8 x 0.10 = **about USD 21.1**.
+Worst per box = guard x USD 1.05/h + 66 GB x USD 0.011/GB = **about USD 6.92** (Amendment 2; registered as 6.75),
+inside the USD 15 per-box rule. Lane worst: 3 boxes plus 8 host refusals, about 3 x 6.92 + 8 x 0.10 = **about USD
+21.6**.
 
 ## Sequencing
 
@@ -278,6 +281,59 @@ worst: 3 boxes plus 8 host refusals, about 3 x 6.75 + 8 x 0.10 = **about USD 21.
 3. The merge.
 4. The readings, `p225-5090-1` to `-3`, through pod-launch from the merge commit, or by direct API rental under the
    project's standing rental rules (host pinned, USD 15 per box, verified teardown).
+
+## Amendment 1 (pre-data): retry run ids for boxes that did not start
+
+The registration names three run ids, `p225-5090-1` to `-3`. Every box needs its own id and receipt (the ledger holds
+one row per run, so an id is never reused), but a box that does not start uses an id while counting toward no
+started slot: a HOST_REFUSED box (capped separately, 4 refusals a trip, 8 in all), or a NOT_RUN box (the launcher's
+pre-flight tore the instance down before the runner ran: no `RUN_ID`, no exit file, no marker; no strike, and it
+counts toward neither cap, like a pre-create refusal; its own row under Outcomes). `p225-5090-1` was such a NOT_RUN
+box, recorded under that row. So `-1` to `-3` can run
+out before three boxes have started. This amendment adds the retry ids **`p225-5090-r1` to `p225-5090-r8`**, for ANY
+box that follows one that did not start, at the same tier and terms. The runner's and the driver's id cases accept
+them; nothing else changes.
+- **The ids are labels, not budget.** The registered caps (3 box-started, 4 refusals a trip, 8 in all) and the strike
+  rules alone govern. Started-box accounting is by outcome, never by id: no code parses the id's number.
+- A box that HOST_REFUSES or is NOT_RUN keeps its own id and receipt, with no strike. A HOST_REFUSED box counts toward
+  the refusal cap as registered; a NOT_RUN box counts toward no cap.
+- A retry box that passes the screen and starts takes the next unused box-started slot. The 3-box-started cap, the
+  strike rules, the stop and the HOST_REFUSED cap are unchanged; nothing is widened.
+- NOT_RUN is decided from the launcher's receipt (its pre-flight teardown), before any fetch. It is never classified by
+  `p225_reduce.py --classify` or the hand-reading table, and it is not PRE_INSTALL_HALT (whose "no marker" reading
+  applies only to a box whose runner ran).
+- If NOT_RUN boxes ever use up `r8`, that is a launcher fault to fix, not a reason to add ids.
+- It is pre-data: no box has started. A box launched after it merges launches from its merge commit, since the
+  runner's bytes (and their staged pin) change.
+
+## Amendment 2 (pre-data): the boot allowance
+
+The guard's boot term was 300 s: launch to the runner's pre-install fit check could take at most about 314 s (the
+wallclock, 5.74 h, less the fit's need). The launcher alone may wait 420 s for ssh on Vast (the manifest's
+`ssh_ready_s`) before it stages the kit. `p225-5090-r1` took 443 s from launch to the check and refused at the fit
+(rc 41, PRE_INSTALL_HALT, no strike; it is recorded under that row and halted the lane, as registered). Measured launch
+to check: 103 s (P226's reading), 184 s (`p225-5090-2`, which passed the fit), 443 s (`r1`).
+- **The change:** the boot term is **880 s**, so the guard is 20,350 + 880 = **21,230 s, 5.90 h** (inside the 5.9 h
+  fill limit), and the launch wallclock is 5.9 h. The worst case is **USD 6.92** a box (was 6.75); the lane worst is
+  about USD 21.6.
+- **What does not change:** every need, alarm and floor; the runner (its fit reads the deadline the launcher sets),
+  so no staged pin moves; rc 41 stays PRE_INSTALL_HALT, so it keeps catching real launch faults.
+- **The test:** the boot allowance (the guard less the fit's need) must be at least the launcher's ssh wait plus a
+  300 s staging margin, so an allowance below the launcher's own ssh wait cannot be registered again.
+- It is pre-data: no box has started. The lane resumes from its merge commit on `p225-5090-r2`.
+
+## Amendment 3 (pre-data): brotli >= 1.2.0 beside the unpinned huggingface_hub
+
+The box installs `huggingface_hub` unpinned (`>=0.23`). Its newest releases fetch over httpx and decode brotli with
+`Decompressor.process(..., output_buffer_limit=...)`, which needs **brotli >= 1.2.0**. The image ships an older brotli,
+so the model fetch raises a TypeError whenever the HF edge serves a file br-encoded. It is host- and edge-dependent: some
+boxes fetch cleanly, and others die at the fetch (another lane's explore box, rc 22, 2026-10-23).
+- **The change:** the runner's install line adds `"brotli>=1.2.0"` beside `"huggingface_hub>=0.23"`, and the staged
+  pin of the runner moves with it. Nothing else changes: no need, alarm, floor, rule, cap or id.
+- **Before it merges** (the maintainer's ruling, 2026-10-23): a box that dies at the fetch from this cause, with the
+  brotli TypeError in its receipt, is a launch fault, not a strike.
+- It is pre-data: no box of this lane has reached a reading. A box launched after it merges launches from its merge
+  commit.
 
 ## What this lane cannot say
 

@@ -1106,6 +1106,25 @@ POS69_SPEED_BAND = (2.3, 3.3)     # P206: s/step Unsloth / e4b on the box's host
 POS69_OPS_RATIO_MIN = 8.0         # P207: CPU ops per profiled step Unsloth / e4b at least this (7.43 M against e4b's 0.54-0.75 M)
 POS69_HOST_SHARE_MIN = 1.05       # P208: the s/step ratio over the device ratio (= e4b's busy_t / Unsloth's) at least this
 POS69_HELDOUT_MAX = 0.01          # P209: |mean held-out at N, e4b defaults - Unsloth|
+# TC1 amendment 79 (qwen3pos79): amendment 69's box at the 0.58.0 release against Unsloth 2026.10.8. The pins are the kit's constants
+# (tc1_run.sh's POS79_* and these must agree; the tests hold them equal); the rule is amendment 69's quote, gated.
+POS79_FAM = "qwen3pos79"
+POS79_E4B_SHA = "f15cb7d695cf7148067c6bcea543484f31dc3abd"     # v0.58.0's peeled tag commit
+POS79_GNF4_SHA = "30adb1bfa76f95f9ce4a4c29734b8f36de907eca"     # v0.51.0's peeled tag commit
+POS79_PINS = {"experts4bit-qlora": "0.58.0", "grouped-nf4-gemm": "0.51.0", "unsloth": "2026.10.8", "unsloth_zoo": "2026.10.8"}
+POS79_RELEASE_PROOF_SHA256 = "aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0"   # bench/tc1/release_proof.py
+POS79_PROVEN = ("unsloth", "unsloth_zoo")                        # the dists release_proof.py proves on the box
+POS79_HARNESS_ENV = ("E4B_SHA", "E4B_VENV", "GNF4_SHA", "GNF4_SHA_B")   # names the harness itself sets: never an e4b or gnf4 knob
+POS79_PYCACHE_PREFIX = "/tmp/tc1-pycache-"                       # tc1_run.sh's pos79_release_proof mktemp template
+POS79_HELDOUT_MAX = 0.01                                         # amendment 69's P209, here a gate before any ratio is quoted
+POS79_STABLE = {"e4b": 0.05, "unsloth": 0.10}                    # TC1's stability rule, |d1 - d2| / mean, on s/step and on device ms
+FAMS.append(POS79_FAM)
+NAMES[POS79_FAM] = "Qwen3-30B-A3B (amendment 79: amendment 69's field-recipe position at the 0.58.0 release against Unsloth 2026.10.8, profiled, two draws each)"
+N_LAYERS[POS79_FAM] = 48
+ATTN_CENSUS[POS79_FAM] = 192
+DENSE_PINS[POS79_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[POS79_FAM] = ("e4b", "fused_attn4_m_fd")
+EXPECTED[POS79_FAM] = [("e4b", "fused_attn4_m_fd"), ("unsloth", "ckpt_unsloth_m_fv"), ("unsloth", "ckpt_unsloth_m_fv_d2"), ("e4b", "fused_attn4_m_fd_d2")]
 # TC1 amendment 70: grouped-nf4-gemm's single-block ladder (NF4_QLORA_SINGLE_LADDER) 0 (l0) vs 1 (l1) at TC1's field recipe, e4b at its
 # defaults otherwise, the shipped and the matched arm, two draws a side in ABBA order, every arm profiled; e4b against itself
 SLADDER_FAM = "qwen3sladder"
@@ -3021,6 +3040,49 @@ def pos76_why(tag, r):
     return "; ".join(bad)
 
 
+def pos78_why(tag, r):
+    """Amendment 78's predicates for a TRAINED pb1cl256 row: amendment 69's field defaults without a profile (torch 2.12, the double-quantized
+    absmax, the reentrant checkpoint on all 48 layers, the combine chunks unset), a census and a per-step memory record, grouped-nf4-gemm bound
+    by commit and nf4_qlora.py hash, and -- BINDING -- the path and the loss the arm's own counters record: every LoRA call width-bucketed
+    (padded, loop and grouped_mm all 0) through the compact bucketed node (its calls equal the bucketed calls), NF4_QLORA_PAD_BUCKETS=1
+    resolved with no bucket ladder, NF4_QLORA_COMPACT_DELTA=1 as set, and E4B_CHUNKED_LM_LOSS=256 with every training forward chunked.
+    An OOM row is never judged here: it is NOT_FIT at its step (pos78_draw). Empty string = as registered."""
+    if tag != POS78_ARMS[0][1]:
+        return f"amendment 78 registers no e4b arm for tag {tag}"
+    r = r or {}
+    cl = dict(r.get("chunked_lm_loss") or {})
+    la = dict(r.get("lean_ab") or {})
+    view = dict(r, chunked_lm_loss=dict(cl, env=None), lean_ab=dict(la, gnf4_pad_buckets_env=None, gnf4_pad_buckets_mode="auto"))
+    bad = [w for w in (pos69_why(tag, view, profile=False),) if w]    # the bucket mode and the loss are this arm's own checks below
+    if int(r.get("profile_steps") or 0) or r.get("profile"):
+        bad.append(f"profile_steps {r.get('profile_steps')!r}: amendment 78 runs no profile (it would sit inside the census window)")
+    if not isinstance(r.get("mem_census"), dict):
+        bad.append("no mem_census on the receipt: the registered instrument (--mem-census 1) did not run")
+    env = r.get("env") or {}
+    code = env.get("gnf4_code") or {}
+    if env.get("grouped-nf4-gemm") != POS78_GNF4_VERSION:
+        bad.append(f"env grouped-nf4-gemm {env.get('grouped-nf4-gemm')!r} != {POS78_GNF4_VERSION}")
+    if code.get("commit") != POS78_GNF4 or code.get("nf4_qlora_sha256") != POS78_NF4_QLORA_SHA:
+        bad.append(f"grouped-nf4-gemm code {code!r} != commit {POS78_GNF4} with nf4_qlora.py {POS78_NF4_QLORA_SHA}")
+    n_ch, n_small, n_stock = (int(cl.get(k) or 0) for k in ("chunked_calls", "small_calls", "stock_calls"))
+    if not (str(cl.get("env")) == POS78_CHUNK and n_ch > 0 and n_small == 0 and n_stock == 0 and int(cl.get("runtime_refusals") or 0) == 0):
+        bad.append(f"the chunked LM loss did not serve every training forward in {POS78_CHUNK}-token chunks (record {cl})")
+    calls = la.get("lora_path_calls") or {}
+    pd, lp, gm, pb = (int(calls.get(k) or 0) for k in ("padded", "loop", "grouped_mm", "padded_bucketed"))
+    cb = r.get("compact_buckets") or {}
+    ka = r.get("keep_ab") or {}
+    path = [("every LoRA call width-bucketed", pb > 0 and pd == lp == gm == 0),
+            ("NF4_QLORA_PAD_BUCKETS=1 resolved, no bucket ladder", la.get("gnf4_pad_buckets_env") == "1" and str(la.get("gnf4_pad_buckets_mode")) == "1"
+             and not la.get("gnf4_pad_ladder") and la.get("gnf4_pad_ladder_env") in (None, "")),
+            ("the compact bucketed node served every bucketed call", bool(cb.get("gnf4_has_compact_buckets")) and cb.get("env") in (None, "")
+             and int(cb.get("calls") or 0) == pb),
+            ("NF4_QLORA_COMPACT_DELTA=1 as set", ka.get("gnf4_compact_delta") == "1" and ka.get("gnf4_compact_delta_env") == "1")]
+    off = [k for k, ok in path if not ok]
+    if off:
+        bad.append(f"pb1cl256 is off its registered path ({'; '.join(off)}; calls {calls}, compact buckets {cb}, compact delta {ka.get('gnf4_compact_delta')!r})")
+    return "; ".join(bad)
+
+
 def pos74_why(tag, r):
     """Amendment 74's predicates: amendment 69's field defaults without a profile (torch 2.12, the double-quantized absmax, the reentrant
     checkpoint on all 48 layers, the chunked losses and combine chunks unset), grouped-nf4-gemm at its registered version, a census on the
@@ -3093,6 +3155,159 @@ def score_pos69(F, fam=POS69_FAM):
              f"s/step ratio {w:.3f} over device ratio {x:.3f} = {w / x:.3f} (busy_t e4b {e['busy']:.3f}, Unsloth {u['busy']:.3f}) vs >= {POS69_HOST_SHARE_MIN}"),
             ("P209", fam, "HELD" if abs(d) <= POS69_HELDOUT_MAX else "FALSIFIED",
              f"mean held-out at N e4b defaults {e['held']:.5f}, Unsloth {u['held']:.5f} (diff {d:+.5f} vs |.| <= {POS69_HELDOUT_MAX})")]
+
+
+def pos79_why(tag, r):
+    """Amendment 79's predicates on one row: torch 2.12; the kit's pins as the arm recorded them (e4b, grouped-nf4-gemm, Unsloth and
+    unsloth_zoo versions, grouped-nf4-gemm's commit); the registered arm tags; a profile with CPU ops on every arm. The knob environment
+    and the bytecode prefix are box facts (pos79_box): the family hands its arms no extra environment, so every arm inherits the box's.
+    Empty string = as registered."""
+    r = r or {}
+    env = r.get("env") or {}
+    bad = []
+    tv = str(env.get("torch") or "")
+    if not tv.startswith("2.12"):
+        bad.append(f"env.torch {tv or 'missing'} is not 2.12*")
+    for pkg, want in POS79_PINS.items():
+        if env.get(pkg) != want:
+            bad.append(f"env {pkg} {env.get(pkg)!r} != {want}, the kit's pin")
+    gc = (env.get("gnf4_code") or {}).get("commit")
+    if gc != POS79_GNF4_SHA:
+        bad.append(f"grouped-nf4-gemm commit {gc!r} != {POS79_GNF4_SHA}, the kit's pin")
+    fw = r.get("framework")
+    if fw == "e4b":                                   # a lever that refused at run time changes the arm though no knob is set
+        cl = r.get("chunked_lm_loss")
+        if not isinstance(cl, dict) or int(cl.get("runtime_refusals") or 0) != 0:
+            bad.append(f"the chunked LM loss refused at run time, or recorded nothing (record {cl!r})")
+    want = {"e4b": ("fused_attn4_m_fd", "fused_attn4_m_fd_d2"), "unsloth": ("ckpt_unsloth_m_fv", "ckpt_unsloth_m_fv_d2")}.get(fw, ())
+    if tag not in want:
+        bad.append(f"amendment 79 registers no {fw} arm {tag!r}")
+    pr = r.get("profile") or {}
+    if not (_cbk_device_ms(r) and pr.get("cpu_ops_per_step")):
+        bad.append("no profile with CPU ops on the receipt: amendment 79 profiles every arm (its quote is device time)")
+    return "; ".join(bad)
+
+
+def pos79_box(d):
+    """Amendment 79's box facts outside its rows, each fail-closed: the summary's POS79_PINS line at the kit's pins and helper sha, its
+    RELEASE_PROOF OK line and its fresh /tmp/tc1-pycache-* prefix (exported there, so every arm inherits it), the proof's JSON (one record
+    per proven dist: its version, RECORD equal, no first_diff, a fresh prefix equal to the summary's, its own name among the imports), the
+    POS79_KNOB_ENV line with no e4b or grouped-nf4-gemm knob bar the harness's own names (every default unset, as the 0.58.0 release
+    resolves it -- amendment 69's asserted 0.49.0 values are not carried over), versions.txt's e4b and grouped-nf4-gemm commits (the t212
+    tripwire's), and the host CPU (box.json). Returns (facts, [failures])."""
+    fx = {"prefix": None, "proofs": {}, "cpu": None}
+    bad = []
+    sp = os.path.join(d or "", "summary.txt")
+    lines = open(sp, errors="replace").read().splitlines() if d and os.path.exists(sp) else []
+    want = (f"POS79_PINS e4b {POS79_E4B_SHA} gnf4 {POS79_GNF4_SHA} unsloth {POS79_PINS['unsloth']} unsloth_zoo {POS79_PINS['unsloth_zoo']} "
+            f"release_proof {POS79_RELEASE_PROOF_SHA256}")
+    if len(POS79_E4B_SHA) != 40:
+        bad.append("the reducer's POS79_E4B_SHA is not a 40-hex commit (unfilled)")
+    if want not in lines:
+        bad.append("no POS79_PINS line at the kit's pins and helper sha in summary.txt")
+    ok = [ln for ln in lines if ln.startswith("RELEASE_PROOF OK ")]
+    m = re.match(r"RELEASE_PROOF OK .* pycache_prefix (\S+)$", ok[-1]) if len(ok) == 1 else None
+    if not m or not m.group(1).startswith(POS79_PYCACHE_PREFIX):
+        bad.append(f"summary.txt carries {len(ok)} RELEASE_PROOF OK lines, not one with a fresh {POS79_PYCACHE_PREFIX}* prefix")
+    else:
+        fx["prefix"] = m.group(1)
+    ae = [ln for ln in lines if ln.startswith("POS79_ARM_ENV ")]
+    if ae != ["POS79_ARM_ENV e4b=[] extra=[]"]:
+        bad.append(f"the arms' extra environment is not recorded empty (TC1_E4B_ENV / TC1_ARM_EXTRA_ENV): {ae}")
+    kl = [ln for ln in lines if ln.startswith("POS79_KNOB_ENV")]
+    if len(kl) != 1:
+        bad.append(f"summary.txt carries {len(kl)} POS79_KNOB_ENV lines, not one: the arms' knob environment is unread")
+    else:
+        knobs = sorted(k for k in kl[0].split()[1:] if k not in POS79_HARNESS_ENV and not k.startswith("E4B_RENT_"))
+        if knobs:
+            bad.append(f"knobs set in the arms' environment: {knobs} (amendment 79 reads every default unset)")
+    jp = os.path.join(d or "", "release_proof_unsloth.json")
+    recs = []
+    if d and os.path.exists(jp):
+        for ln in open(jp, errors="replace"):
+            try:
+                recs.append(json.loads(ln))
+            except ValueError:
+                bad.append("release_proof_unsloth.json holds a line that is not JSON")
+    for dist in POS79_PROVEN:
+        got = [x for x in recs if isinstance(x, dict) and x.get("dist") == dist]
+        x = got[0] if len(got) == 1 else {}
+        why = ("" if len(got) == 1 else f"{len(got)} proofs") or "; ".join(w for w in (
+            "" if x.get("version") == POS79_PINS[dist] else f"version {x.get('version')!r}",
+            "" if x.get("record_equal") is True and x.get("record") == "RECORD equal" and x.get("first_diff") is None else "not RECORD equal",
+            "" if x.get("pycache_fresh") is True else "pycache_fresh not true",
+            "" if fx["prefix"] and x.get("pycache_prefix") == fx["prefix"] else "a prefix other than the summary's",
+            "" if dist in (x.get("imports") or {}) else "its own name not among the imports",
+            "" if str(x.get("wheel") or "").startswith(f"{dist}-{POS79_PINS[dist]}-") else f"wheel {x.get('wheel')!r}") if w)
+        if why:
+            bad.append(f"release proof of {dist}: {why}")
+        else:
+            fx["proofs"][dist] = x
+    vp = os.path.join(d or "", "versions.txt")
+    vt = open(vp, errors="replace").read().splitlines() if d and os.path.exists(vp) else []
+    for ln_want in (f"e4b(t212) {POS79_PINS['experts4bit-qlora']} @{POS79_E4B_SHA}", f"gnf4(t212) {POS79_PINS['grouped-nf4-gemm']} @{POS79_GNF4_SHA}"):
+        if ln_want not in vt:
+            bad.append(f"versions.txt has no line {ln_want!r} (the t212 tripwire's)")
+    bp = os.path.join(d or "", "box.json")
+    try:
+        fx["cpu"] = (json.load(open(bp)) or {}).get("cpu") if d and os.path.exists(bp) else None
+    except ValueError:
+        fx["cpu"] = None
+    if not fx["cpu"]:
+        bad.append("no host CPU in box.json")
+    return fx, bad
+
+
+def pos79_resolved(r):
+    """What 0.58.0's e4b defaults resolved to on one row, reported beside the quote, never ruled: the double-quantized absmax, the
+    checkpoint (layers, funcs), grouped-nf4-gemm's bucket mode and compact bucketed delta, and the chunked-loss and combine-chunk features."""
+    r = r or {}
+    return {"absmax_dq": r.get("absmax_dq"), "ckpt": (r.get("ckpt_offload_layers"), r.get("ckpt_offload_funcs")),
+            "pad_buckets_mode": (r.get("lean_ab") or {}).get("gnf4_pad_buckets_mode"),
+            "compact_buckets": (r.get("compact_buckets") or {}).get("gnf4_has_compact_buckets"),
+            "chunked_lm_loss": (r.get("chunked_lm_loss") or {}).get("e4b_has_chunked_lm_loss"),
+            "combine_chunk": (r.get("combine_chunk") or {}).get("e4b_has_combine_chunk")}
+
+
+def _pos79_draws(R, fw, tag):
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    return [(rows.get(k) or {}).get("r") or {} for k in ((fw, tag), (fw, tag + "_d2"))]
+
+
+def score_pos79(F, d, fam=POS79_FAM):
+    """TC1 amendment 79's rule, in order: the box facts (pos79_box), else NOT_READ; two VALID
+    profiled draws a side, else NOT_READ; each side stable on s/step and on device ms (POS79_STABLE), else UNSTABLE; |mean held-out at N,
+    e4b - Unsloth| <= POS79_HELDOUT_MAX, else QUALITY_DIFFERS; then QUOTED -- the device ratio (Unsloth / e4b ms per profiled step) first,
+    the wall ratio second, named with the host CPU. Returns (verdict, [evidence lines], quote or None)."""
+    R = F.get(fam)
+    if not R:
+        return "NOT_READ", [f"no {fam} family on this box"], None
+    fx, bad = pos79_box(d)
+    if bad:
+        return "NOT_READ", bad, None
+    e, u = _profiled_sides(R, "fused_attn4_m_fd", "ckpt_unsloth_m_fv")
+    if e is None or u is None:
+        return "NOT_READ", [f"two VALID profiled draws a side are registered: e4b {'ok' if e else 'missing'}, Unsloth {'ok' if u else 'missing'}"], None
+    ev = []
+    for fw, tag in (("e4b", "fused_attn4_m_fd"), ("unsloth", "ckpt_unsloth_m_fv")):
+        a, b = _pos79_draws(R, fw, tag)
+        for name, q in (("s/step", lambda r: r.get("s_per_step_median_11plus")), ("device ms", _cbk_device_ms)):
+            x, y = float(q(a)), float(q(b))
+            sp = abs(x - y) / ((x + y) / 2.0)
+            ev.append(f"{fw} {name} draws {x:.4g} / {y:.4g}: |d1-d2|/mean {sp:.4f} vs <= {POS79_STABLE[fw]}")
+            if sp > POS79_STABLE[fw]:
+                return "UNSTABLE", ev, None
+    dq = e["held"] - u["held"]
+    ev.append(f"mean held-out at N e4b {e['held']:.5f}, Unsloth {u['held']:.5f} (diff {dq:+.5f} vs |.| <= {POS79_HELDOUT_MAX})")
+    if abs(dq) > POS79_HELDOUT_MAX:
+        return "QUALITY_DIFFERS", ev, None
+    q = {"device": u["dev"] / e["dev"], "wall": u["s"] / e["s"], "cpu": fx["cpu"], "e4b_dev_ms": e["dev"], "unsloth_dev_ms": u["dev"],
+         "e4b_s": e["s"], "unsloth_s": u["s"]}
+    ev.append(f"Unsloth spends {q['device']:.3f}x e4b's GPU time per step (device ms {u['dev']:.1f} / {e['dev']:.1f}); "
+              f"wall-clock {q['wall']:.3f}x (s/step {u['s']:.3f} / {e['s']:.3f}) on {q['cpu']}")
+    q["resolved"] = [pos79_resolved(r) for r in _pos79_draws(R, "e4b", "fused_attn4_m_fd")]
+    ev += [f"e4b draw {i + 1}: 0.58.0's defaults resolved to {x} (reported, never ruled)" for i, x in enumerate(q["resolved"])]
+    return "QUOTED", ev, q
 
 
 def score_pos68(F, fam=POS68_FAM):
@@ -3525,6 +3740,30 @@ ATTN_CENSUS[POS76_FAM] = 192
 DENSE_PINS[POS76_FAM] = DENSE_PINS[QDENSE_FAM]
 FAM_ANCHOR[POS76_FAM] = POS76_ARMS[0]
 EXPECTED[POS76_FAM] = list(POS76_ARMS)
+POS78_FAM = "qwen3pos78fit"
+#: TC1 amendment 78: the 24 GiB RTX 4090 fit reading. One arm a box, pb1cl256 -- the field recipe for 60 steps with every LoRA delta
+#: width-bucketed through the compact bucketed node (NF4_QLORA_PAD_BUCKETS=1; NF4_QLORA_COMPACT_DELTA=1 is set and serves no call) and the
+#: chunked LM loss in 256-token chunks -- on two boxes on two different machines, each a 24 GiB card by its listing and its memory.total.
+POS78_ARMS = (("e4b", "fused_attn4_m_fd_pb1cl256"),)
+POS78_LABELS = {POS78_ARMS[0]: "pb1cl256"}
+POS78_GNF4 = "efdda943d5a310343ed7fef2e23d1cbf2df27e51"    # grouped-nf4-gemm#587's merge: #584 and #585 with the corrected test
+POS78_GNF4_VERSION = "0.50.0"
+POS78_NF4_QLORA_SHA = "8e0bb5d0d434d661db8dec5fd34c76d43a9da49e8b72867c33ec45a4fbc4a162"   # the nf4_qlora.py that commit installs
+POS78_CHUNK = "256"
+POS78_STEPS = 60
+POS78_CAP = 3                                      # the most draws that may START (bench/common rule 4)
+POS78_FOR_A_PERSON = "an OOM on a machine an earlier draw read: the avoid list failed; for a person"
+POS78_MIB_BAND = (23500, 24600)                    # the box's memory.total, MiB: a 24 GiB card (tc1_run.sh refuses outside it, rc 18)
+POS78_REF_HELDOUT = 0.75489                        # tc1-5090-155's cd1cl1 held-out at 60 steps: REPORTED beside, never a bar (not like-for-like)
+NO_SPEED_FAMS[POS78_FAM] = "e4b only, one arm a box; s/step is recorded, never gated (amendment 78)"
+FAMS.append(POS78_FAM)
+NAMES[POS78_FAM] = ("Qwen3-30B-A3B (amendment 78: the field recipe on a 24 GiB RTX 4090 -- pb1cl256, every LoRA delta width-bucketed "
+                    "through the compact bucketed node and 256-token LM-loss chunks, 60 steps; two boxes on two machines)")
+N_LAYERS[POS78_FAM] = 48
+ATTN_CENSUS[POS78_FAM] = 192
+DENSE_PINS[POS78_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[POS78_FAM] = POS78_ARMS[0]
+EXPECTED[POS78_FAM] = list(POS78_ARMS)
 
 
 def memc4kr_why(r):
@@ -4205,6 +4444,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = pos69_why(r.get("tag") or "", r)
         if w:
             why.append(w)
+    if fam == POS79_FAM:                               # amendment 79: the kit's pins, every knob unset, the proof's prefix, a profile on every arm
+        w = pos79_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
     if fam == POS69MC_FAM:                             # amendment 73: amendment 69's defaults without a profile, the claim's pins, the census
         w = pos69mc_why(r.get("tag") or "", r)
         if w:
@@ -4215,6 +4458,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == POS76_FAM:                               # amendment 76: cd1cl1 at two grouped-nf4-gemm commits, each arm bound to its code
         w = pos76_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == POS78_FAM:                               # amendment 78: pb1cl256 on a 24 GiB 4090, bound to its code, path and loss
+        w = pos78_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == POS75_FAM:                               # amendment 75: the 4090-fit read, each arm bound to its delta path and its loss
@@ -5701,6 +5948,240 @@ def pos76_block(F, d):
     lines.append("- No fit is claimed here. A CANDIDATE is a credited memory saving; a 4090 acceptance box needs its own registration.")
     return lines + memcensus_block(F, POS76_FAM, POS76_ARMS, POS76_LABELS,
                                    title="Amendment 76: the census tables (Qwen3-30B-A3B, cd1cl1, one row per draw; GB = 1e9 bytes)")
+
+
+def pos78_box_facts(d):
+    """One box's facts outside its row: memory.total in MiB (its GPU_MEMORY_TOTAL line), the Vast machine id (the launcher's receipt beside the
+    tc1 dir), and whether the summary carries each runner gate's pass line -- the pre-check, the pad-buckets probe, the tokens."""
+    bx = {"mib": None, "machine": None, "precheck": False, "probe": False, "tokens": False}
+    p = os.path.join(d or "", "summary.txt")
+    if d and os.path.exists(p):
+        for ln in open(p, errors="replace"):
+            m = re.match(r"GPU_MEMORY_TOTAL (\d+) MiB", ln)
+            if m:
+                bx["mib"] = int(m.group(1))
+            bx["precheck"] |= bool(re.match(rf"PRECHECK {POS78_FAM} OK\b", ln))
+            bx["probe"] |= bool(re.match(rf"PADBUCKETS_PROBE {POS78_FAM} 1 True True True \(want", ln))
+            bx["tokens"] |= ln.startswith("TOKENS MATCH tc1-5090-155 ")
+    rp = os.path.join(d or "", os.pardir, "receipt.json")
+    if d and os.path.exists(rp):
+        try:
+            bx["machine"] = str((json.load(open(rp)).get("environment") or {}).get("vast_machine_id") or "") or None
+        except (ValueError, AttributeError):
+            bx["machine"] = None
+    return bx
+
+
+def pos78_headroom(sm, mib):
+    """The three headrooms (MiB) of one draw, each the least over its steps with the step it fell at: usable minus max_allocated, usable
+    minus max_reserved, and memory.total minus device_used, where usable is memory.total minus the step's CUDA context (its device_used
+    minus its reserved). Max_allocated and max_reserved are the run's maxima so far (TC1_STEP_MEM never resets them)."""
+    if not sm or mib is None:
+        return {"h_alloc": None, "h_res": None, "h_dev": None}
+    M = 1048576
+    rows = []
+    for s in sm:
+        usable = mib - (int(s["device_used"]) - int(s["reserved"])) / M
+        rows.append((int(s["step"]), usable - int(s["max_allocated"]) / M, usable - int(s["max_reserved"]) / M, mib - int(s["device_used"]) / M))
+    least = {k: min(rows, key=lambda t: t[i]) for i, k in ((1, "h_alloc"), (2, "h_res"), (3, "h_dev"))}
+    return {k: (least[k][i], least[k][0]) for i, k in ((1, "h_alloc"), (2, "h_res"), (3, "h_dev"))}
+
+
+def pos78_oom_why(r):
+    """Amendment 78's binding for an OOM row (the maintainer's ruling on the review): it reads NOT_FIT only when its record proves the arm ran
+    as registered -- torch 2.12; grouped-nf4-gemm by version, commit and nf4_qlora.py hash; the OOM inside training at a step of the 60, with
+    a loss and a step record for each completed step; the census; and the arm's own oom_path record: the three knobs as the process saw them
+    (NF4_QLORA_PAD_BUCKETS=1, NF4_QLORA_COMPACT_DELTA=1, E4B_CHUNKED_LM_LOSS=256; no bucket ladder, the compact bucketed node at its
+    default), the modes they resolved to, every LoRA call so far width-bucketed through the compact bucketed node (at least one), and the
+    chunked loss patched with no forward on the stock or small loss. The probe and token lines are the box's (pos78_draw). Anything missing
+    reads VOID. Empty string = bound."""
+    r = r or {}
+    bad = []
+    env = r.get("env") or {}
+    code = env.get("gnf4_code") or {}
+    if not str(env.get("torch") or "").startswith("2.12"):
+        bad.append(f"env.torch {env.get('torch') or 'missing'} is not 2.12*")
+    if env.get("grouped-nf4-gemm") != POS78_GNF4_VERSION:
+        bad.append(f"env grouped-nf4-gemm {env.get('grouped-nf4-gemm')!r} != {POS78_GNF4_VERSION}")
+    if code.get("commit") != POS78_GNF4 or code.get("nf4_qlora_sha256") != POS78_NF4_QLORA_SHA:
+        bad.append(f"grouped-nf4-gemm code {code!r} != commit {POS78_GNF4} with nf4_qlora.py {POS78_NF4_QLORA_SHA}")
+    m = re.match(r"OOM at step (\d+):", str(r.get("reason") or ""))
+    done = r.get("steps_done")
+    if not (r.get("phase") == "train" and m and isinstance(done, int) and int(m.group(1)) == done + 1 <= POS78_STEPS):
+        bad.append(f"not an OOM at a training step of the {POS78_STEPS} (phase {r.get('phase')!r}, steps_done {done!r})")
+    elif not (len(r.get("losses") or []) == done and isinstance(r.get("step_mem"), list) and len(r["step_mem"]) == done):
+        bad.append(f"no loss and step record for each of the {done} completed steps (losses {len(r.get('losses') or [])}, "
+                   f"step_mem {len(r['step_mem']) if isinstance(r.get('step_mem'), list) else None})")
+    if not isinstance(r.get("mem_census"), dict):
+        bad.append("no mem_census on the receipt: the registered instrument (--mem-census 1) did not run")
+    op = r.get("oom_path")
+    if not isinstance(op, dict):
+        return "; ".join(bad + ["no oom_path record: the knobs and path counters up to the OOM are unproven"])
+    oe = op.get("env") or {}
+    want = {"NF4_QLORA_PAD_BUCKETS": "1", "NF4_QLORA_COMPACT_DELTA": "1", "E4B_CHUNKED_LM_LOSS": POS78_CHUNK,
+            "NF4_QLORA_PAD_BUCKETS_LADDER": None, "NF4_QLORA_COMPACT_BUCKETS": None}
+    off = {k: oe.get(k) for k, v in want.items() if (oe.get(k) or None) != v}
+    if off:
+        bad.append(f"the knobs as the process saw them are not the registered ones ({off})")
+    calls = op.get("lora_path_calls") or {}
+    pd, lp, gm, pb = (int(calls.get(k) or 0) for k in ("padded", "loop", "grouped_mm", "padded_bucketed"))
+    cl = op.get("chunked_lm_loss") or {}
+    path = [("the bucket mode resolved to 1 with no ladder", str(op.get("gnf4_pad_buckets_mode")) == "1" and op.get("gnf4_pad_ladder") in (False, None)),
+            ("the compact delta resolved on", op.get("gnf4_compact_delta") == "1"),
+            ("every LoRA call so far width-bucketed, at least one", pb > 0 and pd == lp == gm == 0),
+            ("the compact bucketed node served every bucketed call", bool(op.get("gnf4_has_compact_buckets")) and int(op.get("compact_bucket_calls") or 0) == pb),
+            ("the chunked loss patched, no forward on the stock or small loss", int(cl.get("patched") or 0) > 0
+             and all(k in cl and int(cl[k] or 0) == 0 for k in ("small_calls", "stock_calls", "runtime_refusals")))]
+    miss = [k for k, ok in path if not ok]
+    if miss:
+        bad.append(f"the OOM row is off its registered path ({'; '.join(miss)}; calls {calls}, compact bucketed calls "
+                   f"{op.get('compact_bucket_calls')!r}, loss {cl})")
+    return "; ".join(bad)
+
+
+def pos78_draw(F, d):
+    """One started box's draw -> (state, facts). COMPLETE: a VALID trained pb1cl256 row with all 60 steps and a step record for each. OOM: the
+    arm died of an OOM at a step with its record bound (pos78_oom_why); the allocator's own line is kept. VOID: a trained or OOM row off its
+    registration, a card outside the 24 GiB band or a row whose recorded GPU is not an RTX 4090, an unread machine id, or a runner gate's
+    pass line missing from the summary (the pre-check, the pad-buckets probe, the tokens). NO_READ: no trained and no OOM row (a refused
+    pre-check, a dead box)."""
+    R = F.get(POS78_FAM) or {}
+    row = next((x for x in R.get("rows", []) if (x["fw"], x["tag"]) == POS78_ARMS[0]), None)
+    r = (row or {}).get("r") or {}
+    bx = pos78_box_facts(d)
+    x = {"mib": bx["mib"], "machine": bx["machine"], "losses": list(r.get("losses") or []), "held": r.get("eval_loss_final"), "status": r.get("status")}
+    x.update(pos78_headroom(r.get("step_mem") or [], bx["mib"]))
+    st = r.get("status")
+    if row is None or st not in ("ok", "oom"):
+        if row is not None and row.get("verdict") == "VOID":
+            return "VOID", dict(x, why=row.get("why") or "VOID")
+        return "NO_READ", dict(x, why="no pb1cl256 row on this box" if row is None
+                               else f"status {st!r}, no trained or OOM row: {str(r.get('reason') or '')[:200]}")
+    if bx["mib"] is None or not POS78_MIB_BAND[0] <= bx["mib"] <= POS78_MIB_BAND[1]:
+        return "VOID", dict(x, why=f"memory.total {bx['mib']} MiB is outside a 24 GiB card's {POS78_MIB_BAND[0]}-{POS78_MIB_BAND[1]}")
+    if not bx["machine"]:
+        return "VOID", dict(x, why="the machine id is unread (the launcher's receipt beside the tc1 dir)")
+    gpu = str((r.get("env") or {}).get("gpu") or "")
+    if "RTX 4090" not in gpu:                          # the band alone admits a 24 GiB RTX 3090 (24,576 MiB)
+        return "VOID", dict(x, why=f"the row's GPU {gpu or 'unread'!r} is not an RTX 4090")
+    gates = [k for k, ok in (("the pre-check's OK line", bx["precheck"]), ("the pad-buckets probe's 1 True True True line", bx["probe"]),
+                             ("the TOKENS MATCH line", bx["tokens"])) if not ok]
+    if gates:
+        return "VOID", dict(x, why=f"the summary lacks {', '.join(gates)}")
+    if st == "oom":
+        w = pos78_oom_why(r)
+        if w:
+            return "VOID", dict(x, why=f"an OOM row that does not prove its arm ran as registered: {w}")
+        return "OOM", dict(x, why=str(r.get("reason") or "")[:700])
+    if row.get("verdict") == "VALID":
+        n_sm = len(r.get("step_mem") or [])
+        if len(x["losses"]) == POS78_STEPS == n_sm and int(r.get("steps") or 0) == POS78_STEPS:
+            return "COMPLETE", dict(x, why="")
+        return "VOID", dict(x, why=f"a trained row without {POS78_STEPS} steps and a step record for each (losses {len(x['losses'])}, step_mem {n_sm})")
+    return "VOID", dict(x, why=row.get("why") or f"a trained row read {row.get('verdict')!r}")
+
+
+def pos78_lane(draws):
+    """Amendment 78's rule over the started draws in launch order (the maintainer's rulings on the review) -> (FIT | NOT_FIT | VOID | NOT_READ
+    | OPEN, why, roles). Each draw's role says how the rule used it.
+    - One bound OOM decides the lane NOT_FIT: FIT needs both draws to complete, and no further box starts. An OOM on a machine an earlier
+      draw read complete is VOID and a strike instead, flagged for a person: the kit's avoid list failed, and two records disagree about
+      one machine.
+    - A VOID or NO_READ draw is a strike. It never pairs and does not count toward the pair; two consecutive strikes stop the lane.
+    - The first two COMPLETE draws on different machines pair. A COMPLETE draw on a machine an earlier draw read is VOID (the kit avoids
+      every read machine) and a strike.
+    - Two paired draws whose steps 1-2 losses are not bitwise equal read VOID: B starts at zero and the first lr is 0, so those two
+      forwards are the same, and a miss is a plumbing fault. The check is between COMPLETE draws only, never an OOM draw.
+    - Fewer than two read draws: NOT_READ once the stop fires or the cap's POS78_CAP draws have started, else OPEN (a further draw may start)."""
+    roles, read, seen, strikes, done = [], [], set(), 0, False
+    for i, (s, x) in enumerate(draws, 1):
+        if done or len(read) == 2 or i > POS78_CAP:
+            roles.append("after the verdict")
+            continue
+        if s == "OOM" and x["machine"] not in seen:
+            roles.append("decides")
+            done = True
+            continue
+        if s == "COMPLETE" and x["machine"] not in seen:
+            read.append(i)
+            seen.add(x["machine"])
+            strikes = 0
+            roles.append("pairs")
+            continue
+        strikes += 1
+        done = strikes == 2
+        roles.append(("the stop" if done else "strike") + {"COMPLETE": " (a machine already read)",
+                                                            "OOM": f" ({POS78_FOR_A_PERSON})"}.get(s, ""))
+    if "decides" in roles:
+        i = roles.index("decides") + 1
+        return "NOT_FIT", f"draw {i} ran out of memory at a step, its arm bound to its registration: {draws[i - 1][1]['why']}", roles
+    if len(read) < 2:
+        if any(k.startswith("the stop") for k in roles):
+            return "NOT_READ", "two consecutive started draws were not read (the stop)", roles
+        if len(draws) >= POS78_CAP:
+            return "NOT_READ", f"the cap's {POS78_CAP} started draws gave fewer than two read draws", roles
+        return "OPEN", f"{len(read)} read draw(s) so far; a further draw may start within the cap, on a machine no draw has read", roles
+    (_, xa), (_, xb) = (draws[i - 1] for i in read)
+    if len(xa["losses"]) < 2 or len(xb["losses"]) < 2 or xa["losses"][:2] != xb["losses"][:2]:
+        return "VOID", f"steps 1-2's losses differ across draws {read[0]} and {read[1]} ({xa['losses'][:2]} vs {xb['losses'][:2]}): a plumbing fault", roles
+    return "FIT", f"draws {read[0]} and {read[1]} trained all {POS78_STEPS} steps with no out-of-memory error on two different machines", roles
+
+
+def _pos78_mib(h):
+    return "—" if h is None else f"{h[0]:,.0f} MiB (step {h[1]})"
+
+
+def pos78_block(F, d):
+    """Amendment 78's per-box read: this draw's state, its card, whether its machine id was read, the three headrooms (least over its steps),
+    held-out at 60 (reported beside tc1-5090-155's cd1cl1, never a bar: not like-for-like), and on an OOM the allocator's own line. The
+    verdict reads every started draw in launch order: `tc1_reduce.py --pos78-lane DIR_1 [DIR_2 [DIR_3]]`."""
+    if POS78_FAM not in F:
+        return []
+    s, x = pos78_draw(F, d)
+    held = "—" if x["held"] is None else f"{x['held']:.5f} (tc1-5090-155's cd1cl1 {POS78_REF_HELDOUT:.5f}; reported, not like-for-like)"
+    lines = ["\n## Amendment 78: the field recipe on a 24 GiB RTX 4090 (pb1cl256; this box is ONE draw -- the verdict reads every started "
+             "draw, `--pos78-lane`)", "",
+             "| draw state | memory.total | machine id read | steps trained | usable - max allocated | usable - max reserved | total - device used | held-out at 60 |",
+             "|---|---|---|---|---|---|---|---|",
+             f"| {s} | {x['mib'] if x['mib'] is not None else '—'} MiB | {'yes' if x['machine'] else 'no'} | {len(x['losses'])} | {_pos78_mib(x['h_alloc'])} | "
+             f"{_pos78_mib(x['h_res'])} | {_pos78_mib(x['h_dev'])} | {held} |"]
+    if x["why"]:
+        lines.append(f"- **{s}:** {x['why']}")
+    return lines + memcensus_block(F, POS78_FAM, POS78_ARMS, POS78_LABELS,
+                                   title="Amendment 78: the census table (Qwen3-30B-A3B, pb1cl256, this draw; GB = 1e9 bytes)")
+
+
+def pos78_lane_block(draws):
+    """The verdict over the started draws in launch order, with the least of each headroom over the draws it used quoted beside it (FIT never
+    means 'fits with room'; on NOT_FIT, the OOM draw's steps before its OOM). Machine ids and run paths stay out of the text (results text is
+    public); only whether the paired draws ran on two different machines is printed."""
+    v, why, roles = pos78_lane(draws)
+    lines = ["\n## Amendment 78's verdict: the field recipe on a 24 GiB RTX 4090 (pb1cl256, the started draws in launch order)", "",
+             "| draw | state | role | steps | usable - max allocated | usable - max reserved | total - device used | held-out at 60 |",
+             "|---|---|---|---|---|---|---|---|"]
+    for i, ((s, x), role) in enumerate(zip(draws, roles), 1):
+        lines.append(f"| {i} | {s} | {role} | {len(x['losses'])} | {_pos78_mib(x['h_alloc'])} | {_pos78_mib(x['h_res'])} | "
+                     f"{_pos78_mib(x['h_dev'])} | {'—' if x['held'] is None else format(x['held'], '.5f')} |")
+    used = [x for (s, x), role in zip(draws, roles) if role in ("pairs", "decides")]
+    least = {k: min((x[k] for x in used if x[k] is not None), key=lambda h: h[0], default=None) for k in ("h_alloc", "h_res", "h_dev")}
+    lines += ["", f"- **{v}:** {why}."]
+    flagged = [i for i, role in enumerate(roles, 1) if POS78_FOR_A_PERSON in role]
+    if flagged:
+        lines.append(f"- **For a person:** draw(s) {flagged} ran out of memory on a machine an earlier draw read complete. The kit's avoid "
+                     "list should make that impossible, and the two records disagree about one machine, so each such draw is VOID and a "
+                     "strike, never NOT_FIT.")
+    if v in ("FIT", "VOID") and len(used) == 2:
+        two = bool(used[0]["machine"] and used[1]["machine"] and used[0]["machine"] != used[1]["machine"])
+        lines.append(f"- **Two different machines:** {'yes' if two else 'no'} (the ids stay in the private store).")
+    if used:
+        lines.append(f"- **The least headrooms over the draws the verdict used:** usable - max allocated {_pos78_mib(least['h_alloc'])}; usable - "
+                     f"max reserved {_pos78_mib(least['h_res'])}; total - device used {_pos78_mib(least['h_dev'])}.")
+    lines += ["- **Scope:** Qwen3-30B-A3B @ ad44e777, the alpaca tokens (tc1-5090-155's), seq 2048, micro-batch 2, accum 4, r 16, the pb1cl256 "
+              "levers, a 24 GiB card by its listing and its memory.total. The longest padded micro-batch is 565 tokens (step 22); datasets with "
+              "longer batches are not covered.",
+              f"- **Held-out** is reported beside tc1-5090-155's cd1cl1 ({POS78_REF_HELDOUT:.5f}), which is not like-for-like; no quality claim "
+              "follows from this amendment."]
+    return lines
 
 
 def _vs_4090(mib):
@@ -7464,6 +7945,8 @@ def render(F, d):
         out += pos75_block(F, d)
     if POS76_FAM in F:
         out += pos76_block(F, d)
+    if POS78_FAM in F:
+        out += pos78_block(F, d)
     if MEMCENSUS_FAM in F:
         out += memcensus_block(F)
         out += ["\n## Predictions P41 / P42 / P43 (TC1-PREREG amendment 23: the memory census, e4b against Unsloth at micro-batch 1; scored mechanically from the receipts)",
@@ -7672,6 +8155,17 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_pos69(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if POS79_FAM in F:
+        out += ["\n## Amendment 79: the field recipe's same-stack position at the 0.58.0 release against Unsloth 2026.10.8 (profiled)",
+                "| arm | VERDICT | s/step (11..N) | device ms / profiled step | busy_t | CPU ops / profiled step | peak GB | held-out N |",
+                "|---|---|---|---|---|---|---|---|"]
+        for x in F[POS79_FAM]["rows"]:
+            r = x.get("r") or {}
+            pr = r.get("profile") or {}
+            out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(_cbk_device_ms(r), 1)} | "
+                       f"{f(_busy_vs_timed(r), 3)} | {pr.get('cpu_ops_per_step')} | {f(r.get('peak_vram_gb'), 3)} | {r.get('eval_loss_final')} |")
+        v79, ev79, _ = score_pos79(F, d)
+        out += [f"\n**Amendment 79 rule: {v79}**"] + [f"- {x}" for x in ev79]
     if SLADDER_FAM in F:
         out += ["\n## Amendment 70: the single padded block off vs on its ladder at the field recipe (descriptive)",
                 "| arm | VERDICT | s/step (11..N) | device ms / profiled step | busy_t | aten::bmm CPU us / call | laddered calls | peak GB | held-out 0 / N |",
@@ -9119,6 +9613,34 @@ def _pos76_set(groups=None, gap=None, held=None, rec=None, code=None):
             r[k] = v
         R[(fw, tag)] = r
     return R
+
+
+def _pos78_rec(**over):
+    """Amendment 78: one pb1cl256 draw at 60 steps on its registered code, path and loss (the record fields a trained 4090 box writes): every
+    LoRA call bucketed through the compact bucketed node, 256-token LM-loss chunks, and a flat synthetic step record whose three headrooms on
+    a 24,564 MiB card fall at different steps: 1,264 MiB at step 22, 664 at step 30 and 664 at step 40. `over` replaces whole fields."""
+    r = json.loads(json.dumps(_pos75_set()[POS75_ARMS[3]]))
+    r.update(fam=POS78_FAM, tag=POS78_ARMS[0][1], steps=POS78_STEPS, losses=[round(2.05 - 0.02 * i, 5) for i in range(POS78_STEPS)],
+             step_ms=[3000.0] * POS78_STEPS, eval_loss_final=0.7550)
+    for k in ("lora_loop_share", "tokens_per_step", "tokens_padded_per_step"):
+        if isinstance(r.get(k), list) and r[k]:
+            r[k] = (r[k] * POS78_STEPS)[:POS78_STEPS]
+    r["env"] = dict(r["env"], **{"grouped-nf4-gemm": POS78_GNF4_VERSION}, gnf4_code={"commit": POS78_GNF4, "nf4_qlora_sha256": POS78_NF4_QLORA_SHA},
+                    gpu="NVIDIA GeForce RTX 4090")
+    r["chunked_lm_loss"] = dict(r["chunked_lm_loss"], env=POS78_CHUNK, chunked_calls=240, small_calls=0, stock_calls=0, runtime_refusals=0)
+    r["lean_ab"] = dict(r.get("lean_ab") or {}, lora_path_calls={"loop": 0, "padded": 0, "grouped_mm": 0, "padded_bucketed": 49152},
+                        gnf4_pad_buckets_env="1", gnf4_pad_buckets_mode="1", gnf4_pad_ladder=False, gnf4_pad_ladder_env=None)
+    r["compact_buckets"] = {"env": None, "gnf4_has_compact_buckets": True, "calls": 49152}
+    r["keep_ab"] = dict(r.get("keep_ab") or {}, gnf4_compact_delta="1", gnf4_compact_delta_env="1")
+    M = 1048576
+
+    def sm(k):          # the running maxima rise at steps 22 and 30, the reserved pool at 40; the CUDA context stays 500 MiB
+        rs = 23400 if k >= 40 else 23000
+        return {"step": k, "max_allocated": (22800 if k >= 22 else 22000) * M, "max_reserved": (23400 if k >= 30 else 23000) * M,
+                "allocated": 20600 * M, "reserved": rs * M, "device_used": (rs + 500) * M}
+    r["step_mem"] = [sm(k) for k in range(1, POS78_STEPS + 1)]
+    r.update(over)
+    return r
 
 
 def _pos76_vram(d, R, context=645_000_000):
@@ -11985,6 +12507,227 @@ def selftest():
     assert loss_and_logits_bytes(mc6) == POS76_FIX_LOGITS and _blocks_live(mc6, "gb") == 2 and _blocks_live(R6[POS76_ARMS[1]]["mem_census"], "ga") == 1
     assert x5["loss"] == 1_373_501_440 + 686_750_724 and x5["delta"] == 0 and x5["tail"] == 0 and x5["device"] == 26238 * 1048576, x5
     cases += 1
+
+    # 132. TC1 amendment 78 (qwen3pos78fit): pb1cl256 on a 24 GiB RTX 4090, the started draws read in launch order. A trained row on its
+    #      registered code, path and loss with all 60 steps is COMPLETE; the first two COMPLETE draws on two machines with steps 1-2 equal read
+    #      FIT, with the least of each headroom over both quoted; one bound OOM decides NOT_FIT (at step 1 too, and with no second draw); an OOM
+    #      row missing any piece of its binding is VOID (rule 7); a VOID or NO_READ draw is a strike and never pairs, and so is a COMPLETE draw on
+    #      a machine already read; two consecutive strikes, or the cap without two read draws, read NOT_READ; a card outside the band, an unread
+    #      machine, a missing gate line, steps 1-2 unequal, or a row off its path, code, chunk or step count is VOID. No machine id is printed.
+    P8 = lambda r: {POS78_FAM: reduce_family(POS78_FAM, {POS78_ARMS[0]: r}, {}, POS78_STEPS)}
+    G8 = (f"PRECHECK {POS78_FAM} OK 6 passed in 9.1s\n", f"PADBUCKETS_PROBE {POS78_FAM} 1 True True True (want: 1 True True True)\n",
+          "TOKENS MATCH tc1-5090-155 (sha and train-only sha)\n")
+    with tempfile.TemporaryDirectory() as td8:
+        n_box = [0]
+
+        def box8(r, mib=24564, mach="host-id-aaa1", gates=G8):
+            n_box[0] += 1
+            bd = os.path.join(td8, f"b{n_box[0]}", "tc1")
+            os.makedirs(bd)
+            open(os.path.join(bd, "summary.txt"), "w").write(f"GPU_MEMORY_TOTAL {mib} MiB (a 24 GiB card: 23500-24600)\n" + "".join(gates))
+            json.dump({"environment": {"vast_machine_id": mach}}, open(os.path.join(td8, f"b{n_box[0]}", "receipt.json"), "w"))
+            return pos78_draw(P8(r) if r is not None else {}, bd), bd
+        lane = lambda *ds: pos78_lane(list(ds))
+        M8 = 1048576
+        sm_b = [dict(x, max_allocated=x["max_allocated"] + 100 * M8) for x in _pos78_rec()["step_mem"]]    # 100 MiB less h_alloc
+        (a8, d8a), (b8, _) = box8(_pos78_rec()), box8(_pos78_rec(step_mem=sm_b), mach="host-id-bbb2")
+        assert a8[0] == b8[0] == "COMPLETE", (a8, b8)
+        assert a8[1]["h_alloc"] == (1264.0, 22) and a8[1]["h_res"] == (664.0, 30) and a8[1]["h_dev"] == (664.0, 40), a8[1]
+        assert b8[1]["h_alloc"] == (1164.0, 22) and b8[1]["h_res"] == (664.0, 30), b8[1]
+        assert lane(a8, b8) == ("FIT", "draws 1 and 2 trained all 60 steps with no out-of-memory error on two different machines", ["pairs", "pairs"])
+        t8 = "\n".join(pos78_lane_block([a8, b8]))
+        assert "**FIT:**" in t8 and "usable - max allocated 1,164 MiB (step 22)" in t8 and "usable - max reserved 664 MiB (step 30)" in t8 \
+            and "total - device used 664 MiB (step 40)" in t8 and "For a person" not in t8, t8      # the least over BOTH draws
+        assert "**Two different machines:** yes" in t8 and "host-id-" not in t8 and "565 tokens (step 22)" in t8 and "not like-for-like" in t8, t8
+        assert "host-id-" not in "\n".join(pos78_block(P8(_pos78_rec()), d8a)) and "Amendment 78: the field recipe" in render(P8(_pos78_rec()), d8a)
+        assert lane(a8)[0] == "OPEN" and lane()[0] == "OPEN"
+
+        # the OOM binding: a bound OOM decides NOT_FIT; each missing piece reads VOID
+        ls, sm = _pos78_rec()["losses"], _pos78_rec()["step_mem"]
+        op8 = {"env": {"NF4_QLORA_PAD_BUCKETS": "1", "NF4_QLORA_PAD_BUCKETS_LADDER": None, "NF4_QLORA_COMPACT_DELTA": "1",
+                       "NF4_QLORA_COMPACT_BUCKETS": None, "E4B_CHUNKED_LM_LOSS": POS78_CHUNK},
+               "gnf4_imported": True, "lora_path_calls": {"loop": 0, "padded": 0, "grouped_mm": 0, "padded_bucketed": 17200},
+               "gnf4_pad_buckets_mode": "1", "gnf4_pad_ladder": False, "gnf4_compact_delta": "1", "gnf4_has_compact_buckets": True,
+               "compact_bucket_calls": 17200, "chunked_lm_loss": {"patched": 1, "chunked_calls": 84, "small_calls": 0, "stock_calls": 0, "runtime_refusals": 0}}
+
+        def oom8(k=22, **over):
+            r = _pos78_rec(status="oom", reason=f"OOM at step {k}: CUDA out of memory. Tried to allocate 72.00 MiB.", steps=None, phase="train",
+                           steps_done=k - 1, losses=ls[:k - 1], step_mem=sm[:k - 1], oom_path=json.loads(json.dumps(op8)))
+            for f in ("lean_ab", "compact_buckets", "keep_ab", "chunked_lm_loss"):     # an OOM stub carries none of the trained row's path records
+                r.pop(f, None)
+            r.update(over)
+            return r
+        (o8, _), (o1, _) = box8(oom8(), mach="host-id-ccc3"), box8(oom8(1), mach="host-id-ccc3")
+        assert o8[0] == "OOM" and "Tried to allocate 72.00 MiB" in o8[1]["why"] and o1[0] == "OOM", (o8, o1)
+        assert lane(o8)[0] == "NOT_FIT" and lane(o8, a8)[::2] == ("NOT_FIT", ["decides", "after the verdict"]), lane(o8, a8)
+        assert lane(a8, o8)[::2] == ("NOT_FIT", ["pairs", "decides"]) and lane(a8, o1)[0] == "NOT_FIT"      # an OOM at step 1: no bitwise check
+        t8o = "\n".join(pos78_lane_block([a8, o8]))
+        assert "**NOT_FIT:** draw 2 ran out of memory" in t8o and "| 2 | OOM | decides | 21 |" in t8o and "host-id-" not in t8o, t8o
+        ope = op8["env"]
+        for bad in ({"env": dict(_pos78_rec()["env"], **{"grouped-nf4-gemm": "0.49.0"}, gnf4_code={"commit": "deadbeef", "nf4_qlora_sha256": "0" * 64})},
+                    {"env": dict(_pos78_rec()["env"], gnf4_code={"commit": POS78_GNF4, "nf4_qlora_sha256": "0" * 64})},
+                    {"env": dict(_pos78_rec()["env"], gnf4_code=None)}, {"env": dict(_pos78_rec()["env"], torch="2.8.0+cu128")},
+                    {"oom_path": None}, {"oom_path": dict(op8, env={})},
+                    {"oom_path": dict(op8, env=dict(ope, NF4_QLORA_PAD_BUCKETS=None))},
+                    {"oom_path": dict(op8, env=dict(ope, NF4_QLORA_COMPACT_DELTA=None))},
+                    {"oom_path": dict(op8, env=dict(ope, E4B_CHUNKED_LM_LOSS="1"))},
+                    {"oom_path": dict(op8, env=dict(ope, NF4_QLORA_PAD_BUCKETS_LADDER="1"))},
+                    {"oom_path": dict(op8, env=dict(ope, NF4_QLORA_COMPACT_BUCKETS="0"))},
+                    {"oom_path": dict(op8, gnf4_pad_buckets_mode="auto")}, {"oom_path": dict(op8, gnf4_pad_ladder=True)},
+                    {"oom_path": dict(op8, gnf4_compact_delta="0")},
+                    {"oom_path": dict(op8, lora_path_calls=dict(op8["lora_path_calls"], padded=8))},
+                    {"oom_path": dict(op8, lora_path_calls={}, compact_bucket_calls=0)},                    # no LoRA call at all
+                    {"oom_path": dict(op8, compact_bucket_calls=17000)}, {"oom_path": dict(op8, gnf4_has_compact_buckets=False)},
+                    {"oom_path": dict(op8, chunked_lm_loss=None)},
+                    {"oom_path": dict(op8, chunked_lm_loss=dict(op8["chunked_lm_loss"], stock_calls=1))},
+                    {"oom_path": dict(op8, chunked_lm_loss=dict(op8["chunked_lm_loss"], patched=0))},
+                    {"oom_path": dict(op8, chunked_lm_loss=dict(op8["chunked_lm_loss"], runtime_refusals=1))},
+                    {"oom_path": dict(op8, chunked_lm_loss={"patched": 1})},
+                    {"mem_census": None}, {"step_mem": sm[:20]}, {"step_mem": None}, {"losses": ls[:20]}, {"phase": "load"},
+                    {"steps_done": None}, {"reason": "OOM at step 25: CUDA out of memory."}):
+            v8 = box8(oom8(**bad), mach="host-id-fff6")[0]
+            assert v8[0] == "VOID" and "does not prove its arm ran as registered" in v8[1]["why"], (bad, v8)
+            assert lane(a8, v8)[0] == "OPEN" and lane(v8, a8, b8)[::2] == ("FIT", ["strike", "pairs", "pairs"]), bad
+        assert box8(oom8(61, steps_done=60, losses=ls, step_mem=sm), mach="host-id-fff6")[0][0] == "VOID"   # past the 60 steps
+        fail_pre = (f"PRECHECK {POS78_FAM} pre-check FAILED: grouped-nf4-gemm rc=1 on this GPU 1 failed, 5 passed\n",) + G8[1:]
+        fail_probe = G8[:1] + (f"PADBUCKETS_PROBE {POS78_FAM} 1 True False True (want: 1 True True True)\n",) + G8[2:]
+        for gs in (fail_pre, fail_probe):                                                        # a gate line that says it failed
+            assert box8(oom8(), mach="host-id-fff6", gates=gs)[0][0] == "VOID" and box8(_pos78_rec(), mach="host-id-fff6", gates=gs)[0][0] == "VOID", gs
+        for g in range(3):                                                                       # each runner gate's line removed
+            gs = G8[:g] + G8[g + 1:]
+            assert box8(oom8(), mach="host-id-fff6", gates=gs)[0][0] == "VOID" and box8(_pos78_rec(), mach="host-id-fff6", gates=gs)[0][0] == "VOID", g
+
+        # the lane: strikes, the stop, the cap, machines, steps 1-2
+        v8 = box8(_pos78_rec(), mib=49140, mach="host-id-ddd4")[0]                              # a 48 GB card by its memory.total
+        (n8, _), = [box8(None, mach="host-id-ggg7")]
+        r8 = box8(_pos78_rec(status="not_run", reason="pre-check FAILED: rc=1", steps=None), mach="host-id-hhh8", gates=())[0]
+        assert v8[0] == "VOID" and n8[0] == "NO_READ" and r8[0] == "NO_READ", (v8, n8, r8)
+        assert lane(v8, n8)[::2] == ("NOT_READ", ["strike", "the stop"]) and lane(v8, n8, a8)[2] == ["strike", "the stop", "after the verdict"]
+        assert lane(a8, v8, b8)[::2] == ("FIT", ["pairs", "strike", "pairs"]) and lane(a8, r8, n8)[::2] == ("NOT_READ", ["pairs", "strike", "the stop"])
+        assert lane(v8, a8, n8)[::2] == ("NOT_READ", ["strike", "pairs", "strike"])                     # the cap: three started, one read
+        assert lane(v8, a8, n8, b8)[::2] == ("NOT_READ", ["strike", "pairs", "strike", "after the verdict"])   # a fourth never pairs
+        same = box8(_pos78_rec())[0]
+        assert lane(a8, same)[::2] == ("OPEN", ["pairs", "strike (a machine already read)"]) and lane(a8, same, b8)[0] == "FIT"
+        assert lane(a8, b8, n8)[2] == ["pairs", "pairs", "after the verdict"] and lane(a8, n8, b8, b8)[2][-1] == "after the verdict"
+        o_same = box8(oom8(), mach="host-id-aaa1")[0]                                            # an OOM where draw 1 read complete
+        assert o_same[0] == "OOM" and lane(a8, o_same)[::2] == ("OPEN", ["pairs", f"strike ({POS78_FOR_A_PERSON})"]), lane(a8, o_same)
+        assert lane(a8, o_same, v8)[0] == "NOT_READ" and lane(a8, o_same, b8)[0] == "FIT" and lane(o_same, a8)[0] == "NOT_FIT"
+        t8p = "\n".join(pos78_lane_block([a8, o_same]))
+        assert "**For a person:** draw(s) [2]" in t8p and "host-id-" not in t8p, t8p
+        assert box8(_pos78_rec(), mach="")[0][0] == "VOID"                                      # an unread machine id
+        for g8 in ("NVIDIA GeForce RTX 3090", "", None):                                         # a 24 GiB card that is not a 4090; no name
+            env8 = dict(_pos78_rec()["env"], gpu=g8)
+            assert box8(_pos78_rec(env=env8), mach="host-id-jjj1")[0][0] == "VOID", g8
+            assert box8(oom8(env=env8), mach="host-id-jjj1")[0][0] == "VOID", g8
+        t8 = box8(_pos78_rec(losses=[ls[0] + 1e-5] + ls[1:]), mach="host-id-eee5")[0]
+        assert t8[0] == "COMPLETE" and lane(a8, t8)[0] == "VOID" and "plumbing fault" in lane(a8, t8)[1]
+        la8 = _pos78_rec()["lean_ab"]
+        for bad in ({"lean_ab": dict(la8, lora_path_calls=dict(la8["lora_path_calls"], padded=8))},          # a single-block call
+                    {"lean_ab": dict(la8, gnf4_pad_buckets_env=None, gnf4_pad_buckets_mode="auto")},          # the buckets' unset auto
+                    {"compact_buckets": {"env": None, "gnf4_has_compact_buckets": True, "calls": 49000}},     # a bucketed call off the node
+                    {"chunked_lm_loss": dict(_pos78_rec()["chunked_lm_loss"], env="1")},                    # 512-token chunks
+                    {"env": dict(_pos78_rec()["env"], gnf4_code={"commit": POS76_GNF4["ga"], "nf4_qlora_sha256": POS78_NF4_QLORA_SHA})},
+                    {"steps": POS78_STEPS - 1, "losses": ls[:-1], "step_mem": sm[:-1]}, {"steps": POS78_STEPS - 1},
+                    {"lean_ab": {}}, {"compact_buckets": {}}, {"chunked_lm_loss": {}}, {"keep_ab": {}}, {"mem_census": None},   # evidence removed:
+                    {"env": dict(_pos78_rec()["env"], gnf4_code=None)}, {"step_mem": []}):                                    # each fails closed
+            assert box8(_pos78_rec(**bad), mach="host-id-fff6")[0][0] == "VOID", bad
+        nb = os.path.join(td8, "nomib", "tc1")                                                     # no GPU_MEMORY_TOTAL line at all
+        os.makedirs(nb)
+        open(os.path.join(nb, "summary.txt"), "w").write("BOX A families: qwen3pos78fit\n" + "".join(G8))
+        json.dump({"environment": {"vast_machine_id": "host-id-iii9"}}, open(os.path.join(td8, "nomib", "receipt.json"), "w"))
+        assert pos78_draw(P8(_pos78_rec()), nb)[0] == "VOID"
+    cases += 1
+    # 133. TC1 amendment 79 (qwen3pos79): amendment 69's box at the 0.58.0 release vs Unsloth 2026.10.8. QUOTED on the default fixture
+    #      (device 2.278 first, wall second, with the host CPU); an unfilled e4b pin, a missing pins line, a missing or not-RECORD-equal or
+    #      stale-prefix proof, a prefix that is not fresh, a knob in the arms' environment or no record of it, a proof without its own
+    #      import or at another wheel, or a missing versions.txt commit read NOT_READ; an off-pin version, torch, commit or tag, or no
+    #      profile, is VOID (NOT_READ: not two VALID draws a side); unstable draws read UNSTABLE; a held-out gap over 0.01 QUALITY_DIFFERS
+    g79 = globals()
+    e4b_pin = g79["POS79_E4B_SHA"]
+    stand_in = "ab" * 20                                       # a stand-in commit for the fixture; the kit's real pin is filled at the tag
+    pfx = POS79_PYCACHE_PREFIX + "x1y2z3"
+
+    def set79(rec=None, s=None, held=None):
+        R = _pos69_set(s=s, held=held)
+        out = {}
+        for (fw, tag), r in R.items():
+            r = json.loads(json.dumps(r))
+            r["fam"] = POS79_FAM
+            env = dict(r.get("env") or {}, torch="2.12.1+cu130", gnf4_code={"commit": POS79_GNF4_SHA, "nf4_qlora_sha256": "c" * 64},
+                       **POS79_PINS)
+            r["env"] = env
+            for k, v in ((rec or {}).get(tag) or {}).items():
+                r[k] = v(r) if callable(v) else v
+            out[(fw, tag)] = r
+        return {POS79_FAM: reduce_family(POS79_FAM, out, {}, 20)}
+
+    def box79(name, pins=True, proof=True, fresh=True, jprefix=None, versions=True, patch=None, knobs="E4B_SHA GNF4_SHA", spfx=None,
+              armenv="e4b=[] extra=[]"):
+        bd = os.path.join(d, name)
+        os.makedirs(bd, exist_ok=True)
+        sm = []
+        if pins:
+            sm.append(f"POS79_PINS e4b {g79['POS79_E4B_SHA']} gnf4 {POS79_GNF4_SHA} unsloth {POS79_PINS['unsloth']} unsloth_zoo "
+                      f"{POS79_PINS['unsloth_zoo']} release_proof {POS79_RELEASE_PROOF_SHA256}")
+        sm.append(f"RELEASE_PROOF OK unsloth=={POS79_PINS['unsloth']} unsloth_zoo=={POS79_PINS['unsloth_zoo']} pycache_prefix {spfx or pfx}")
+        if knobs is not None:
+            sm.append(f"POS79_KNOB_ENV {knobs} ")
+        if armenv is not None:
+            sm.append(f"POS79_ARM_ENV {armenv}")
+        open(os.path.join(bd, "summary.txt"), "w").write("\n".join(sm) + "\n")
+        if proof:
+            open(os.path.join(bd, "release_proof_unsloth.json"), "w").write("".join(json.dumps(
+                {"dist": x, "version": POS79_PINS[x], "wheel": f"{x}-{POS79_PINS[x]}-py3-none-any.whl", "wheel_pick": "filename", "sha256": "d" * 64,
+                 "files": 9, "record": "RECORD equal", "record_equal": True, "first_diff": None, "imports": {x: f"/v/{x}/__init__.py"},
+                 "pycache_prefix": jprefix or pfx, "pycache_fresh": fresh, **((patch or {}).get(x) or {})}) + "\n" for x in POS79_PROVEN))
+        if versions:
+            open(os.path.join(bd, "versions.txt"), "w").write(f"e4b(t212) {POS79_PINS['experts4bit-qlora']} @{g79['POS79_E4B_SHA']}\n"
+                                                              f"gnf4(t212) {POS79_PINS['grouped-nf4-gemm']} @{POS79_GNF4_SHA}\n")
+        open(os.path.join(bd, "box.json"), "w").write(json.dumps({"cpu": "AMD EPYC 7713 64-Core Processor"}))
+        return bd
+
+    try:
+        F79 = set79()
+        assert all(x["verdict"] == "VALID" for x in F79[POS79_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in F79[POS79_FAM]["rows"]]
+        g79["POS79_E4B_SHA"] = ""
+        v, ev, _ = score_pos79(F79, box79("p79-unfilled"))
+        assert v == "NOT_READ" and any("unfilled" in x for x in ev), (v, ev)
+        g79["POS79_E4B_SHA"] = stand_in
+        v, ev, q = score_pos79(F79, box79("p79-ok"))
+        assert v == "QUOTED" and abs(q["device"] - 4100.0 / 1800.0) < 1e-9 and q["cpu"].startswith("AMD EPYC"), (v, ev)
+        assert len(q["resolved"]) == 2 and all("absmax_dq" in x and "ckpt" in x for x in q["resolved"]), q["resolved"]
+        assert sum("0.58.0's defaults resolved to" in x for x in ev) == 2, ev
+        assert "Amendment 79 rule: QUOTED" in render(F79, os.path.join(d, "p79-ok"))
+        for name, kw, needle in (("p79-nopins", {"pins": False}, "POS79_PINS"), ("p79-noproof", {"proof": False}, "0 proofs"),
+                                 ("p79-stale", {"fresh": False}, "pycache_fresh not true"),
+                                 ("p79-jpfx", {"jprefix": POS79_PYCACHE_PREFIX + "other"}, "a prefix other than the summary's"),
+                                 ("p79-nover", {"versions": False}, "versions.txt has no line"),
+                                 ("p79-noimp", {"patch": {"unsloth_zoo": {"imports": {"unsloth": "/v/u.py"}}}}, "own name not among the imports"),
+                                 ("p79-whl", {"patch": {"unsloth": {"wheel": "unsloth-2026.10.7-py3-none-any.whl"}}}, "wheel 'unsloth-2026.10.7"),
+                                 ("p79-knob", {"knobs": "E4B_SHA GNF4_SHA NF4_QLORA_COMPACT_DELTA"}, "knobs set in the arms' environment"),
+                                 ("p79-noknob", {"knobs": None}, "0 POS79_KNOB_ENV lines"),
+                                 ("p79-spfx", {"spfx": "/var/tmp/x", "jprefix": "/var/tmp/x"}, "not one with a fresh"),
+                                 ("p79-e4benv", {"armenv": "e4b=[NF4_QLORA_COMPACT_DELTA=1] extra=[]"}, "extra environment is not recorded empty"),
+                                 ("p79-xenv", {"armenv": "e4b=[] extra=[E4B_CHUNKED_LM_LOSS=256]"}, "extra environment is not recorded empty"),
+                                 ("p79-noaenv", {"armenv": None}, "extra environment is not recorded empty")):
+            v, ev, _ = score_pos79(F79, box79(name, **kw))
+            assert v == "NOT_READ" and any(needle in x for x in ev), (name, v, ev)
+        old = set79(rec={"ckpt_unsloth_m_fv": {"env": lambda r: dict(r["env"], unsloth="2026.9.14")}})
+        assert old[POS79_FAM]["verdicts"][("unsloth", "ckpt_unsloth_m_fv")] == "VOID"
+        for tag, rec, needle in (("fused_attn4_m_fd", {"env": lambda r: dict(r["env"], torch="2.8.0+cu128")}, "not 2.12"),
+                                 ("fused_attn4_m_fd", {"env": lambda r: dict(r["env"], gnf4_code={"commit": "ef" * 20})}, "grouped-nf4-gemm commit"),
+                                 ("ckpt_unsloth_m_fv_d2", {"profile": None}, "no profile"),
+                                 ("fused_attn4_m_fd_d2", {"chunked_lm_loss": lambda r: dict(r["chunked_lm_loss"], runtime_refusals=1)}, "refused at run time"),
+                                 ("fused_attn4_m_fd", {"chunked_lm_loss": None}, "recorded nothing")):
+            row = [x for x in set79(rec={tag: rec})[POS79_FAM]["rows"] if x["tag"] == tag][0]
+            assert row["verdict"] == "VOID" and needle in row["why"], (tag, needle, row["verdict"], row["why"])
+        assert pos79_why("fused_attn4_m_pd", (F79[POS79_FAM]["rows"][-1].get("r") or {})).count("registers no") == 1   # an off-registration tag
+        assert "registers no" not in pos79_why("fused_attn4_m_fd", [x for x in F79[POS79_FAM]["rows"] if x["tag"] == "fused_attn4_m_fd"][0]["r"])
+        assert score_pos79(set79(s={"fd": (3.15, 3.40)}), os.path.join(d, "p79-ok"))[0] == "UNSTABLE"
+        assert score_pos79(set79(held={"fv": 0.7700}), os.path.join(d, "p79-ok"))[0] == "QUALITY_DIFFERS"
+    finally:
+        g79["POS79_E4B_SHA"] = e4b_pin
+    cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
 
@@ -11995,11 +12738,21 @@ def main():
     ap.add_argument("--md", default=None)
     ap.add_argument("--steps", type=int, default=None, help="registered N (default: read from the receipts)")
     ap.add_argument("--selftest", action="store_true", help="R7: hand-built receipts through every reading; exit 0 iff every case reads as registered")
+    ap.add_argument("--pos78-lane", nargs="+", metavar="DIR", default=None,
+                    help="TC1 amendment 78: the verdict over the started boxes' tc1 dirs in launch order (one pb1cl256 draw each, at most 3)")
     ap.add_argument("--tc1-dir", default=None, help="R10 (d): a TC1 receipt dir (qwen3 / qwen3native tokens) whose quoted 11..20 s/step medians the qwen3curve arms are read beside (TRAVELS within 10 %%); "
                                                    "R11 (b): the frontier tokens' offload anchor is read against its resident e4b/fused_attn4_m (EQUIVALENT-TO-RESIDENT) and P4 is scored")
     a = ap.parse_args()
     if a.selftest:
         selftest()
+        return
+    if a.pos78_lane:
+        if len(a.pos78_lane) > POS78_CAP:
+            ap.error(f"--pos78-lane: amendment 78 starts at most {POS78_CAP} draws")
+        text = "\n".join(pos78_lane_block([pos78_draw(reduce_dir(d), d) for d in a.pos78_lane]))
+        print(text)
+        if a.md:
+            open(a.md, "w").write(text + "\n")
         return
     if not a.dir:
         ap.error("dir is required (or --selftest)")

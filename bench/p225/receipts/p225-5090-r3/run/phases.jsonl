@@ -1,0 +1,26 @@
+{"phase": "install", "event": "start", "kind": "setup", "t": 1792769461}
+{"phase": "install", "event": "end", "t": 1792769498}
+{"phase": "offload_test", "event": "start", "kind": "measure", "t": 1792769505}
+{"phase": "offload_test", "event": "end", "t": 1792769509}
+{"phase": "fetch", "event": "start", "kind": "setup", "t": 1792769509}
+{"phase": "fetch", "event": "end", "t": 1792769967}
+{"phase": "bake", "event": "start", "kind": "setup", "t": 1792769974}
+{"phase": "bake", "event": "end", "t": 1792770029}
+{"phase": "train_REF", "event": "start", "kind": "measure", "t": 1792770040}
+{"phase": "train_REF", "event": "end", "t": 1792770445}
+{"phase": "ref_REF", "event": "start", "kind": "measure", "t": 1792770452}
+{"phase": "ref_REF", "event": "end", "t": 1792772371}
+{"phase": "slot_b0A1", "event": "start", "kind": "measure", "t": 1792772378}
+{"phase": "slot_b0A1", "event": "end", "t": 1792772533}
+{"phase": "slot_b0B", "event": "start", "kind": "measure", "t": 1792772540}
+{"phase": "slot_b0B", "event": "end", "t": 1792772667}
+{"phase": "slot_b0A2", "event": "start", "kind": "measure", "t": 1792772674}
+{"phase": "slot_b0A2", "event": "end", "t": 1792772720}
+{"phase": "slot_b1A1", "event": "start", "kind": "measure", "t": 1792772727}
+{"phase": "slot_b1A1", "event": "end", "t": 1792772773}
+{"phase": "slot_b1B", "event": "start", "kind": "measure", "t": 1792772780}
+{"phase": "slot_b1B", "event": "end", "t": 1792772826}
+{"phase": "slot_b1A2", "event": "start", "kind": "measure", "t": 1792772833}
+{"phase": "slot_b1A2", "event": "end", "t": 1792772879}
+{"phase": "reduce", "event": "start", "kind": "reduce", "t": 1792772886}
+{"phase": "reduce", "event": "end", "t": 1792772886}

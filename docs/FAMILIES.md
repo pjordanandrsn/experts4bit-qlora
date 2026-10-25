@@ -56,19 +56,19 @@ From `docs/capabilities.json` (each capability's `model_families`; its status is
 
 From `docs/claims.json`. Each cell counts the current claims for that family and area: verified or measured (a public receipt), then `+N private` for measured-private rows (a receipt this repository cannot show). Superseded, retired and open rows are not counted. The last column is the newest `measured_on` among the counted rows. A claim that names several families counts for each.
 
-| family | `offload` | `parity` | `quality` | `serve` | `train` | newest |
-|---|---|---|---|---|---|---|
-| `olmoe` | - | - | 1 | 14 | 23 | 2026-10-18 |
-| `qwen3_moe` | - | 1 +1 private | - | 130 +2 private | 121 | 2026-10-22 |
-| `gemma4_text` | - | 2 +1 private | 0 +1 private | 9 | 13 | 2026-10-10 |
-| `granitemoe` | - | 0 +1 private | 1 | 19 | 20 | 2026-10-18 |
-| `gpt_oss` | - | 1 +1 private | - | 14 | 10 | 2026-10-09 |
-| `mixtral` | - | - | 1 | 15 | 19 | 2026-10-20 |
-| `lfm2_moe` | - | - | - | - | 3 | 2026-10-04 |
-| `granitemoehybrid` | - | - | - | - | 3 | 2026-10-04 |
-| `ernie4_5_moe` | - | - | - | - | 3 | 2026-10-04 |
-| `nemotron_h` | - | - | - | - | 3 | 2026-10-04 |
-| `qwen3_5_moe` | - | - | - | 7 | 14 | 2026-10-09 |
+| family | `kernel` | `offload` | `parity` | `quality` | `serve` | `train` | newest |
+|---|---|---|---|---|---|---|---|
+| `olmoe` | 1 | - | - | 1 | 14 | 23 | 2026-10-24 |
+| `qwen3_moe` | 5 | - | 1 +1 private | - | 135 +2 private | 122 | 2026-10-24 |
+| `gemma4_text` | - | - | 2 +1 private | 0 +1 private | 9 | 13 | 2026-10-10 |
+| `granitemoe` | - | - | 0 +1 private | 1 | 19 | 20 | 2026-10-18 |
+| `gpt_oss` | - | - | 1 +1 private | - | 14 | 10 | 2026-10-09 |
+| `mixtral` | 2 | - | - | 1 | 16 | 19 | 2026-10-24 |
+| `lfm2_moe` | - | - | - | - | - | 3 | 2026-10-04 |
+| `granitemoehybrid` | - | - | - | - | - | 3 | 2026-10-04 |
+| `ernie4_5_moe` | - | - | - | - | - | 3 | 2026-10-04 |
+| `nemotron_h` | - | - | - | - | - | 3 | 2026-10-04 |
+| `qwen3_5_moe` | - | - | - | - | 7 | 14 | 2026-10-09 |
 
 ## Claims not mapped to a family
 

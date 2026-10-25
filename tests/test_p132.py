@@ -12,6 +12,7 @@ import subprocess
 import sys
 
 import pytest
+from guard_outcomes import expect_outcome
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 LANE = REPO / "bench" / "p132"
@@ -306,5 +307,5 @@ def test_missing_history_fails_under_ci_and_skips_locally(monkeypatch, ci, outco
         monkeypatch.setenv("CI", ci)
     else:
         monkeypatch.delenv("CI", raising=False)
-    with pytest.raises(outcome):
+    with expect_outcome(outcome):
         _history_missing("the commits are not in this checkout")

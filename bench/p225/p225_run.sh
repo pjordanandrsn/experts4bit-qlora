@@ -22,7 +22,8 @@ CANARY_SHA256=91c24ea851fec34c4e74cb589a0e42cbed2e0b84f1af813f013a57f8cda7da07  
 INSTALL_TO_GATE_S=450   # the install and the self-tests (P224's)
 MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39   # the SC1 pin, as P224
 case "$P225_RUN_ID" in
-  p225-5090-1|p225-5090-2|p225-5090-3) TIER=a;;        # the 30-Mops floor (the ruling); no fallback tier at this N
+  p225-5090-1|p225-5090-2|p225-5090-3|p225-5090-r1|p225-5090-r2|p225-5090-r3|p225-5090-r4|p225-5090-r5|p225-5090-r6|p225-5090-r7|p225-5090-r8) TIER=a;;   # the 30-Mops floor (the ruling); no fallback tier
+  # at this N; r1..r8 are Amendment 1's retry ids for boxes after one that did not start (labels, not budget)
   *) say "unregistered run ID: $P225_RUN_ID"; finish 78;;
 esac
 # ---- every fixed need and alarm (PREREG "The alarms"; p225_derive.py writes them, tests/test_p225.py parses them)
@@ -111,7 +112,7 @@ pipx(){ local log=$1 secs=$2; shift 2
   say "pip failed ($(tail -1 $log | cut -c1-120)) -- one retry in 20 s"; sleep 20
   perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input -c $W/constraints.txt "$@" >> $log 2>&1; }
 pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
-  "transformers==5.17.0" "bitsandbytes==0.50.2" accelerate sentencepiece safetensors "huggingface_hub>=0.23" pytest numpy \
+  "transformers==5.17.0" "bitsandbytes==0.50.2" accelerate sentencepiece safetensors "huggingface_hub>=0.23" "brotli>=1.2.0" pytest numpy \
   fastapi "uvicorn==0.38.0" httpx "datasets>=2.14" || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
 # Loggetta goes in --no-deps below (its own requirements would re-resolve e4b[train,fast] and grouped-nf4-gemm from
 # PyPI over the pinned commits), so the one it needs on the experts4bit path, datasets, is named above under the held

@@ -1,0 +1,9 @@
+# p228-5090-r1: files kept only in the private receipt store, byte-exact. The launcher's teardown proof and instance
+# record name the provider's instance. Receipts are never rewritten, so they are not committed here. sha256, then the
+# file's path within this run's receipt.
+823e6952015691addb3d74fdccdd04316d21a6816b102fd2d26376438b651f6e  teardown-proof.json
+a5fee6aefdf5f8337e42db10d687d4480cbca8319869f5e389e984dbd7801fe0  instance.json
+# Added 2026-10-24: files that carry the rented card's GPU UUID (nvidia-smi's uuid), kept only in the private
+# receipt store, byte-exact. The public tree carries no GPU UUID (the receipts rule since 2026-10-20).
+0ba3ea04e842f16f75b38fe815e29ab6bf3c4678a9e70d30bc79d47ff901a28a  forensics.txt
+d6b55d409b368e0b0eede023e90e6c3abbd65e8b5cfd48f4376ec999d5f006f3  outer.log

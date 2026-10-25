@@ -130,7 +130,11 @@ NEED_AXOLOTL=1; case " $FAMILIES " in " qwen3hp1cal ") NEED_UNSLOTH=0; NEED_AXOL
 case " $FAMILIES " in " qwen3hp2 ") NEED_AXOLOTL=0;; esac     # HP2 (bench/hp2/HP2-PREREG.md): e4b vs Unsloth only
 case " $FAMILIES " in " qwen3hpn ") NEED_AXOLOTL=0;; esac     # HPN (bench/hpn/HPN-DESIGN.md): e4b + Unsloth readers only
 case " $FAMILIES " in " qwen3hbd ") NEED_AXOLOTL=0;; esac     # HBD (bench/hbd/PREREG-hbd.md): e4b + Unsloth cells only
+case " $FAMILIES " in " qwen3pos79 ") NEED_AXOLOTL=0;; esac   # TC1 amendment 79: amendment 69's four arms, all in venv-unsloth
 case " $FAMILIES " in " qwen3hp3 "|" qwen3hp3shake ") NEED_UNSLOTH=0; NEED_AXOLOTL=0;; esac   # HP3 (bench/hp3/HP3-PREREG.md): its own three venvs, on one build
+# HP3 Amendment 2, the (R) fallback (qwen3hp3r): e4b vs Unsloth 2026.9.14 on HPN's build, so only venv-unsloth-t28 (+ e4b in it, t28u);
+# no cu130 Unsloth venv and no axolotl
+SKIP_UNS_CU130=0; case " $FAMILIES " in " qwen3hp3r "|" qwen3hp3rshake ") NEED_AXOLOTL=0; SKIP_UNS_CU130=1;; esac
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 FETCH_OK_N=0; FETCH_FAILED_N=0   # families whose model staged / did not (tc1_prepare); none staged and one failed = rc 15 at the end
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED pack=$PACK" | tee -a summary.txt
@@ -193,6 +197,52 @@ done
 for f in tc1_arm.py tc1_reduce.py tp4_alpaca.py n9_datasets.py ds_manifest.json; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done   # TC1b: + the clinical builder and its manifest (tc1_drive.sh's STAGE)
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "BOX REFUSED: gpu '$GPU_NAME' is not the registered class ($GPU_CLASS)"; echo "BOX_REFUSED gpu=$GPU_NAME" >> summary.txt; finish 12;; esac
+# HP3 Amendment 1 part 8 begin -- the card's MEMORY, not only its name (the reviewer, 2026-10-23, after a name-only screen pinned a
+# 48 GB modded RTX 4090): for the HP3 tokens, memory.total must fall in the class's band (MiB), else a host refusal before any staging
+# (rc 18: the launcher's "a lane's other registered host floor"; 14 is egress there)
+case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*|*" qwen3hp3r "*|*" qwen3hp3rshake "*)
+  GPU_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -dc 0-9)
+  case "$GPU_CLASS" in A4000) MEMBAND=15000:17000;; L4) MEMBAND=22000:24576;; 4090) MEMBAND=23000:25000;; L40S) MEMBAND=44000:49152;;
+    5090) MEMBAND=31000:33000;; *) MEMBAND="";; esac
+  if [ -z "$MEMBAND" ] || [ -z "$GPU_MIB" ] || [ "$GPU_MIB" -lt "${MEMBAND%%:*}" ] || [ "$GPU_MIB" -gt "${MEMBAND##*:}" ]; then
+    say "BOX REFUSED: gpu memory ${GPU_MIB:-unread} MiB is outside the $GPU_CLASS band (${MEMBAND:-none registered}) -- host-limited"
+    echo "BOX_REFUSED gpu_mem=${GPU_MIB:-unread}MiB class=$GPU_CLASS band=${MEMBAND:-none}" >> summary.txt; finish 18; fi;;
+esac
+# HP3 Amendment 1 part 8 end
+# TC1 amendment 79 -- the 0.58.0 release head-to-head: every pin is a constant of this reviewed kit, never a launch-time value. e4b at
+# v0.58.0's peeled tag commit and grouped-nf4-gemm at v0.51.0's (both git installs from the canonical repositories, byte-proven by the
+# commit, which the t212 tripwire asserts), Unsloth and unsloth_zoo at PyPI's latest at registration (proven by release_proof.py before any
+# arm). The token runs alone. Any other value refuses here (rc 78), before any staging.
+POS79_E4B_SHA=f15cb7d695cf7148067c6bcea543484f31dc3abd     # v0.58.0's peeled tag commit
+POS79_GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca     # v0.51.0's peeled tag commit
+POS79_UNSLOTH=2026.10.8; POS79_UNSLOTH_ZOO=2026.10.8
+case " $FAMILIES " in *" qwen3pos79 "*)
+  why=""
+  [ "$FAMILIES" = qwen3pos79 ] || why="the qwen3pos79 token runs alone (got: $FAMILIES)"
+  [ ${#POS79_E4B_SHA} -eq 40 ] || why="${why:+$why; }the kit's POS79_E4B_SHA is not a 40-hex commit (unfilled)"
+  [ "$E4B_SHA" = "$POS79_E4B_SHA" ] || why="${why:+$why; }E4B_SHA $E4B_SHA is not the kit's $POS79_E4B_SHA"
+  [ "$GNF4_SHA" = "$POS79_GNF4_SHA" ] || why="${why:+$why; }GNF4_SHA $GNF4_SHA is not the kit's $POS79_GNF4_SHA"
+  [ "${TC1_UNSLOTH_VERSION:-}" = "$POS79_UNSLOTH" ] || why="${why:+$why; }TC1_UNSLOTH_VERSION ${TC1_UNSLOTH_VERSION:-unset} is not $POS79_UNSLOTH"
+  [ "${TC1_UNSLOTH_ZOO_VERSION:-}" = "$POS79_UNSLOTH_ZOO" ] || why="${why:+$why; }TC1_UNSLOTH_ZOO_VERSION ${TC1_UNSLOTH_ZOO_VERSION:-unset} is not $POS79_UNSLOTH_ZOO"
+  [ -s "$W/release_proof.py" ] || why="${why:+$why; }release_proof.py is not staged"
+  # the two ways arm_once hands an arm extra environment (TC1_E4B_ENV to every e4b arm, TC1_ARM_EXTRA_ENV to one arm): amendment 79 reads
+  # every default unset, so neither may carry anything on this box
+  [ -z "${TC1_E4B_ENV:-}" ] || why="${why:+$why; }TC1_E4B_ENV is set ($TC1_E4B_ENV): amendment 79 hands its arms no extra environment"
+  [ -z "${TC1_ARM_EXTRA_ENV:-}" ] || why="${why:+$why; }TC1_ARM_EXTRA_ENV is set ($TC1_ARM_EXTRA_ENV): amendment 79 hands its arms no extra environment"
+  if [ -n "$why" ]; then say "BOX REFUSED (amendment 79 pins): $why"; echo "BOX_REFUSED pos79_pins: $why" >> summary.txt; finish 78; fi
+  echo "POS79_PINS e4b $E4B_SHA gnf4 $GNF4_SHA unsloth $POS79_UNSLOTH unsloth_zoo $POS79_UNSLOTH_ZOO release_proof $(sha256sum "$W/release_proof.py" | cut -c1-64)" | tee -a summary.txt
+  echo "POS79_ARM_ENV e4b=[${TC1_E4B_ENV:-}] extra=[${TC1_ARM_EXTRA_ENV:-}]" | tee -a summary.txt;;
+esac
+# TC1 amendment 78 -- the 24 GiB fit reading: the card's memory.total must be a 24 GiB card's, else a host refusal (rc 18) before any
+# staging. The GPU name alone admits a 48 GB "RTX 4090"; the screen bands the listing's gpu_ram, and this reads the card itself.
+POS78_MIB_MIN=23500; POS78_MIB_MAX=24600
+case " $FAMILIES " in *" qwen3pos78fit "*)
+  GPU_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -dc 0-9)
+  echo "GPU_MEMORY_TOTAL ${GPU_MIB:-unreadable} MiB (a 24 GiB card: $POS78_MIB_MIN-$POS78_MIB_MAX; amendment 78)" | tee -a summary.txt
+  { [ -n "$GPU_MIB" ] && [ "$GPU_MIB" -ge "$POS78_MIB_MIN" ] && [ "$GPU_MIB" -le "$POS78_MIB_MAX" ]; } \
+    || { say "BOX REFUSED: memory.total ${GPU_MIB:-unreadable} MiB is not a 24 GiB card's ($POS78_MIB_MIN-$POS78_MIB_MAX; host floor)"
+         echo "BOX_REFUSED gpu_memory_total=${GPU_MIB:-unreadable} band=$POS78_MIB_MIN-$POS78_MIB_MAX (amendment 78)" >> summary.txt; finish 18; };;
+esac
 # K: the class label the arm records (TC1_BOX_CLASS): "RTX <n>" for a numeric class, the class string itself otherwise (H100 NVL / SXM / PCIE pass the substring check above)
 case "$GPU_CLASS" in [0-9]*) BOX_CLASS="RTX $GPU_CLASS";; *) BOX_CLASS="$GPU_CLASS";; esac
 # F [F19]: every arm runs with OMP_NUM_THREADS = the box's PHYSICAL core count (recorded in the receipt's arm_facts)
@@ -219,13 +269,35 @@ echo "CPU allotment $ALLOT (cgroup quota capped by affinity; physical cores $PHY
 case " $FAMILIES " in *" qwen3ompab "*)
   [ "$ALLOT" -lt "$PHYS" ] || { say "BOX REFUSED: the container's CPU allotment ($ALLOT) is not below the physical cores ($PHYS) -- amendment 45's threads A/B has no contrast on this host (host floor)"; echo "BOX_REFUSED cpu_allotment=$ALLOT phys=$PHYS" >> summary.txt; finish 18; };;
 esac
-# TC1 amendment 76: a CPU-allotment floor in the pre-flight (P224's lesson, applied before data). Box tc1-5090-155 ran amendment 75's four
-# arms in 36.6 min at an allotment of 47. Scaling its CPU-bound phases as 47/ALLOT, every arm run three times (the load gate's two re-runs),
-# with 25 % headroom, the 2 h guard covers an allotment of 42 or more (TC1-PREREG amendment 76, "The CPU floor"). Below it the box refuses
-# here, before any venv or fetch.
-POS76_MIN_ALLOT=42
+# TC1 amendment 76's CPU-allotment floor (42) is SUPERSEDED by amendment 77: the quota is recorded (arm_facts.threads), never screened.
+# TC1 amendment 77: a SINGLE-THREAD floor in the pre-flight, before any venv or fetch. The probe is the launcher's own cpu_loop_mops loop
+# (its host probe; the same body as bench/p225/p225_probe.py), the median of 5 runs of at least 2 s each. Box tc1-5090-155 read 25.91
+# Mops (its launcher host facts); scaling its CPU-bound phases as 25.91/M, every arm run three times, with 25 % headroom, a 3 h guard
+# covers 15 Mops or more (TC1-PREREG amendment 77). Below the floor the box refuses here (rc 18, a host floor).
+POS77_MIN_MOPS=15
+single_thread_mops(){ python3 - <<'PYM' 2>/dev/null
+import statistics, time
+def loop():
+    x = 0
+    for i in range(1_000_000):
+        x = (x + i * 7) & 0xFFFF
+    return x
+def once(min_s=2.0):
+    t0, n = time.perf_counter(), 0
+    while True:
+        loop()
+        n += 1
+        dt = time.perf_counter() - t0
+        if dt >= min_s:
+            return n * 1_000_000 / dt / 1e6
+print("%.2f" % statistics.median(once() for _ in range(5)))
+PYM
+}
 case " $FAMILIES " in *" qwen3pos76co "*)
-  [ "$ALLOT" -ge "$POS76_MIN_ALLOT" ] || { say "BOX REFUSED: the container's CPU allotment ($ALLOT) is under amendment 76's floor ($POS76_MIN_ALLOT): the 2 h guard would not cover the four arms with the load gate's re-runs (host floor)"; echo "BOX_REFUSED cpu_allotment=$ALLOT floor=$POS76_MIN_ALLOT (amendment 76)" >> summary.txt; finish 18; };;
+  MOPS=$(single_thread_mops)
+  echo "SINGLE_THREAD ${MOPS:-unreadable} Mops (median of 5; floor $POS77_MIN_MOPS; python $(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null); amendment 77)" | tee -a summary.txt
+  python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "${MOPS:-0}" "$POS77_MIN_MOPS" 2>/dev/null \
+    || { say "BOX REFUSED: single-thread speed ${MOPS:-unreadable} Mops is under amendment 77's floor ($POS77_MIN_MOPS): the 3 h guard would not cover the four arms with the load gate's re-runs (host floor)"; echo "BOX_REFUSED single_thread_mops=${MOPS:-unreadable} floor=$POS77_MIN_MOPS (amendment 77)" >> summary.txt; finish 18; };;
 esac
 # P48 run 1 (2026-09-19) drew a host whose container overlay was 32 GB and died ENOSPC mid-fetch; box B fetches ~120 GB of
 # checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.
@@ -403,7 +475,7 @@ else
   say "venv-unsloth-t28 SKIPPED: the $FAMILIES token runs no Unsloth arm (TC1-PREREG amendment 3)"
 fi
 UNS_OK=0
-if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then
+if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ] && [ "$SKIP_UNS_CU130" != 1 ]; then
   UNS_OK=1; say "venv-unsloth: unsloth[cu130-torch2121]==$UNS_VER unsloth_zoo==$ZOO_VER (torch 2.12.1+cu130)"
   # TC1-PREREG amendment 2 (2026-10-01): the cu130 extra pins torch==2.12.1+cu130 / torchvision+cu130, which live on PyTorch's cu130
   # index, not PyPI -- without the index pip's resolver backtracks for the whole 2,700 s alarm (tc1-5090-7, 30 min at 99 % CPU, 0 sockets).
@@ -483,8 +555,8 @@ else
 fi
 # HBD's E2 (bench/hbd/PREREG-hbd.md): e4b + grouped-nf4-gemm at the same pins into venv-unsloth-t28 (torch 2.8.0+cu128, Unsloth's
 # transformers), built for the qwen3hbd token only; a failed install or tripwire makes E2 an install_failed row
-T28U_OK=0; T28U_REASON="built only for the qwen3hbd token"
-case " $FAMILIES " in *" qwen3hbd "*)
+T28U_OK=0; T28U_REASON="built only for the qwen3hbd, qwen3hp3r and qwen3hp3rshake tokens"
+case " $FAMILIES " in *" qwen3hbd "*|*" qwen3hp3r "*|*" qwen3hp3rshake "*)
   if [ "$UNS_T28_OK" = 1 ]; then
     T28U_REASON=""; say "venv-unsloth-t28 + e4b @$E4B_SHA + gnf4 @$GNF4_SHA (HBD's E2)"
     perl -e 'alarm 2400; exec @ARGV' $PY_UNS_T28 -m pip install -q --no-input --prefer-binary \
@@ -506,6 +578,28 @@ PYT3
       if [ $trc -ne 0 ]; then T28U_REASON="e4b-t28u tripwire failed (logs/tripwire_e4b_t28u.log)"; else T28U_OK=1; tail -1 logs/tripwire_e4b_t28u.log; fi
     fi
   else T28U_REASON="venv-unsloth-t28 did not install/import"; fi;;
+esac
+# HP3 Amendment 2, the (R) build record: e4b (t28u) and Unsloth 2026.9.14 share venv-unsloth-t28, so they are one build by construction;
+# hp3_build.py still probes each framework there and compares the build fields against torch 2.8.0+cu128 (bitsandbytes is Unsloth's own
+# resolve, recorded, never pinned by us). H3R_OK gates the family; a failure names the cause.
+H3R_OK=0; H3R_REASON="built only for the qwen3hp3r and qwen3hp3rshake tokens"
+case " $FAMILIES " in *" qwen3hp3r "*|*" qwen3hp3rshake "*)
+  H3R_REASON=""
+  [ "$UNS_T28_OK" = 1 ] || H3R_REASON="venv-unsloth-t28 did not install/import (logs/pip_unsloth_t28.log)"
+  [ -z "$H3R_REASON" ] && [ "$T28U_OK" != 1 ] && H3R_REASON="$T28U_REASON"
+  if [ -z "$H3R_REASON" ]; then mkdir -p $W/hp3
+    for fw in e4b unsloth; do
+      $PY_UNS_T28 $W/hp3_build.py probe --framework $fw --out $W/hp3/build_probe_$fw.json > logs/hp3_build_probe_$fw.log 2>&1 \
+        || { H3R_REASON="the $fw build probe failed (logs/hp3_build_probe_$fw.log)"; break; }
+      tail -1 logs/hp3_build_probe_$fw.log
+    done
+  fi
+  if [ -z "$H3R_REASON" ]; then
+    $PY_UNS_T28 $W/hp3_build.py compare $W/hp3/build_probe_e4b.json $W/hp3/build_probe_unsloth.json --want-torch 2.8.0 --want-cuda cu128 \
+      --want-bnb any --out $W/hp3/build.json 2>&1 | tee -a summary.txt
+    [ "${PIPESTATUS[0]}" = 0 ] && H3R_OK=1 || H3R_REASON="the two frameworks are not one build (hp3/build.json)"
+  fi
+  [ "$H3R_OK" = 1 ] || echo "HP3 BUILD_FAILED: $H3R_REASON" | tee -a summary.txt;;
 esac
 # ---------------------------------------------------------------- axolotl 0.20.0 (phase 2, axolotl-arm-spec.md): its own venv, uv, CPython 3.12, torch cu130
 # Pins (wheel METADATA): python >= 3.12, torch >= 2.13.0 <= 2.14.0, transformers == 5.17.0, peft == 0.21.0, bitsandbytes == 0.50.2.
@@ -1827,6 +1921,38 @@ tc1_pos69_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   can_run 600 $FAM/e4b/m_fd_d2      && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_pos79_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 79 (2026-10-24): amendment 69's box at the 0.58.0 release against
+# Unsloth 2026.10.8 -- the same four arms in the same ABBA order (fd fv fv fd), both in venv-unsloth, every arm profiled; the pins are the
+# kit's (the gate above), and release_proof.py has proven Unsloth's wheels before this runs (pos79_release_proof).
+tc1_pos79_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
+  local ALL="e4b:fused_attn4_m_fd:fused unsloth:ckpt_unsloth_m_fv:unsloth unsloth:ckpt_unsloth_m_fv_d2:unsloth e4b:fused_attn4_m_fd_d2:fused"
+  say "===== RELEASE FIELD POSITION family $FAM ($MID @ $REV; e4b 0.58.0 vs Unsloth $POS79_UNSLOTH on one stack, profiled; amendment 79)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7 --unsloth-moe-backend grouped_mm"
+  local PP="--profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM"
+  can_run 600 $FAM/e4b/m_fd         && E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/unsloth/m_fv     && arm   $FAM unsloth ckpt_unsloth_m_fv unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS $MATCH $PP
+  can_run 600 $FAM/unsloth/m_fv_d2  && draw2 $FAM unsloth ckpt_unsloth_m_fv unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS $MATCH $PP
+  can_run 600 $FAM/e4b/m_fd_d2      && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
+# pos79_release_proof -- TC1 amendment 79: after every install and before any arm, Unsloth and unsloth_zoo must be byte-for-byte the wheels
+# PyPI publishes (release_proof.py: the RECORD compare on disk, the import origin, the fresh bytecode prefix). The bytecode prefix is
+# exported here, after the installs (pip's own compile stays in-tree, which the proof's rule (b) allows), so the proof and every arm read
+# under one fresh, empty prefix; RELEASE_PROOF_FRESH_PYCACHE names the same directory. The proof runs as the arms run: venv-unsloth's
+# python, cwd $W, this environment. Any refusal ends the box here (rc 9) and no arm runs. The e4b / grouped-nf4-gemm knob environment
+# every arm inherits is recorded here too (POS79_KNOB_ENV: the names of every E4B_*, NF4_QLORA_* and GNF4_* variable), since the family
+# hands its arms no extra environment; the reducer reads the defaults unset from it.
+pos79_release_proof(){ local PC rc
+  [ "$UNS_OK" = 1 ] && [ "$T212_OK" = 1 ] || { say "RELEASE PROOF NOT RUN: venv-unsloth ok=$UNS_OK, e4b in it ok=$T212_OK"; echo "RELEASE_PROOF NOT_RUN uns_ok=$UNS_OK t212_ok=$T212_OK" >> summary.txt; return 1; }
+  PC=$(mktemp -d /tmp/tc1-pycache-XXXXXX) || return 1
+  export PYTHONPYCACHEPREFIX=$PC RELEASE_PROOF_FRESH_PYCACHE=$PC
+  (cd $W && perl -e 'alarm 900; exec @ARGV' $PY_UNS $W/release_proof.py "unsloth==$POS79_UNSLOTH" "unsloth_zoo==$POS79_UNSLOTH_ZOO") \
+    > $W/release_proof_unsloth.json 2> logs/release_proof.log; rc=$?
+  if [ $rc -ne 0 ]; then tail -3 logs/release_proof.log; say "RELEASE PROOF FAILED rc=$rc"; echo "RELEASE_PROOF FAILED rc=$rc $(tail -1 logs/release_proof.log | cut -c1-300)" >> summary.txt; return 1; fi
+  echo "RELEASE_PROOF OK unsloth==$POS79_UNSLOTH unsloth_zoo==$POS79_UNSLOTH_ZOO pycache_prefix $PC" | tee -a summary.txt
+  echo "POS79_KNOB_ENV $(env | grep -E '^(E4B_|NF4_QLORA_|GNF4_)' | cut -d= -f1 | sort | tr '\n' ' ')" | tee -a summary.txt; }
 # tc1_pos69mc_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 73 (2026-10-21): amendment 69's field recipe with the memory census --
 # its two matched arms (fd, fv), one draw each in venv-unsloth, --mem-census 1 and no profile (a profiler would sit inside the census window);
 # 60 steps with the field recipe's in-loop evaluations, as the claim's peak counted them. e4b and grouped-nf4-gemm are the drive's E4B_SHA /
@@ -1926,8 +2052,10 @@ tc1_pos76_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   [ "${GNF4_SHA_B:-}" = "$POS76_GNF4_AFTER" ] || why="${why:+$why; }amendment 76's AFTER side is grouped-nf4-gemm $POS76_GNF4_AFTER (got GNF4_SHA_B ${GNF4_SHA_B:-unset})"
   [ "$T212_OK" = 1 ] || why="${why:+$why; }venv-unsloth's e4b (t212) is unavailable: $T212_REASON"
   if [ -z "$why" ]; then                             # the pre-check: the AFTER commit's compact-delta tests on THIS GPU
-    local PC=$W/gnf4-after
-    rm -rf "$PC"
+    # the clone sits BESIDE the work dir, never in it (the fetch copies $W, and a checkout under it wedges the receipt store), and is
+    # removed after the pre-check
+    local PC=${POS76_PRECHECK_DIR:-$(dirname "$W")/gnf4-pos76}
+    rm -rf "$PC" "$PC-site"
     # pytest goes into its own --target dir, on PYTHONPATH for the pre-check only: venv-unsloth (the measured venv) is not changed, and
     # its package set is read before and after; a difference refuses the family
     $PY_UNS -m pip freeze --all > logs/precheck_freeze_before.txt 2> logs/precheck_freeze.err
@@ -1941,6 +2069,7 @@ tc1_pos76_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
     $PY_UNS -m pip freeze --all > logs/precheck_freeze_after.txt 2>> logs/precheck_freeze.err
     [ -s logs/precheck_freeze_before.txt ] && cmp -s logs/precheck_freeze_before.txt logs/precheck_freeze_after.txt \
       || why="${why:+$why; }the pre-check changed venv-unsloth's package set, or it could not be read (logs/precheck_freeze_before.txt, _after.txt)"
+    rm -rf "$PC" "$PC-site"
     echo "PRECHECK $FAM ${why:-OK} $(tail -1 logs/precheck_compact_delta.log 2>/dev/null)" | tee -a summary.txt
   fi
   if [ -n "$why" ]; then
@@ -1962,6 +2091,62 @@ tc1_pos76_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   else
     stubw $FAM e4b fused_attn4_m_cd1cl1_gb_d2 fused not_run "the switch back to grouped-nf4-gemm $GNF4_SHA failed (logs/pip_gnf4_t212_switch.log)"
   fi
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
+POS78_GNF4=efdda943d5a310343ed7fef2e23d1cbf2df27e51   # TC1 amendment 78: grouped-nf4-gemm#587's merge (#584 and #585, the corrected test)
+POS78_TOKENS_SHA=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac   # tc1-5090-155's tokens (train + 8 held-out rows)
+POS78_TRAIN_SHA=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7    # ... and their train-only sha
+# tc1_pos78_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 78 (2026-10-24): the field recipe on a 24 GiB RTX 4090. One arm, pb1cl256
+# (NF4_QLORA_COMPACT_DELTA=1 NF4_QLORA_PAD_BUCKETS=1 E4B_CHUNKED_LM_LOSS=256, e4b's matched arm, 60 steps, TC1_STEP_MEM=1, --mem-census 1),
+# at grouped-nf4-gemm POS78_GNF4. Before it, each refusing at cents: the card band (above, rc 18); the PRE-CHECK, that commit's
+# kernel/test_compact_delta.py and test_compact_buckets.py on this GPU, cloned OUTSIDE $W (the drive fetches $W, and a source checkout --
+# its .git, its own release SUMS -- is not evidence) and removed after; a probe that the INSTALLED nf4_qlora reads NF4_QLORA_PAD_BUCKETS=1
+# as bucketed; and the tokens equal to tc1-5090-155's.
+tc1_pos78_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_fd_pb1cl256:fused" TAG=fused_attn4_m_fd_pb1cl256
+  say "===== 24 GiB FIT family $FAM ($MID @ $REV; pb1cl256 on a 24 GiB RTX 4090, 60 steps; amendment 78)"
+  local why="" PC="${POS78_PRECHECK_DIR:-$(dirname "$W")/gnf4-pos78}" pb prc
+  [ "$STEPS" = 60 ] && [ "$EVAL_EVERY" = 20 ] && [ "$EVAL_N" = 8 ] || why="amendment 78 needs amendment 73's window: TC1_STEPS=60, TC1_EVAL_EVERY=20, TC1_EVAL_N=8 (got $STEPS, $EVAL_EVERY, $EVAL_N)"
+  [ "$GNF4_SHA" = "$POS78_GNF4" ] || why="${why:+$why; }amendment 78 pins grouped-nf4-gemm $POS78_GNF4 (got GNF4_SHA $GNF4_SHA)"
+  [ "$T212_OK" = 1 ] || why="${why:+$why; }venv-unsloth's e4b (t212) is unavailable: $T212_REASON"
+  if [ -z "$why" ]; then
+    rm -rf "$PC" "$PC-site"
+    $PY_UNS -m pip freeze --all > logs/precheck_freeze_before.txt 2> logs/precheck_freeze.err
+    { perl -e 'alarm 600; exec @ARGV' git clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git "$PC" && git -C "$PC" checkout -q "$GNF4_SHA" \
+      && $PY_UNS -m pip install -q --no-input --target "$PC-site" pytest; } > logs/precheck_setup.log 2>&1 || why="the pre-check could not set up grouped-nf4-gemm $GNF4_SHA (logs/precheck_setup.log)"
+    if [ -z "$why" ]; then
+      (cd "$PC/kernel" && PYTHONPATH="$PC-site" perl -e 'alarm 900; exec @ARGV' $PY_UNS -m pytest -q -rs -p no:cacheprovider test_compact_delta.py test_compact_buckets.py) \
+        > logs/precheck_compact_delta.log 2>&1; prc=$?
+      if [ $prc -ne 0 ]; then why="pre-check FAILED: grouped-nf4-gemm $GNF4_SHA kernel/test_compact_delta.py + test_compact_buckets.py rc=$prc on this GPU (logs/precheck_compact_delta.log)"
+      elif grep -qE '^SKIPPED \[[0-9]+\] .*(is a CUDA allocator statistic|device memory is a CUDA statistic)' logs/precheck_compact_delta.log; then
+        why="pre-check incomplete: a CUDA case skipped on this GPU (logs/precheck_compact_delta.log)"; fi
+    fi
+    $PY_UNS -m pip freeze --all > logs/precheck_freeze_after.txt 2>> logs/precheck_freeze.err
+    [ -s logs/precheck_freeze_before.txt ] && cmp -s logs/precheck_freeze_before.txt logs/precheck_freeze_after.txt \
+      || why="${why:+$why; }the pre-check changed venv-unsloth's package set, or it could not be read (logs/precheck_freeze_before.txt, _after.txt)"
+    rm -rf "$PC" "$PC-site"
+    echo "PRECHECK $FAM ${why:-OK} $(tail -1 logs/precheck_compact_delta.log 2>/dev/null)" | tee -a summary.txt
+  fi
+  if [ -z "$why" ]; then                             # the INSTALLED nf4_qlora (venv-unsloth, cwd $W, no PYTHONPATH), with the arm's variable
+    pb=$(cd "$W" && NF4_QLORA_PAD_BUCKETS=1 $PY_UNS -c "import nf4_qlora as q; print(q._pad_buckets_mode(), q._lean_delta_enabled(), q._compact_buckets_enabled(), q._pad_buckets_enabled(1))" 2>&1 | tail -1)
+    echo "PADBUCKETS_PROBE $FAM ${pb:-unreadable} (want: 1 True True True)" | tee -a summary.txt
+    [ "$pb" = "1 True True True" ] || why="the pad-buckets probe read ${pb:-unreadable}, not 1 True True True"
+  fi
+  if [ -n "$why" ]; then
+    stubw $FAM e4b $TAG fused not_run "$why"
+    echo "$(echo $FAM | tr a-z A-Z) REFUSED $why" | tee -a summary.txt; return 0
+  fi
+  local TOK TS TR; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  TR=$(train_sha $TOK)
+  if [ "$TS" != "$POS78_TOKENS_SHA" ] || [ "$TR" != "$POS78_TRAIN_SHA" ]; then
+    why="the tokens sha $TS / train $TR differ from tc1-5090-155's $POS78_TOKENS_SHA / $POS78_TRAIN_SHA"
+    stubw $FAM e4b $TAG fused not_run "$why"; echo "$(echo $FAM | tr a-z A-Z) REFUSED $why" | tee -a summary.txt
+    free_family $FAM ${MID//\//--}; return 0
+  fi
+  echo "TOKENS MATCH tc1-5090-155 (sha and train-only sha)" | tee -a summary.txt
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED" CEN="--mem-census 1 --profile-steps 0"
+  can_run 600 $FAM/e4b/m_fd_pb1cl256 && TC1_ARM_EXTRA_ENV="NF4_QLORA_COMPACT_DELTA=1 NF4_QLORA_PAD_BUCKETS=1 E4B_CHUNKED_LM_LOSS=256 TC1_STEP_MEM=1" \
+    E4B_VENV=t212 arm $FAM e4b $TAG fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
 # tc1_pos68_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 68 (2026-10-08): amendment 67's packed-row position profiled -- e4b's
@@ -2182,24 +2367,26 @@ DECGATE_REQUIRED="route:test_decoded_route_passes_the_rd1_gate_against_the_dense
 tc1_decoded_gate(){
   [ -f $W/decgate.json ] && grep -q '"passed": true' $W/decgate.json && return 0
   say "===== DECODED-ROUTE GATE (amendment 46): grouped-nf4-gemm @$GNF4_SHA's compiled tests for the decoded route on this card, before any arm"
-  local SRC=$W/gnf4-src REASON=""
-  rm -rf $SRC; : > logs/decgate_rc.txt
-  if ! perl -e 'alarm 600; exec @ARGV' git clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git $SRC > logs/decgate_clone.log 2>&1 \
-     || ! git -C $SRC checkout -q "$GNF4_SHA" >> logs/decgate_clone.log 2>&1; then
+  # the checkout sits BESIDE the work dir, never in it: the fetch copies $W, and a .git or a nested receipt.json under it wedges the receipt
+  # store (tc1dec-5090-4). It is removed after the gate as before.
+  local SRC=${DECGATE_SRC_DIR:-$(dirname "$W")/gnf4-decgate} REASON=""
+  rm -rf "$SRC"; : > logs/decgate_rc.txt
+  if ! perl -e 'alarm 600; exec @ARGV' git clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git "$SRC" > logs/decgate_clone.log 2>&1 \
+     || ! git -C "$SRC" checkout -q "$GNF4_SHA" >> logs/decgate_clone.log 2>&1; then
     REASON="the grouped-nf4-gemm checkout at $GNF4_SHA failed (logs/decgate_clone.log)"
   elif ! $PY_E4B -m pytest --version > /dev/null 2>&1 \
        && ! perl -e 'alarm 600; exec @ARGV' $PY_E4B -m pip install -q --no-input pytest > logs/decgate_pytest.log 2>&1; then
     REASON="pytest could not be installed into venv-e4b (logs/decgate_pytest.log)"
   fi
   if [ -z "$REASON" ]; then
-    (cd $SRC/kernel && env -u TRITON_INTERPRET perl -e 'alarm 1500; exec @ARGV' $PY_E4B -m pytest -q -p no:cacheprovider test_nf4_route.py \
+    (cd "$SRC/kernel" && env -u TRITON_INTERPRET perl -e 'alarm 1500; exec @ARGV' $PY_E4B -m pytest -q -p no:cacheprovider test_nf4_route.py \
        -k "$DECGATE_K" --junitxml=$W/logs/decgate_route.xml) > logs/decgate_route.log 2>&1
     echo "decgate route rc=$?" >> logs/decgate_rc.txt
-    (cd $SRC/kernel && env -u TRITON_INTERPRET perl -e 'alarm 600; exec @ARGV' $PY_E4B -m pytest -q -p no:cacheprovider test_nf4_route_decision.py \
+    (cd "$SRC/kernel" && env -u TRITON_INTERPRET perl -e 'alarm 600; exec @ARGV' $PY_E4B -m pytest -q -p no:cacheprovider test_nf4_route_decision.py \
        --junitxml=$W/logs/decgate_decision.xml) > logs/decgate_decision.log 2>&1
     echo "decgate decision rc=$?" >> logs/decgate_rc.txt
   fi
-  local HEAD_AT; HEAD_AT=$(git -C $SRC rev-parse HEAD 2>/dev/null)
+  local HEAD_AT; HEAD_AT=$(git -C "$SRC" rev-parse HEAD 2>/dev/null)
   TC1_W="$W" DECGATE_REASON="$REASON" GNF4_SHA="$GNF4_SHA" DECGATE_K="$DECGATE_K" DECGATE_REQUIRED="$DECGATE_REQUIRED" DECGATE_HEAD="$HEAD_AT" \
     $PY_E4B - <<'PYG' 2>&1 | tee -a summary.txt
 import json, os, re, xml.etree.ElementTree as ET
@@ -2243,7 +2430,7 @@ print(f"DECODED GATE {'PASSED' if passed else 'NOT PASSED'} on {gpu} (torch {tv}
 PYG
   # the checkout is not evidence (decgate.json, logs/decgate_* are): gone before any arm, so no partial pull or fetch carries its files --
   # its docs/receipts-ab/receipt.json once failed adertha's reconciler for every launch on the account (tc1dec-5090-4, 2026-10-06)
-  rm -rf $SRC
+  rm -rf "$SRC"
   grep -q '"passed": true' $W/decgate.json 2>/dev/null && return 0
   say "BOX REFUSED: the decoded route's correctness gate did not pass on this card ($W/decgate.json) -- no arm runs"
   echo "BOX_REFUSED decoded-gate" | tee -a summary.txt
@@ -2793,7 +2980,7 @@ tc1_hp2_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 TOK TS TOKC TS
 # tc1_hp3_family FAM MID REV FAL EAL UAL AAL SHAKE -- HP3 (bench/hp3/HP3-PREREG.md). Every arm runs in its framework's HP3 venv, all on the
 # one matched build (H3_OK, hp3/build.json). Phase B is one calibration step per framework on rows 97-396, each base exported. The one
 # evaluator, in venv-hp3-e4b, then reads each base with a zero adapter, and hp3_reduce.py g1 applies G1'. Exit 4 (a whole-box CLOSE)
-# ends the draw. Phase C runs confirmation seeds 3410-3412 for each framework that passed G1', with e4b first at each seed; the first
+# ends the draw. Phase C runs confirmation seeds 3410-3414 (Amendment 1) for each framework that passed G1', with e4b first at each seed; the first
 # run per framework re-exports its base. axolotl runs kernels OFF (--axolotl-kernels off --axolotl-best 0), as the prereg's label (ii)
 # says. Phase D is the evaluator's pass and hp3_reduce.py verdict, with the axolotl receipts for the engagement check.
 # No redraw: a VOID run makes its pairs NOT_READ.
@@ -2808,18 +2995,54 @@ hp3_fail(){ local AF=$1 FW=$2 TAG=$3 st=$4 cls v
         --floor-mib 16384 2>/dev/null) || cls="R | the classifier failed"
   [ -n "$cls" ] || cls="R | the classifier printed nothing"
   case "$cls" in HOST_*) echo "HP3 ARM_FAILED $FW/$TAG $st: host-attributable (${cls%% |*}): the spare | ${cls#*| }";;
-    *) echo "HP3 ARM_FAILED $FW/$TAG $st: ${cls%% |*} -> the (R) fallback signal | ${cls#*| }";; esac | tee -a summary.txt; }
+    *) echo "HP3 ARM_FAILED $FW/$TAG $st: ${cls%% |*}$SIG | ${cls#*| }";; esac | tee -a summary.txt; }
+# hp3_seed_plan W NF (HP3 Amendment 1 part 7): after seed 3410 completes, the number of confirmation seeds n that fit, by TIMING alone:
+# need(k) = (k - 1) x W + 360 s x NF x k (the evaluator's pass, ~6 min a run) + 900 s (can_run's reserve), against left() - 900. n is the
+# largest k in {5, 4, 3} that fits, else 0 (a host-limited NOT_READ). It writes hp3/seed_plan.json BEFORE any later seed or the
+# evaluator's pass, and echoes n; a failed write echoes UNWRITABLE and returns 1 (a harness fault). No loss, receipt or verdict is read.
+hp3_seed_plan(){ local SW=$1 NF=$2 L k n=0 need=""
+  L=$(left)
+  for k in 5 4 3; do local nk=$(( (k - 1) * SW + 360 * NF * k + 900 ))
+    need="$need \"$k\": $nk,"; [ $n = 0 ] && [ $nk -le $(( L - 900 )) ] && n=$k; done
+  $PY_E4B -c "import json,sys,time; n,W,L,nf=map(int,sys.argv[2:6]); seeds=[3410,3411,3412,3413,3414][:n]
+json.dump({'n': n, 'seeds': seeds, 'basis': 'timing', 'seed1_wall_s': W, 'left_s': L, 'frameworks': nf, 'need_s': json.loads(sys.argv[6]),
+           'eval_s_per_run': 360, 'reserve_s': 900, 'written_at_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+           'reason': ('fit: %d seeds at seed 3410\\'s wall time %d s' % (n, W)) if n else 'host-limited: fewer than 3 seeds fit at seed 3410\\'s wall time %d s' % W},
+          open(sys.argv[1], 'w'), indent=1)" $W/hp3/seed_plan.json $n $SW $L $NF "{${need%,} }" || { echo UNWRITABLE; return 1; }
+  echo $n; }
 hp3_run(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 RC=$8 TOK=$9 TS=${10}; shift 10
-  can_run 1500 $FAM/$FW/$TAG && HP3_VENV=1 arm $FAM $FW $TAG $ARM $AL "$MID" $REV 0 $RC $TOK $TS "$@"; }
-tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=${8:-0} TOK TS TOKC TSC rc s fw B RT OKF st x ALL=""
-  local CE=hp3cal_e4b_k00_s3407 CU=hp3cal_unsloth_s3407 CA=hp3cal_axolotl_s3407 SEEDS=$HP1_CONF_SEEDS RC=hp3 PR=() RCP=() SIG=""
-  [ "$SHAKE" = 1 ] && { SEEDS=${HP1_CONF_SEEDS%% *}; RC=hp3shake; SIG=" -> the (R) fallback signal"; }
+  can_run 1500 $FAM/$FW/$TAG && HP3_VENV=$HV E4B_VENV=$EV UNS_VENV=$UV arm $FAM $FW $TAG $ARM $AL "$MID" $REV 0 $RC $TOK $TS "$@"; }
+tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=${8:-0} MODE=${9:-p} TOK TS TOKC TSC rc s fw B RT OKF st x ALL=""
+  # HP3 Amendment 1: five confirmation seeds per framework, a literal (never HP1's TC1_HP1_CONF_SEEDS knob); the shakedown runs the first
+  local CE=hp3cal_e4b_k00_s3407 CU=hp3cal_unsloth_s3407 CA=hp3cal_axolotl_s3407 SEEDS="3410 3411 3412 3413 3414" RC=hp3 PR=() RCP=() SIG=""
+  [ "$SHAKE" = 1 ] && { SEEDS=3410; RC=hp3shake; SIG=" -> the (R) fallback signal"; }
+  # MODE p = build (P), the three frameworks in their HP3 venvs; MODE r = Amendment 2's (R) fallback: e4b (t28u) vs Unsloth 2026.9.14
+  # (t28) on torch 2.8.0+cu128, no axolotl, the evaluator in venv-unsloth-t28, the reducer in its --fallback-r mode
+  local HV=1 EV="" UV="" PYEV=$PY_H3E RFLAG=() FWS="e4b unsloth axolotl" BOK=$H3_OK BR=$H3_REASON
+  # each mode's shakedown has its own registered ids; under (R) a shakedown failure is a kit fault, never a fallback signal (the
+  # maintainer, 2026-10-24 04:36Z: hp3r-shake-1, one spare hp3r-shake-2, never data)
+  local SIDS="hp3-shake-1 hp3-shake-2"
+  if [ "$MODE" = r ]; then
+    SIDS="hp3r-shake-1 hp3r-shake-2"; [ "$SHAKE" = 1 ] && SIG=" -> an (R) kit fault: fix it, then the spare"
+    HV=""; EV=t28u; UV=t28; PYEV=$PY_UNS_T28; RFLAG=(--fallback-r); FWS="e4b unsloth"; BOK=${H3R_OK:-0}; BR=${H3R_REASON:-the (R) build record is missing}
+  fi
+  # the evaluator's trainable-count check (hp1_eval --expect-trainable): the 2-layer cut trains far fewer parameters than the
+  # registered 48-layer count, so the shakedown passes 0 (not checked), as HP1's shakedown and AXO1767 do; the read keeps the
+  # registered count. hp3-shake-1 (2026-10-23) VOIDed every calibration arm on it ("trainable 26771456 != the registered 642514944").
+  # 0 turns hp1_eval's check OFF, so it is reachable only from a registered SHAKEDOWN id (the reviewer, 2026-10-24): keyed on the id
+  # itself, never on an env var or a flag a reading launch could inherit; the shakedown token under any other id refuses.
+  local EXPT=()
+  if [ "$SHAKE" = 1 ]; then
+    case " $SIDS " in *" $TC1_RUN_ID "*) EXPT=(--expect-trainable 0);;
+      *) echo "HP3 REFUSED: the shakedown token under run id '$TC1_RUN_ID', not a registered shakedown id (${SIDS// //})" | tee -a summary.txt; return 0;; esac
+  fi
   say "===== HP3 family $FAM ($MID @ $REV; $([ "$SHAKE" = 1 ] && echo "SHAKEDOWN, never data: the 2-layer cut" || echo "the read: all 48 layers"); seeds [$SEEDS]; alarms e4b $EAL unsloth $UAL axolotl $AAL)"
   HP1_AX_DROP=1
-  [ "$H3_OK" = 1 ] || { echo "HP3 BUILD_FAILED: $H3_REASON$SIG" | tee -a summary.txt; return 0; }
-  for s in $SEEDS; do ALL="$ALL e4b:hp3_k00_s$s:fused unsloth:hp3_unsloth_s$s:unsloth axolotl:hp3_axolotl_s$s:axolotl"; done
+  [ "$BOK" = 1 ] || { echo "HP3 BUILD_FAILED: $BR$SIG" | tee -a summary.txt; return 0; }
+  local AXP=""; case " $FWS " in *" axolotl "*) AXP=" axolotl:$CA:axolotl";; esac
+  for s in $SEEDS; do ALL="$ALL e4b:hp3_k00_s$s:fused unsloth:hp3_unsloth_s$s:unsloth"; [ -n "$AXP" ] && ALL="$ALL axolotl:hp3_axolotl_s$s:axolotl"; done
   [ "$SHAKE" = 1 ] && export TC1_FETCH_ALLOW="model-00001-of-00016.safetensors model-00016-of-00016.safetensors *.json tokenizer* merges.txt vocab.json *.txt"
-  tc1_prepare $FAM "$MID" $REV $FAL "e4b:$CE:fused unsloth:$CU:unsloth axolotl:$CA:axolotl$ALL" $HP1_EVAL_N || { unset TC1_FETCH_ALLOW; return 0; }
+  tc1_prepare $FAM "$MID" $REV $FAL "e4b:$CE:fused unsloth:$CU:unsloth$AXP$ALL" $HP1_EVAL_N || { unset TC1_FETCH_ALLOW; return 0; }
   unset TC1_FETCH_ALLOW
   mkdir -p $W/hp1/hp3cal $W/hp3
   TOKC=$W/hp3/tokens_${FAM}_calib.json
@@ -2846,30 +3069,47 @@ tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=$
   local AK="--axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 0 --axolotl-kernels off --lora-init native --adapter-dtype native"
   local XC="--hp1-export $W/hp1/hp3cal --hp1-export-base 1"
   # phase B: e4b first (the competitors check their trainable counts against its receipt)
-  HP3_VENV=1 TC1_ARM_EXTRA_ENV="$E" arm $AF e4b $CE fused $EAL "$TM" $TR 0 hp3cal $TLC $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407 $XC
-  HP3_VENV=1 TC1_ARM_EXTRA_ENV="$E" arm $AF unsloth $CU unsloth $UAL "$TM" $TR 0 hp3cal $TLC $TSC $UK --seed 3407 --order-seed 3407 $XC
-  HP3_VENV=1 TC1_ARM_EXTRA_ENV="$E" arm $AF axolotl $CA axolotl $AAL "$TM" $TR 0 hp3cal $TLC $TSC $AK --seed 3407 --order-seed 3407 $XC
-  for x in $CE:e4b $CU:unsloth $CA:axolotl; do
+  HP3_VENV=$HV E4B_VENV=$EV TC1_ARM_EXTRA_ENV="$E" arm $AF e4b $CE fused $EAL "$TM" $TR 0 hp3cal $TLC $TSC --attn-4bit 1 $(hp1_cell k00 3407) --seed 3407 --order-seed 3407 $XC
+  HP3_VENV=$HV UNS_VENV=$UV TC1_ARM_EXTRA_ENV="$E" arm $AF unsloth $CU unsloth $UAL "$TM" $TR 0 hp3cal $TLC $TSC $UK --seed 3407 --order-seed 3407 $XC
+  [ -n "$AXP" ] && HP3_VENV=$HV TC1_ARM_EXTRA_ENV="$E" arm $AF axolotl $CA axolotl $AAL "$TM" $TR 0 hp3cal $TLC $TSC $AK --seed 3407 --order-seed 3407 $XC
+  local CALS="$CE:e4b $CU:unsloth"; [ -n "$AXP" ] && CALS="$CALS $CA:axolotl"
+  for x in $CALS; do
     st=$(status_of $AF ${x#*:} ${x%%:*}); [ "$st" = ok ] && continue
     if [ "$SHAKE" = 1 ]; then hp3_fail $AF ${x#*:} ${x%%:*} $st; else echo "HP3 CALIB_ARM_FAILED ${x#*:} $st" | tee -a summary.txt; fi
     rm -rf $SC; return 0
   done
-  env $E HF_HUB_OFFLINE=1 $PY_H3E $W/hp1_eval.py --receipts $W/${AF}_e4b_$CE.json $W/${AF}_unsloth_$CU.json $W/${AF}_axolotl_$CA.json \
-    --bases $W/hp1/hp3cal/base_e4b_$AF $W/hp1/hp3cal/base_unsloth_$AF $W/hp1/hp3cal/base_axolotl_$AF --tokens $TLC --eval-n 300 --model "$TM" --revision $TR \
-    --out $W/hp3/eval_cal.json > logs/hp3_eval_cal.log 2>&1; tail -1 logs/hp3_eval_cal.log
-  $PY_H3E $W/hp3_reduce.py g1 $W/hp3/eval_cal.json --out $W/hp3/g1.json 2>&1 | tee -a summary.txt; rc=${PIPESTATUS[0]}
+  local CR=() CB=(); for x in $CALS; do CR+=($W/${AF}_${x#*:}_${x%%:*}.json); CB+=($W/hp1/hp3cal/base_${x#*:}_$AF); done
+  env $E HF_HUB_OFFLINE=1 $PYEV $W/hp1_eval.py --receipts "${CR[@]}" \
+    --bases "${CB[@]}" --tokens $TLC --eval-n 300 --model "$TM" --revision $TR \
+    ${EXPT[@]+"${EXPT[@]}"} --out $W/hp3/eval_cal.json > logs/hp3_eval_cal.log 2>&1; tail -1 logs/hp3_eval_cal.log
+  $PYEV $W/hp3_reduce.py g1 $W/hp3/eval_cal.json ${RFLAG[@]+"${RFLAG[@]}"} --out $W/hp3/g1.json 2>&1 | tee -a summary.txt; rc=${PIPESTATUS[0]}
   # G1' is enforced HERE, by the reducer's exit code (4 = a whole-box CLOSE): the draw ends and the box tears down (a reading, not a strike)
   if [ "$rc" = 4 ]; then echo "HP3 G1_CLOSED: bases differ: outside this registration$SIG" | tee -a summary.txt; rm -rf $SC; hp1_bulk_manifest "$W"; return 0; fi
   [ "$rc" = 0 ] || { echo "HP3 G1_UNUSABLE rc=$rc" | tee -a summary.txt; rm -rf $SC; return 0; }
-  OKF=$($PY_H3E -c "import json,sys; d=json.load(open(sys.argv[1])); print(' '.join(f for f, s in d['frameworks'].items() if s['g1'] == 'PASS'))" $W/hp3/g1.json)
-  if [ "$SHAKE" = 1 ] && [ "$OKF" != "e4b unsloth axolotl" ]; then
+  # only this mode's frameworks run (FWS): under (R) a g1 record naming axolotl never starts an axolotl arm
+  OKF=$($PYEV -c "import json,sys; d=json.load(open(sys.argv[1])); print(' '.join(f for f, s in d['frameworks'].items() if s['g1'] == 'PASS' and f in sys.argv[2].split()))" $W/hp3/g1.json "$FWS")
+  if [ "$SHAKE" = 1 ] && [ "$OKF" != "$FWS" ]; then
     echo "HP3 SHAKEDOWN G1' at L2 is not PASS for every framework (PASS: $OKF)$SIG" | tee -a summary.txt; rm -rf $SC; return 0; fi
   # the 6(b) tolerance is READ from the reducer's record (one source; no restated number here)
-  RT=$($PY_H3E -c "import json,sys; print(float(json.load(open(sys.argv[1]))['roundtrip_zero_centred_tol']))" $W/hp3/g1.json) \
+  RT=$($PYEV -c "import json,sys; print(float(json.load(open(sys.argv[1]))['roundtrip_zero_centred_tol']))" $W/hp3/g1.json) \
     || { echo "HP3 G1_UNUSABLE (no 6(b) tolerance in g1.json)" | tee -a summary.txt; rm -rf $SC; return 0; }
   echo "HP3 G1' readable frameworks: $OKF; 6(b) VOIDs a run iff its adapter round trip exceeds $RT; no redraw" | tee -a summary.txt
-  local X="--hp1-export $W/hp1" BE=1 BU=1 BA=1
+  local X="--hp1-export $W/hp1" BE=1 BU=1 BA=1 T0 i=0 NPLAN=5 PLAN=() NF
+  NF=$(echo $OKF | wc -w | tr -d ' '); T0=$(date +%s)
   for s in $SEEDS; do
+    i=$((i + 1))
+    if [ "$SHAKE" != 1 ] && [ $i = 2 ]; then       # Amendment 1 part 7: the seed plan, from seed 3410's wall time across every framework
+      if ! NPLAN=$(hp3_seed_plan $(( $(date +%s) - T0 )) $NF); then
+        # a harness fault, never the host's (the maintainer, 2026-10-23 20:58Z): no read, and the record names the harness
+        echo "HP3 SEED_PLAN_UNWRITABLE: hp3/seed_plan.json could not be written (a harness fault, not host-limited); NOT_READ" | tee -a summary.txt
+        rm -rf $SC; hp1_bulk_manifest "$W"; return 0; fi
+      PLAN=(--seed-plan $W/hp3/seed_plan.json)
+      echo "HP3 SEED_PLAN n=$NPLAN ($($PY_E4B -c "import json,sys; print(json.load(open(sys.argv[1]))['reason'])" $W/hp3/seed_plan.json 2>/dev/null))" | tee -a summary.txt
+      if [ "$NPLAN" = 0 ]; then
+        echo "HP3 HOST_LIMITED: fewer than 3 complete seeds fit inside the guard; NOT_READ, a host refusal note, no strike" | tee -a summary.txt
+        rm -rf $SC; hp1_bulk_manifest "$W"; return 0; fi
+    fi
+    [ $i -gt $NPLAN ] && break
     case " $OKF " in *" e4b "*) B=""; [ $BE = 1 ] && { B="--hp1-export-base 1"; BE=0; }
       TC1_ARM_EXTRA_ENV="$E" hp3_run $AF e4b hp3_k00_s$s fused $EAL "$TM" $TR $RC $TLS $TS --attn-4bit 1 $(hp1_cell k00 $s) --seed $s --order-seed $s $X $B;; esac
     case " $OKF " in *" unsloth "*) B=""; [ $BU = 1 ] && { B="--hp1-export-base 1"; BU=0; }
@@ -2885,13 +3125,14 @@ tc1_hp3_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SHAKE=$
       st=$(status_of $AF ${x#*:} ${x%%:*}_s$SEEDS); [ "$st" = ok ] || { hp3_fail $AF ${x#*:} ${x%%:*}_s$SEEDS $st; rm -rf $SC; return 0; }
     done
   fi
-  env $E HF_HUB_OFFLINE=1 $PY_H3E $W/hp1_eval.py --receipts "${PR[@]}" --bases $W/hp1/base_*_$AF --tokens $TLS --eval-n $HP1_EVAL_N --model "$TM" --revision $TR \
-    --zero-report-only 1 --roundtrip-zero-centred $RT --out $W/hp3/eval_P.json > logs/hp3_eval_P.log 2>&1; tail -1 logs/hp3_eval_P.log
+  env $E HF_HUB_OFFLINE=1 $PYEV $W/hp1_eval.py --receipts "${PR[@]}" --bases $W/hp1/base_*_$AF --tokens $TLS --eval-n $HP1_EVAL_N --model "$TM" --revision $TR \
+    --zero-report-only 1 --roundtrip-zero-centred $RT ${PLAN[@]+"${PLAN[@]}"} ${EXPT[@]+"${EXPT[@]}"} --out $W/hp3/eval_P.json > logs/hp3_eval_P.log 2>&1; tail -1 logs/hp3_eval_P.log
   rm -rf $SC
   hp1_bulk_manifest "$W"
-  $PY_H3E $W/hp3_reduce.py verdict $W/hp3/eval_P.json --g1 $W/hp3/g1.json --manifest $W/hp1/bulk_manifest.json "${RCP[@]}" --out $W/hp3/verdict.json 2>&1 | tee -a summary.txt
+  $PYEV $W/hp3_reduce.py verdict $W/hp3/eval_P.json --g1 $W/hp3/g1.json --manifest $W/hp1/bulk_manifest.json "${RCP[@]}" ${PLAN[@]+"${PLAN[@]}"} ${RFLAG[@]+"${RFLAG[@]}"} \
+    --out $W/hp3/verdict.json 2>&1 | tee -a summary.txt
   if [ "$SHAKE" = 1 ]; then      # the kit check: every run that exists is non-VOID (one seed, so the pairs themselves read NOT_READ)
-    $PY_H3E -c "import json,sys; v=json.load(open(sys.argv[1]))['void']; bad={k: w for k, w in v.items() if w != 'absent'}
+    $PYEV -c "import json,sys; v=json.load(open(sys.argv[1]))['void']; bad={k: w for k, w in v.items() if w != 'absent'}
 print('HP3 SHAKEDOWN_OK' if not bad else 'HP3 SHAKEDOWN_FAILED ' + json.dumps(bad)); sys.exit(1 if bad else 0)" $W/hp3/verdict.json 2>&1 | tee -a summary.txt
   fi
   echo "HP3 verdict: $W/hp3/verdict.json" | tee -a summary.txt; return 0; }
@@ -3197,6 +3438,7 @@ tc1_native_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=
   free_family $FAM ${MID//\//--}; }
 # ---------------------------------------------------------------- the plan (TC1-PREREG "Model", "Alarms": e4b 3600, Unsloth 3600, HF 1800, axolotl 2700, reference 5400, profiled 2400; fetch as tp4's qwen3)
 #      FAM    MID                 REV                                       FETCH E4B  UNS  HF   AX   REF  PROF
+[ "$FAMILIES" = qwen3pos79 ] && { pos79_release_proof || finish 9; }   # TC1 amendment 79: no arm runs on an unproven Unsloth
 for FAM in $FAMILIES; do case "$FAM" in
   qwen3)       tc1_family        qwen3       Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700 5400 2400;;
   qwen3native) tc1_native_family qwen3native Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700;;
@@ -3249,10 +3491,12 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3pos67) tc1_pos67_family qwen3pos67 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 67: the packed-row position at the new defaults
   qwen3pos68) tc1_pos68_family qwen3pos68 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 68: amendment 67's position profiled
   qwen3pos69) tc1_pos69_family qwen3pos69 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 69: the field recipe's same-stack position profiled
+  qwen3pos79) tc1_pos79_family qwen3pos79 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 79: amendment 69's box at the 0.58.0 release vs Unsloth 2026.10.8
   qwen3pos69mc) tc1_pos69mc_family qwen3pos69mc Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 73: amendment 69's arms with the memory census
   qwen3pos74pd) tc1_pos74_family qwen3pos74pd Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 74: amendment 73's census at today's pins, one grouped-nf4-gemm switch per arm
   qwen3pos75cl) tc1_pos75_family qwen3pos75cl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 75: the 4090-fit read, the compact delta and the chunked LM loss
   qwen3pos76co) tc1_pos76_family qwen3pos76co Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 76: cd1cl1 at grouped-nf4-gemm before vs after #584's reordered compact backward
+  qwen3pos78fit) tc1_pos78_family qwen3pos78fit Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 78: pb1cl256 on a 24 GiB RTX 4090, 60 steps
   qwen3sladder) tc1_sladder_family qwen3sladder Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 70: the single-block ladder 0 vs 1, field recipe
   qwen3slauto) tc1_slauto_family qwen3slauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 71: the single-block ladder 0 vs auto, field recipe
   qwen3fqkv) tc1_fqkv_family qwen3fqkv Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # P129 Amendment 2: the fused q/k/v training projection 0 vs 1, field recipe
@@ -3287,6 +3531,8 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3hp2)    tc1_hp2_family    qwen3hp2    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HP2 (e4b K00 vs Unsloth)
   qwen3hp3)      tc1_hp3_family qwen3hp3      Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 5400 0;;   # HP3 (the read)
   qwen3hp3shake) tc1_hp3_family qwen3hp3shake Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1800 1800 1800 1;;   # HP3 shakedown (never data)
+  qwen3hp3r)     tc1_hp3_family qwen3hp3r     Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600 3600 0 r;;   # HP3 (R): e4b vs Unsloth 2026.9.14, t28
+  qwen3hp3rshake) tc1_hp3_family qwen3hp3rshake Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1800 1800 1800 1 r;;   # HP3 (R) shakedown (never data)
   qwen3hpn)    tc1_hpn_family    qwen3hpn    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HPN ($0 diagnostic, lab A2000)
   qwen3hbd)    tc1_hbd_family    qwen3hbd    Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 2400 3600;;       # HBD (bench/hbd/PREREG-hbd.md, one rented card)
   qwen3axo1767) tc1_axo1767_family qwen3hp1   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400;;           # #1767 (AXO1767-PREREG): the four-score reading
@@ -3314,9 +3560,10 @@ say "reduce"
 case " $FAMILIES " in *" tc2small "*) REDUCE_STEPS="";; *) REDUCE_STEPS="--steps $STEPS";; esac
 $PY_E4B $W/tc1_reduce.py $W --md $W/RESULTS-tc1.md $REDUCE_STEPS > RESULTS.txt 2>&1; tail -40 RESULTS.txt
 echo "----- summary.txt -----"; cat summary.txt; echo "----- versions.txt -----"; cat versions.txt
-[ "$NEED_UNSLOTH" != 1 ] || [ "$UNS_OK" = 1 ] || echo "NO cu130 UNSLOTH COMPARATOR on this box (venv-unsloth: ${CU130_OK:-?} driver gate, install ok=$UNS_OK): its rows are refused/install_failed" | tee -a summary.txt
+[ "$NEED_UNSLOTH" != 1 ] || [ "$SKIP_UNS_CU130" = 1 ] || [ "$UNS_OK" = 1 ] || echo "NO cu130 UNSLOTH COMPARATOR on this box (venv-unsloth: ${CU130_OK:-?} driver gate, install ok=$UNS_OK): its rows are refused/install_failed" | tee -a summary.txt
 [ "$NEED_UNSLOTH" != 1 ] || [ "$UNS_T28_OK" = 1 ] || echo "NO torch-2.8 UNSLOTH ROW on this box (venv-unsloth-t28 did not install/import)" | tee -a summary.txt
-[ "$AX_OK" = 1 ] || echo "NO AXOLOTL on this box: $AX_REASON" | tee -a summary.txt
+# the HP3 tokens build axolotl in their own venv (venv-hp3-axolotl, H3_OK), never venv-axolotl, so this line would misreport them
+case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*|*" qwen3hp3r "*|*" qwen3hp3rshake "*) ;; *) [ "$AX_OK" = 1 ] || echo "NO AXOLOTL on this box: $AX_REASON" | tee -a summary.txt;; esac
 case " $FAMILIES " in *" qwen3frontier "*) echo "AXOLOTL[deepspeed] extra installed=$AX_DS_OK (TC3 arm 10 is a refused row either way; its stub records the deepspeed version)" | tee -a summary.txt;; esac
 # 2026-10-09 (tc1-5090-143): a box on which no family's model staged measured nothing; it ends HARNESS_ERROR (rc 15), not OK with stubs
 if [ "$FETCH_OK_N" = 0 ] && [ "$FETCH_FAILED_N" -gt 0 ]; then say "NO MODEL STAGED: $FETCH_FAILED_N family fetch(es) failed, none succeeded -- every arm is a stub"

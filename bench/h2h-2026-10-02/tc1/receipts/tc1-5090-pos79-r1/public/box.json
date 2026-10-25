@@ -1,0 +1,18 @@
+{
+ "box": "A",
+ "run_id": "tc1-5090-pos79-r1",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "615.71.09",
+ "cpu": "Intel(R) Xeon(R) CPU E5-2698 v4 @ 2.20GHz",
+ "nproc": 40,
+ "mem_total_kb": "263747500",
+ "cgroup_memory_max": "183333027840",
+ "disk_root": "overlay         220G  3.0M  220G   1% /",
+ "cgroup_cpu_max": "1920000 100000",
+ "affinity_cpus": 40,
+ "cgroup_cpuset_effective": "0-39",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}

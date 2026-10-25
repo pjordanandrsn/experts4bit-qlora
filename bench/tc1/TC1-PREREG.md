@@ -3489,7 +3489,7 @@ comparable as context, not as the control. Both commits carry the release string
 - One RTX 5090 by the launcher's ranking. A pin names only a machine whose listing has held across at least two screen sweeps and 180 s,
   with its latest read fresh, on an offer that read listed. `TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`.
 
-**The CPU floor, in the pre-flight** (P224's lesson, applied before data). A box whose container CPU allotment is under **42** refuses
+**The CPU floor, in the pre-flight** (P224's lesson, applied before data; superseded by amendment 77). A box whose container CPU allotment is under **42** refuses
 before any venv or fetch (`BOX_REFUSED`, rc 18). The floor is sized from box `tc1-5090-155`, which ran amendment 75's four arms at an
 allotment of 47 (48 physical cores) in 36.6 min:
 
@@ -3544,7 +3544,7 @@ fit. A 4090 box needs its own registration.
 amendment 75's numbers that would put cd1cl1's zero-gap projection under a 4090's total, but not its device peak at amendment 75's
 allocator gap.
 
-**Budget.** One RTX 5090 at the declared $1.05/h, a 2 h guard, TC1's 98 GB host floor.
+**Budget** (superseded by amendment 77)**.** One RTX 5090 at the declared $1.05/h, a 2 h guard, TC1's 98 GB host floor.
 - **Time:** about 11 min of venvs and fetch, about 3 min of pre-check, four arms at about 9 min each, and two reinstalls: about 55 min.
 - **Worst case:** 2 h × $1.05 + 100 GB × $0.011/GB = **$3.20**. Expected about $1.5.
 
@@ -3552,3 +3552,255 @@ allocator gap.
 finding) runs amendment 75's arms on a real RTX 4090. Once this is pushed, explore boxes may run this family on a real RTX 4090 as well.
 Nothing they show changes this rule or this box, and none of their numbers is cited in this read. A 4090 fit is claimed only through its
 own registration.
+
+### Amendment 77 (2026-10-23T20:08Z, after amendment 76's registration, before any box): amendment 76's host floor screens single-thread speed, under a 3 h guard
+
+(The number 77 was once drafted for a thread-pinning change in a pull request closed unmerged. It was never registered.)
+
+**Why.** Amendment 76 sized its pre-flight floor on the container's CPU allotment (42). By the maintainer's ruling of 2026-10-23, the
+floor screens single-thread speed instead: the launcher's `cpu_loop_mops`, which it measures on every box. The allotment and the thread
+pools are recorded (`arm_facts.threads`), never screened.
+
+**The floor.** Box `tc1-5090-155` read **25.91 Mops** (its launcher host facts, in the private receipt store). Amendment 76's phase table
+is unchanged: 8.4 min that does not scale with the CPU, and 76.65 min that does, with every arm run three times. This amendment ASSUMES
+the CPU-bound part scales as 25.91/M; the 25 % headroom is what covers departures from that.
+
+| guard | 1.25 × (8.4 + 76.65 × 25.91/M) <= guard | floor | worst |
+|---|---|---|---|
+| 2 h | M >= 22.67 | 23 Mops | $3.20 |
+| 2.5 h | M >= 17.80 | 18 Mops | $3.72 |
+| **3 h** | M >= 14.65 | **15 Mops** | **$4.25** |
+
+Registered: the **3 h guard** and the **15 Mops** floor. It admits slower hosts for about $1 more worst case.
+
+**The probe.** The pre-flight, before any venv or fetch, times the launcher's own `cpu_loop_mops` loop (the same body as
+`bench/p225/p225_probe.py`): the median of 5 runs of at least 2 s each. `summary.txt` gets a `SINGLE_THREAD` line. Under 15 Mops, or an
+unreadable reading, the box refuses (`BOX_REFUSED`, rc 18, a host floor; no data is read). The launcher's own `cpu_loop_mops` from the
+same box is recorded beside it in the receipt.
+
+**Budget** (supersedes amendment 76's): one RTX 5090 at the declared $1.05/h, a 3 h guard, TC1's 98 GB host floor. Worst case
+3 h × $1.05 + 100 GB × $0.011/GB = **$4.25**. Expected about $1.5.
+
+Everything else is amendment 76's: the arms, the pre-check, the validity predicates, the rule, the window and the read.
+
+### Amendment 78 (2026-10-24T01:30Z, after amendment 77, before any box): the field recipe on a 24 GiB RTX 4090 (the fit reading)
+
+**Why.** The goal is that TC1's matched field recipe trains on a real 24 GB RTX 4090, with no change to the recipe. Amendment 75's
+box (`tc1-5090-155`) found no arm that fits. Since then, three levers that change no recipe term have landed or been found in
+grouped-nf4-gemm and e4b: the compact delta (#584 and #585), the chunked LM loss in smaller chunks, and per-bucket padding of the LoRA
+delta through the compact bucketed node. Explore boxes, kept in the private receipt store, informed this design. They are design input
+only: no number from them is used here or in the rule.
+
+**The arm (one a box): pb1cl256.** e4b's matched arm at the field recipe for 60 steps (amendment 73's window: eval every 20 on 8 rows),
+with:
+- `NF4_QLORA_PAD_BUCKETS=1`: every LoRA delta padded per bucket (`_pad_buckets`: a bucket's width is at most twice its narrowest group's)
+  through the compact bucketed node, instead of every group padded to the widest;
+- `E4B_CHUNKED_LM_LOSS=256`: the training loss in 256-token chunks;
+- `NF4_QLORA_COMPACT_DELTA=1`, as set (with every call bucketed, it serves no call);
+- `TC1_STEP_MEM=1` and `--mem-census 1`; no profile.
+No recipe term changes: the model and its revision, the 60 steps, sequence 2048, micro-batch 2, accumulation 4, r 16, the adapter targets,
+fp32 matched adapters, expert residency, the optimizer and the loss masking are TC1's. The arithmetic order differs from the shipped arm,
+so a training trajectory may differ slightly.
+
+**Pins.** The launch commit and the stack under test are this amendment's merge. grouped-nf4-gemm `efdda943` (#587's merge: #584 and
+#585, with the corrected compact-delta test), release 0.50.0, bound by commit and the sha256 of the `nf4_qlora.py` it installs.
+Qwen3-30B-A3B at `ad44e777`. The tokens must equal `tc1-5090-155`'s (sha `bfc742f6…`, train-only sha `604f3140…`), else the box refuses.
+
+**Before the arm, each refusing at cents:**
+1. the card: `memory.total` must be 23,500 to 24,600 MiB, a 24 GiB card. Outside it the box refuses before any staging (rc 18, a host
+   floor). The market screen bands the listing's `gpu_ram` the same way, since the GPU name alone admits a 48 GB "RTX 4090";
+2. the pre-check: `efdda943`'s `kernel/test_compact_delta.py` and `kernel/test_compact_buckets.py` on this GPU. A failure, a skipped
+   CUDA case, or a change to venv-unsloth's package set refuses. The clone sits outside the fetched work dir and is removed after;
+3. a probe: the installed `nf4_qlora`, read in venv-unsloth with the arm's variable, must report bucketed padding on, the lean delta
+   on, the compact bucketed node on, and bucketing for any call;
+4. the tokens, as above.
+
+**Draws: two read boxes on two different machines.** One machine is not a capability. The kit enforces it: each box's manifest lists
+every earlier read draw's committed receipt under `avoid_vast_machine_receipts`, and the launcher refuses a launch whose cited receipt is
+absent or not a completed run of the same class. The reducer also checks it.
+
+**The rule** (`tc1_reduce.py`: `pos78_draw` per box, `--pos78-lane DIR_1 [DIR_2 [DIR_3]]` for the verdict over the started boxes in
+launch order). Per box:
+- COMPLETE: a VALID trained row with all 60 steps and a step record for each. VALID binds the code (commit and file hash), the path
+  (every LoRA call width-bucketed, with no single-block, loop or grouped_mm call, and the compact bucketed node's calls equal to the
+  bucketed calls) and the loss (every training forward chunked at 256), on amendment 69's field defaults;
+- OOM: the arm died of an out-of-memory error at a step of the 60, and its record proves the arm ran as registered. An OOM row carries
+  no trained-row path record, so the arm writes one for it (`oom_path`): the knobs as the process saw them and the counters up to the
+  OOM. The binding is torch 2.12; grouped-nf4-gemm's version, commit and `nf4_qlora.py` hash; the three knobs
+  (`NF4_QLORA_PAD_BUCKETS=1`, `NF4_QLORA_COMPACT_DELTA=1`, `E4B_CHUNKED_LM_LOSS=256`, with no bucket ladder and the compact bucketed
+  node at its default) and the modes they resolved to; every LoRA call so far width-bucketed through the compact bucketed node, at least
+  one; the chunked loss patched, with no forward on the stock or small loss; a loss and a step record for each completed step; and the
+  census. Its step and the allocator's own line are kept;
+- VOID: a trained or OOM row off its registration, a card outside the band, a row whose recorded GPU is not an RTX 4090 (the band
+  alone admits a 24 GiB RTX 3090), an unread machine id, or a missing pass line for the pre-check, the probe or the tokens in the box's
+  summary;
+- NO_READ: no trained or OOM row (a refused pre-check, a dead box).
+
+Over the started draws, in launch order:
+1. **NOT_FIT** on the first OOM draw. FIT needs both draws to complete, so one bound OOM on a 24 GiB card decides the lane, and no
+   further box starts. This holds at any step, step 1 or 2 included. The one exception: an OOM on a machine an earlier draw read
+   complete is VOID and a strike, never NOT_FIT. The kit's avoid list should make it impossible, so it means the enforcement failed,
+   and two records that disagree about one machine are not a clean answer. The verdict flags such a draw for a person;
+2. a VOID or NO_READ draw is a strike. It never pairs and does not count toward the pair. So is a COMPLETE draw on a machine an
+   earlier draw read (the kit avoids every read machine). Two consecutive strikes stop the lane: **NOT_READ**;
+3. the first two COMPLETE draws on different machines pair. **VOID** if their steps 1-2 losses are not bitwise equal. B starts at zero
+   and the first learning rate is 0, so those two forwards are the same, and a miss is a plumbing fault. The check is between COMPLETE
+   draws only, never an OOM draw;
+4. otherwise **FIT**;
+5. **NOT_READ** if the cap's three started boxes give fewer than two read draws. Until then the lane is open, and the next box avoids
+   every machine already read.
+
+**No headroom floor.** But the claim row and the results text quote the least of each of three headrooms over the draws the verdict
+used (both paired draws; on NOT_FIT, the OOM draw's steps before its OOM), so "fits" is never read as "fits with room": usable minus max allocated, usable minus max reserved, and `memory.total` minus device used. Usable is
+`memory.total` minus the step's CUDA context (its device used minus its reserved).
+
+**Reported, never a bar.** Held-out loss after 60 steps, beside `tc1-5090-155`'s cd1cl1 (0.75489). That is not like-for-like (a
+different family, arm and card), and no quality claim follows from this amendment. s/step is recorded.
+
+**The claim's scope.** A FIT covers this fixture only: Qwen3-30B-A3B at `ad44e777`, the alpaca tokens above, sequence 2048,
+micro-batch 2, accumulation 4, r 16, the pb1cl256 levers, and a 24 GiB card by both its listing and its `memory.total`. The longest
+padded micro-batch in these tokens is 565 tokens (step 22, from `tc1-5090-155`'s record). Datasets with longer batches are not covered.
+
+**bench/common's registration rules, stated:**
+1. launch commit and stack: this amendment's merge, with grouped-nf4-gemm `efdda943`;
+2. run ids: `tc1-4090-1` to `tc1-4090-3` (one for every box the cap allows to start), and retry ids `tc1-4090-r1` to `tc1-4090-r8`.
+   No code parses an id's number;
+3. outcome classes as in bench/common's table. A refusal at create or a NOT_RUN uses an id and is never a strike. The runner's card
+   refusal (rc 18) is a host refusal before the install;
+4. the cap: at most **three** boxes START. A strike is a started box that was not read; two consecutive strikes stop the lane. One bound
+   OOM ends the lane. The third started box is the last, whatever it reads;
+5. boot slack: a 1.5 h guard against about 30 minutes of phases leaves far more than 540 s;
+6. once closed, the tests assert this amendment's literal pins at its frozen commit;
+7. every gate fails closed: a missing memory.total, GPU name, machine id, gate line, step record, path counter, knob, loss record or
+   code record reads VOID or NO_READ, on a trained row and on an OOM row, and the reducer self-test (case 132) removes each one;
+8. the fetch imports no links (`tc1_drive.sh`'s `--no-links`, rule 8).
+
+**Budget.** One RTX 4090 a box, at a declared $1.00/h with 220 GB of storage, a 1.5 h guard, and up to 100 GB downloaded at no more
+than $0.02/GB. The lane must fit the $15 rail, so the download price is capped and the eight retry ids are kept: a box that does not
+start is this market's common case. The cap is enforced in two places, which read one constant:
+- the kit's screen (`bench/tc1/pos78_kit.py`, `offer_why`) admits only one GPU, a listing `gpu_ram` of 24,000 to 24,600 MiB, at most
+  $1.00/h with the 220 GB disk, and download at no more than $0.02/GB;
+- the launch template (`bench/tc1/pos78_manifest_template.json`) carries `max_download_usd_per_gb` 0.02, and the launcher drops any
+  offer that bills download above it.
+`tests/test_tc1_pos78_kit.py` refuses an offer at $0.021/GB and checks that the template carries the screen's caps.
+- **A started box:** 1.5 h × $1.00 + 100 GB × $0.02 = **$3.50**, the guard running from the create.
+- **A box that does not start** (a NOT_RUN at the launcher's pre-flight, or the runner's refusal before its install: the card band, the
+  GPU class, the disk, the driver) costs its time to the refusal plus its download before it. The time is at most:
+  - 600 s for the provider to run the instance (the launcher's pre-flight timeout);
+  - 420 s for ssh (the template's `ssh_ready_s`; bench/common rule 5);
+  - 180 s for the pre-flight's four bandwidth windows of 45 s each;
+  - 120 s to stage the kit (rule 5's margin);
+  - 120 s for the runner's refusal, the evidence pull and the destroy.
+  That is 1,440 s = 0.4 h × $1.00 = $0.40. The download is the pre-flight's probe files, at most 1.17 GB (75 MB and up to 105 MB from
+  the generic endpoints, and 440 MB and 548 MB from the HF CDN), × $0.02 = $0.03 rounded up. Each such box costs at most **$0.43**.
+- **The lane:** bench/common rule 4 bounds the boxes by the ids: three reading ids plus r1 to r8 is 11 boxes, of which at most three
+  start. So the lane's worst is 3 × $3.50 + 8 × $0.43 = $10.50 + $3.44 = **$13.94**, inside the $15 rail. A refusal at create uses no
+  id and costs $0.
+
+A default change (bucketed padding or the 256-token chunk on 24 GiB cards) is not part of this amendment. It needs its own PR, citing
+this reading.
+
+### Amendment 79 (2026-10-24T15:21Z, after amendment 78's read, before any box): the field recipe's same-stack position at the 0.58.0 release, against Unsloth 2026.10.8 (one fixed rule)
+
+**Why.** Release day's head-to-head row for training. STATUS's field-recipe position is amendment 69's: at e4b 0.49.0 and Unsloth
+2026.9.14, Unsloth spent 1.92x e4b's GPU time per step, and 2.80x wall-clock on an EPYC 7713 (`tc1-5090-137`). Both frameworks have
+released since. This amendment reads amendment 69's box again at the released pins, so the position quoted beside 0.58.0 is measured on
+0.58.0.
+
+**The box** (token `qwen3pos79`, `tc1_pos79_family`). Amendment 69's, unchanged in every recipe term. That is TC1's field recipe and
+tokens (alpaca, seq 2048, micro-batch 2 x accum 4, r 16, fp32 matched adapters, `matched:3407`) over 60 steps. Both frameworks run in
+venv-unsloth (torch 2.12.1+cu130, from `unsloth[cu130-torch2121]`). e4b runs `fused_attn4_m_fd` and Unsloth runs `ckpt_unsloth_m_fv`
+(grouped_mm), with two draws each in ABBA order (fd fv fv fd). Every arm is profiled (`--profile-steps 3 --profile-warm 3`), with
+`TC1_LOAD_GATE=6.0` and `TC1_LOAD_RETRIES=2`. One RTX 5090. The axolotl venv is not built, since no arm uses it.
+
+**The pins: constants of the reviewed kit, never launch-time values.** `tc1_run.sh` (`POS79_*`), `tc1_reduce.py` (`POS79_*`), the launch
+template and this text carry one value each, and `tests/test_tc1_pos79.py` holds them equal:
+- e4b: `experts4bit-qlora` 0.58.0, a git install at v0.58.0's peeled tag commit `f15cb7d695cf7148067c6bcea543484f31dc3abd` from
+  github.com/pjordanandrsn/experts4bit-qlora (the tag object peels to it; read with `git ls-remote` at the tag line). The t212 tripwire
+  asserts the installed commit, and the commit is the byte proof.
+- grouped-nf4-gemm: 0.51.0, a git install at v0.51.0's peeled tag commit `30adb1bfa76f95f9ce4a4c29734b8f36de907eca` from
+  github.com/pjordanandrsn/grouped-nf4-gemm, asserted the same way.
+- Unsloth: unsloth 2026.10.8 and unsloth_zoo 2026.10.8 from PyPI, PyPI's latest at registration. A newer Unsloth is a new reading, not
+  this one. They are installed by the kit's existing line (`TC1_UNSLOTH_VERSION`, `TC1_UNSLOTH_ZOO_VERSION`), and proven before any arm,
+  as below.
+- transformers, peft, bitsandbytes, trl and torch are whatever `unsloth[cu130-torch2121]==2026.10.8` resolves. They are recorded in
+  `versions.txt` and on every receipt, never pinned by us and never ruled.
+
+The box refuses (rc 78, before any staging) when `E4B_SHA`, `GNF4_SHA`, `TC1_UNSLOTH_VERSION` or `TC1_UNSLOTH_ZOO_VERSION` is not the
+kit's, when the kit's e4b commit is unfilled, when another token shares the box, or when the release proof is not staged. It also
+refuses when either of the harness's two ways of handing an arm extra environment carries anything (`TC1_E4B_ENV`, every e4b arm;
+`TC1_ARM_EXTRA_ENV`, one arm). It records the pins and the helper's sha256 as a `POS79_PINS` line, and both of those as a
+`POS79_ARM_ENV` line.
+
+**The release proof.** `bench/tc1/release_proof.py` (sha256 `aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0`) is
+byte-identical to loggetta's `bench/release_proof.py` at loggetta#126's merge. It is staged with the kit.
+- **When it runs:** after every install, the e4b install into venv-unsloth included, and before any arm (`pos79_release_proof`).
+- **The bytecode prefix:** the kit first exports `PYTHONPYCACHEPREFIX` and `RELEASE_PROOF_FRESH_PYCACHE` as one fresh, empty
+  `/tmp/tc1-pycache-*` directory. pip's own compile, earlier, stays in-tree, which the proof's rule (b) allows.
+- **How it runs:** venv-unsloth's python, from `$W`, in this environment, as the arms run. It proves `unsloth==2026.10.8` and
+  `unsloth_zoo==2026.10.8`: the published wheel's RECORD on disk, every top-level name importing from the proven install, and the fresh
+  prefix.
+- **Its record:** the JSON goes to `release_proof_unsloth.json`, and an OK line naming the prefix goes to the summary.
+- **A refusal** ends the box (rc 9), and no arm runs.
+
+Every arm then reads under that prefix, which stays exported for the rest of the box. The box also records the knob environment every
+arm inherits (`POS79_KNOB_ENV`: the name of every `E4B_*`, `NF4_QLORA_*` and `GNF4_*` variable). The family hands its arms no extra
+environment, so the box's environment is theirs. `tc1_arm.py` is unchanged: bench/q235's kit pins it by sha256.
+
+**Validity** (`pos79_why`, per row):
+- torch 2.12;
+- the kit's pins as the arm recorded them (the four versions, and grouped-nf4-gemm's installed commit);
+- on e4b, a chunked-LM-loss record with no run-time refusal: a lever that refused at run time changes the arm though no knob is set;
+- the registered tags;
+- a profile with CPU ops on every arm.
+
+A row off any of these is VOID.
+
+**The box facts** (`pos79_box`, each fail-closed):
+- the `POS79_PINS` line at the kit's pins and the helper's sha256;
+- one `RELEASE_PROOF OK` line, and its fresh `/tmp/tc1-pycache-*` prefix;
+- one `POS79_ARM_ENV` line reading `e4b=[] extra=[]`;
+- one `POS79_KNOB_ENV` line, with no e4b or grouped-nf4-gemm knob in it bar the harness's own `E4B_SHA`, `E4B_VENV`, `GNF4_SHA` and
+  `GNF4_SHA_B`. Every default is therefore unset. Amendment 69 asserted the values 0.49.0's defaults resolved to; this amendment reads
+  0.58.0's defaults as 0.58.0 resolves them, so those values are not carried over;
+- the proof's JSON: one record per proven dist, at its version, `RECORD equal` with no `first_diff`, `pycache_fresh` true, the summary's
+  prefix, and its own name among the imports;
+- `versions.txt`'s t212 lines at the e4b and grouped-nf4-gemm commits;
+- the host CPU (`box.json`).
+
+**The rule** (`score_pos79`, in this order; the first that applies is the reading):
+1. **NOT_READ**: a box fact fails;
+2. **NOT_READ**: fewer than two VALID profiled draws a side;
+3. **UNSTABLE**: a side's draws differ by more than TC1's stability bound, |d1 - d2| / mean <= 0.05 for e4b and 0.10 for Unsloth, on
+   s/step or on device ms per profiled step;
+4. **QUALITY_DIFFERS**: |mean held-out at N, e4b - Unsloth| > 0.01 (amendment 69's P209 bar, here a gate before any ratio);
+5. otherwise **QUOTED**, amendment 69's quote. The device ratio comes first, the wall ratio second, named with the host:
+   "Unsloth spends D x e4b's GPU time per step (device ms per profiled step, medians of two draws); wall-clock W x on <host CPU>".
+
+**Reported, never a bar.** What 0.58.0's e4b defaults resolved to on each e4b draw (`pos79_resolved`: the double-quantized absmax,
+the checkpoint's layers and functions, grouped-nf4-gemm's bucket mode and compact bucketed delta, the chunked-loss and combine-chunk
+features), beside the quote. CPU ops per profiled step, busy_t, peak GB, J/step, the per-draw values, and amendment 69's readings beside
+this one (1.92x device, 2.80x wall on an EPYC 7713). The two readings come from two releases on two hosts, so the difference between them
+is not read as either framework's change.
+
+**The quote's scope.** One RTX 5090, one host CPU, TC1's field recipe on Qwen3-30B-A3B at `ad44e777`, these pins. It says nothing about
+another recipe, model, card or host, or another release of either framework.
+
+**bench/common's registration rules, stated:**
+1. **Launch commit:** this amendment's merge. The stack under test is the pins above, installed from the canonical repositories and PyPI.
+2. **Run ids:** `tc1-5090-pos79` for the started box, and `tc1-5090-pos79-r1` for a box that does not start. No code parses an id.
+3. **Outcome classes:** as in bench/common's table. A refusal at create or a NOT_RUN uses an id and is never a strike. The pin gate
+   (rc 78) and the proof (rc 9) are kit refusals.
+4. **The cap:** at most **one** box STARTS. A started box that is not read leaves the row NOT_READ ("not read today"), and it is not
+   re-run under this amendment.
+5. **Boot slack:** a 3.5 h guard against amendment 69's box at about 1.2 h leaves far more than 540 s.
+6. **Frozen pins:** once the row is read, the tests assert this amendment's pins at its frozen commit.
+7. **Fail closed:** every gate fails closed. A missing pin line, proof record, prefix, knob line, commit line, profile or host reads
+   VOID or NOT_READ, and the reducer self-test (case 133) removes each one.
+8. **The fetch imports no links** (`tc1_drive.sh`'s `--no-links`).
+
+**Budget.** One RTX 5090 at a declared $1.00/h with 220 GB of storage, a 3.5 h guard, and up to 100 GB downloaded at no more than
+$0.02/GB. The screen (`bench/tc1/pos79_kit.py`, `offer_why`) and the launch template carry the same caps.
+- **The started box:** 3.5 h x $1.00 + 100 GB x $0.02 = **$5.50**.
+- **A box that does not start:** at most 1,440 s at the box rate plus 1.17 GB of probes, **$0.43** (amendment 78's arithmetic).
+- **The row:** one started box plus one retry id is **$5.93**, inside the $6 cap for this row.

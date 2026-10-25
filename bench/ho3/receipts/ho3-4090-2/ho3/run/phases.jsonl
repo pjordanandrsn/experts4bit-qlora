@@ -1,0 +1,16 @@
+{"phase": "install", "event": "start", "kind": "setup", "t": 1792775417}
+{"phase": "install", "event": "end", "t": 1792775470}
+{"phase": "fetch", "event": "start", "kind": "setup", "t": 1792775470}
+{"phase": "fetch", "event": "end", "t": 1792775710}
+{"phase": "plan", "event": "start", "kind": "setup", "t": 1792775710}
+{"phase": "plan", "event": "end", "t": 1792775764}
+{"phase": "train_lfm2_1024", "event": "start", "kind": "measure", "t": 1792775764}
+{"phase": "train_lfm2_1024", "event": "end", "t": 1792775832}
+{"phase": "train_lfm2_2048", "event": "start", "kind": "measure", "t": 1792775832}
+{"phase": "train_lfm2_2048", "event": "end", "t": 1792775894}
+{"phase": "train_ernie_1024", "event": "start", "kind": "measure", "t": 1792775894}
+{"phase": "train_ernie_1024", "event": "end", "t": 1792775959}
+{"phase": "train_ernie_2048", "event": "start", "kind": "measure", "t": 1792775959}
+{"phase": "train_ernie_2048", "event": "end", "t": 1792776018}
+{"phase": "reduce", "event": "start", "kind": "reduce", "t": 1792776018}
+{"phase": "reduce", "event": "end", "t": 1792776018}

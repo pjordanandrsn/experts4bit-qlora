@@ -90,11 +90,16 @@ jobs:
           moved to pjordanandrsn/adertha-agents
           the launcher refuses unknown keys (adertha-agents#243)
           a stuck load is not machine evidence (adertha#164)
+          the failed adertha reconciler
+          the driver reads ADERTHA_REPO
           the receipt sits in adertha-receipts on cdo/state-2026-01-01
           reduced from /Users/someone/runs/x and /home/someone/runs/y
           a venv under /home/n/.venvs/z
           ingested by pjordanandrsn/org-corpus
           the run lock lives at ~/.adertha/rent-live.lock
+          NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-00000000-0000-0000-0000-000000000000, 12.0
+          _CudaDeviceProperties(name='NVIDIA GeForce RTX 4090', major=8, minor=9, uuid=00000000-0000-0000-0000-000000000000)
+          {"device": {"name": "NVIDIA GeForce RTX 4090", "uuid": "00000000-0000-0000-0000-000000000000"}}
           # Append-only ledger: one JSON object per line
           {"run_id": "canary-1", "external_receipt": {}}
           {"cost_usd": 0.0, "role": "canary", "date_utc": "2026-01-01", "run_id": "canary-2"}

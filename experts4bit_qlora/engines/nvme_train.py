@@ -627,6 +627,8 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
     from nvme_arena import load_index
 
     index = load_index(arena_path)
+    from ..merged_arena import refuse_merged
+    refuse_merged(index, arena_path)          # a merged arena is never read as a base (bench/d0/ARENA-DESIGN.md)
 
     # The documented hard floor, ENFORCED. One `ensure` requests every expert a
     # forward routed, and each protects a slot from eviction, so a request wider

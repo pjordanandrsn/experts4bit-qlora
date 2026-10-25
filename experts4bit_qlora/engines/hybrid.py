@@ -1015,7 +1015,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        dispatch_diet: bool = False,
                        collapse_resident: bool = True,
                        layers: Sequence[int] | None = None,
-                       verbose: bool = False) -> int:
+                       verbose: bool = False,
+                       merged_arena: dict | None = None) -> int:
     """Patch every MoE module per the placement manifest. Returns the patch
     count (0 = not engaged — record it, never infer from timings).
 
@@ -1106,7 +1107,16 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     The last row is the whole finding: DRAM against VRAM, with no cold path
     anywhere in it, reproduces the cold arm's divergence to the digit. Both
     destinations are exact against their matched control, and both of those
-    equalities are pinned in ``tests/test_hybrid_cold_dest.py``."""
+    equalities are pinned in ``tests/test_hybrid_cold_dest.py``.
+
+    A merged arena (``bake_mode: "nf4-merged"``) is refused before any tier
+    opens it, unless ``merged_arena`` is that arena's own ``merge`` block, as
+    the paged server passes it once refusal 13 has matched it to its adapter
+    (:mod:`experts4bit_qlora.merged_arena`)."""
+    # A merged arena (bench/d0/ARENA-DESIGN.md) is never read as a base: refused before any tier opens it, unless
+    # `merged_arena` is the paged server's verified merge block (refusal 13 passed) for this very arena.
+    from ..merged_arena import refuse_merged_path
+    refuse_merged_path(arena_path, merged_arena)
     # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
     from ..absmax_dq import refuse_compressed_absmax
     refuse_compressed_absmax(model, "enable_hybrid_tier")

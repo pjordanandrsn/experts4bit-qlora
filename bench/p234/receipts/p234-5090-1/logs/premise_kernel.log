@@ -1,0 +1,8 @@
+....................                                                     [100%]
+=============================== warnings summary ===============================
+test_nf4_smallm_bw_gpu.py: 20 warnings
+  /root/p234/test_nf4_smallm_bw_gpu.py:67: DeprecationWarning: enable_hot_residency is superseded by enable_pipelined_residency (same capability; K is config); kept through 0.6 to reproduce the v0 receipts; removal in 0.7
+    assert enable_hot_residency(mod, [torch.arange(E)], device="cuda") == 1
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+20 passed, 20 warnings in 6.07s

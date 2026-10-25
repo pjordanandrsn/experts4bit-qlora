@@ -136,6 +136,17 @@ def test_the_guard_fits_under_the_launchers_wallclock_cap():
     assert set(D.FLOOR_MOPS) == {"a"} and set(_load("p225_probe").FLOORS) == {"a"}     # no fallback tier at this N
 
 
+def test_amendment_2_the_boot_allowance_covers_the_launchers_ssh_wait():
+    D, C = _load("p225_derive"), _load("p225_canary")
+    plan = D.plan("a", C.N_HELDOUT)
+    fit_need = plan["fit"] * D.GUARD_X                       # the runner's FIT_NEED (fit x FIT_HEADROOM_PCT / 100)
+    assert plan["guard_s"] - fit_need >= D.SSH_READY_S + D.STAGING_MARGIN_S, (plan["guard_s"], fit_need)
+    assert D.SSH_READY_S >= 420 and D.STAGING_MARGIN_S >= 300       # never registered below the launcher's own wait
+    assert "FIT_HEADROOM_PCT=125" in RUN and D.GUARD_X == 1.25       # the runner's headroom is the derivation's
+    assert plan["guard_s"] == 21230 and round(plan["worst_usd"], 2) == 6.92
+    assert "**21,230 s, 5.90 h**" in PREREG and "**USD 6.92**" in PREREG
+
+
 def test_the_held_out_size_is_the_ruled_rule_on_the_five_sd_receipts():
     S, C = _load("p225_size"), _load("p225_canary")
     r = S.size(SD_INPUTS, KURTOSIS_MAX)
@@ -312,6 +323,19 @@ def test_run_ids_agree_across_runner_driver_and_prereg():
     assert "`p225-5090-1`" in PREREG
 
 
+def test_amendment_1_adds_exactly_the_eight_refusal_retry_ids():
+    retry = [f"p225-5090-r{i}" for i in range(1, 9)]
+    for rid in retry:
+        assert f"{rid}|" in RUN or f"{rid})" in RUN
+        assert f"{rid}|" in DRIVE or f"{rid})" in DRIVE
+    assert "p225-5090-r9" not in RUN and "p225-5090-r9" not in DRIVE        # one per refusal allowed in all (8)
+    assert "p225-5090-4" not in RUN and "p225-5090-4" not in DRIVE          # the 3-box-started cap is not widened
+    assert "**`p225-5090-r1` to `p225-5090-r8`**, for ANY" in PREREG
+    assert "**The ids are labels, not budget.**" in PREREG
+    assert "| **NOT_RUN** (Amendment 1) |" in PREREG
+    assert "and it is not PRE_INSTALL_HALT" in PREREG
+
+
 def test_no_shakedown_and_no_fixture_generation():
     assert "SHAKE=0" in RUN and "fixture_base" not in RUN and "FIXTURE" not in RUN
     assert "fixture_base.py" not in DRIVE
@@ -321,3 +345,8 @@ def test_the_runner_finishes_with_an_answer_only_on_pass_fail_or_inconclusive():
     assert 'case "$V" in PASS|FAIL|INCONCLUSIVE) finish 0;; *) say "P225 $V -- no reading"; finish 27;; esac' in RUN
     R = _load("p225_reduce")
     assert set(R.ANSWERS) == {"PASS", "FAIL", "INCONCLUSIVE"}
+
+
+def test_amendment_3_pins_brotli_beside_the_unpinned_hub():
+    assert '"huggingface_hub>=0.23" "brotli>=1.2.0"' in RUN
+    assert "## Amendment 3 (pre-data): brotli >= 1.2.0 beside the unpinned huggingface_hub" in PREREG

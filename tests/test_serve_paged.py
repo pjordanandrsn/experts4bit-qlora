@@ -992,6 +992,30 @@ def test_batched_graphs_refuse_the_solver_placement(monkeypatch):
     assert hr.DEVICE_GROUPING == [False]
 
 
+def test_forced_graphs_refuse_the_solver_placement_at_startup(monkeypatch):
+    """A tiered MoE layer syncs on the host every step, so a forced E4B_PAGED_GRAPHS=1 at solver would capture nothing
+    (every bucket raising and running eagerly): it is refused by name at any max_seqs, from the environment and from
+    code. auto and 0 at solver start and decode eagerly; a forced 1 at all-vram is unchanged."""
+    for k in ("E4B_PAGED_GRAPHS", "E4B_PAGED_DEVICE", "E4B_PAGED_PLACEMENT", "E4B_PAGED_MAX_SEQS"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)
+    monkeypatch.setenv("E4B_PAGED_MODEL", "Qwen/Qwen3-30B-A3B")
+    monkeypatch.setenv("E4B_PAGED_PLACEMENT", "solver")
+    for seqs in ("1", "4"):
+        monkeypatch.setenv("E4B_PAGED_MAX_SEQS", seqs)
+        monkeypatch.setenv("E4B_PAGED_GRAPHS", "1")
+        with pytest.raises(ValueError, match="solver would capture nothing"):
+            PagedServeConfig.from_env()
+        for ok in ("auto", "0"):
+            monkeypatch.setenv("E4B_PAGED_GRAPHS", ok)
+            assert PagedServeConfig.from_env().graphs is False
+    monkeypatch.setenv("E4B_PAGED_PLACEMENT", "all-vram")
+    monkeypatch.setenv("E4B_PAGED_GRAPHS", "1")
+    assert PagedServeConfig.from_env().graphs is True
+    with pytest.raises(ValueError, match="solver would capture nothing"):
+        PagedServeConfig(model="m", graphs=True, max_seqs=1, buckets=(1,), placement="solver").validate()
+
+
 def test_build_engine_sets_grouping_before_it_captures():
     import inspect
     src = inspect.getsource(build_engine)

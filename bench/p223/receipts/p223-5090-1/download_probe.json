@@ -1,0 +1,12 @@
+{
+ "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+ "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61",
+ "floor_mb_s": 40,
+ "status": 200,
+ "bytes": 1622147072,
+ "seconds": 20.01,
+ "mb_s": 81.1,
+ "shard": "model-00001-of-00019.safetensors",
+ "error": null,
+ "when": "2026-10-23T23:53:43Z"
+}

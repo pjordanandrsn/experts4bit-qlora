@@ -403,3 +403,97 @@ entry-by-entry comparison is recorded with the run. Any difference is its own pr
 **Unchanged:** every constant, threshold and cost; the arms, both knobs, FLIPS, the bar and its exclusions, the price
 ceiling, the order of the three lanes, the screen deadline, the box, the proof, the guards and the $0 shakedown.
 
+
+### Amendment 5 (registered before any SC2f run): the kit is held at e4b#2041's merge, for the harness's brotli pin and fetch retry
+
+**Why.** The kit held at `1a25b209` (Amendment 4) installs `huggingface_hub` without a `brotli` floor. An unpinned
+`huggingface_hub` on httpx decodes brotli with an API older brotli lacks, so a br-encoded file at the fetch raised
+TypeError on some hosts. e4b#2041 fixes the shared harness, `bench/sc1/sc1_run.sh`, before any SC2f run. Amendment 4
+makes any difference from the held kit its own pre-run amendment; this is that amendment.
+
+**The kit is held at `7b8f1f69`** (e4b#2041's merge), replacing `1a25b209` for the KIT only. At the launch commit, every
+`bench/sc1/staged.sha256` entry must be byte-identical to that entry at `7b8f1f69`, and `bench/sc1/sc1_drive.sh` and
+`bench/sc1/make_pin.sh`, which decide what is staged, must be byte-identical too. The stack under test is unchanged:
+the launch command sets `E4B_SHA=36cdd2d4e031e8365ab52e495c40cd79043edd49`, which `sc1_drive.sh` uses in place of its checkout's HEAD, so every box installs `36cdd2d4`. This supersedes the instruction
+to check out exactly `36cdd2d4` for the KIT only: the kit's checkout is now a `main` commit at or after `7b8f1f69` whose kit
+equals `7b8f1f69`'s (the HOLD gate below). If a later commit changes any staged entry, `7b8f1f69` itself is the checkout.
+
+**What changed in the kit, against `1a25b209`.** Boxes N, O and P stage one flat kit, every entry on every box, so the
+whole difference is declared:
+
+- `sc1_run.sh` is the only existing entry whose bytes differ, and it differs in three ways. Two are behavioural for
+  box N: the e4b install line adds `"brotli>=1.2.0"`, and `fetch()` retries a failed snapshot download once after
+  20 s, appending to the same log, with the alarm re-armed from the time left, before it is a DL FAIL (rc 11, as before).
+  The third is box Q's wiring (SC2j): Q added as an alternative to nine box lists, Q's dispatch line, and its
+  `prove_q` line. With `SC1_BOX` = N, none of the Q wiring is reachable.
+- Seven entries are new, all box Q's: `sc2j_box_q.sh`, `sc2j_contract.py`, `sc2j_prompts.py`, `sc2j_reduce.py`,
+  `p117_reduce.py`, `test_decode_graph_buckets.py` and `g3_smoke.py`. They are staged on box N, but nothing box N runs
+  sources or calls them. An inert file belongs to the kit hold, not to the stack under test.
+- `staged.sha256` carries those changes; `sc1_drive.sh` and `make_pin.sh` change only to stage the seven files.
+
+**The check, which fails closed** (`bench/sc2/sc2_kit_hold.py`, its self-test refusing each gate with its evidence removed;
+`tests/test_sc2_kit_hold.py`). On the controller, before the create, `python bench/sc2/sc2_kit_hold.py check --at <launch commit>
+--e4b-sha "$E4B_SHA" --out <run>/kit_hold.json`, run from a `main` checkout that carries this amendment, runs five
+gates. DELTA: the difference `1a25b209` -> `7b8f1f69` is
+exactly the set above: one changed entry, every `sc1_run.sh` hunk classified as the brotli line, a fetch-retry line, a
+Q alternative (the line with its Q removed is its `1a25b209` line) or a box Q line, each declared hunk present once, and
+the seven entries added. PIN: every entry's sha256 is its source at `7b8f1f69`. INERT: no staged entry other than
+the seven names any of them or box Q's functions, except `sc1_run.sh` on box Q's own lines, and in `sc1_drive.sh` and
+`make_pin.sh` the names appear only on staging lines. HOLD: the launch commit's entries and the two driver files equal
+`7b8f1f69`'s. STACK: the launch's `E4B_SHA` is `36cdd2d4e031e8365ab52e495c40cd79043edd49` in full, so a launch that
+omits it (and would install the checkout's HEAD) refuses. Any refusal stops the launch before the create. The record holds every hunk and every hit. At
+`7b8f1f69` the check reads OK, with 16 classified `sc1_run.sh` lines (1 brotli, 4 fetch-retry, 9 Q alternatives, 2 box Q lines), the seven entries added, all 99 pins matching their sources, and 12 hits on the new names, each on one of box Q's three `sc1_run.sh` lines or a staging line of `sc1_drive.sh` or `make_pin.sh`.
+
+**The stack is a VOID condition of the rule.** After the box, on the fetched run,
+`python bench/sc2/sc2_kit_hold.py verdict-stack --run <run>/sc1 --out <run>/verdict_stack.json` reads the installed
+evidence first: `versions.txt`'s `e4b <version> @<commit>` line, which the box writes only after its tripwire has
+confirmed the install, must name `36cdd2d4`, and so must every `KNOBS ... e4b=` line of `summary.txt` (the launch's
+`E4B_SHA`). Either record missing, abbreviated, or disagreeing with the other reads VOID. **A box verdict stands only
+when verdict-stack reads OK; otherwise the read is VOID.** `verdict_stack.json` is a required results file: a results PR
+or a re-derivation without it, or with it not OK, reads VOID. This also catches a hand launch that bypasses the check
+above. The staged reducers are unchanged, so the kit stays `7b8f1f69`'s. Its self-test removes or alters each record,
+including the two disagreeing either way, and `tests/test_sc2_kit_hold.py` runs it on a real fetched run's records.
+
+**Unchanged:** every constant, threshold and cost; the arms, both knobs, FLIPS, the bar and its exclusions, the price
+ceiling, the order of the three lanes, the screen deadline, the box, the proof, the guards and the $0 shakedown.
+Amendment 3's default check still runs at the launch commit against `v0.57.0` and is recorded with the run.
+
+### Amendment 6 (registered before any SC2f run): the HOLD gate's declared exceptions, in one place
+
+**Why.** Amendment 5's HOLD gate requires the launch commit's staged kit, `sc1_drive.sh` and `make_pin.sh` to equal
+`7b8f1f69`'s byte for byte. Since then, two changes landed on `main` that boxes N, O and P never run, so no later
+`main` commit passed. bench/common rule 8 (a fetch never imports links) put `--no-links` into `sc1_drive.sh`'s fetch.
+SC2j's own amendments changed `sc2j_box_q.sh` and added `sc2j_quality.py` to the flat kit and to the drivers'
+staging lists. The only checkout that still passed was `7b8f1f69` itself, whose fetch keeps links.
+
+**The change.** The HOLD gate (`bench/sc2/sc2_kit_hold.py`) keeps its byte identity with `7b8f1f69` and tolerates
+exactly these exceptions. This list is the whole set; anything outside it refuses.
+
+1. **Rule 8's fetch token.** `sc1_drive.sh` may carry one ` --no-links`, immediately after `rsync -az` on `pull_box`'s
+   rsync line (`pull_box()` is the nearest function above that line). A second token, the token on any other line or
+   at any other position, or any other changed byte refuses.
+2. **Box Q's own files.**
+   - An entry whose name matches `sc2j_<name>.(py|sh|json)` exactly may be changed or added.
+   - Any other name refuses, including a new file nobody references: a staged `json.py` or `torch.py` would shadow a
+     real module on every box, so the exact name is a safety condition. A removed entry refuses.
+   - The staging lines of `sc1_drive.sh` and `make_pin.sh` may gain exactly the names of the sc2j entries that were
+     added, and nothing else.
+   - INERT runs again at the launch commit, over every other staged entry (the Python files included) and both
+     drivers. No `sc2j_<name>` may appear outside box Q's own `sc1_run.sh` lines and the drivers' staging lines.
+
+The checkout that stages must be the launch commit, clean. The check runs in that checkout (`--repo <launch
+checkout>`) and refuses if its `git status --porcelain` is non-empty or its `HEAD` is not `--at`, however `--at` is
+spelled. Fetch flags
+and box Q's files change nothing that boxes N, O and P run, so the hold keeps its meaning. The stack is still
+`36cdd2d4`, under the STACK gate and `verdict-stack`.
+
+**Evidence.** The self-test refuses each exception beyond its letter (the new cases: a non-sc2j entry changed; an N/O/P
+runner gaining `. $W/sc2j_extra.py`; a removed entry; the delta plus another driver byte; an unreferenced staged
+`json.py`; a staging line gaining a non-sc2j name, or an sc2j name that is not an added entry; an sc2j name on a
+non-staging driver line; a box Q file named outside the pattern, including names only a prefix or substring match
+would pass, `sc2j_extra.py.bak` and `foo_sc2j_extra.py`; a dirty staging checkout at a full-sha `--at`; a staging
+checkout whose `HEAD` is not `--at`). `tests/test_sc2_kit_hold.py`
+checks the registered `main` commit `ac7e6ed1`, which carries exactly exceptions 1 and 2: HOLD reads OK, and
+`hold_diff` is `sc2j_box_q.sh` and `sc2j_quality.py`.
+
+**Unchanged:** everything else Amendment 5 registered; every constant, threshold and cost.

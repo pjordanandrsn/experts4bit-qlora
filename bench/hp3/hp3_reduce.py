@@ -17,6 +17,7 @@ engagement check). Per pair: the seed-paired Delta, its 90 % t-interval and G2' 
 deltaN is reported with the in-loop term named. Then the three-way read. Exit 0 when every pair is read, 3 otherwise.
 """
 import argparse
+import hashlib
 import json
 import math
 import statistics
@@ -26,7 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "hp1"))   # in the repo
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tc1"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))                 # on the box, the staged files sit side by side
-import hp1_reduce as H1  # noqa: E402  (paired_reading, pooled_sd, order_problems, manifest_problems, t_ppf: tested in HP1)
+import hp1_reduce as H1  # noqa: E402  (pooled_sd, order_problems, manifest_problems, t_ppf, _mean, _ss: tested in HP1)
 import axo1767_reduce as AX  # noqa: E402  (engagement: AXO1767 Amendment 1's check, tested there)
 
 SCOPE = "parity of the exported adapters under one evaluator on byte-identical bases"
@@ -40,8 +41,29 @@ FRAMEWORKS = ("e4b", "unsloth", "axolotl")
 REFERENCE = "e4b"
 PAIRS = (("e4b", "unsloth"), ("e4b", "axolotl"), ("unsloth", "axolotl"))
 CAL_TAGS = {"e4b": "hp3cal_e4b_k00_s3407", "unsloth": "hp3cal_unsloth_s3407", "axolotl": "hp3cal_axolotl_s3407"}
+MODE = "p"
+# HP3 Amendment 2, the (R) fallback (registered before any data; triggered by hp3-shake-2's G1' at L2): e4b vs Unsloth 2026.9.14 on
+# HPN's build, one pair, no axolotl. Label (i) is dropped and (iii) names torch 2.8.0+cu128.
+LABELS_R = ("(R) the registered fallback: e4b K00 vs Unsloth 2026.9.14 (HP1/HP2's version) on torch 2.8.0+cu128 (HPN's build); "
+            "axolotl waits for an amendment; "
+            "(iii) the build is torch 2.8.0+cu128 with Unsloth's own bitsandbytes resolve: no HP3 (R) number is compared with an HP2 or HPN number")
+
+
+_P_GLOBALS = (FRAMEWORKS, PAIRS, LABELS)
+
+
+def set_mode_p():
+    """Back to build (P): three frameworks, three pairs, (P)'s labels (tests switch modes in one process)."""
+    global FRAMEWORKS, PAIRS, LABELS, MODE
+    (FRAMEWORKS, PAIRS, LABELS), MODE = _P_GLOBALS, "p"
+
+
+def set_fallback_r():
+    """Switch this module to (R): two frameworks, one pair, the (R) labels; the three-way read does not apply."""
+    global FRAMEWORKS, PAIRS, LABELS, MODE
+    FRAMEWORKS, PAIRS, LABELS, MODE = ("e4b", "unsloth"), (("e4b", "unsloth"),), LABELS_R, "r"
 RUN_PREFIX = {"e4b": "hp3_k00_s", "unsloth": "hp3_unsloth_s", "axolotl": "hp3_axolotl_s"}
-SEEDS = H1.CONFIRMATION_SEEDS
+SEEDS = (3410, 3411, 3412, 3413, 3414)   # Amendment 1: five confirmation seeds per framework (was HP1's 3410-3412)
 EXIT_OK, EXIT_UNUSABLE, EXIT_INCOMPLETE, EXIT_G1_CLOSE = 0, 2, 3, 4
 
 WORDING = {
@@ -165,13 +187,69 @@ def _order(ranks):
     return any(all(p.index(w) < p.index(lo) for w, lo in ranks) for p in itertools.permutations(FRAMEWORKS))
 
 
-def verdict(evs, g1rec, receipts):
-    """The verdict record from the confirmation evaluator output(s), the G1' record and the arm receipts {tag: receipt}."""
+def paired_reading(name, a_ys, a_recs, b_ys, b_recs, sigma, margin, seeds=SEEDS):
+    """hp1_reduce.paired_reading's rule, unchanged, over HP3's seeds (HP1's reads HP1_CONFIRMATION_SEEDS, three): Delta_s = y(a, s) -
+    y(b, s); CI90 by t(df n-1); BEATS / BEHIND (interval clear of 0 and |mean| > sigma) before PARITY (TOST within +-margin), else
+    INCONCLUSIVE. tests/test_hp3.py checks it equals hp1_reduce.paired_reading at HP1's three seeds."""
+    seeds = list(seeds)
+    deltas = [a_ys[s] - b_ys[s] for s in seeds]
+    k = len(deltas)
+    mean = H1._mean(deltas)
+    sd = math.sqrt(H1._ss(deltas) / (k - 1))
+    se = sd / math.sqrt(k)
+    tq = H1.t_ppf(H1.CI_TAIL, k - 1)
+    lo, hi = mean - tq * se, mean + tq * se
+    if hi < 0 and abs(mean) > sigma:
+        verdict = "BEATS"
+    elif lo > 0 and abs(mean) > sigma:
+        verdict = "BEHIND"
+    elif lo >= -margin and hi <= margin:
+        verdict = "PARITY"
+    else:
+        verdict = "INCONCLUSIVE"
+    obo = sorted(r["tag"] for r in a_recs + b_recs if r["own_base_only"])
+    return {"reading": name, "seeds": seeds, "deltas": dict(zip(map(str, seeds), deltas)), "mean": mean, "sd": sd, "se": se,
+            "df": k - 1, "t_crit": tq, "ci90": [lo, hi], "m": margin, "sigma_seed": sigma, "verdict": verdict,
+            "any_own_base_only": bool(obo), "own_base_only": obo}
+
+
+def seed_rho(a_ys, b_ys, seeds=SEEDS):
+    """Amendment 1, REPORTED only: the correlation over seeds between the two frameworks' row means (the seed pairing the paired
+    difference relies on). None when either side has no spread."""
+    x, y = [a_ys[s] for s in seeds], [b_ys[s] for s in seeds]
+    mx, my = statistics.mean(x), statistics.mean(y)
+    sxx, syy = sum((v - mx) ** 2 for v in x), sum((v - my) ** 2 for v in y)
+    if sxx == 0 or syy == 0:
+        return None
+    return round(sum((p - mx) * (q - my) for p, q in zip(x, y)) / math.sqrt(sxx * syy), 4)
+
+
+PLAN_COUNTS = (3, 4, 5)   # Amendment 1 part 7: the seed counts a plan may name (0 = host-limited, nothing read)
+
+
+def plan_seeds(plan):
+    """(n, seeds, reason) from the runner's hp3/seed_plan.json (Amendment 1 part 7), or ValueError. The plan is decided by timing alone,
+    so it must say so; it names a PREFIX of SEEDS of length 3, 4 or 5, or 0 (host-limited)."""
+    if plan is None:
+        return len(SEEDS), list(SEEDS), "no seed plan: the registered five seeds"
+    n = plan.get("n")
+    if type(n) is not int or (n != 0 and n not in PLAN_COUNTS):
+        raise ValueError(f"seed plan n={n!r} is not 0, 3, 4 or 5")
+    if plan.get("basis") != "timing":
+        raise ValueError(f"seed plan basis {plan.get('basis')!r} is not 'timing'")
+    if plan.get("seeds") != list(SEEDS[:n]):
+        raise ValueError(f"seed plan seeds {plan.get('seeds')!r} are not the first {n} of {list(SEEDS)}")
+    return n, list(SEEDS[:n]), str(plan.get("reason") or "")
+
+
+def verdict(evs, g1rec, receipts, plan=None):
+    """The verdict record from the confirmation evaluator output(s), the G1' record, the arm receipts {tag: receipt} and the seed plan."""
+    n_seeds, seeds, plan_reason = plan_seeds(plan)
     arms = _runs(evs)
     ys, recs, voids, rho = {f: {} for f in FRAMEWORKS}, {f: [] for f in FRAMEWORKS}, {}, {f: {} for f in FRAMEWORKS}
     ok_fw = {f for f, st in (g1rec.get("frameworks") or {}).items() if st.get("g1") == "PASS"}
     for fw in sorted(ok_fw):
-        for s in SEEDS:
+        for s in seeds:
             a = arms.get((fw, s))
             why = _void(fw, a, receipts)
             if why:
@@ -181,9 +259,16 @@ def verdict(evs, g1rec, receipts):
             rho[fw][s] = a.get("evaluator_minus_inloop_final")
             recs[fw].append({"tag": a["tag"], "seed": s, "order": a.get("order"), "own_base_only": bool(a.get("own_base_only"))})
     out = {"reducer": "bench/hp3/hp3_reduce.py verdict", "scope": SCOPE, "labels": LABELS, "g1": g1rec.get("verdict"), "void": voids,
-           "y": {fw: {str(s): v for s, v in d.items()} for fw, d in ys.items() if d}, "pairs": {}}
+           "y": {fw: {str(s): v for s, v in d.items()} for fw, d in ys.items() if d}, "pairs": {},
+           "seed_count": n_seeds, "seeds_read": seeds, "seed_plan_reason": plan_reason,
+           "reduced_power": (f"a reduced-power read on {n_seeds} seeds (Amendment 1 part 7), never upgraded later" if 0 < n_seeds < len(SEEDS)
+                             else None)}
     for a, b in PAIRS:
         name = f"{a}-{b}"
+        if n_seeds == 0:
+            out["pairs"][name] = {"verdict": "NOT_READ", "scope": SCOPE,
+                                  "wording": WORDING["NOT_READ"].format(why=f"host-limited, no seed read ({plan_reason})")}
+            continue
         if a not in ok_fw or b not in ok_fw:
             closed = [f for f in (a, b) if f not in ok_fw]
             st = [(g1rec.get("frameworks") or {}).get(f, {}).get("g1", "ABSENT") for f in closed]
@@ -203,13 +288,20 @@ def verdict(evs, g1rec, receipts):
             continue
         sigma, sigma_df, _ = H1.pooled_sd([(f"P:{a}", list(ys[a].values())), (f"P:{b}", list(ys[b].values()))])
         m = min(max(sigma, H1.MARGIN_FLOOR), H1.MARGIN_CAP)
-        head = H1.paired_reading(f"{a} vs {b}", ys[a], recs[a], ys[b], recs[b], sigma, m)
-        e = [rho[a][s] - rho[b][s] for s in SEEDS]
+        head = paired_reading(f"{a} vs {b}", ys[a], recs[a], ys[b], recs[b], sigma, m, seeds=seeds)
+        e = [rho[a][s] - rho[b][s] for s in seeds]
         out["pairs"][name] = {"verdict": head["verdict"], "wording": WORDING[head["verdict"]].format(a=a, b=b), "scope": SCOPE,
                               "m": m, "sigma_seed": sigma, "sigma_seed_df": sigma_df, "headline": head,
+                              "rho_seed_reported": seed_rho(ys[a], ys[b], seeds=seeds),
                               "deltaN_reported": {"mean": round(statistics.mean(e), 6), "per_seed": e,
                                                   "term": "in-loop (the two frameworks' training forwards at step N)"}}
     vs = {k: p["verdict"] for k, p in out["pairs"].items()}
+    if MODE == "r":                                  # (R): one pair, so the pair's verdict is the reading; no three-way read
+        read = all(v not in ("CLOSE", "NOT_READ") for v in vs.values())
+        out["three_way"] = {"verdict": "NOT_APPLICABLE", "why": "(R) reads one pair (e4b-unsloth); axolotl waits for an amendment",
+                            "pairs_read": sum(v not in ("CLOSE", "NOT_READ") for v in vs.values())}
+        out["home_field"] = g1rec.get("home_field")
+        return out, (EXIT_OK if read else EXIT_INCOMPLETE)
     if any(v in ("CLOSE", "NOT_READ") for v in vs.values()):
         three = "NOT_READ"
     elif all(v == "PARITY" for v in vs.values()):
@@ -236,14 +328,19 @@ def main(argv=None):
     a1 = sub.add_parser("g1")
     a1.add_argument("eval_json")
     a1.add_argument("--rows", type=int, default=CAL_ROWS)
+    a1.add_argument("--fallback-r", action="store_true", help="HP3 Amendment 2's (R): e4b vs Unsloth only")
     a1.add_argument("--out", required=True)
     a2 = sub.add_parser("verdict")
     a2.add_argument("evals", nargs="+")
     a2.add_argument("--g1", required=True)
     a2.add_argument("--arm-receipt", action="append", default=[], help="an axolotl confirmation arm's receipt (its tag inside)")
     a2.add_argument("--manifest", action="append", default=[])
+    a2.add_argument("--seed-plan", help="the runner's hp3/seed_plan.json (Amendment 1 part 7); every evaluator output must carry its sha256")
+    a2.add_argument("--fallback-r", action="store_true", help="HP3 Amendment 2's (R): e4b vs Unsloth only")
     a2.add_argument("--out", required=True)
     a = ap.parse_args(argv)
+    if a.fallback_r:
+        set_fallback_r()
     try:
         if a.cmd == "g1":
             rec = g1(json.load(open(a.eval_json)), a.rows)
@@ -260,7 +357,21 @@ def main(argv=None):
         for p in a.arm_receipt:
             q = json.load(open(p))
             receipts[q.get("tag")] = q
-        rec, code = verdict([json.load(open(p)) for p in a.evals], json.load(open(a.g1)), receipts)
+        evs = [json.load(open(p)) for p in a.evals]
+        plan = None
+        if a.seed_plan:                       # Amendment 1 part 7: the content binding (no mtime is trusted)
+            raw = open(a.seed_plan, "rb").read()
+            want = hashlib.sha256(raw).hexdigest()
+            bad = [p for p, ev in zip(a.evals, evs) if ev.get("plan_sha256") != want]
+            if bad:
+                raise ValueError(f"the evaluator output(s) {bad} do not carry this seed plan's sha256 {want[:12]} (plan_sha256 missing, null or "
+                                 "different): the plan was not fixed before the evaluator's pass, or another plan was")
+            plan = json.loads(raw)
+        else:
+            bound = [p for p, ev in zip(a.evals, evs) if ev.get("plan_sha256") is not None]
+            if bound:
+                raise ValueError(f"the evaluator output(s) {bound} carry a plan_sha256 but no --seed-plan was given: the runner's plan is missing")
+        rec, code = verdict(evs, json.load(open(a.g1)), receipts, plan)
         json.dump(rec, open(a.out, "w"), indent=1)
         print(f"HP3_VERDICT three_way={rec['three_way']['verdict']} "
               + " ".join(f"{k}={p['verdict']}" for k, p in rec["pairs"].items()) + f" ({SCOPE})")

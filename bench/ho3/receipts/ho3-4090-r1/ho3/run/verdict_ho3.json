@@ -1,0 +1,29 @@
+{
+ "band_computed": false,
+ "card": "NVIDIA GeForce RTX 4090",
+ "cause": "lfm2: lfm2_1024: a plan total, estimate or peak is missing ((9768170758, None, 7692749872, 7337996288)); ernie: ernie_1024: a plan total, estimate or peak is missing ((21856438198, None, 17766306072, 17099802624))",
+ "cohorts": {
+  "ernie": {
+   "card": "NVIDIA GeForce RTX 4090",
+   "cause": "ernie_1024: a plan total, estimate or peak is missing ((21856438198, None, 17766306072, 17099802624))",
+   "verdict": "VOID"
+  },
+  "lfm2": {
+   "card": "NVIDIA GeForce RTX 4090",
+   "cause": "lfm2_1024: a plan total, estimate or peak is missing ((9768170758, None, 7692749872, 7337996288))",
+   "verdict": "VOID"
+  }
+ },
+ "n_covered": 0,
+ "n_rows": 0,
+ "pins": {
+  "e4b": "f6e66fd65b28fe493a89062b02aa91d3970ff995",
+  "gnf4": "a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7",
+  "launch": "e4230f8270f0675020a6c0ee587814a76723a8d0",
+  "loggetta": "9348f8b865f9e429f0628ae6e5be412787447331"
+ },
+ "plan_findings": [],
+ "rows": [],
+ "run_id": "ho3-4090-r1",
+ "verdict": "VOID"
+}

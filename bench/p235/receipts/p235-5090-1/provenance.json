@@ -1,0 +1,12 @@
+{
+ "experts4bit-qlora": {
+  "direct_url": null,
+  "provenance": "pypi",
+  "version": "0.58.0"
+ },
+ "grouped-nf4-gemm": {
+  "direct_url": null,
+  "provenance": "pypi",
+  "version": "0.51.0"
+ }
+}

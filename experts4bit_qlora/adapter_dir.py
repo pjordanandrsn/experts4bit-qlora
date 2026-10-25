@@ -250,6 +250,8 @@ BASE_MISMATCH_SCOPES = ("experts",)
 ACCEPT_BASE_MISMATCH_ENV = "E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH"
 #: the expert status when the manifest's fp32 source fingerprint, not the trained-form one, equals the arena's
 SOURCE_VERIFIED = "verified (source)"
+#: the expert status when a merged arena's own fingerprint (``merge.merged_qfp_v1``) equals the served one
+MERGED_VERIFIED = "verified (merged)"
 
 
 def parse_accept_unverified_base(raw: str) -> frozenset:
@@ -291,7 +293,7 @@ def _dq_trained(ad: AdapterDir) -> bool:
 
 
 def fingerprint_check(ad: AdapterDir, model, arena: str, *, accept_base_mismatch: frozenset = frozenset(),
-                      fingerprint=None) -> tuple:
+                      fingerprint=None, merge: dict | None = None) -> tuple:
     """``(refusals, report)``: the SERVED base's qfp-v1 against the adapter's recorded one, per scope the /2 manifest
     records. Called after the load and BEFORE :func:`merge_attention_lora` (the merge rewrites the attention weights)
     and before any lever. ``report[scope]`` is ``{"scheme", "trained", "served", "modules", "seconds", "status"}``,
@@ -303,7 +305,12 @@ def fingerprint_check(ad: AdapterDir, model, arena: str, *, accept_base_mismatch
     declared recipe difference whose quality effect is not read here. Refusal 11: the attention base differs (never
     overridden). Refusal 12: the expert base differs, unless the operator names ``experts`` in
     ``E4B_PAGED_ADAPTER_ACCEPT_BASE_MISMATCH``. ``fingerprint`` is
-    :func:`.adapter_schema.quant_fingerprint` (a test may pass its own)."""
+    :func:`.adapter_schema.quant_fingerprint` (a test may pass its own).
+
+    ``merge``: the served arena's ``merge`` block, once refusal 13 has matched it to this adapter before the load. The
+    served experts are then compared with the merged arena's own fingerprint (``merge.merged_qfp_v1``, status
+    ``verified (merged)``), never with the base's, which merged rows cannot match. A mismatch there is refusal 12 with
+    no override: the arena file is not the one its index records."""
     if fingerprint is None:
         from .adapter_schema import quant_fingerprint as fingerprint
     refusals, report = [], {}
@@ -313,6 +320,18 @@ def fingerprint_check(ad: AdapterDir, model, arena: str, *, accept_base_mismatch
             continue
         got = (fingerprint(model, "attention", source="resident") if scope == "attention"
                else fingerprint(model, "experts", source="arena", arena=arena))
+        if scope == "experts" and merge is not None:
+            ok = got["sha256"] == merge.get("merged_qfp_v1") and got.get("scheme_id") == want.get("scheme_id")
+            report[scope] = {"scheme": got.get("scheme_id"), "trained": want.get("sha256"),
+                             "base": merge.get("base_qfp_v1"), "merged": merge.get("merged_qfp_v1"),
+                             "served": got["sha256"],
+                             "modules": {"trained": want.get("modules"), "served": got.get("modules")},
+                             "seconds": got.get("seconds"), "status": MERGED_VERIFIED if ok else "mismatch (merged)"}
+            if not ok:
+                refusals.append((12, f"the served merged arena is not the one its index records: qfp-v1 "
+                                     f"{got['sha256'][:16]} served against the merge's {str(merge.get('merged_qfp_v1'))[:16]}"
+                                     f" (an arena file replaced under a copied index?). This refusal has no override"))
+            continue
         match = got["sha256"] == want.get("sha256") and got.get("scheme_id") == want.get("scheme_id")
         row = {"scheme": got.get("scheme_id"), "trained": want.get("sha256"), "served": got["sha256"],
                "modules": {"trained": want.get("modules"), "served": got.get("modules")},
@@ -388,6 +407,10 @@ def base_match(ad: AdapterDir, refusals=(), fingerprints=None) -> dict:
     if ex is not None:
         if ex["status"] == "verified":
             experts = f"verified (qfp-v1 {ex['served'][:16]})"
+        elif ex["status"] == MERGED_VERIFIED:
+            # the trained delta is IN the served rows: the arena is the merge its index records
+            experts = (f"merged (qfp-v1 {ex['served'][:16]}, the merged arena's own); the expert delta is baked into "
+                       f"the served rows, merged from the base qfp-v1 {str(ex.get('base'))[:16]}")
         elif ex["status"] == SOURCE_VERIFIED:
             # the BASE is proven, never "served == trained": the served absmax is fp32, the trained one compressed
             experts = (f"verified (source, qfp-v1 {ex['served'][:16]}); trained on "
@@ -404,13 +427,20 @@ def base_match(ad: AdapterDir, refusals=(), fingerprints=None) -> dict:
 def servable_refusals(ad: AdapterDir, *, served_revision: str | None, requested_revision: str | None,
                       arena_index: dict | None, levers: dict, allow_unverified_arena: bool = False,
                       accept_unverified_base: frozenset = frozenset(), check_served_revision: bool = True,
-                      served_model: str | None = None, spec: str = "off") -> list:
+                      served_model: str | None = None, spec: str = "off", merged_opt_in: bool = False) -> list:
     """Every ``(code, reason)`` that stops this server from serving ``ad`` as trained (empty: servable). The codes are
     the spec's: 1 expert LoRA, 2 base revision, 3 arena source (repo and revision), 4 arena recipe, 5 re-quantizing levers,
     6 unknown target modules, 8 attention trained on a 4-bit base (v1), 9 an expert base this server cannot verify (v1),
-    unless the operator accepts it by name, 10 speculative decoding (its draft head and gate were read on the base); 11
-    and 12 (the measured attention and expert fingerprints) come from :func:`fingerprint_check` after the load. Refusal 7 (the verifier) has already passed. ``check_served_revision=False`` skips only
-    the served commit's comparison, for the check made before the load (the loader resolves the commit)."""
+    unless the operator accepts it by name, 10 speculative decoding (its draft head and gate were read on the base), 13 a
+    merged arena not served as written (:func:`.merged_arena.merged_arena_refusals`; ``merged_opt_in`` is
+    ``E4B_PAGED_MERGED_ARENA=1``); 11 and 12 (the measured attention and expert fingerprints) come from
+    :func:`fingerprint_check` after the load. Refusal 7 (the verifier) has already passed. ``check_served_revision=False``
+    skips only the served commit's comparison, for the check made before the load (the loader resolves the commit).
+
+    A live expert LoRA is refusal 1, except on a merged arena that refusal 13 passes: there the delta is already in the
+    arena's rows and the server applies nothing of the adapter's expert tensors. Both are decided here, before the load,
+    so neither can shadow the other."""
+    from .merged_arena import is_merged, merged_arena_refusals
     import torch
 
     out = []
@@ -420,8 +450,11 @@ def servable_refusals(ad: AdapterDir, *, served_revision: str | None, requested_
         out.append((9, f"the expert base cannot be verified: {_expert_base_unverified(ad)}, so the whole served model "
                        f"may differ from the trained one. Set E4B_PAGED_ADAPTER_ACCEPT_UNVERIFIED_BASE=experts to serve "
                        f"it anyway (reported as base_match.experts=unverified)"))
+    merged = arena_index is not None and is_merged(arena_index)
+    r13 = merged_arena_refusals(ad, arena_index, opt_in=merged_opt_in) if merged else []
+    out.extend(r13)
     live = [n for n in ad.expert_tensors if n.endswith("_lora_B") and bool(torch.any(ad.tensors[n] != 0))]
-    if live:
+    if live and not (merged and not r13):
         out.append((1, f"expert LoRA is not served on the paged path ({len(live)} expert lora_B tensors are nonzero, "
                        f"e.g. {live[0]}); serve it with loggetta.load_adapter, or train attention-only "
                        f"(train_experts=false)"))

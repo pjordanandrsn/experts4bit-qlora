@@ -881,7 +881,7 @@ def test_amendment_3_axolotl_family_uv_index_strategy_and_no_unsloth_venv_on_tha
     assert re.search(r'uv pip install --python \$PY_AX "axolotl==\$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > logs/pip_axolotl.log', body)
     # the token alone builds no Unsloth venv; every other token still builds both, behind the same driver gate
     assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab "|" qwen3reuseab "|" qwen3keepab "|" routebench "|" fusedsweep ") NEED_UNSLOTH=0;; esac' in body   # amendments 8, 10, 12-15 add their tokens
-    assert 'if [ "$NEED_UNSLOTH" = 1 ]; then\nUNS_T28_OK=1' in body and 'if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then' in body
+    assert 'if [ "$NEED_UNSLOTH" = 1 ]; then\nUNS_T28_OK=1' in body and 'if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ] && [ "$SKIP_UNS_CU130" != 1 ]; then' in body   # HP3 Amendment 2: (R) skips cu130
     assert body.index("NEED_UNSLOTH=1; case") < body.index("venv-unsloth-t28:") and body.count("runs no Unsloth arm (TC1-PREREG amendment 3)") == 2
 
 
@@ -2204,6 +2204,7 @@ def test_tc1_amendment_46_decoded_route_tokens():
 
 _FAKE_GIT = r'''#!/bin/sh
 # a stand-in for `git` in amendment 46's gate test: `git clone ... DEST` writes a kernel/ with the two test files; checkout succeeds
+echo "$*" >> "$DECGATE_GIT_LOG"
 if [ "$1" = clone ]; then
   [ -n "$DECGATE_FAKE_CLONE_FAIL" ] && exit 128
   for a in "$@"; do d="$a"; done
@@ -2246,12 +2247,14 @@ def test_tc1_amendment_46_decoded_gate_refuses_the_box_before_any_arm(tmp_path, 
     script = (f'set -uo pipefail\nW={W}; cd $W; NONCE=t; TC1_BOX=A; PY_E4B={sys.executable}; GNF4_SHA={"g" * 40}; : > summary.txt\n'
               f'{helpers}\n{gate}\ntc1_decoded_gate; tc1_decoded_gate; echo GATE-DONE\n')
     r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=300,
-                       env={**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", **env})
+                       env={**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "DECGATE_GIT_LOG": str(tmp_path / "git.log"), **env})
     rec = json.loads((W / "decgate.json").read_text())
+    clones = [ln for ln in (tmp_path / "git.log").read_text().splitlines() if ln.startswith("clone ")]
+    assert clones == [f"clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git {tmp_path / 'gnf4-decgate'}"], clones   # once, beside W
     summ = (W / "summary.txt").read_text()
     # the checkout is gone before any arm on every path (its nested receipt.json once refused every launch on the account), and the
     # record names the commit it was at
-    assert not (W / "gnf4-src").exists(), case
+    assert not (W / "gnf4-src").exists() and not (tmp_path / "gnf4-decgate").exists(), case     # beside W, and removed after the gate
     assert not list(W.rglob("receipt.json")), list(W.rglob("receipt.json"))
     assert rec["checkout_head"] == ("f" * 40 if case != "no_clone" else None), rec
     assert r.returncode == want_rc, (case, r.returncode, r.stdout[-800:], r.stderr[-800:])
@@ -2611,3 +2614,72 @@ def test_gnf4_code_identity_reads_the_installed_commit_and_the_imported_file(tmp
     monkeypatch.setattr(importlib.metadata, "distribution", gone)
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
     assert arm.gnf4_code_identity() == {"commit": None, "nf4_qlora_sha256": None}
+
+
+class _FakeAllocator:
+    """A stand-in for torch.cuda's peak stats: reset_peak_memory_stats() drops each maximum to the current value, as the real one does."""
+
+    def __init__(self):
+        self.alloc = self.reserved = self.max_alloc = self.max_reserved = self.resets = 0
+
+    def use(self, alloc, reserved):
+        self.alloc, self.reserved = alloc, reserved
+        self.max_alloc, self.max_reserved = max(self.max_alloc, alloc), max(self.max_reserved, reserved)
+
+    def synchronize(self):
+        pass
+
+    def max_memory_allocated(self):
+        return self.max_alloc
+
+    def max_memory_reserved(self):
+        return self.max_reserved
+
+    def memory_allocated(self):
+        return self.alloc
+
+    def memory_reserved(self):
+        return self.reserved
+
+    def mem_get_info(self):
+        return (100 - self.reserved, 100)
+
+    def reset_peak_memory_stats(self):
+        self.resets += 1
+        self.max_alloc, self.max_reserved = self.alloc, self.reserved
+
+
+def test_step_mem_maxima_stay_running_maxima_across_phase_resets(monkeypatch):
+    """#2003 review: under --phase-peaks 1, phase_mark() resets BOTH allocator peaks at every in-loop eval. step_mem_row must fold
+    both back (_RUN_PEAKS and _RUN_RESERVED), so its max_allocated and max_reserved never drop, and it must never reset them itself.
+    The mutant (no reserved fold, the PR's first head) shows the drop this test exists to catch."""
+    import types
+    arm = _load_arm_module()
+    cuda = _FakeAllocator()
+    monkeypatch.setattr(arm, "torch", types.SimpleNamespace(cuda=cuda))
+    monkeypatch.setattr(arm, "DEV", "cuda")
+
+    def run(fold_reserved):
+        cuda.__init__()
+        monkeypatch.setattr(arm, "_PHASE_PEAKS", {})
+        monkeypatch.setattr(arm, "_RUN_PEAKS", [])
+        monkeypatch.setattr(arm, "_RUN_RESERVED", [] if fold_reserved else None)
+        rows = []
+        cuda.use(10, 20)
+        rows.append(arm.step_mem_row(1))
+        cuda.use(12, 30)                       # the in-loop eval after step 1 peaks the reserved pool,
+        cuda.use(11, 15)                       # frees it,
+        arm.phase_mark("eval")                 # and the phase boundary resets both peaks to the current use
+        rows.append(arm.step_mem_row(2))
+        cuda.use(9, 14)
+        rows.append(arm.step_mem_row(3))
+        return rows
+
+    rows = run(fold_reserved=True)
+    assert [r["max_allocated"] for r in rows] == [10, 12, 12]
+    assert [r["max_reserved"] for r in rows] == [20, 30, 30]          # the eval's 30 is kept, and set before row 2 (the docstring note)
+    assert [r["reserved"] for r in rows] == [20, 15, 14] and rows[2]["device_used"] == 14
+    assert cuda.resets == 1                                           # phase_mark's reset only: step_mem_row never resets
+    mutant = run(fold_reserved=False)
+    assert [r["max_reserved"] for r in mutant] == [20, 15, 15]        # the drop the fold prevents
+    assert arm.step_mem_row.__doc__ and "eval after step N" in " ".join(arm.step_mem_row.__doc__.split())

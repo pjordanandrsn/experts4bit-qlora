@@ -1,0 +1,771 @@
+{
+ "lane": "P232",
+ "verdict": "FLIP_ROWS_8",
+ "reasons": [
+  "T=2: PASS",
+  "T=4: PASS",
+  "T=8: PASS",
+  "every T up to 8 passes: a separate PR may make E4B_INT8_HEAD_ROWS=8 qwen3_moe's default, citing this read and P229"
+ ],
+ "tripwire": [],
+ "bars": {
+  "quality_bias": 0.02,
+  "quality_argmax": 0.95,
+  "q_windows": 24,
+  "flip_g": 1.01,
+  "noisy_band": [
+   0.985,
+   1.015
+  ],
+  "reps": 5,
+  "min_power_w": 575,
+  "tripwire": {
+   "bias": 0.005,
+   "argmax": 0.98,
+   "kl_mult": 3.0,
+   "kl_abs": 0.002
+  }
+ },
+ "shakedown": false,
+ "quality": {
+  "2": {
+   "bias": -9.1e-05,
+   "argmax_agree": 0.997396,
+   "argmax_counts": [
+    3064,
+    3072
+   ],
+   "kl": 0.000142,
+   "n": 24,
+   "floor_kl": 0.0,
+   "rep_identical": {
+    "wikitext": true
+   },
+   "b16": {
+    "R_vs_B16": {
+     "bias": 0.0012337173935717538,
+     "argmax_agree": 0.9908854166666666,
+     "kl": 0.0006440017653522905
+    },
+    "K_vs_B16": {
+     "bias": 0.0011427111347385537,
+     "argmax_agree": null,
+     "kl": null,
+     "unread": "argmax and KL: the registered phases score B16 against R only"
+    },
+    "bars_p153": {
+     "bias": 0.02,
+     "argmax": 0.95
+    }
+   }
+  },
+  "4": {
+   "bias": -9.1e-05,
+   "argmax_agree": 0.997396,
+   "argmax_counts": [
+    3064,
+    3072
+   ],
+   "kl": 0.000142,
+   "n": 24,
+   "floor_kl": 0.0,
+   "rep_identical": {
+    "wikitext": true
+   },
+   "b16": {
+    "R_vs_B16": {
+     "bias": 0.0012337173935717538,
+     "argmax_agree": 0.9908854166666666,
+     "kl": 0.0006440017653522905
+    },
+    "K_vs_B16": {
+     "bias": 0.0011427111347385537,
+     "argmax_agree": null,
+     "kl": null,
+     "unread": "argmax and KL: the registered phases score B16 against R only"
+    },
+    "bars_p153": {
+     "bias": 0.02,
+     "argmax": 0.95
+    }
+   }
+  },
+  "8": {
+   "bias": -3.1e-05,
+   "argmax_agree": 0.998047,
+   "argmax_counts": [
+    3066,
+    3072
+   ],
+   "kl": 0.000142,
+   "n": 24,
+   "floor_kl": 0.0,
+   "rep_identical": {
+    "wikitext": true
+   },
+   "b16": {
+    "R_vs_B16": {
+     "bias": 0.001144064275183802,
+     "argmax_agree": 0.990234375,
+     "kl": 0.0006546515451594225
+    },
+    "K_vs_B16": {
+     "bias": 0.0011130477225787712,
+     "argmax_agree": null,
+     "kl": null,
+     "unread": "argmax and KL: the registered phases score B16 against R only"
+    },
+    "bars_p153": {
+     "bias": 0.02,
+     "argmax": 0.95
+    }
+   }
+  }
+ },
+ "quality_unrounded": {
+  "2": {
+   "bias": -9.10062588332002e-05,
+   "argmax_agree": 0.9973958333333334,
+   "argmax_counts": [
+    3064,
+    3072
+   ],
+   "kl": 0.00014204919144418277,
+   "n": 24,
+   "floor_kl": 0.0,
+   "rep_identical": {
+    "wikitext": true
+   },
+   "b16": {
+    "R_vs_B16": {
+     "bias": 0.0012337173935717538,
+     "argmax_agree": 0.9908854166666666,
+     "kl": 0.0006440017653522905
+    },
+    "K_vs_B16": {
+     "bias": 0.0011427111347385537,
+     "argmax_agree": null,
+     "kl": null,
+     "unread": "argmax and KL: the registered phases score B16 against R only"
+    },
+    "bars_p153": {
+     "bias": 0.02,
+     "argmax": 0.95
+    }
+   }
+  },
+  "4": {
+   "bias": -9.10062588332002e-05,
+   "argmax_agree": 0.9973958333333334,
+   "argmax_counts": [
+    3064,
+    3072
+   ],
+   "kl": 0.00014204919144418277,
+   "n": 24,
+   "floor_kl": 0.0,
+   "rep_identical": {
+    "wikitext": true
+   },
+   "b16": {
+    "R_vs_B16": {
+     "bias": 0.0012337173935717538,
+     "argmax_agree": 0.9908854166666666,
+     "kl": 0.0006440017653522905
+    },
+    "K_vs_B16": {
+     "bias": 0.0011427111347385537,
+     "argmax_agree": null,
+     "kl": null,
+     "unread": "argmax and KL: the registered phases score B16 against R only"
+    },
+    "bars_p153": {
+     "bias": 0.02,
+     "argmax": 0.95
+    }
+   }
+  },
+  "8": {
+   "bias": -3.101655260503063e-05,
+   "argmax_agree": 0.998046875,
+   "argmax_counts": [
+    3066,
+    3072
+   ],
+   "kl": 0.0001419120924472922,
+   "n": 24,
+   "floor_kl": 0.0,
+   "rep_identical": {
+    "wikitext": true
+   },
+   "b16": {
+    "R_vs_B16": {
+     "bias": 0.001144064275183802,
+     "argmax_agree": 0.990234375,
+     "kl": 0.0006546515451594225
+    },
+    "K_vs_B16": {
+     "bias": 0.0011130477225787712,
+     "argmax_agree": null,
+     "kl": null,
+     "unread": "argmax and KL: the registered phases score B16 against R only"
+    },
+    "bars_p153": {
+     "bias": 0.02,
+     "argmax": 0.95
+    }
+   }
+  }
+ },
+ "bucket_stability": {
+  "R": {
+   "2": {
+    "rows_identical": 4,
+    "rows": 4,
+    "max_abs_diff": 0.0,
+    "steps": 2
+   },
+   "4": {
+    "rows_identical": 8,
+    "rows": 8,
+    "max_abs_diff": 0.0,
+    "steps": 2
+   },
+   "8": {
+    "rows_identical": 16,
+    "rows": 16,
+    "max_abs_diff": 0.0,
+    "steps": 2
+   }
+  },
+  "K": {
+   "2": {
+    "rows_identical": 4,
+    "rows": 4,
+    "max_abs_diff": 0.0,
+    "steps": 2
+   },
+   "4": {
+    "rows_identical": 8,
+    "rows": 8,
+    "max_abs_diff": 0.0,
+    "steps": 2
+   },
+   "8": {
+    "rows_identical": 16,
+    "rows": 16,
+    "max_abs_diff": 0.0,
+    "steps": 2
+   }
+  },
+  "B16": {
+   "2": {
+    "rows_identical": 4,
+    "rows": 4,
+    "max_abs_diff": 0.0,
+    "steps": 2
+   },
+   "4": {
+    "rows_identical": 8,
+    "rows": 8,
+    "max_abs_diff": 0.0,
+    "steps": 2
+   },
+   "8": {
+    "rows_identical": 16,
+    "rows": 16,
+    "max_abs_diff": 0.0,
+    "steps": 2
+   }
+  }
+ },
+ "speed": {
+  "decode_tok_s": {
+   "Ra": {
+    "W2": 320.95,
+    "W4": 545.75,
+    "W8": 980.53
+   },
+   "Ka": {
+    "W2": 330.92,
+    "W4": 558.99,
+    "W8": 996.75
+   },
+   "Kb": {
+    "W2": 330.92,
+    "W4": 558.69,
+    "W8": 1000.07
+   },
+   "Rb": {
+    "W2": 320.65,
+    "W4": 541.65,
+    "W8": 976.75
+   },
+   "Rc": {
+    "W2": 320.34,
+    "W4": 543.32,
+    "W8": 977.03
+   },
+   "Kc": {
+    "W2": 331.08,
+    "W4": 557.91,
+    "W8": 1000.45
+   },
+   "Kd": {
+    "W2": 330.45,
+    "W4": 557.16,
+    "W8": 999.55
+   },
+   "Rd": {
+    "W2": 320.07,
+    "W4": 542.98,
+    "W8": 976.62
+   }
+  },
+  "g": {
+   "2": 1.0311,
+   "4": 1.0243,
+   "8": 1.0165
+  },
+  "g_unrounded": {
+   "2": 1.031064028664901,
+   "4": 1.0242601923957857,
+   "8": 1.0165420741843698
+  },
+  "pairs": {
+   "W2": {
+    "Ka/Ra": 1.0311,
+    "Kb/Rb": 1.032,
+    "Kc/Rc": 1.0335,
+    "Kd/Rd": 1.0324
+   },
+   "W4": {
+    "Ka/Ra": 1.0243,
+    "Kb/Rb": 1.0315,
+    "Kc/Rc": 1.0269,
+    "Kd/Rd": 1.0261
+   },
+   "W8": {
+    "Ka/Ra": 1.0165,
+    "Kb/Rb": 1.0239,
+    "Kc/Rc": 1.024,
+    "Kd/Rd": 1.0235
+   }
+  },
+  "geomean": {
+   "W2": 1.0323,
+   "W4": 1.0272,
+   "W8": 1.022
+  },
+  "self_pairs": {
+   "W2": {
+    "Rb/Ra": 0.9991,
+    "Kb/Ka": 1.0,
+    "Rd/Rc": 0.9992,
+    "Kd/Kc": 0.9981
+   },
+   "W4": {
+    "Rb/Ra": 0.9925,
+    "Kb/Ka": 0.9995,
+    "Rd/Rc": 0.9994,
+    "Kd/Kc": 0.9987
+   },
+   "W8": {
+    "Rb/Ra": 0.9961,
+    "Kb/Ka": 1.0033,
+    "Rd/Rc": 0.9996,
+    "Kd/Kc": 0.9991
+   }
+  },
+  "cross_block_self_pairs": {
+   "W2": {
+    "Rc/Ra": 0.9981,
+    "Kc/Ka": 1.0005
+   },
+   "W4": {
+    "Rc/Ra": 0.9955,
+    "Kc/Ka": 0.9981
+   },
+   "W8": {
+    "Rc/Ra": 0.9964,
+    "Kc/Ka": 1.0037
+   }
+  },
+  "telemetry": {
+   "Ra": {
+    "power_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3105.0
+    ],
+    "temperature_max": 63.0,
+    "sm_clock_min": 2812.0
+   },
+   "Ka": {
+    "power_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3105.0
+    ],
+    "temperature_max": 65.0,
+    "sm_clock_min": 2812.0
+   },
+   "Kb": {
+    "power_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3105.0
+    ],
+    "temperature_max": 67.0,
+    "sm_clock_min": 2812.0
+   },
+   "Rb": {
+    "power_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3105.0
+    ],
+    "temperature_max": 67.0,
+    "sm_clock_min": 2812.0
+   },
+   "Rc": {
+    "power_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3105.0
+    ],
+    "temperature_max": 68.0,
+    "sm_clock_min": 2812.0
+   },
+   "Kc": {
+    "power_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3105.0
+    ],
+    "temperature_max": 68.0,
+    "sm_clock_min": 2812.0
+   },
+   "Kd": {
+    "power_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3105.0
+    ],
+    "temperature_max": 68.0,
+    "sm_clock_min": 2812.0
+   },
+   "Rd": {
+    "power_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3105.0
+    ],
+    "temperature_max": 68.0,
+    "sm_clock_min": 2812.0
+   },
+   "Rw": {
+    "power_limit_w": [
+     575.0
+    ],
+    "clocks_max_sm": [
+     3105.0
+    ],
+    "temperature_max": 58.0,
+    "sm_clock_min": 2827.0
+   }
+  },
+  "warmup": {
+   "decode_tok_s": {
+    "W2": 321.62,
+    "W4": 546.64,
+    "W8": 980.39
+   },
+   "over_Ra": {
+    "W2": 1.0021,
+    "W4": 1.0016,
+    "W8": 0.9999
+   }
+  },
+  "k_vs_r_tokens": {
+   "Ka/Ra W2 32": {
+    "rows_identical": 1,
+    "rows": 2,
+    "first_divergent_step": [
+     null,
+     25
+    ]
+   },
+   "Ka/Ra W2 160": {
+    "rows_identical": 1,
+    "rows": 2,
+    "first_divergent_step": [
+     null,
+     25
+    ]
+   },
+   "Ka/Ra W4 32": {
+    "rows_identical": 3,
+    "rows": 4,
+    "first_divergent_step": [
+     null,
+     25,
+     null,
+     null
+    ]
+   },
+   "Ka/Ra W4 160": {
+    "rows_identical": 2,
+    "rows": 4,
+    "first_divergent_step": [
+     null,
+     25,
+     null,
+     90
+    ]
+   },
+   "Ka/Ra W8 32": {
+    "rows_identical": 7,
+    "rows": 8,
+    "first_divergent_step": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     7
+    ]
+   },
+   "Ka/Ra W8 160": {
+    "rows_identical": 5,
+    "rows": 8,
+    "first_divergent_step": [
+     null,
+     108,
+     157,
+     null,
+     null,
+     null,
+     null,
+     7
+    ]
+   },
+   "Kb/Rb W2 32": {
+    "rows_identical": 1,
+    "rows": 2,
+    "first_divergent_step": [
+     null,
+     25
+    ]
+   },
+   "Kb/Rb W2 160": {
+    "rows_identical": 1,
+    "rows": 2,
+    "first_divergent_step": [
+     null,
+     25
+    ]
+   },
+   "Kb/Rb W4 32": {
+    "rows_identical": 3,
+    "rows": 4,
+    "first_divergent_step": [
+     null,
+     25,
+     null,
+     null
+    ]
+   },
+   "Kb/Rb W4 160": {
+    "rows_identical": 2,
+    "rows": 4,
+    "first_divergent_step": [
+     null,
+     25,
+     null,
+     90
+    ]
+   },
+   "Kb/Rb W8 32": {
+    "rows_identical": 7,
+    "rows": 8,
+    "first_divergent_step": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     7
+    ]
+   },
+   "Kb/Rb W8 160": {
+    "rows_identical": 5,
+    "rows": 8,
+    "first_divergent_step": [
+     null,
+     108,
+     157,
+     null,
+     null,
+     null,
+     null,
+     7
+    ]
+   },
+   "Kc/Rc W2 32": {
+    "rows_identical": 1,
+    "rows": 2,
+    "first_divergent_step": [
+     null,
+     25
+    ]
+   },
+   "Kc/Rc W2 160": {
+    "rows_identical": 1,
+    "rows": 2,
+    "first_divergent_step": [
+     null,
+     25
+    ]
+   },
+   "Kc/Rc W4 32": {
+    "rows_identical": 3,
+    "rows": 4,
+    "first_divergent_step": [
+     null,
+     25,
+     null,
+     null
+    ]
+   },
+   "Kc/Rc W4 160": {
+    "rows_identical": 2,
+    "rows": 4,
+    "first_divergent_step": [
+     null,
+     25,
+     null,
+     90
+    ]
+   },
+   "Kc/Rc W8 32": {
+    "rows_identical": 7,
+    "rows": 8,
+    "first_divergent_step": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     7
+    ]
+   },
+   "Kc/Rc W8 160": {
+    "rows_identical": 5,
+    "rows": 8,
+    "first_divergent_step": [
+     null,
+     108,
+     157,
+     null,
+     null,
+     null,
+     null,
+     7
+    ]
+   },
+   "Kd/Rd W2 32": {
+    "rows_identical": 1,
+    "rows": 2,
+    "first_divergent_step": [
+     null,
+     25
+    ]
+   },
+   "Kd/Rd W2 160": {
+    "rows_identical": 1,
+    "rows": 2,
+    "first_divergent_step": [
+     null,
+     25
+    ]
+   },
+   "Kd/Rd W4 32": {
+    "rows_identical": 3,
+    "rows": 4,
+    "first_divergent_step": [
+     null,
+     25,
+     null,
+     null
+    ]
+   },
+   "Kd/Rd W4 160": {
+    "rows_identical": 2,
+    "rows": 4,
+    "first_divergent_step": [
+     null,
+     25,
+     null,
+     90
+    ]
+   },
+   "Kd/Rd W8 32": {
+    "rows_identical": 7,
+    "rows": 8,
+    "first_divergent_step": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     7
+    ]
+   },
+   "Kd/Rd W8 160": {
+    "rows_identical": 5,
+    "rows": 8,
+    "first_divergent_step": [
+     null,
+     108,
+     157,
+     null,
+     null,
+     null,
+     null,
+     7
+    ]
+   }
+  }
+ },
+ "per_T": {
+  "2": {
+   "result": "PASS",
+   "failed": []
+  },
+  "4": {
+   "result": "PASS",
+   "failed": []
+  },
+  "8": {
+   "result": "PASS",
+   "failed": []
+  }
+ }
+}

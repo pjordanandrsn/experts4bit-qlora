@@ -1,0 +1,19 @@
+{
+ "ok": true,
+ "fingerprint": {
+  "attention": {
+   "scheme_id": "qfp-v1",
+   "modules": 192,
+   "sha256": "9c85c87d4502ddad86dbe96a96d0fab1c06afbd0deb589e5fa37b2fcf2fba2a0",
+   "bytes_hashed": 1811939328,
+   "seconds": 0.916
+  },
+  "experts": {
+   "scheme_id": "qfp-v1",
+   "modules": 96,
+   "sha256": "dc2a9949c457bccedea6039a5e6f7cd013216c2e8e8bad55c966d871ce406c9c",
+   "bytes_hashed": 1824528384,
+   "seconds": 1.297
+  }
+ }
+}

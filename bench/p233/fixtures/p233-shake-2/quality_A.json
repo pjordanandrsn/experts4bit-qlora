@@ -1,0 +1,4591 @@
+{
+ "mode": "quality",
+ "arm": "A",
+ "shakedown": true,
+ "e4b_sha": "9d19079ec20fcefafc697fe6277c39ef75319f82",
+ "gnf4_sha": "41ef086e6a3e2be5b158ff1bb38e0de67862a949",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "served_revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "knobs": {
+  "E4B_PAGED_PLACEMENT": "all-vram",
+  "E4B_PAGED_VRAM_GB": null,
+  "E4B_PAGED_DRAM_GB": null,
+  "E4B_PAGED_GRAPHS": "0",
+  "E4B_INT8_HEAD_BW": "1",
+  "E4B_INT8_HEAD_ROWS": "8",
+  "E4B_PAGED_HOT_ROWS": "128",
+  "E4B_ATTN_SPLIT_CAP": null,
+  "E4B_ATTN_SPLIT_FIXED": null,
+  "E4B_DENSE_GEMV_BW": null,
+  "E4B_PAGED_SPEC": null,
+  "E4B_FUSE_PREFILL_GLUE": null,
+  "E4B_NF4_SMALLM_BW": null,
+  "E4B_SERVE_EXP_INT4": null,
+  "E4B_PAGED_FUSE_QKV": null,
+  "E4B_FUSE_T1_GLUE": null,
+  "E4B_FUSE_T1_GLUE_R2": null,
+  "E4B_FUSE_ROUTER_EPI": null,
+  "GNF4_GEMV_BW": null,
+  "GNF4_GEMV_BW_PLAN": null,
+  "GNF4_GEMV_BW_DECODE": null
+ },
+ "torch": "2.8.0+cu128",
+ "sm_count": 170,
+ "cc": "12.0",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "load_s": 37.66,
+ "config": {
+  "placement": "all-vram",
+  "vram_gb": 1.2,
+  "dram_gb": 6.0,
+  "graphs": false,
+  "max_seqs": 16,
+  "max_tokens_per_seq": 4096,
+  "buckets": [
+   1,
+   2,
+   4,
+   8,
+   16
+  ],
+  "hot_rows": 128,
+  "torch_threads": 8,
+  "device": "cuda"
+ },
+ "levers": {
+  "int8_head_bw": {
+   "mode": "1",
+   "modules": 1,
+   "shape": [
+    151936,
+    2048
+   ],
+   "int8_bytes": 311164928,
+   "grid": "quantize_rows_int8 (K36); the weight rounded in place to bf16(q * s), P150's I8HEAD",
+   "source": "explicit",
+   "rows": {
+    "rows_max": 8,
+    "kernel": "dense_i8.linear_i8 (K37)",
+    "plan": {
+     "2": [
+      32,
+      256,
+      4
+     ],
+     "3": [
+      32,
+      256,
+      4
+     ],
+     "4": [
+      32,
+      256,
+      4
+     ],
+     "5": [
+      32,
+      256,
+      4
+     ],
+     "6": [
+      32,
+      256,
+      4
+     ],
+     "7": [
+      32,
+      256,
+      4
+     ],
+     "8": [
+      32,
+      256,
+      4
+     ]
+    },
+    "source": "explicit"
+   },
+   "engagement": {
+    "modules": 1,
+    "routed_modules_by_rows": {},
+    "passed_modules_by_rows": {},
+    "routed_kernel_by_rows": {}
+   }
+  },
+  "attn_split_cap": {
+   "cap": 16,
+   "source": "default-allowlisted",
+   "plans": {}
+  },
+  "fusion_modes": {
+   "E4B_PAGED_FUSE_QKV": "auto",
+   "E4B_FUSE_T1_GLUE": "auto",
+   "E4B_FUSE_T1_GLUE_R2": "auto",
+   "E4B_FUSE_ROUTER_EPI": "auto"
+  },
+  "fusion_sources": {
+   "E4B_PAGED_FUSE_QKV": "default-allowlisted",
+   "E4B_FUSE_T1_GLUE": "default-allowlisted",
+   "E4B_FUSE_T1_GLUE_R2": "default-allowlisted",
+   "E4B_FUSE_ROUTER_EPI": "default-allowlisted"
+  },
+  "fusions": {
+   "fuse_qkv_n": 48,
+   "fuse_t1_glue_n": 193,
+   "fuse_t1_glue_r2_n": [
+    48,
+    48
+   ],
+   "fuse_router_epilogue_n": 48
+  },
+  "prefill_glue": {
+   "mode": "1",
+   "source": "default-allowlisted"
+  },
+  "dense_gemv_bw": {
+   "mode": "0",
+   "modules": 0,
+   "engagement": {
+    "modules": 0,
+    "routed_modules_by_rows": {},
+    "passed_modules_by_rows": {}
+   }
+  },
+  "k25_lut": {
+   "env": null,
+   "lut": "prmt",
+   "why": null,
+   "source": "default-allowlisted"
+  },
+  "k25_plan": {
+   "env": null,
+   "plan": "c1",
+   "why": null,
+   "source": "default-allowlisted",
+   "gu": {
+    "block_n": 64,
+    "kc": 256,
+    "warps": 4,
+    "stages": 2
+   },
+   "dn": {
+    "block_n": 128,
+    "kc": 128,
+    "warps": 8,
+    "stages": 3
+   }
+  },
+  "nf4_smallm_bw": {
+   "env": null,
+   "on": false,
+   "max_tokens": 8,
+   "why": "opt-in: E4B_NF4_SMALLM_BW is not 1"
+  }
+ },
+ "graph_status": null,
+ "model_type": "qwen3_moe",
+ "moe_layers": 48,
+ "experts": 128,
+ "top_k": 8,
+ "transformers": "5.17.0",
+ "arena": {
+  "sha256": "6c27ae824912171ea83b00fe4ff48e38cd07f9e3d45f1987275bbdb23f93eeec",
+  "bytes": 16307453952,
+  "index_sha256": "a053ac8fd0e9c18838fa7fc622befc73e4718349eb6f6906c18a495476eaf5b7",
+  "seconds": 11.3
+ },
+ "windows_sha256": "a5837e6155a890eeb372d41a9d6b522817c0c603ebd450b0f3faf7cccac12a85",
+ "placement": {
+  "placement": "all-vram",
+  "budget_gb": {
+   "vram": 1.2,
+   "dram": 6.0
+  },
+  "budget_bytes": {
+   "vram": 1288490188,
+   "dram": 6442450944
+  },
+  "moe_layers": 48,
+  "experts_per_layer": [
+   128
+  ],
+  "bytes_per_expert": 2654208,
+  "experts": {
+   "vram": 6144,
+   "dram": 0,
+   "nvme": 0
+  },
+  "bytes": {
+   "vram": 16307453952,
+   "dram": 0,
+   "nvme": 0
+  },
+  "resident_bytes": {
+   "vram": 16307453952,
+   "dram": 0
+  },
+  "layers": {
+   "collapse": 48,
+   "tiered": 0
+  },
+  "per_layer": [
+   {
+    "layer": 0,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 1,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 2,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 3,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 4,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 5,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 6,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 7,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 8,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 9,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 10,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 11,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 12,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 13,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 14,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 15,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 16,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 17,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 18,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 19,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 20,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 21,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 22,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 23,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 24,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 25,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 26,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 27,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 28,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 29,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 30,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 31,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 32,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 33,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 34,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 35,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 36,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 37,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 38,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 39,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 40,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 41,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 42,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 43,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 44,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 45,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 46,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   },
+   {
+    "layer": 47,
+    "experts": 128,
+    "vram": 128,
+    "dram": 0,
+    "nvme": 0,
+    "path": "collapse",
+    "resident_bytes": {
+     "vram": 339738624,
+     "dram": 0
+    }
+   }
+  ]
+ },
+ "host_cpu": {
+  "model": "AMD EPYC 9654 96-Core Processor",
+  "isa": {
+   "avx2": true,
+   "avx512": true,
+   "amx": false
+  },
+  "flags": [
+   "avx2",
+   "avx512_bf16",
+   "avx512_vnni",
+   "avx512bw",
+   "avx512f",
+   "avx512vl"
+  ],
+  "cpus": 384,
+  "affinity": 384,
+  "torch_threads": 8,
+  "cpu_kernel_threads": 128,
+  "layer_thread_request": [
+   0
+  ],
+  "numa_nodes": 2
+ },
+ "dispatch_build": {
+  "dotpad": 0,
+  "dotpad_splitk": 0,
+  "scalar": 0,
+  "scalar_splitk": 0,
+  "bw_tree": 0,
+  "bw_prmt32": 300,
+  "bw_splitk": 0
+ },
+ "phases": {
+  "1": {
+   "phase": "off",
+   "arms": [
+    "R",
+    "rep",
+    "half",
+    "chunk",
+    "mutant_scale"
+   ],
+   "windows": {
+    "wikitext": 8
+   },
+   "windows_sha256": {
+    "wikitext": "a5837e6155a890eeb372d41a9d6b522817c0c603ebd450b0f3faf7cccac12a85"
+   },
+   "group": 1,
+   "prompt": 512,
+   "cont": 128,
+   "chunk": 512,
+   "floor_chunk": 256,
+   "layers": 48,
+   "ref_kw": {
+    "device_grouping": true,
+    "padded": true
+   },
+   "rep_identical": {
+    "wikitext": true
+   },
+   "counters_wrapped": [
+    "rmsnorm_rows",
+    "rmsnorm_resid_rows",
+    "scaled_resid_add_rows",
+    "rope_norm_heads",
+    "rope_heads",
+    "router_epilogue"
+   ],
+   "qkv_modules": 48,
+   "rehearsal": {
+    "stand_in_attention": false
+   },
+   "per_window": {
+    "wikitext": {
+     "R": [
+      {
+       "window": 0,
+       "nll": 2.261953879901488,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 1,
+       "nll": 2.862439772365917,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 2,
+       "nll": 1.855084202582713,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 3,
+       "nll": 1.9662745705029074,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 4,
+       "nll": 2.6374760822288827,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 5,
+       "nll": 1.7808698601512187,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 6,
+       "nll": 2.0005298450795106,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 7,
+       "nll": 2.278844156196268,
+       "argmax_agree": 1.0
+      }
+     ],
+     "rep": [
+      {
+       "window": 0,
+       "nll": 2.261953879901488,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      }
+     ],
+     "half": [
+      {
+       "window": 0,
+       "nll": 2.261953879901488,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 1,
+       "nll": 2.862439772365917,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 2,
+       "nll": 1.855084202582713,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 3,
+       "nll": 1.9662745705029074,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 4,
+       "nll": 2.6374760822288827,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 5,
+       "nll": 1.7808698601512187,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 6,
+       "nll": 2.0005298450795106,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 7,
+       "nll": 2.278844156196268,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      }
+     ],
+     "chunk": [
+      {
+       "window": 0,
+       "nll": 2.268896108987233,
+       "argmax_agree": 0.96875,
+       "kl": 0.004339514818990017
+      },
+      {
+       "window": 1,
+       "nll": 2.842153529845291,
+       "argmax_agree": 0.9453125,
+       "kl": 0.006536092000124868
+      },
+      {
+       "window": 2,
+       "nll": 1.8497167626204858,
+       "argmax_agree": 0.9765625,
+       "kl": 0.010660051559423345
+      },
+      {
+       "window": 3,
+       "nll": 1.9821871581377035,
+       "argmax_agree": 0.9921875,
+       "kl": 0.007640973349123836
+      },
+      {
+       "window": 4,
+       "nll": 2.656165876433864,
+       "argmax_agree": 0.96875,
+       "kl": 0.011516960939326915
+      },
+      {
+       "window": 5,
+       "nll": 1.7636680736617922,
+       "argmax_agree": 0.9921875,
+       "kl": 0.006008048321330756
+      },
+      {
+       "window": 6,
+       "nll": 1.99432261246363,
+       "argmax_agree": 0.9609375,
+       "kl": 0.008251174049209178
+      },
+      {
+       "window": 7,
+       "nll": 2.280727458490497,
+       "argmax_agree": 0.9609375,
+       "kl": 0.010896859519658813
+      }
+     ],
+     "mutant_scale": [
+      {
+       "window": 0,
+       "nll": 2.982042583468446,
+       "argmax_agree": 0.6796875,
+       "kl": 1.0805702986162782
+      },
+      {
+       "window": 1,
+       "nll": 4.171845135494294,
+       "argmax_agree": 0.5,
+       "kl": 1.3575312428839652
+      },
+      {
+       "window": 2,
+       "nll": 2.9335365474121318,
+       "argmax_agree": 0.625,
+       "kl": 1.1085318456988489
+      },
+      {
+       "window": 3,
+       "nll": 3.0507048285420524,
+       "argmax_agree": 0.625,
+       "kl": 1.1196637682052142
+      },
+      {
+       "window": 4,
+       "nll": 3.8607386530394194,
+       "argmax_agree": 0.609375,
+       "kl": 1.318759880839366
+      },
+      {
+       "window": 5,
+       "nll": 2.6698962808224564,
+       "argmax_agree": 0.578125,
+       "kl": 1.1923039703897302
+      },
+      {
+       "window": 6,
+       "nll": 2.7143040806137257,
+       "argmax_agree": 0.6796875,
+       "kl": 0.8285807944785049
+      },
+      {
+       "window": 7,
+       "nll": 3.376961933041912,
+       "argmax_agree": 0.609375,
+       "kl": 1.05156932094269
+      }
+     ]
+    }
+   },
+   "engagement": {
+    "wikitext": {
+     "R": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 69.43,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.59,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.99,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.71,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.51,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 41.85,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.5,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 41.4,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      }
+     ],
+     "rep": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.94,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      }
+     ],
+     "half": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": true,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.61,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": true,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 41.07,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": true,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 41.6,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": true,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.83,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": true,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.52,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": true,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 41.69,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": true,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.52,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": true,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 41.51,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      }
+     ],
+     "chunk": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.65,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 41.55,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.83,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.33,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.82,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.26,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.26,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 41.79,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6321,
+        "rmsnorm_resid_rows": 6192,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 129,
+       "qkv_calls": 6192
+      }
+     ],
+     "mutant_scale": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.87,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 41.48,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 41.04,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.48,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 42.76,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.37,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 40.42,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      },
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 41.81,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 127,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6272,
+        "rmsnorm_resid_rows": 6144,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 128,
+       "qkv_calls": 6144
+      }
+     ]
+    }
+   },
+   "seconds": 195.9,
+   "attn_split_cap": {
+    "cap": 16,
+    "source": "default-allowlisted",
+    "plans": {
+     "1": {
+      "calls": 201168,
+      "plan": 32,
+      "n_split": 16
+     }
+    }
+   },
+   "quality_kv": {
+    "passes": 33,
+    "asked": [
+     656
+    ],
+    "max_tokens_per_seq": [
+     4096
+    ],
+    "blocks_per_seq": [
+     256
+    ],
+    "split_cap": 16,
+    "plan_clash": [],
+    "plan_bT": 32
+   },
+   "paths": {
+    "per_layer": [
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 4232,
+      "collapse": 4232,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     }
+    ],
+    "totals": {
+     "calls": 203136,
+     "collapse": 203136,
+     "tiered": 0,
+     "dram_cpu": 0,
+     "dram_gpu": 0
+    },
+    "layers_collapse": 48,
+    "layers_tiered": 0,
+    "layers_mixed": 0,
+    "layers_idle": 0
+   },
+   "argmax": null,
+   "head_calls": {
+    "routed": {
+     "1": 4191
+    },
+    "passed": {
+     "256": 16,
+     "512": 25
+    }
+   },
+   "int8_head_bw_measure": {
+    "modules": 1,
+    "routed_modules_by_rows": {
+     "1": 1
+    },
+    "passed_modules_by_rows": {
+     "256": 1,
+     "512": 1
+    },
+    "routed_kernel_by_rows": {
+     "1": "K36 gemv_i8_bw"
+    }
+   },
+   "dispatch_measure": {
+    "dotpad": 0,
+    "dotpad_splitk": 0,
+    "scalar": 0,
+    "scalar_splitk": 0,
+    "bw_tree": 0,
+    "bw_prmt32": 402336,
+    "bw_splitk": 0
+   },
+   "telemetry": {
+    "before": {
+     "power.limit": 575.0,
+     "clocks.max.sm": 3090.0,
+     "temperature.gpu": 44.0,
+     "clocks.sm": 2430.0,
+     "power.draw": 56.06
+    },
+    "after": {
+     "power.limit": 575.0,
+     "clocks.max.sm": 3090.0,
+     "temperature.gpu": 47.0,
+     "clocks.sm": 2835.0,
+     "power.draw": 104.89
+    }
+   },
+   "wall_s": 195.9
+  },
+  "8": {
+   "phase": "off",
+   "arms": [
+    "R",
+    "rep",
+    "half",
+    "chunk",
+    "mutant_scale"
+   ],
+   "windows": {
+    "wikitext": 8
+   },
+   "windows_sha256": {
+    "wikitext": "a5837e6155a890eeb372d41a9d6b522817c0c603ebd450b0f3faf7cccac12a85"
+   },
+   "group": 8,
+   "prompt": 512,
+   "cont": 128,
+   "chunk": 512,
+   "floor_chunk": 256,
+   "layers": 48,
+   "ref_kw": {
+    "device_grouping": true,
+    "padded": true
+   },
+   "rep_identical": {
+    "wikitext": true
+   },
+   "counters_wrapped": [
+    "rmsnorm_rows",
+    "rmsnorm_resid_rows",
+    "scaled_resid_add_rows",
+    "rope_norm_heads",
+    "rope_heads",
+    "router_epilogue"
+   ],
+   "qkv_modules": 48,
+   "rehearsal": {
+    "stand_in_attention": false
+   },
+   "per_window": {
+    "wikitext": {
+     "R": [
+      {
+       "window": 0,
+       "nll": 2.2825909409422884,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 1,
+       "nll": 2.8306230733105906,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 2,
+       "nll": 1.8523721077203632,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 3,
+       "nll": 1.9447437263863954,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 4,
+       "nll": 2.6504444469181463,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 5,
+       "nll": 1.7758338414968478,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 6,
+       "nll": 2.0059813444894674,
+       "argmax_agree": 1.0
+      },
+      {
+       "window": 7,
+       "nll": 2.2800168323203804,
+       "argmax_agree": 1.0
+      }
+     ],
+     "rep": [
+      {
+       "window": 0,
+       "nll": 2.2825909409422884,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 1,
+       "nll": 2.8306230733105906,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 2,
+       "nll": 1.8523721077203632,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 3,
+       "nll": 1.9447437263863954,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 4,
+       "nll": 2.6504444469181463,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 5,
+       "nll": 1.7758338414968478,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 6,
+       "nll": 2.0059813444894674,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      },
+      {
+       "window": 7,
+       "nll": 2.2800168323203804,
+       "argmax_agree": 1.0,
+       "kl": 0.0
+      }
+     ],
+     "half": [
+      {
+       "window": 0,
+       "nll": 2.280476522078316,
+       "argmax_agree": 0.9921875,
+       "kl": 0.00269492025438077
+      },
+      {
+       "window": 1,
+       "nll": 2.8499052302634595,
+       "argmax_agree": 0.9453125,
+       "kl": 0.007579037642885973
+      },
+      {
+       "window": 2,
+       "nll": 1.8367394224383702,
+       "argmax_agree": 0.984375,
+       "kl": 0.007738696710842596
+      },
+      {
+       "window": 3,
+       "nll": 1.9360652737639774,
+       "argmax_agree": 0.9609375,
+       "kl": 0.008754493176517775
+      },
+      {
+       "window": 4,
+       "nll": 2.6665026390715276,
+       "argmax_agree": 0.9453125,
+       "kl": 0.008540885149846522
+      },
+      {
+       "window": 5,
+       "nll": 1.7521440509643247,
+       "argmax_agree": 0.9609375,
+       "kl": 0.008440004407052948
+      },
+      {
+       "window": 6,
+       "nll": 1.9874148133262404,
+       "argmax_agree": 0.96875,
+       "kl": 0.008219997186455698
+      },
+      {
+       "window": 7,
+       "nll": 2.2616813673550333,
+       "argmax_agree": 0.9609375,
+       "kl": 0.008039929995275419
+      }
+     ],
+     "chunk": [
+      {
+       "window": 0,
+       "nll": 2.2722118803357354,
+       "argmax_agree": 0.9765625,
+       "kl": 0.005005234279943155
+      },
+      {
+       "window": 1,
+       "nll": 2.8368475610677706,
+       "argmax_agree": 0.9765625,
+       "kl": 0.007331088783723634
+      },
+      {
+       "window": 2,
+       "nll": 1.8437722237490526,
+       "argmax_agree": 0.96875,
+       "kl": 0.010348819825299893
+      },
+      {
+       "window": 3,
+       "nll": 1.9597930824969425,
+       "argmax_agree": 0.96875,
+       "kl": 0.009857792788405262
+      },
+      {
+       "window": 4,
+       "nll": 2.6361157636566643,
+       "argmax_agree": 0.96875,
+       "kl": 0.007723792355259093
+      },
+      {
+       "window": 5,
+       "nll": 1.7746871899393577,
+       "argmax_agree": 0.96875,
+       "kl": 0.006698108913085754
+      },
+      {
+       "window": 6,
+       "nll": 2.0003434911568734,
+       "argmax_agree": 0.9765625,
+       "kl": 0.008753048277189007
+      },
+      {
+       "window": 7,
+       "nll": 2.281705886465309,
+       "argmax_agree": 0.984375,
+       "kl": 0.009075898816869321
+      }
+     ],
+     "mutant_scale": [
+      {
+       "window": 0,
+       "nll": 2.9922086166517907,
+       "argmax_agree": 0.6640625,
+       "kl": 1.0956523736049597
+      },
+      {
+       "window": 1,
+       "nll": 4.219735646806782,
+       "argmax_agree": 0.5546875,
+       "kl": 1.3767272251885743
+      },
+      {
+       "window": 2,
+       "nll": 2.971220685412561,
+       "argmax_agree": 0.6328125,
+       "kl": 1.117253604462121
+      },
+      {
+       "window": 3,
+       "nll": 3.077535558368936,
+       "argmax_agree": 0.6640625,
+       "kl": 1.1602236582521073
+      },
+      {
+       "window": 4,
+       "nll": 3.9028324749583874,
+       "argmax_agree": 0.6015625,
+       "kl": 1.3042799245764627
+      },
+      {
+       "window": 5,
+       "nll": 2.7186742597538966,
+       "argmax_agree": 0.578125,
+       "kl": 1.270016492425384
+      },
+      {
+       "window": 6,
+       "nll": 2.7415930145411096,
+       "argmax_agree": 0.671875,
+       "kl": 0.840275466765803
+      },
+      {
+       "window": 7,
+       "nll": 3.3845025722748687,
+       "argmax_agree": 0.609375,
+       "kl": 1.061115487639654
+      }
+     ]
+    }
+   },
+   "engagement": {
+    "wikitext": {
+     "R": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 78.31,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 1016,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6615,
+        "rmsnorm_resid_rows": 6480,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 135,
+       "qkv_calls": 6480
+      }
+     ],
+     "rep": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 50.96,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 1016,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6615,
+        "rmsnorm_resid_rows": 6480,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 135,
+       "qkv_calls": 6480
+      }
+     ],
+     "half": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": true,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 98.87,
+       "decode_calls": 12192,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 254,
+         "rows": 1016,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 12838,
+        "rmsnorm_resid_rows": 12576,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 12192
+       },
+       "forwards": 262,
+       "qkv_calls": 12576
+      }
+     ],
+     "chunk": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 50.76,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 1016,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 7007,
+        "rmsnorm_resid_rows": 6864,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 143,
+       "qkv_calls": 6864
+      }
+     ],
+     "mutant_scale": [
+      {
+       "device_grouping": true,
+       "padded": true,
+       "halves": false,
+       "reverse": false,
+       "graph_status": {
+        "1": "eager: capture=False",
+        "2": "eager: capture=False",
+        "4": "eager: capture=False",
+        "8": "eager: capture=False",
+        "16": "eager: capture=False"
+       },
+       "step_ms": 51.42,
+       "decode_calls": 6096,
+       "grouping_flags_in_pass": {
+        "device_grouping": true,
+        "force_singleton_groups": false
+       },
+       "graph_stats": {
+        "1": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "2": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "4": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        },
+        "8": {
+         "replays": 0,
+         "eager_steps": 127,
+         "rows": 1016,
+         "pad_rows": 0
+        },
+        "16": {
+         "replays": 0,
+         "eager_steps": 0,
+         "rows": 0,
+         "pad_rows": 0
+        }
+       },
+       "kernels": {
+        "rmsnorm_rows": 6615,
+        "rmsnorm_resid_rows": 6480,
+        "scaled_resid_add_rows": 0,
+        "rope_norm_heads": 0,
+        "rope_heads": 0,
+        "router_epilogue": 6096
+       },
+       "forwards": 135,
+       "qkv_calls": 6480
+      }
+     ]
+    }
+   },
+   "seconds": 56.9,
+   "attn_split_cap": {
+    "cap": 16,
+    "source": "default-allowlisted",
+    "plans": {
+     "8": {
+      "calls": 24384,
+      "plan": 11,
+      "n_split": 11
+     },
+     "4": {
+      "calls": 12192,
+      "plan": 23,
+      "n_split": 16
+     }
+    }
+   },
+   "quality_kv": {
+    "passes": 5,
+    "asked": [
+     656
+    ],
+    "max_tokens_per_seq": [
+     4096
+    ],
+    "blocks_per_seq": [
+     256
+    ],
+    "split_cap": 16,
+    "plan_clash": [],
+    "plan_bT": 11
+   },
+   "paths": {
+    "per_layer": [
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     },
+     {
+      "calls": 810,
+      "collapse": 810,
+      "tiered": 0,
+      "dram_cpu": 0,
+      "dram_gpu": 0
+     }
+    ],
+    "totals": {
+     "calls": 38880,
+     "collapse": 38880,
+     "tiered": 0,
+     "dram_cpu": 0,
+     "dram_gpu": 0
+    },
+    "layers_collapse": 48,
+    "layers_tiered": 0,
+    "layers_mixed": 0,
+    "layers_idle": 0
+   },
+   "argmax": null,
+   "head_calls": {
+    "routed": {
+     "4": 254,
+     "8": 508
+    },
+    "passed": {
+     "256": 16,
+     "512": 32
+    }
+   },
+   "int8_head_bw_measure": {
+    "modules": 1,
+    "routed_modules_by_rows": {
+     "1": 1,
+     "4": 1,
+     "8": 1
+    },
+    "passed_modules_by_rows": {
+     "256": 1,
+     "512": 1
+    },
+    "routed_kernel_by_rows": {
+     "1": "K36 gemv_i8_bw",
+     "4": "K37 linear_i8",
+     "8": "K37 linear_i8"
+    }
+   },
+   "dispatch_measure": {
+    "dotpad": 0,
+    "dotpad_splitk": 0,
+    "scalar": 0,
+    "scalar_splitk": 0,
+    "bw_tree": 0,
+    "bw_prmt32": 0,
+    "bw_splitk": 0
+   },
+   "telemetry": {
+    "before": {
+     "power.limit": 575.0,
+     "clocks.max.sm": 3090.0,
+     "temperature.gpu": 47.0,
+     "clocks.sm": 2835.0,
+     "power.draw": 104.89
+    },
+    "after": {
+     "power.limit": 575.0,
+     "clocks.max.sm": 3090.0,
+     "temperature.gpu": 49.0,
+     "clocks.sm": 2430.0,
+     "power.draw": 104.24
+    }
+   },
+   "wall_s": 56.9
+  }
+ },
+ "max_mem_gb": 23.78,
+ "wall_s": 315.1,
+ "status": "ok"
+}

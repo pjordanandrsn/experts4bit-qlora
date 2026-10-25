@@ -60,11 +60,17 @@ def test_the_helpers_are_p149s_registered_bytes():
         assert pins[name] == p149[name], name
 
 
-def test_the_runner_the_reducer_and_ci_pin_the_same_grouped_nf4_gemm():
+#: Amendment 3: P223's OWN registered grouped-nf4-gemm (v0.49.0, the tag commit its shakes ran), asserted as a constant,
+#: never read from the live ci.yml, so a CI pin bump cannot silently re-point a registered reading.
+P223_GNF4 = "a83f6bb3a3a69aef8981fb81b6361bf62b06f6e7"
+
+
+def test_the_runner_and_the_reducer_pin_p223s_own_registered_grouped_nf4_gemm():
     red = (LANE / "p223_reduce.py").read_text(encoding="utf-8")
-    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     sha = re.search(r"^GNF4_SHA=([0-9a-f]{40})", RUN, re.M).group(1)
-    assert f'GNF4_SHA = "{sha}"' in red and f"grouped-nf4-gemm.git@{sha}" in ci
+    assert sha == P223_GNF4, f"the runner pins {sha}, P223 registers {P223_GNF4} (v0.49.0)"
+    assert f'GNF4_SHA = "{P223_GNF4}"' in red
+    assert "## Amendment 3" in PRE and "`a83f6bb3`" in PRE and "never the live CI pin" in PRE
 
 
 def test_the_arms_are_the_registrations_in_box_reducer_and_runner():
@@ -95,11 +101,12 @@ def test_the_arms_are_the_registrations_in_box_reducer_and_runner():
 
 
 def test_the_runner_refuses_before_any_install_and_runs_the_registered_order():
-    assert "p223-5090-1|p223-5090-2|p223-5090-3) SHAKE=0;;" in RUN and "`p223-5090-1` is the reading" in PRE
+    assert "p223-5090-1|p223-5090-2|p223-5090-3|p223-5090-r1|p223-5090-r2|p223-5090-r3|p223-5090-r4|p223-5090-r5|p223-5090-r6|p223-5090-r7|p223-5090-r8) SHAKE=0;;" in RUN and "`p223-5090-1` is the reading" in PRE
     assert "MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1; REV=eba92302a2861cdc0098cc54bc9f17cb2c47eb61" in RUN
     assert "MIN_POWER_W=575" in RUN and 'assert triton.__version__ == "3.4.0"' in RUN and "TORCH_FULL\" = 2.8.0+cu128" in RUN
     assert 'transformers.__version__ == "5.17.0"' in RUN and "Mixtral at `eba92302`" in PRE
     order = ['[ "$CC" = 12.0 ]', '[ "$PL" -ge "$MIN_POWER_W" ] && [ "$EPL" -ge "$MIN_POWER_W" ]', "finish 17; }",
+             'echo "refused: download ${DL:-none}" > REFUSAL; finish 14; }',      # Amendment 3: the probe, before the fit
              '[ "$LEFT" -ge "$FIT_NEED" ]', "finish 19; }", ". ./phases.sh", "pipx(){", "phase_start install setup",
              "pipx logs/pip_e4b.log",
              "p223_reduce.py --self-test", "p223_box.py --self-test",
@@ -454,6 +461,7 @@ def _clean_checkout():
 
 
 @pytest.mark.parametrize("run_id,ok", [("p223-5090-1", True), ("p223-5090-3", True), ("p223-5090-4", False),
+                                       ("p223-5090-r1", True), ("p223-5090-r8", True), ("p223-5090-r9", False),
                                        ("p223-shake-1", True), ("p223-shake-3", True), ("p223-shake-6", True), ("p223-shake-7", False),
                                        ("p149-5090-1", False), ("p223-dry-1", False)])
 def test_the_driver_takes_the_registered_ids_only(tmp_path, run_id, ok):
@@ -477,3 +485,46 @@ def test_the_driver_stages_what_the_pins_name():
     names = {pathlib.Path(p).name for p in re.findall(r"\$\w+(?:/\w+)?/([\w.\-]+)", stage)}
     assert names == set(SOURCES) | {"staged-p223.sha256"}, names
     assert "--exclude 'work/*'" in drive and "P223_RUN_NONCE" in drive and "P149_" not in drive and "p149-" not in drive
+
+
+DRIVE = (LANE / "p223_drive.sh").read_text(encoding="utf-8")
+
+
+def _joined(text):
+    out, cur = [], ""
+    for line in text.splitlines():
+        if line.rstrip().endswith("\\"):
+            cur += line.rstrip()[:-1] + " "
+            continue
+        out.append(cur + line)
+        cur = ""
+    return out
+
+
+def test_amendment_3_the_fetch_imports_no_links():
+    """Amendment 3 (bench/common rule 8): every rsync in the driver, in any command position, passes --no-links."""
+    cmd = re.compile(r"(?:^|[;&|!(]\s*|\$\(\s*|\bif\s+|\bthen\s+)\s*rsync\b")
+
+    def calls(text):
+        return [ln for ln in _joined(text) if cmd.search(ln.split("#", 1)[0])]
+    for form in ("if ! rsync -az a b", "x=$(rsync -az a b)", "true && rsync -az a b", "rsync -az a b"):
+        assert calls(form) == [form], form
+    assert calls("# rsync -az in a comment") == []
+    found = calls(DRIVE)
+    assert found, "the driver's fetch is an rsync"
+    for ln in found:
+        assert "--no-links" in ln.split("#", 1)[0].split(), ln
+
+
+def test_amendment_3_the_download_probe_refuses_before_the_fit_and_records_every_box():
+    """Amendment 3: P231's probe method at rc 14 (P223's rc 19 is the guard fit), written before its refusal reads it."""
+    assert "MIN_DL_MB_S=40" in RUN and "${P223_MIN_DL_MB_S:-}" in RUN and "min_dl_mb_s=$MIN_DL_MB_S" in RUN
+    i_rec = RUN.index('[ -s $W/download_probe.json ] ||')
+    i_dump = RUN.index('json.dump(rec, open(os.environ["OUT"], "w"), indent=1)')
+    i_ref = RUN.index("finish 14; }")
+    assert i_dump < i_rec < i_ref < RUN.index('[ "$LEFT" -ge "$FIT_NEED" ]') < RUN.index("pipx(){")
+    assert 'req.add_unredirected_header("Authorization"' in RUN, "the token goes to the resolve endpoint only"
+    assert RUN.count("finish 14") == 1, "rc 14 is the probe's alone"
+    for s in ("## Amendment 3", "rc 14", "40 MB/s", "2,335 s", "665 s", "3 consecutive", "`download_probe.json`",
+              "`p223-5090-r1` to `p223-5090-r8`", "USD 4.81", "USD 0.26", "USD 11.98", "--no-links"):
+        assert s in PRE, s

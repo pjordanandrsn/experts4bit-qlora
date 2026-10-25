@@ -1,0 +1,1127 @@
+{
+ "mode": "quality",
+ "arm": "B1",
+ "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+ "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61",
+ "e4b_sha": "47bf1ed2fcc11842aea93b8e6a1ec7fd5bfe2c00",
+ "gnf4_sha": "41ef086e6a3e2be5b158ff1bb38e0de67862a949",
+ "knob": "1",
+ "gnf4_knobs": {
+  "GNF4_GEMV_BW": null,
+  "GNF4_GEMV_BW_PLAN": null,
+  "GNF4_GEMV_BW_DECODE": null,
+  "GNF4_GEMV_DOTPAD": null
+ },
+ "max_seqs": 16,
+ "max_tokens_per_seq": 768,
+ "transformers": "5.17.0",
+ "load_s": 18.0,
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16
+ ],
+ "dispatch_build": {
+  "dotpad": 0,
+  "dotpad_splitk": 0,
+  "scalar": 0,
+  "scalar_splitk": 0,
+  "bw_tree": 0,
+  "bw_prmt32": 512,
+  "bw_splitk": 256
+ },
+ "dispatch_measure": {
+  "dotpad": 0,
+  "dotpad_splitk": 0,
+  "scalar": 0,
+  "scalar_splitk": 0,
+  "bw_tree": 0,
+  "bw_prmt32": 97536,
+  "bw_splitk": 48768
+ },
+ "route_measure": {
+  "nf4_singleton|le256": 48768,
+  "nf4_mtile_captured|gt256": 1536
+ },
+ "phase": "on",
+ "arms": [
+  "ON"
+ ],
+ "windows": {
+  "wikitext": 24,
+  "c4val1": 24
+ },
+ "windows_sha256": {
+  "wikitext": "7e9fe49b39f2f71f63188e41a26504f3d035c4e81f1ca4544e803ea95181e8ad",
+  "c4val1": "28cbe228a1a41a8ee395c9983afcf45dfb6fb7a3412ab672ed728650436300eb"
+ },
+ "group": 4,
+ "prompt": 512,
+ "cont": 128,
+ "chunk": 512,
+ "floor_chunk": 256,
+ "layers": 32,
+ "ref_kw": {
+  "device_grouping": true,
+  "padded": true
+ },
+ "rep_identical": {},
+ "counters_wrapped": [
+  "rmsnorm_rows",
+  "rmsnorm_resid_rows",
+  "scaled_resid_add_rows",
+  "rope_norm_heads",
+  "rope_heads",
+  "router_epilogue"
+ ],
+ "qkv_modules": 0,
+ "rehearsal": {
+  "stand_in_attention": false
+ },
+ "per_window": {
+  "wikitext": {
+   "ON": [
+    {
+     "window": 0,
+     "nll": 1.1799490323106099,
+     "argmax_agree": 0.9921875,
+     "kl": 0.0016173198335496242
+    },
+    {
+     "window": 1,
+     "nll": 2.006714047492692,
+     "argmax_agree": 0.953125,
+     "kl": 0.00869702467700828
+    },
+    {
+     "window": 2,
+     "nll": 1.6628466356524427,
+     "argmax_agree": 0.984375,
+     "kl": 0.004108415132730636
+    },
+    {
+     "window": 3,
+     "nll": 0.854484546142686,
+     "argmax_agree": 0.9609375,
+     "kl": 0.007620810636654429
+    },
+    {
+     "window": 4,
+     "nll": 1.4484265402020817,
+     "argmax_agree": 0.9921875,
+     "kl": 0.0039240575515491136
+    },
+    {
+     "window": 5,
+     "nll": 1.9396709058875103,
+     "argmax_agree": 0.984375,
+     "kl": 0.004480123781371859
+    },
+    {
+     "window": 6,
+     "nll": 1.5796077782780316,
+     "argmax_agree": 0.9921875,
+     "kl": 0.003309621168383625
+    },
+    {
+     "window": 7,
+     "nll": 1.8796399411973956,
+     "argmax_agree": 0.9609375,
+     "kl": 0.0028917457918102296
+    },
+    {
+     "window": 8,
+     "nll": 1.8613589863877849,
+     "argmax_agree": 0.9609375,
+     "kl": 0.009569162220153582
+    },
+    {
+     "window": 9,
+     "nll": 2.234131429675557,
+     "argmax_agree": 0.9609375,
+     "kl": 0.006033121784290607
+    },
+    {
+     "window": 10,
+     "nll": 1.015289320347712,
+     "argmax_agree": 0.9765625,
+     "kl": 0.004229603208009802
+    },
+    {
+     "window": 11,
+     "nll": 1.4312289591914151,
+     "argmax_agree": 0.984375,
+     "kl": 0.004789273113331105
+    },
+    {
+     "window": 12,
+     "nll": 1.6771233866539887,
+     "argmax_agree": 0.96875,
+     "kl": 0.009701111469252899
+    },
+    {
+     "window": 13,
+     "nll": 1.336406474554778,
+     "argmax_agree": 0.984375,
+     "kl": 0.0040764014012661665
+    },
+    {
+     "window": 14,
+     "nll": 1.21739668981893,
+     "argmax_agree": 0.96875,
+     "kl": 0.003414274164007358
+    },
+    {
+     "window": 15,
+     "nll": 2.214655996434799,
+     "argmax_agree": 0.96875,
+     "kl": 0.003031185977522055
+    },
+    {
+     "window": 16,
+     "nll": 1.3580619259030584,
+     "argmax_agree": 0.9765625,
+     "kl": 0.002238477532805261
+    },
+    {
+     "window": 17,
+     "nll": 1.4644106000445447,
+     "argmax_agree": 0.9921875,
+     "kl": 0.0035061156900146884
+    },
+    {
+     "window": 18,
+     "nll": 1.2477658227940793,
+     "argmax_agree": 0.9765625,
+     "kl": 0.003819080296975308
+    },
+    {
+     "window": 19,
+     "nll": 1.8185670472217126,
+     "argmax_agree": 0.9765625,
+     "kl": 0.003513747626270325
+    },
+    {
+     "window": 20,
+     "nll": 1.2487477171905823,
+     "argmax_agree": 0.96875,
+     "kl": 0.004006706385658171
+    },
+    {
+     "window": 21,
+     "nll": 0.7153676199641397,
+     "argmax_agree": 0.9765625,
+     "kl": 0.0018863643459044732
+    },
+    {
+     "window": 22,
+     "nll": 1.0864589864645495,
+     "argmax_agree": 0.9453125,
+     "kl": 0.0026600563498060392
+    },
+    {
+     "window": 23,
+     "nll": 1.5706232749334,
+     "argmax_agree": 0.984375,
+     "kl": 0.0023775428223729023
+    }
+   ]
+  },
+  "c4val1": {
+   "ON": [
+    {
+     "window": 0,
+     "nll": 2.0179062964793957,
+     "argmax_agree": 0.953125,
+     "kl": 0.004380760062560274
+    },
+    {
+     "window": 1,
+     "nll": 1.5833683982249518,
+     "argmax_agree": 0.9609375,
+     "kl": 0.0037210535917773235
+    },
+    {
+     "window": 2,
+     "nll": 1.3144963937178886,
+     "argmax_agree": 0.9921875,
+     "kl": 0.001929081583369463
+    },
+    {
+     "window": 3,
+     "nll": 3.235879178162577,
+     "argmax_agree": 0.96875,
+     "kl": 0.002505945267969878
+    },
+    {
+     "window": 4,
+     "nll": 2.32589843116466,
+     "argmax_agree": 0.9765625,
+     "kl": 0.002620778766438292
+    },
+    {
+     "window": 5,
+     "nll": 1.9283018573670647,
+     "argmax_agree": 0.9765625,
+     "kl": 0.0028701541989885337
+    },
+    {
+     "window": 6,
+     "nll": 2.4332917565911316,
+     "argmax_agree": 0.9375,
+     "kl": 0.003987765469073423
+    },
+    {
+     "window": 7,
+     "nll": 1.7271451660681905,
+     "argmax_agree": 0.96875,
+     "kl": 0.012757271469325926
+    },
+    {
+     "window": 8,
+     "nll": 1.8685410684658663,
+     "argmax_agree": 0.96875,
+     "kl": 0.00311714356099998
+    },
+    {
+     "window": 9,
+     "nll": 1.526117503277419,
+     "argmax_agree": 0.9765625,
+     "kl": 0.006608647868588946
+    },
+    {
+     "window": 10,
+     "nll": 2.346527191030873,
+     "argmax_agree": 0.984375,
+     "kl": 0.002878973353656278
+    },
+    {
+     "window": 11,
+     "nll": 1.844394997505832,
+     "argmax_agree": 0.9609375,
+     "kl": 0.0025921144978648947
+    },
+    {
+     "window": 12,
+     "nll": 1.6915535506630022,
+     "argmax_agree": 0.9765625,
+     "kl": 0.004461939138457716
+    },
+    {
+     "window": 13,
+     "nll": 2.051790132735192,
+     "argmax_agree": 0.9765625,
+     "kl": 0.003401336134713162
+    },
+    {
+     "window": 14,
+     "nll": 1.7312304960973028,
+     "argmax_agree": 1.0,
+     "kl": 0.003512479622666098
+    },
+    {
+     "window": 15,
+     "nll": 1.7260651386128014,
+     "argmax_agree": 0.9765625,
+     "kl": 0.004658325223383997
+    },
+    {
+     "window": 16,
+     "nll": 1.501942022463183,
+     "argmax_agree": 0.9921875,
+     "kl": 0.0016443778344398252
+    },
+    {
+     "window": 17,
+     "nll": 1.4612533977446993,
+     "argmax_agree": 0.9921875,
+     "kl": 0.003938513669872615
+    },
+    {
+     "window": 18,
+     "nll": 2.098041957098559,
+     "argmax_agree": 0.9765625,
+     "kl": 0.002530666712042884
+    },
+    {
+     "window": 19,
+     "nll": 3.6791468462297416,
+     "argmax_agree": 0.921875,
+     "kl": 0.010539814430302386
+    },
+    {
+     "window": 20,
+     "nll": 1.651226949690031,
+     "argmax_agree": 0.9921875,
+     "kl": 0.0019796980647570836
+    },
+    {
+     "window": 21,
+     "nll": 1.7621786796367296,
+     "argmax_agree": 0.9765625,
+     "kl": 0.0036839968618393726
+    },
+    {
+     "window": 22,
+     "nll": 2.183936846103606,
+     "argmax_agree": 0.96875,
+     "kl": 0.0033573645763400606
+    },
+    {
+     "window": 23,
+     "nll": 1.0726601518599193,
+     "argmax_agree": 0.9765625,
+     "kl": 0.0034814865030721592
+    }
+   ]
+  }
+ },
+ "engagement": {
+  "wikitext": {
+   "ON": [
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 22.0,
+     "decode_calls": 4064,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 508,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 4191,
+      "rmsnorm_resid_rows": 4064,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 8128,
+      "router_epilogue": 4064
+     },
+     "forwards": 131,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 21.53,
+     "decode_calls": 4064,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 508,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 4191,
+      "rmsnorm_resid_rows": 4064,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 8128,
+      "router_epilogue": 4064
+     },
+     "forwards": 131,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 21.55,
+     "decode_calls": 4064,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 508,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 4191,
+      "rmsnorm_resid_rows": 4064,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 8128,
+      "router_epilogue": 4064
+     },
+     "forwards": 131,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 21.6,
+     "decode_calls": 4064,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 508,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 4191,
+      "rmsnorm_resid_rows": 4064,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 8128,
+      "router_epilogue": 4064
+     },
+     "forwards": 131,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 21.57,
+     "decode_calls": 4064,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 508,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 4191,
+      "rmsnorm_resid_rows": 4064,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 8128,
+      "router_epilogue": 4064
+     },
+     "forwards": 131,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 21.59,
+     "decode_calls": 4064,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 508,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 4191,
+      "rmsnorm_resid_rows": 4064,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 8128,
+      "router_epilogue": 4064
+     },
+     "forwards": 131,
+     "qkv_calls": 0
+    }
+   ]
+  },
+  "c4val1": {
+   "ON": [
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 21.6,
+     "decode_calls": 4064,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 508,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 4191,
+      "rmsnorm_resid_rows": 4064,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 8128,
+      "router_epilogue": 4064
+     },
+     "forwards": 131,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 21.62,
+     "decode_calls": 4064,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 508,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 4191,
+      "rmsnorm_resid_rows": 4064,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 8128,
+      "router_epilogue": 4064
+     },
+     "forwards": 131,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 21.63,
+     "decode_calls": 4064,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 508,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 4191,
+      "rmsnorm_resid_rows": 4064,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 8128,
+      "router_epilogue": 4064
+     },
+     "forwards": 131,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 21.61,
+     "decode_calls": 4064,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 508,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 4191,
+      "rmsnorm_resid_rows": 4064,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 8128,
+      "router_epilogue": 4064
+     },
+     "forwards": 131,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 21.66,
+     "decode_calls": 4064,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 508,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 4191,
+      "rmsnorm_resid_rows": 4064,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 8128,
+      "router_epilogue": 4064
+     },
+     "forwards": 131,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 21.62,
+     "decode_calls": 4064,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 508,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 4191,
+      "rmsnorm_resid_rows": 4064,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 8128,
+      "router_epilogue": 4064
+     },
+     "forwards": 131,
+     "qkv_calls": 0
+    }
+   ]
+  }
+ },
+ "seconds": 65.9,
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "max_mem_gb": 27.85,
+ "status": "ok"
+}
