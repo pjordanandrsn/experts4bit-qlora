@@ -37,7 +37,7 @@ E4B_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null) || { say "refusing: cannot 
 STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
 for f in bench/p238/p238_run.sh bench/p238/p238_op.py bench/p238/p238_hook.py bench/p238/p238_bytes.py bench/p238/p238_reduce.py \
          bench/p238/p238_schedule.py bench/p238/staged-p238.sha256 bench/common/unsloth_moe_counter.py bench/common/card_clock.py \
-         bench/tc1/tc1_arm.py bench/tc1/f15v2.py bench/tc1/release_proof.py; do
+         bench/tc1/tc1_arm.py bench/tc1/f15v2.py bench/tc1/release_proof.py bench/tp4/tp4_alpaca.py; do
   cp "$REPO/$f" "$STAGE/" || { say "stage missing: $f"; exit 78; }
 done
 (cd "$STAGE" && shasum -a 256 -c staged-p238.sha256 > /dev/null) || { say "refusing: staged files differ from staged-p238.sha256"; exit 78; }

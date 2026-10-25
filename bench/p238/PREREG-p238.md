@@ -231,7 +231,8 @@ sets it (above), bf16 autocast, the same packed batches in the same order for ev
   in the profile). ONE method; there is no fallback. **The reading launches only after amendment 81 merges.** The shakedown may run
   before it, since it is not read;
 - **peak VRAM:** `max_memory_allocated` over the process (each load is fresh), with Unsloth's frozen vision tower reported beside it;
-- **energy:** the NVML energy-counter delta over steps 11..60 (one window, >= 10 s at every point), J per step and J per token;
+- **energy:** the NVML energy-counter delta over steps 11..60 (one window, >= 10 s at every point), J per step and J per token. The
+  hook reads the counter at every step edge (observation only), and the window is edges 10 to 60;
   cross-check as at op level;
 - **loss:** step-0 loss, every step's training loss, held-out loss after step 60 (`--eval-n 48`).
 
@@ -296,6 +297,9 @@ fault.
 
 **Stability:** the two draws of a (point, arm) within 5 % (e4b) or 10 % (Unsloth) on wall and device time, else the pair is flagged
 UNSTABLE and kept out of the headline (TC1's rule).
+
+**The box's verdict** is READ only when every step row and every op row READs; each VOID row is reported with its faults, and a
+VOID row is never dropped to rescue the rest (the runner exits 27).
 
 **Reported, never a bar:** per row the ratio medians and draw bands; per load the order position, global index, load wall and the
 Unsloth Mega-cache line; the E_A route counts; op-level bit identity; the energy cross-check.

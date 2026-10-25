@@ -396,6 +396,7 @@ class GpuCtx:
              "inner_type": type(self.inner).__name__, "matched_init": self.matched,
              "device": torch.cuda.get_device_name(0), "cap": list(torch.cuda.get_device_capability()),
              "sm_count": torch.cuda.get_device_properties(0).multi_processor_count, "premise_table": self.table,
+             "adapters": __import__("p238_hook").adapter_census(self.model, self.fw),
              "loader_x": {k: self.x.get(k) for k in ("loader_used", "unsloth_double_quant", "absmax_dq", "n_patched", "reason",
                                                       "moe_backend_selected", "unsloth_target_parameters")}}
         if self.fw == "e4b":

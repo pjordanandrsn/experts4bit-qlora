@@ -233,8 +233,8 @@ def fake_route(monkeypatch):
 
 def test_the_route_wrapper_returns_the_routes_own_answer_and_logs_it(fake_route):
     nr, orig = fake_route
-    h = HOOK.make(type("A", (), {"framework": "e4b"})())
-    h.post_import(None)
+    h = HOOK.make()
+    h.post_import(type("A", (), {"framework": "e4b", "accum": 1})())
     assert nr.train_gemm_route is not orig and nr.train_gemm_route.__wrapped__ is orig
     for n in (None, 1, 8, 16, 17, 256):
         assert nr.train_gemm_route("cuda", n) == orig("cuda", n)
@@ -253,7 +253,8 @@ def test_mutant_a_route_wrapper_that_changes_the_route_is_caught(fake_route):
 def test_the_forward_pre_hook_leaves_the_call_unchanged_and_counts_grad_state(monkeypatch, fake_route):
     m = _e4b_model(n_layers=1)
     m.layers[0].mlp.experts.forward = lambda *a, **k: torch.ones(1)  # a stand-in call target; the hook sees the module call
-    h = HOOK.make(type("A", (), {"framework": "e4b"})())
+    h = HOOK.make()
+    h.fw = "e4b"
     import types
     fake_fast = types.SimpleNamespace(FAST_TRAIN_STATS={"absmax_dq": {"compressed": 0, "required": True, "kept_fp32": None},
                                                          "patched": 1, "skipped": {}})
@@ -472,3 +473,106 @@ def test_mutant_the_old_tail_collapses_host_codes_to_23(tmp_path):
     for rc in ("13", "18"):
         r = subprocess.run(["bash", "-c", f"RC={rc}\n" + old])
         assert r.returncode == 23 != int(rc)
+
+
+def test_the_factory_takes_no_arguments_and_post_import_reads_the_framework(fake_route):
+    """tc1_arm's load_arm_hook calls ``getattr(mod, fac)()``: a factory that needs an argument would exit 10 on the box."""
+    import inspect
+    assert list(inspect.signature(HOOK.make).parameters) == []
+    h = HOOK.make()
+    assert h.fw is None
+    h.post_import(type("A", (), {"framework": "e4b", "accum": 3})())
+    assert (h.fw, h.micro_batches) == ("e4b", 3)
+    h.step_edge(0)
+    e = h.record()["edges"][0]
+    assert "energy_mj" in e and "t" in e                         # the counter's reading (None without NVML) is always recorded
+
+
+# -- p238_reduce.py --work: the receipts a box leaves on disk, read end to end ------------------------------------------------------
+def _write(path, obj):
+    import json
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes((json.dumps(obj) + "\n").encode() if not isinstance(obj, str) else obj.encode())
+
+
+def _work_dir(tmp_path):
+    """A box's run directory with one op process (op-e4b, index 1) and one step load (E_F at 2k, index 3), built from the
+    self-test's clean row: the tc1_arm receipt (arm_hook.record carrying the hook's facts and edges), the full profile, a gpuclk log
+    in card_clock's format, box.json, the release proof's JSON lines, and the op record."""
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    e, table, census = R._good_rows()
+    w = tmp_path / "p238"
+    _write(w / "schedule.txt", "1 op 1 - e4b -\n3 step 1 2k E_F 0\n")
+    cell = {"status": "ok", "env": {**{k: v for k, v in R.PINS.items()}, "torch": "2.12.1+cu130", "unsloth_env": {}},
+            "absmax_dq_modules": R.N_LAYERS, "tokens_per_step": e["tokens_per_step"], "step_ms": e["step_ms"],
+            "loss_first": 2.0, "eval_loss_final": 1.5, "peak_vram_gb": 28.0, "loader_used": None,
+            "arm_hook": {"record": {"facts": {**e["hook"]["facts"], "premise_table": table, "adapters": census,
+                                              "absmax_compressed": R.N_LAYERS, "fast_train_absmax_dq": e["absmax"]["fast_train"]},
+                                    "edges": e["hook"]["edges"], "micro_batches": 1}}}
+    base = w / "loads" / "3" / "qwen3_5_e4b_p238_3_E_F_2k"
+    _write(base.with_name(base.name + ".json"), cell)
+    _write(base.with_name(base.name + "_profile.json"), e["profile"])
+    _write(w / "loads" / "gpuclk_3.txt", "".join(f"{1700000000 + i} 2800, 14001, 61, 0x0000000000000000\n" for i in range(200)))
+    _write(w / "box.json", e["card"])
+    _write(w / "release_proof.json", "".join(f'{{"dist": "{d}", "record_equal": true}}\n' for d in R.RELEASES))
+    op = {"p238_op": 1, "dry": False, "capture": "eager", "framework": "e4b", "arms": ["E_F", "E_A"],
+          "facts": {"premise_table": table, "adapters": census},
+          "cells": [{"rows": r, "routing": k, "b_restored_zero": True,
+                     "parity": {a_: {"errs": {"out": 1e-3}, "ok": True} for a_ in ("E_F", "E_A")},
+                     "visits": [{"device_ms_per_call": 1.0, "wall_ms_per_call": 1.1}] * (R.OP_REPS * 4)}
+                    for r in R.OP_ROWS for k in R.OP_ROUTINGS]}
+    _write(w / "ops" / "op_1_e4b.json", op)
+    return R, w
+
+
+def test_reduce_work_reads_a_box_directory_end_to_end(tmp_path):
+    R, w = _work_dir(tmp_path)
+    out = R.reduce_work(str(w))
+    assert out["verdict"] == "READ", out
+    assert (out["n_rows"], out["n_op_rows"], out["n_void"]) == (1, 1, 0)
+
+
+@pytest.mark.parametrize("remove", ["loads/3/qwen3_5_e4b_p238_3_E_F_2k.json", "loads/3/qwen3_5_e4b_p238_3_E_F_2k_profile.json",
+                                    "loads/gpuclk_3.txt", "box.json", "release_proof.json", "ops/op_1_e4b.json"])
+def test_reduce_work_voids_when_any_file_is_missing(tmp_path, remove):
+    R, w = _work_dir(tmp_path)
+    (w / remove).unlink()
+    out = R.reduce_work(str(w))
+    assert out["verdict"] == "VOID" and out["n_void"] >= 1
+
+
+def test_the_runner_exits_only_registered_codes_and_host_codes_only_for_host_faults():
+    """The launcher excludes a machine on 13 14 17 18 (the driver passes them through): the runner may exit 13 only at the disk
+    floor and 18 only at a refused host fault, never 14 or 17, and every other exit is a code the PREREG registers."""
+    import re
+    text = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
+    sites = [(m.group(1), text[text.rfind("\n", 0, m.start()) + 1:text.find("\n", m.end())]) for m in re.finditer(r"finish (\d+)", text)]
+    registered = {"0", "9", "10", "13", "15", "16", "18", "27", "28", "41", "78", "130"}
+    assert sites and all(code in registered for code, _ in sites), sorted({c for c, _ in sites} - registered)
+    host = [(c, line) for c, line in sites if c in ("13", "14", "17", "18")]
+    assert all(c in ("13", "18") for c, _ in host)
+    assert [line for c, line in host if c == "13"] and all("disk" in line and "REFUSED" in line for c, line in host if c == "13")
+    assert len([1 for c, _ in host if c == "13"]) == 1
+    assert all("REFUSED" in line for c, line in host if c == "18")
+
+
+STAGED = ["bench/p238/p238_run.sh", "bench/p238/p238_op.py", "bench/p238/p238_hook.py", "bench/p238/p238_bytes.py",
+          "bench/p238/p238_reduce.py", "bench/p238/p238_schedule.py", "bench/common/unsloth_moe_counter.py", "bench/common/card_clock.py",
+          "bench/tc1/tc1_arm.py", "bench/tc1/f15v2.py", "bench/tc1/release_proof.py", "bench/tp4/tp4_alpaca.py"]
+
+
+def test_the_staged_pin_is_the_repos_bytes_and_the_drivers_list():
+    """staged-p238.sha256 names every file the driver stages (but itself), by the hash of the bytes in this tree. A kit file changed
+    without re-pinning fails here, before any box (mutant loops on staged files deselect this test, by design)."""
+    import hashlib
+    import re
+    pin = {}
+    for line in (ROOT / "bench" / "p238" / "staged-p238.sha256").read_text(encoding="utf-8").splitlines():
+        sha, name = line.split()
+        pin[name] = sha
+    assert pin == {pathlib.Path(f).name: hashlib.sha256((ROOT / f).read_bytes()).hexdigest() for f in STAGED}
+    drive = (ROOT / "bench" / "p238" / "p238_drive.sh").read_text(encoding="utf-8")
+    staged = set(re.findall(r"(bench/[a-z0-9_/-]+\.(?:sha256|py|sh))\b", drive.split("for f in", 1)[1].split("; do", 1)[0]))
+    assert staged == set(STAGED) | {"bench/p238/staged-p238.sha256"}
+    run = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
+    assert all(pathlib.Path(f).name in run for f in STAGED)        # the runner checks every staged file it is handed

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""p238_hook.py -- P238's TC1_ARM_HOOK module (``TC1_ARM_HOOK=bench.p238.p238_hook:make``, its sha256 in the box's staged pin).
+"""p238_hook.py -- P238's TC1_ARM_HOOK module (``TC1_ARM_HOOK=p238_hook:make`` with ``TC1_ARM_HOOK_SHA256`` its staged sha256;
+tc1_arm.py's load_arm_hook calls the factory with no arguments and refuses any other bytes).
 
 OBSERVE ONLY. Every wrapper it installs returns the wrapped function's own output, unchanged (the tests show it per wrapper), and
 nothing here sets a knob, a dispatch or a route. The phases tc1_arm calls:
@@ -9,7 +10,8 @@ nothing here sets a knob, a dispatch or a route. The phases tc1_arm calls:
   ``patch_loaded`` with the loaded ``*MoeExperts`` modules (the zoo's compile-cache copy of moe_utils can appear during the load).
   Every arm records the premise table (``p238_bytes``), the adapter census per (layer, projection), the absmax facts, and puts a
   forward PRE-hook (it returns None, so the call is unchanged) on each called experts module, counting forwards and those under grad;
-- ``step_edge(i)``: a snapshot of every counter, before optimizer step i and once after the last step;
+- ``step_edge(i)``: a snapshot of every counter, and NVML's total-energy counter (mJ; the PREREG's primary step energy, over
+  edges 10..60), before optimizer step i and once after the last step;
 - ``record()``: all of it, for the receipt.
 
 The non-zero-B layout check is NOT here: it changes B and runs extra forwards, so it runs in the op processes (p238_op.py), which
@@ -34,10 +36,10 @@ def _sha_t(t):
 
 
 class P238Hook:
-    def __init__(self, args):
-        self.fw = getattr(args, "framework", None)
-        self.micro_batches = int(getattr(args, "accum", 1) or 1)   # tc1_arm: one optimizer step = accum micro-batches
+    def __init__(self):
+        self.fw, self.micro_batches = None, 1                       # read from tc1_arm's args at post_import
         self.counter = None
+        self._nvml = None
         self.route_log = {}                  # "n_groups:route" -> calls
         self.fwd = {"calls": 0, "under_grad": 0}
         self.edges = []
@@ -46,6 +48,14 @@ class P238Hook:
 
     # -- post_import ----------------------------------------------------------------------------------------------------------
     def post_import(self, args):
+        self.fw = getattr(args, "framework", None)
+        self.micro_batches = int(getattr(args, "accum", 1) or 1)   # tc1_arm: one optimizer step = accum micro-batches
+        try:
+            import pynvml
+            pynvml.nvmlInit()
+            self._nvml = pynvml.nvmlDeviceGetHandleByIndex(0)
+        except Exception as e:  # noqa: BLE001 -- recorded: the energy counter is then unread, and the sampled cross-check stands alone
+            self.facts["nvml"] = f"unavailable: {type(e).__name__}"
         if self.fw == "unsloth":
             sys.path.insert(0, os.path.join(HERE, "..", "common"))
             from unsloth_moe_counter import UnslothMoeCounter
@@ -96,8 +106,18 @@ class P238Hook:
         self._handles = [m.register_forward_pre_hook(pre_hook) for _, m in called]
 
     # -- step_edge / record ---------------------------------------------------------------------------------------------------
+    def _energy_mj(self):
+        if self._nvml is None:
+            return None
+        try:
+            import pynvml
+            return int(pynvml.nvmlDeviceGetTotalEnergyConsumption(self._nvml))
+        except Exception:  # noqa: BLE001 -- an unsupported counter reads None; the reducer then uses the sampled cross-check, stated
+            return None
+
     def snapshot(self):
-        s = {"fwd": dict(self.fwd)}
+        import time
+        s = {"fwd": dict(self.fwd), "t": time.time(), "energy_mj": self._energy_mj()}
         if self.counter is not None:
             s["unsloth"] = self.counter.snapshot()
         if self.fw == "e4b":
@@ -151,6 +171,6 @@ def adapter_census(model, fw):
     return out
 
 
-def make(args):
-    """The factory tc1_arm calls (TC1_ARM_HOOK=bench.p238.p238_hook:make)."""
-    return P238Hook(args)
+def make():
+    """The factory tc1_arm calls, with no arguments (TC1_ARM_HOOK=p238_hook:make)."""
+    return P238Hook()

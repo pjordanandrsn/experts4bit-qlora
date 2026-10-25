@@ -81,6 +81,8 @@ def check_card(row):
     if (c.get("sm_count") or 0) < 160:
         why.append(f"SMs {c.get('sm_count')}")
     k = row.get("clock") or {}
+    if (k.get("busy_samples") or 0) < 10:
+        why.append(f"{k.get('busy_samples') or 0} busy clock samples < 10 (the card was not read under load)")
     if k.get("busy_median_mhz") is None or k["busy_median_mhz"] < CLOCK_FLOOR_MHZ:
         why.append(f"busy SM median {k.get('busy_median_mhz')} < {CLOCK_FLOOR_MHZ} MHz")
     if k.get("hard_reason_any") is not False:
@@ -371,6 +373,106 @@ def reduce(rows, op_rows):
     return out
 
 
+# -- the receipts on disk -> rows ------------------------------------------------------------------------------------------------
+RELEASES = ("experts4bit-qlora", "grouped-nf4-gemm", "unsloth", "unsloth_zoo", "peft", "bitsandbytes", "transformers")
+
+
+def _int_keys(table):
+    """The premise table after a JSON round trip: layer keys come back as strings; p238_bytes.compare wants the layer ints."""
+    return {int(k) if isinstance(k, str) and k.isdigit() else k: v for k, v in (table or {}).items()}
+
+
+def _json(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def release_proof_ok(path):
+    """release_proof.py prints one JSON object per distribution; every registered one must say record_equal."""
+    seen = {}
+    try:
+        for line in open(path, encoding="utf-8"):
+            line = line.strip()
+            if line.startswith("{"):
+                d = json.loads(line)
+                seen[d.get("dist")] = bool(d.get("record_equal"))
+    except (OSError, ValueError):
+        return False
+    return all(seen.get(d) is True for d in RELEASES)
+
+
+def clock_facts(path):
+    """A load's gpuclk log through card_clock.py's own summary (the same parser and busy threshold as the burn)."""
+    import card_clock
+    try:
+        sm = card_clock.summarize_log(path)
+    except OSError:
+        return {}
+    return {"busy_median_mhz": sm.get("sm_median"), "hard_reason_any": bool(sm.get("hard_reasons_any_sample")),
+            "swpowercap_clear_frac": sm.get("busy_soft_clean_fraction"), "busy_samples": sm.get("busy_samples")}
+
+
+def normalize_load(work, sched, box, proof_ok):
+    """One step load (a schedule row) from its tc1_arm receipt, its full profile, its clock log and the hook's record."""
+    idx, arm, point = sched["index"], sched["arm"], sched["point"]
+    fw = ARMS[arm]
+    base = os.path.join(work, "loads", str(idx), f"qwen3_5_{fw}_p238_{idx}_{arm}_{point}")
+    cell = _json(base + ".json") or {}
+    prof = _json(base + "_profile.json")
+    rec = ((cell.get("arm_hook") or {}).get("record")) or {}
+    facts = rec.get("facts") or {}
+    env = cell.get("env") or {}
+    row = {"index": idx, "draw": sched["draw"], "point": point, "arm": arm, "framework": fw, "position": sched["position"],
+           "status": cell.get("status"), "dry": False,
+           "versions": {**{k: env.get(k) for k in PINS}, "torch": env.get("torch"), "release_proof_ok": proof_ok},
+           "card": box, "clock": clock_facts(os.path.join(work, "loads", f"gpuclk_{idx}.txt")),
+           "premise_table": _int_keys(facts.get("premise_table")), "adapters": facts.get("adapters"),
+           "loader_used": cell.get("loader_used"), "unsloth_env": env.get("unsloth_env"),
+           "hook": {"facts": facts, "edges": rec.get("edges"), "structural": rec.get("structural")},
+           "tokens_per_step": cell.get("tokens_per_step"), "step_ms": cell.get("step_ms"),
+           "micro_batches_per_step": rec.get("micro_batches"), "profile": prof, "cell": cell,
+           "step0_loss": cell.get("loss_first"), "heldout_loss": cell.get("eval_loss_final"), "peak_vram_gb": cell.get("peak_vram_gb")}
+    if fw == "e4b":
+        row["absmax"] = {"tc1_modules": cell.get("absmax_dq_modules"), "compressed_now": facts.get("absmax_compressed"),
+                         "fast_train": facts.get("fast_train_absmax_dq")}
+    else:
+        row["absmax"] = {"loaded_nested": (cell.get("unsloth_double_quant") or {}).get("loaded_nested")}
+    return row
+
+
+def normalize_op(work, sched):
+    """One op process from its p238_op.py record (its premise table and adapter census come from the same load path)."""
+    path = os.path.join(work, "ops", f"op_{sched['index']}_{sched['framework']}.json")
+    rec = _json(path)
+    facts = (rec or {}).get("facts") or {}
+    return {"record": rec, "framework": sched["framework"], "draw": sched["draw"], "index": sched["index"],
+            "premise_table": _int_keys(facts.get("premise_table")), "adapters": facts.get("adapters")}
+
+
+def reduce_work(work):
+    """The box: the schedule it ran, every row and op row, and its verdict. READ only when every row and every op row READs
+    (each fault is reported on its row; a VOID row is never dropped to rescue the rest)."""
+    sys.path.insert(0, HERE)
+    import p238_schedule
+    sched_txt = os.path.join(work, "schedule.txt")
+    want = None
+    if os.path.isfile(sched_txt):
+        want = {int(line.split()[0]) for line in open(sched_txt, encoding="utf-8") if line.strip()}
+    sched = [r for r in p238_schedule.schedule() if want is None or r["index"] in want]
+    box = _json(os.path.join(work, "box.json")) or {}
+    proof = release_proof_ok(os.path.join(work, "release_proof.json"))
+    rows = [normalize_load(work, r, box, proof) for r in sched if r["kind"] == "step"]
+    ops = [normalize_op(work, r) for r in sched if r["kind"] == "op"]
+    out = reduce(rows, ops)
+    bad = [r for r in out["rows"] + out["op_rows"] if r["verdict"] != "READ"]
+    out["verdict"] = "READ" if (out["rows"] or out["op_rows"]) and not bad else "VOID"
+    out["n_rows"], out["n_op_rows"], out["n_void"] = len(out["rows"]), len(out["op_rows"]), len(bad)
+    return out
+
+
 # -- the self-test ---------------------------------------------------------------------------------------------------------------
 def _good_rows():
     table = {L: {p: {f: f"{L}{p}{f}" for f in ("packed", "absmax_q", "absmax_s", "absmax_off", "absmax_code", "code")}
@@ -378,7 +480,7 @@ def _good_rows():
     census = {f"{L}:{p}": {"trainable": 1, "A_sha": f"a{L}{p}"} for L in range(N_LAYERS) for p in ("gate_up_proj", "down_proj")}
     base = {"status": "ok", "dry": False, "versions": {**PINS, "torch": "2.12.1+cu130", "release_proof_ok": True},
             "card": {"name": "NVIDIA GeForce RTX 5090", "cap": [12, 0], "sm_count": 170},
-            "clock": {"busy_median_mhz": 2800, "hard_reason_any": False, "swpowercap_clear_frac": 1.0},
+            "clock": {"busy_median_mhz": 2800, "hard_reason_any": False, "swpowercap_clear_frac": 1.0, "busy_samples": 200},
             "premise_table": table, "adapters": census, "point": "2k", "tokens_per_step": [2048] * STEPS,
             "step_ms": [1000.0] * STEPS, "micro_batches_per_step": 1,
             "profile": {"summary": {"device_ms_method": DEVICE_MS_METHOD, "device_ms": 900.0, "profiled_steps": 3},
@@ -518,11 +620,20 @@ def main(argv=None):
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--work", help="a box's run directory (/root/p238 on the box, or a fetched copy)")
+    ap.add_argument("--out", help="where the verdict JSON goes")
     a = ap.parse_args(argv)
     if a.selftest:
         print(f"P238 REDUCE SELFTEST OK cases={selftest()}")
         return 0
-    ap.error("the receipt adapter lands with the tc1_arm hook PR's receipt layout; only --selftest runs today")
+    if not a.work or not a.out:
+        ap.error("--work and --out, or --selftest")
+    out = reduce_work(a.work)
+    data = (json.dumps(out, indent=1, sort_keys=True, default=str) + "\n").encode()
+    with open(a.out, "wb") as f:
+        f.write(data)
+    print(f"P238 {out['verdict']}: {out['n_rows']} step rows, {out['n_op_rows']} op rows, {out['n_void']} VOID")
+    return 0
 
 
 if __name__ == "__main__":
