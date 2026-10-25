@@ -33,10 +33,18 @@ library's fused path.
   `UNSLOTH_MOE_NF4_AUTO_MAX_ROWS=128`, `UNSLOTH_MOE_NF4_AUTOTUNE=0` (fixed tiles, line 316), `UNSLOTH_MOE_GROUPED_TRITON=auto`.
   Every other `UNSLOTH_*` key the three zoo modules read (found by scanning their source, `check_env` in
   `bench/common/unsloth_moe_counter.py`) is unset.
-- **e4b's frozen absmax is double-quantized, explicitly:** `E4B_ABSMAX_DQ=1` on both e4b arms (`enable_fast_train` then REQUIRES
-  the compression and raises on a refusal, `engines/fast.py:878-880`). That is the nested form Unsloth's loader builds
-  (`bnb_4bit_use_double_quant=True`), and the one the premise compares. `FAST_TRAIN_STATS["absmax_dq"]` is recorded per load. Every
-  other grouped-nf4-gemm and e4b knob is at its default except `GNF4_TRAIN_GEMM`.
+- **e4b's frozen absmax is double-quantized: a PIN of the shipped default, not a deviation.** At v0.58.1, nested absmax is
+  `enable_fast_train`'s and the CLI trainer's default for resident training (`absmax_dq.py:1-2`, `44-46`), and it is the form
+  Unsloth's loader builds (`bnb_4bit_use_double_quant=True`) and the premise compares. The same docstring keeps TC1's switch explicit,
+  so both e4b arms set it both ways: `E4B_ABSMAX_DQ=1` in the environment (`enable_fast_train` then REQUIRES it and raises on a
+  refusal, `engines/fast.py:878-880`, `1037-1042`) AND `--absmax-dq 1` on tc1_arm, which compresses before the LoRA wrap and
+  refuses an arm that compressed nothing (`bench/tc1/tc1_arm.py:1984-1994`).
+  - **BINDING per e4b load, else VOID:** the receipt's `absmax_dq.modules` == 40; every expert stack reads compressed
+    (`is_absmax_compressed`, 40 of 40); `FAST_TRAIN_STATS["absmax_dq"]` has `required` true and `kept_fp32` null. (Its `compressed`
+    count is 0 by design here, since tc1_arm compressed first and the second call is idempotent, `fast.py:1063-1071`.) The premise
+    table's nested fields agree, since it fails closed on an fp32 absmax. A reducer mutant: an e4b load without the compression
+    VOIDs on both checks.
+- Every other grouped-nf4-gemm and e4b knob is at its default except `GNF4_TRAIN_GEMM`.
 
 ## What is trained: LoRA on the routed experts, rank 8, on both sides
 
