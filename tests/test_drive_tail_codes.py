@@ -7,14 +7,22 @@ power cap (17) or host floor (18), and the next pin can buy the same machine aga
 ``$RC`` when the success marker is missing exits 0 on a box rc 0 without the marker: a success the box never recorded (e4b#2137's
 G3 kit). This test runs every driver's fetch-and-exit tail on synthetic fetched directories and asserts:
 
-- (a) the host codes 13, 14, 17 and 18 pass through unchanged;
+- (a) the host codes 13, 14, 17 and 18 exit unchanged, whatever the lane registers: they are the launcher's codes, the same in
+  every lane (bench/common/drive_tail.sh's drive_finish always passes them through; a runner must emit them only for a genuine
+  host fault, which is each lane's kit test);
 - (b) rc 0 without the success marker never exits 0;
 - (c) a missing exit file never exits 0;
 
 plus a control: rc 0 WITH the marker exits 0. A tail the harness cannot drive (no fetched exit file, or a control that does not exit
-0) fails as ``undrivable``. The tail is the driver's own text from its ``RC=$(cat "...EXIT_CODE...")`` line to the end, run with
-``RUN_DIR``, ``OUT`` and ``NONCE`` set; a driver that exposes ``<LANE>_DRIVE_TAIL_DIR`` / ``<LANE>_DRIVE_TAIL_NONCE`` is run whole
-through them. It runs with only harmless tools on PATH (no rm, ssh, scp, rsync or curl) in a scratch directory.
+0) fails as ``undrivable``. The tail is, in order of preference: the whole driver, when it exposes ``<LANE>_DRIVE_TAIL_DIR`` /
+``<LANE>_DRIVE_TAIL_NONCE``; its ``drive_finish ...`` line (bench/common/drive_tail.sh, the shared tail every live lane can source);
+or its own text from its ``RC=$(cat "...EXIT_CODE...")`` line to the end, run with ``RUN_DIR``, ``OUT`` and ``NONCE`` set. It runs
+with only read-only tools on PATH (no rm, find, sed, awk, python3, ssh, scp, rsync or curl) in a scratch directory.
+
+A WRAPPER reads no fetched exit file of its own: it delegates the run to another driver and checks that driver's records
+(bench/sc2/sc2_qualify_drive.sh around bench/sc1/sc1_drive.sh, e4b#2139). Wrappers are listed by path in the allowlist's
+``wrappers``; a listed wrapper must stay undrivable here (a drivable one is held to the rule like any driver), and no script may run
+bench/sc1/sc1_drive.sh unless it is a listed wrapper.
 
 Drivers that fail today are listed in tests/fixtures/drive_tail_allowlist.json: each with its sha256, the exact assertions it fails,
 and either "closed lane: <reason>" or "live: fix due in the lane's next PR". A NEW driver, or a CHANGED one (its sha256 no longer
@@ -42,10 +50,16 @@ SUCCESS = re.compile(r'"([^"]*_SUCCESS\.\$NONCE[^"]*)"')
 TAIL_HOOK = re.compile(r"\b([A-Z0-9]+)_DRIVE_TAIL_DIR\b")
 HOST_CODES = (13, 14, 17, 18)
 NONCE = "n0nce"
-#: the only tools a tail can run here: nothing that deletes or reaches the network
-SAFE_TOOLS = ("cat", "printf", "test", "[", "ls", "wc", "tr", "cut", "date", "find", "mkdir", "head", "tail", "grep", "sed", "awk",
-              "basename", "dirname", "sort", "true", "false", "env", "echo", "touch", "stat", "python3")
-STATUS = re.compile(r"(closed lane: \S.*|live: fix due in the lane's next PR.*)")
+#: the only programs a tail can run here, all read-only: no rm, no in-place editor or interpreter (find -delete, sed -i, awk
+#: system(), python3), nothing that reaches the network. Today's tails use cat, grep, tail and cut beyond shell builtins.
+SAFE_TOOLS = ("cat", "printf", "test", "[", "ls", "wc", "tr", "cut", "head", "tail", "grep", "basename", "dirname", "true", "false",
+              "echo")
+STATUS = re.compile(r"(closed lane: \S.*|live: \S.*)")
+DRIVE_FINISH = re.compile(r"^\s*drive_finish\s+(.+)$", re.MULTILINE)
+DRIVE_TAIL = REPO / "bench" / "common" / "drive_tail.sh"
+SC1_DRIVER = "bench/sc1/sc1_drive.sh"
+#: a shell line that RUNS sc1_drive.sh (bash/sh/exec/source/. or the path itself at command position), not one that names it
+SC1_CALL = re.compile(r"(?:^|[;&|(]\s*|\b(?:bash|sh|exec|source)\s+|\.\s+)\"?[^\"\s;]*sc1_drive\.sh\b")
 
 
 def _ids(paths: list[Path]) -> list[str]:
@@ -79,6 +93,15 @@ def run_case(driver: Path, tmp: Path, exit_code: int | None, marker: bool):
         d.mkdir()
         env.update({f"{lane}_DRIVE_TAIL_DIR": str(d), f"{lane}_DRIVE_TAIL_NONCE": NONCE})
         ec, sm, cmd = d / f"{lane}_EXIT_CODE.{NONCE}", d / f"{lane}_SUCCESS.{NONCE}", [BASH, str(driver)]
+    elif DRIVE_FINISH.search(text):
+        call = DRIVE_FINISH.search(text).group(1)
+        env.update({"RUN_DIR": str(tmp / "run"), "OUT": str(tmp / "run" / "out"), "NONCE": NONCE, "E4B_RENT_RUN_DIR": str(tmp / "run")})
+        args = subprocess.run([BASH, "-c", f'set -- {call}; printf "%s\\n" "$1" "$2" "$3"'], env=env, capture_output=True,
+                              text=True, check=True).stdout.split("\n")
+        ec, sm = Path(args[0]) / f"{args[2]}_EXIT_CODE.{args[1]}", Path(args[0]) / f"{args[2]}_SUCCESS.{args[1]}"
+        script = tmp / "tail.sh"
+        script.write_text(f'set +e\nsay(){{ :; }}\n. "{DRIVE_TAIL}"\ndrive_finish {call}\nexit 99\n')
+        cmd = [BASH, str(script)]
     else:
         lines = text.splitlines()
         idx = next((i for i, ln in enumerate(lines) if RC_LINE.search(ln)), None)
@@ -122,6 +145,10 @@ def _allowlist() -> dict:
     return json.loads(ALLOWLIST.read_text())["drivers"]
 
 
+def _wrappers() -> dict:
+    return json.loads(ALLOWLIST.read_text())["wrappers"]
+
+
 def test_the_drivers_are_all_here():
     assert len(DRIVERS) >= 150, _ids(DRIVERS)       # a glob that matched nothing would make every test below vacuous
 
@@ -134,20 +161,49 @@ def test_every_allowlist_entry_names_a_driver_and_a_status():
         assert re.fullmatch(r"[0-9a-f]{64}", e.get("sha256") or ""), path
         assert e.get("fails"), f"{path}: an entry lists the assertions it fails"
         assert STATUS.fullmatch(e.get("status") or ""), f"{path}: status {e.get('status')!r}"
+    for path, why in _wrappers().items():
+        assert path in known and path not in entries and why.strip(), path
+
+
+def judge(rel: str, fails: list[str], sha: str, entry: dict | None, is_wrapper: bool) -> str | None:
+    """The rule over one driver: None when it holds, else why it does not."""
+    if is_wrapper:
+        return None if fails == ["undrivable: no fetched exit file"] else f"{rel} is drivable now: leave the wrappers list ({fails})"
+    if not fails:
+        return None if entry is None else f"{rel} now passes: remove its allowlist entry"
+    if entry is None:
+        return f"{rel} fails {fails} and is not allowlisted (a new or changed driver never is): fix its tail"
+    if entry["sha256"] != sha:
+        return f"{rel} changed since it was allowlisted, so it is held to the rule: fix its tail ({fails})"
+    if entry["fails"] != fails:
+        return f"{rel}: fails {fails}, allowlisted for {entry['fails']}"
+    return None
 
 
 @pytest.mark.parametrize("driver", DRIVERS, ids=_ids(DRIVERS))
 def test_the_driver_tail_passes_the_box_code_through(driver: Path, tmp_path: Path):
     rel = str(driver.relative_to(REPO))
-    fails = assess(driver, tmp_path)
-    entry = _allowlist().get(rel)
-    if not fails:
-        assert entry is None, f"{rel} now passes: remove its allowlist entry"
-        return
-    assert entry is not None, f"{rel} fails {fails} and is not allowlisted (a new or changed driver never is): fix its tail"
-    sha = hashlib.sha256(driver.read_bytes()).hexdigest()
-    assert entry["sha256"] == sha, f"{rel} changed since it was allowlisted, so it is held to the rule: fix its tail ({fails})"
-    assert entry["fails"] == fails, f"{rel}: fails {fails}, allowlisted for {entry['fails']}"
+    why = judge(rel, assess(driver, tmp_path), hashlib.sha256(driver.read_bytes()).hexdigest(), _allowlist().get(rel),
+                rel in _wrappers())
+    assert why is None, why
+
+
+F = ["(b) rc 0 without the success marker exits 0"]
+E = {"sha256": "a" * 64, "fails": F, "status": "closed lane: x"}
+
+
+@pytest.mark.parametrize("fails,sha,entry,wrapper,holds", [
+    (F, "a" * 64, E, False, True),                     # allowlisted, unchanged, failing exactly as listed
+    (F, "b" * 64, E, False, False),                    # CHANGED since it was allowlisted: held to the rule
+    ([], "a" * 64, E, False, False),                   # passes now: its entry must leave
+    (F, "a" * 64, None, False, False),                 # fails and is not allowlisted (a new driver)
+    (F + ["(c) a missing exit file exits 0"], "a" * 64, E, False, False),   # fails more than its entry says
+    ([], "a" * 64, None, False, True),                 # passes, no entry
+    (["undrivable: no fetched exit file"], "z", None, True, True),           # a wrapper that stays undrivable
+    ([], "z", None, True, False),                      # a wrapper that became drivable must leave the list
+])
+def test_the_rule_itself(fails, sha, entry, wrapper, holds):
+    assert (judge("bench/x/x_drive.sh", fails, sha, entry, wrapper) is None) is holds
 
 
 # -- the harness itself, on hand-written tails: each assertion fires, and a correct tail passes ---------------------------------
@@ -173,6 +229,8 @@ exit "$RC"
     ("no marker", NO_MARKER, ["(b) rc 0 without the success marker exits 0"]),
     ("missing file reads 0", MISSING_OK, ["(c) a missing exit file exits 0"]),
     ("no exit file", "exit 0\n", ["undrivable: no fetched exit file"]),
+    ("control fails", GOOD.replace("exit 0; fi", "exit 26; fi"),                  # rc 0 WITH the marker does not exit 0
+     ["undrivable: rc 0 with the success marker exits 26"]),
 ])
 def test_the_harness_on_known_tails(tmp_path: Path, name, tail, want):
     d = tmp_path / "x_drive.sh"
@@ -187,3 +245,51 @@ def test_a_tail_cannot_delete_or_reach_the_network(tmp_path: Path):
     d.write_text(f'RC=$(cat "$RUN_DIR/x/X_EXIT_CODE.$NONCE")\nrm -rf "{keep}"; ssh host true; rsync a b; exit "$RC"\n')
     assert run_case(d, tmp_path / "w", 13, False) == 13
     assert keep.exists()                                                              # rm is not on the tail's PATH
+
+
+def test_only_a_listed_wrapper_runs_sc1_drive():
+    """sc1_drive.sh is HOLD-pinned and exits rc 0 without its success marker (its last line); e4b#2139's wrapper checks the marker
+    for it. A new script that runs it directly would not, so every caller must be a listed wrapper."""
+    callers = []
+    for p in sorted((REPO / "bench").rglob("*.sh")):
+        rel = str(p.relative_to(REPO))
+        if rel == SC1_DRIVER:
+            continue
+        for line in p.read_text(errors="replace").splitlines():
+            code = line.split("#", 1)[0] if not line.lstrip().startswith("#") else ""
+            if SC1_CALL.search(code) and not re.search(r"\b(?:say|echo|printf)\b", code.split("sc1_drive.sh")[0]):
+                callers.append(rel)
+                break
+    assert "bench/sc2/sc2_qualify_drive.sh" in callers           # the pattern still finds the one known caller
+    assert set(callers) <= set(_wrappers()), sorted(set(callers) - set(_wrappers()))
+
+
+# -- bench/common/drive_tail.sh, driven directly ---------------------------------------------------------------------------------
+@pytest.mark.parametrize("codes,content,marker,want", [
+    ("", "0", NONCE, 0),
+    ("", "0", None, 24),
+    ("", "0", "other", 24),                                     # another nonce's marker never counts
+    ("", None, None, 23),
+    ("", "x1", None, 23),
+    ("", "", None, 23),
+    ("", "13", None, 13), ("", "14", None, 14), ("", "17", None, 17), ("", "18", None, 18),   # the launcher's codes, always
+    ("", "9", None, 26),                                        # an empty list: every other non-zero is 26
+    ("9 27", "9", None, 9), ("9 27", "27", None, 27), ("9 27", "41", None, 26),
+    ("13 41", "13", None, 13),                                  # a list that also names a host code
+])
+def test_drive_finish(tmp_path: Path, codes, content, marker, want):
+    d = tmp_path / "out"
+    d.mkdir()
+    if content is not None:
+        (d / f"X_EXIT_CODE.{NONCE}").write_text(f"{content}\n")
+    if marker is not None:
+        (d / f"X_SUCCESS.{marker}").write_text("")
+    script = f'. "{DRIVE_TAIL}"\ndrive_finish "{d}" {NONCE} X "{codes}"\nexit 99\n'
+    r = subprocess.run([BASH, "-c", script], check=False, capture_output=True, text=True, timeout=30)
+    assert r.returncode == want, r.stderr
+
+
+def test_a_driver_that_sources_drive_tail_passes(tmp_path: Path):
+    d = tmp_path / "x_drive.sh"
+    d.write_text('#!/bin/bash\nssh never-run\n. "$REPO/bench/common/drive_tail.sh"\ndrive_finish "$OUT" "$NONCE" X "9 27"\n')
+    assert assess(d, tmp_path / "w") == []

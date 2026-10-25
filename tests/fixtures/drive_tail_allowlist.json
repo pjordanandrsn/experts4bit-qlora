@@ -1,5 +1,5 @@
 {
- "about": "Drivers whose fetch-and-exit tail fails tests/test_drive_tail_codes.py today, pinned by sha256. A new or changed driver is never added; an entry leaves when its driver is fixed. 'live' rows are fixed in the lane's next PR.",
+ "about": "Drivers whose fetch-and-exit tail fails tests/test_drive_tail_codes.py today, pinned by sha256. A new or changed driver is never added; an entry leaves when its driver is fixed. 'live' rows are fixed in the lane's next PR. 'wrappers' lists drivers that read no fetched exit file of their own and delegate to one that does.",
  "drivers": {
   "bench/b374/b374_drive.sh": {
    "fails": [
@@ -244,7 +244,7 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "9061f52593ab952c2c9c04befd885d1f3b0ab4846767e443f0b2f1cab3faf64b",
-   "status": "closed lane: results merged (bench/k29/receipts/rehearsal-a2000-v1/RESULTS-rehearsal.md)"
+   "status": "live: fix due in the lane's next PR"
   },
   "bench/k30/k30_drive.sh": {
    "fails": [
@@ -258,7 +258,7 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "79c1a54be9b797a34359cf6b9d215b34f64779307816172d3bf9e2094e14f1f3",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: read via P116 (DEFAULT_ON), lever shipped in gnf4#502"
   },
   "bench/k34/k34_drive.sh": {
    "fails": [
@@ -510,7 +510,7 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "9588b5f25e0fc4227412d93a9dcd9c1c035723be5f2b364943e8ac7f949abef0",
-   "status": "live: fix due in the lane's next PR"
+   "status": "closed lane: superseded by P138 (#1727/#1728)"
   },
   "bench/p133/p133_drive.sh": {
    "fails": [
@@ -1164,7 +1164,7 @@
     "(b) rc 0 without the success marker exits 0"
    ],
    "sha256": "fbc51f47ddca37936460155bb4b0eb7566774a057add04d0a28ba92bbf376544",
-   "status": "live: fix due in the lane's next PR; a pinned kit (SC2's HOLD), so the tail change needs a pre-run amendment or a declared HOLD exception"
+   "status": "live: covered by bench/sc2/sc2_qualify_drive.sh's marker check (e4b#2139) for boxes N/O/P; its other uses (box Q / SC2j, and SC1's own boxes) are closed lanes, and a future launch goes through a covering wrapper (HOLD-pinned, so the tail is not edited)"
   },
   "bench/sc2/sc1g-r/sc1g_r_drive.sh": {
    "fails": [
@@ -1172,13 +1172,6 @@
    ],
    "sha256": "35da64f81b7d3a10e494d2ce45299d75113d0cff66fc82591541ddc7f9c4f9d1",
    "status": "live: fix due in the lane's next PR"
-  },
-  "bench/sc2/sc2_qualify_drive.sh": {
-   "fails": [
-    "undrivable: no fetched exit file"
-   ],
-   "sha256": "10d3be7e4b908374b443cc42f6b038780c325e178491a897f308ca6443433043",
-   "status": "live: fix due in the lane's next PR; a wrapper whose own refusals exit 17, 18 and 25 directly, and whose run's exit is bench/sc1/sc1_drive.sh's tail"
   },
   "bench/sd1/sd1_drive.sh": {
    "fails": [
@@ -1222,5 +1215,8 @@
    "sha256": "d39bfe1160366eb625b6c853a6972bcfd489b0281bf1de28645a1955e6e82c09",
    "status": "closed lane: results merged (bench/vsplit/RESULTS-vsplit.md)"
   }
+ },
+ "wrappers": {
+  "bench/sc2/sc2_qualify_drive.sh": "delegates the run to bench/sc1/sc1_drive.sh and checks its SC1_RUN_NONCE, SC1_SUCCESS.<nonce> and SC1_EXIT_CODE.<nonce> (e4b#2139); its own refusals exit 17, 18 and 25 directly"
  }
 }
