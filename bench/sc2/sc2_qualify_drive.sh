@@ -4,6 +4,8 @@
 #   17 / 18  a host fault, READ and failed (the launcher's power-cap / host-floor codes: it excludes the machine);
 #   25       probe_error: a record missing or unreadable, a HARNESS fault that voids the run and never excludes;
 #   9        the burn's setup (apt / venv / torch download) failed: a harness fault, not a card verdict.
+#   24       the lane driver exited 0 without THIS run's SC1_RUN_NONCE, SC1_SUCCESS.<nonce> and SC1_EXIT_CODE.<nonce> = 0
+#            (SC2f Amendment 8): a malformed record, a harness fault, never a PASS.
 # Before any install, on the rented card:
 #   1. nvidia-smi enforced.power.limit (with power.limit and power.max_limit, recorded) must be 575 W, compared as a
 #      float (bench/sc2/sc2_qualify.py power): READ at another limit 17, unreadable 25;
@@ -72,6 +74,14 @@ $SSH "rm -rf -- $QW/venv" > /dev/null 2>&1 || true
 $SSH "mkdir -p $QW && cd $QW && rm -f sampler.csv sampler.pid && (setsid nohup nvidia-smi --query-gpu=timestamp,clocks.sm,clocks_event_reasons.active,power.draw --format=csv -lms 1000 > sampler.csv 2> sampler.err < /dev/null & echo \$! > sampler.pid)" \
   || say "the sampler did not start (judged UNREAD after the run)"
 bash "$REPO/bench/sc1/sc1_drive.sh"; DRC=$?
+# sc1_drive.sh (held, unchanged) exits the box's rc even when it is 0 without SC1_SUCCESS.<nonce> (its last line): a
+# clean exit here also needs THIS run's fetched success marker and an exit file reading 0, else the record is
+# malformed (24), never a PASS (the class of e4b#2137's driver-tail fix)
+if [ "$DRC" = 0 ]; then
+  N=$(cat "$RUN_DIR/sc1/SC1_RUN_NONCE" 2>/dev/null)
+  { [ -n "$N" ] && [ -f "$RUN_DIR/sc1/SC1_SUCCESS.$N" ] && [ "$(cat "$RUN_DIR/sc1/SC1_EXIT_CODE.$N" 2>/dev/null)" = 0 ]; } \
+    || { say "the lane driver exited 0 without this run's success marker and exit code 0: a malformed record (24)"; DRC=24; }
+fi
 $SSH "cd $QW && kill \$(cat sampler.pid) 2>/dev/null; sleep 1" > /dev/null 2>&1 || true
 fetch_q
 python3 "$Q" judge-run --sampler "$QD/box/sampler.csv" --out "$QD/run_judge.json"; jr=$?
