@@ -8,7 +8,8 @@ import subprocess
 import pytest
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
-KITS = {"g1": ("bench/kv-pool-g/g1-smoke/g1_smoke_drive.sh", "g1s"), "g3": ("bench/kv-pool-g/g3-smoke/g3_smoke_drive.sh", "g3s")}
+KITS = {"g1": ("bench/kv-pool-g/g1-smoke/g1_smoke_drive.sh", "g1s"), "g3": ("bench/kv-pool-g/g3-smoke/g3_smoke_drive.sh", "g3s"),
+        "g3c": ("bench/kv-pool-g/g3-gpu-check/g3check_drive.sh", "g3c")}
 
 
 def _fetch_block(kit):
