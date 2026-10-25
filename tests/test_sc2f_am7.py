@@ -186,6 +186,8 @@ def _tree(tmp_path, drive_rc=0):
     (t / "bench" / "sc1" / "sc1_drive.sh").write_text(
         '#!/bin/bash\necho DRIVE_CALLED >> "$DRIVE_LOG"\nmkdir -p "$E4B_RENT_RUN_DIR/sc1"\n'
         '[ -n "$PROOF_W" ] && printf "power.limit,clocks.max.sm %s W, 3105 MHz\\n" "$PROOF_W" > "$E4B_RENT_RUN_DIR/sc1/forensics.txt"\n'
+        'echo nn > "$E4B_RENT_RUN_DIR/sc1/SC1_RUN_NONCE"; echo "${BOX_RC:-0}" > "$E4B_RENT_RUN_DIR/sc1/SC1_EXIT_CODE.nn"\n'
+        '[ "${NO_MARKER:-0}" = 1 ] || [ "${BOX_RC:-0}" != 0 ] || : > "$E4B_RENT_RUN_DIR/sc1/SC1_SUCCESS.nn"\n'
         f'exit {drive_rc}\n')
     return t
 
@@ -222,7 +224,7 @@ def _sampler(n=30, mask=CLEAN, bad_tail=None):
 
 
 def _wrap(tmp_path, power="575.00 W, 575.00 W, 600.00 W", burn_rc=0, burn_refusal="", drive_rc=0, prove="1",
-          proof_w="575.00", host_facts=575.0, sampler=None, box="N"):
+          proof_w="575.00", host_facts=575.0, sampler=None, box="N", no_marker=False, box_rc=0):
     sampler = _sampler() if sampler is None else sampler
     t, b = _tree(tmp_path, drive_rc), _stubs(tmp_path, power, burn_rc, burn_refusal, None if sampler == "MISSING" else sampler)
     run = tmp_path / "run"
@@ -232,7 +234,8 @@ def _wrap(tmp_path, power="575.00 W, 575.00 W, 600.00 W", burn_rc=0, burn_refusa
     env = {"PATH": f"{b}:{os.environ['PATH']}", "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1",
            "E4B_RENT_SSH_OPTS": "-o X=1", "E4B_RENT_RUN_DIR": str(run), "E4B_RENT_RUN_ID": "sc2f-prove-11",
            "E4B_RENT_DEADLINE_EPOCH": "9999999999", "E4B_RENT_INSTANCE_ID": "1", "SC1_BOX": box, "SC1_PROVE": prove,
-           "DRIVE_LOG": str(tmp_path / "drive.log"), "PROOF_W": proof_w or ""}
+           "DRIVE_LOG": str(tmp_path / "drive.log"), "PROOF_W": proof_w or "", "NO_MARKER": "1" if no_marker else "0",
+           "BOX_RC": str(box_rc)}
     out = subprocess.run(["bash", str(t / "bench" / "sc2" / "sc2_qualify_drive.sh")], capture_output=True, text=True, env=env)
     return out, (tmp_path / "drive.log").exists(), run
 
@@ -319,6 +322,19 @@ def test_a_symlink_in_the_fetched_records_is_refused_before_any_read(tmp_path):
            "E4B_RENT_INSTANCE_ID": "1", "SC1_BOX": "N", "DRIVE_LOG": str(tmp_path / "drive.log"), "PROOF_W": "575.00"}
     out = subprocess.run(["bash", str(t / "bench" / "sc2" / "sc2_qualify_drive.sh")], capture_output=True, text=True, env=env)
     assert out.returncode == 25 and "symlink" in out.stdout and not (tmp_path / "drive.log").exists(), out.stdout + out.stderr
+
+
+@pytest.mark.parametrize("prove", ["1", "0"])
+def test_a_driver_exit_0_without_the_success_marker_is_never_a_pass(tmp_path, prove):
+    """sc1_drive.sh (held) exits the box's rc even when it is 0 without SC1_SUCCESS.<nonce>; the wrapper exits 24."""
+    out, drove, run = _wrap(tmp_path, prove=prove, no_marker=True)
+    assert out.returncode == 24 and drove and "success marker" in out.stdout, out.stdout + out.stderr
+    assert (run / "qualify" / "run_judge.json").exists()            # the sampler is still fetched and judged, for the record
+
+
+def test_a_driver_exit_0_over_a_nonzero_box_code_is_never_a_pass(tmp_path):
+    out, _, _ = _wrap(tmp_path, box_rc=23)
+    assert out.returncode == 24, out.stdout + out.stderr
 
 
 def test_the_wrapper_refuses_boxes_outside_sc2f_h_i(tmp_path):
