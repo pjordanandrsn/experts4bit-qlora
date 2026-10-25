@@ -1125,6 +1125,34 @@ ATTN_CENSUS[POS79_FAM] = 192
 DENSE_PINS[POS79_FAM] = DENSE_PINS[QDENSE_FAM]
 FAM_ANCHOR[POS79_FAM] = ("e4b", "fused_attn4_m_fd")
 EXPECTED[POS79_FAM] = [("e4b", "fused_attn4_m_fd"), ("unsloth", "ckpt_unsloth_m_fv"), ("unsloth", "ckpt_unsloth_m_fv_d2"), ("e4b", "fused_attn4_m_fd_d2")]
+
+# TC1 amendment 80 (qwen3pos80; e4b#2129's confirmation read): amendment 79's box at the 0.58.1 release, every arm's distributions PyPI's
+# wheels, each proven by its bytes; F15 v2 (f15v2.py) in place of F15 v1 for this family; device time kernels-only; the card screened by
+# card_clock.py, before install and per draw. The pins are the kit's (tc1_run.sh's POS80_* and these must agree; the tests hold them equal).
+POS80_FAM = "qwen3pos80"
+POS80_E4B_SHA = "605d21e67958fa94d5e73fc3a95ffcb5c8eae02d"     # v0.58.1's peeled tag commit (venv-e4b's git install; no arm uses it)
+POS80_GNF4_SHA = "30adb1bfa76f95f9ce4a4c29734b8f36de907eca"    # v0.51.0's peeled tag commit
+POS80_PINS = {"experts4bit-qlora": "0.58.1", "grouped-nf4-gemm": "0.51.0", "unsloth": "2026.10.8", "unsloth_zoo": "2026.10.8"}
+POS80_PROVEN = tuple(POS80_PINS)                                   # all four are proven on the box
+#: the import each proof must show among its origins: the arms' entry module (grouped-nf4-gemm installs flat modules, no package of its name)
+POS80_OWN_IMPORT = {"experts4bit-qlora": "experts4bit_qlora", "grouped-nf4-gemm": "nf4_qlora", "unsloth": "unsloth", "unsloth_zoo": "unsloth_zoo"}
+POS80_HELPER_SHA256 = {"release_proof": "aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0",
+                       "card_clock": "1dae29569b776f7ce4595e07b1582011ed8ed1b7068b07ce7cb484aa8ed266ac", "f15v2": "e32f6bcb8c09abb4b09f918cfc55f7b70ad6488400bd61e297440ceb5c4de3ff"}
+POS80_HARNESS_ENV = POS79_HARNESS_ENV
+POS80_PYCACHE_PREFIX = "/tmp/tc1-pycache-"
+POS80_HELDOUT_MAX = POS79_HELDOUT_MAX                              # amendment 69's P209
+POS80_STABLE = POS79_STABLE
+POS80_CLOCK_FLOOR = 2700                                           # MHz, the RTX 5090's: before install (the burn) and per draw
+POS80_DRAW_MIN_CLEAN = 0.95                                        # per draw: no slowdown or cap reason on >= 95 % of busy samples
+POS80_BURN_MIN_CLEAN = 0.95                                        # the burn: SwPowerCap clear on >= 95 % of busy samples; every hard reason on every sample
+POS80_MIN_MOPS = 15                                                # amendment 77's single-thread floor
+FAMS.append(POS80_FAM)
+NAMES[POS80_FAM] = "Qwen3-30B-A3B (amendment 80: amendment 79's box at the 0.58.1 release, PyPI wheels, F15 v2, the card floor; two profiled draws each)"
+N_LAYERS[POS80_FAM] = 48
+ATTN_CENSUS[POS80_FAM] = 192
+DENSE_PINS[POS80_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[POS80_FAM] = ("e4b", "fused_attn4_m_fd")
+EXPECTED[POS80_FAM] = list(EXPECTED[POS79_FAM])
 # TC1 amendment 70: grouped-nf4-gemm's single-block ladder (NF4_QLORA_SINGLE_LADDER) 0 (l0) vs 1 (l1) at TC1's field recipe, e4b at its
 # defaults otherwise, the shipped and the matched arm, two draws a side in ABBA order, every arm profiled; e4b against itself
 SLADDER_FAM = "qwen3sladder"
@@ -3310,6 +3338,257 @@ def score_pos79(F, d, fam=POS79_FAM):
     return "QUOTED", ev, q
 
 
+def _pos80_helper(name):
+    """f15v2.py / card_clock.py: beside this file on the box (staged flat), or in the repository (bench/tc1, bench/common). Only a file
+    whose sha256 is the kit's (POS80_HELPER_SHA256) is executed. None if absent or different, which every caller reads as unread."""
+    import hashlib
+    import importlib.util
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (os.path.join(here, name + ".py"), os.path.join(here, "..", "common", name + ".py")):
+        if os.path.exists(path):
+            if hashlib.sha256(open(path, "rb").read()).hexdigest() != POS80_HELPER_SHA256.get(name):
+                continue
+            spec = importlib.util.spec_from_file_location(f"_pos80_{name}", path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+    return None
+
+
+def pos80_why(tag, r):
+    """Amendment 80's predicates on one row, each fail-closed:
+    - torch 2.12, and the kit's four pins as the arm recorded them;
+    - the registered tags, e4b's chunked loss with no run-time refusal, and a full profile beside the receipt;
+    - on an Unsloth arm, F15 v2 ENGAGED (f15v2.engagement: exact counts on the dispatch the pinned zoo takes);
+    - on every arm, the card floor on its own clock log (card_clock: busy median >= POS80_CLOCK_FLOOR, no slowdown or cap reason on
+      >= POS80_DRAW_MIN_CLEAN of busy samples).
+    Empty string = as registered."""
+    r = r or {}
+    env = r.get("env") or {}
+    bad = []
+    tv = str(env.get("torch") or "")
+    if not tv.startswith("2.12"):
+        bad.append(f"env.torch {tv or 'missing'} is not 2.12*")
+    for pkg, want in POS80_PINS.items():
+        if env.get(pkg) != want:
+            bad.append(f"env {pkg} {env.get(pkg)!r} != {want}, the kit's pin")
+    fw = r.get("framework")
+    if fw == "e4b":
+        cl = r.get("chunked_lm_loss")
+        if not isinstance(cl, dict) or int(cl.get("runtime_refusals") or 0) != 0:
+            bad.append(f"the chunked LM loss refused at run time, or recorded nothing (record {cl!r})")
+    want = {"e4b": ("fused_attn4_m_fd", "fused_attn4_m_fd_d2"), "unsloth": ("ckpt_unsloth_m_fv", "ckpt_unsloth_m_fv_d2")}.get(fw, ())
+    if tag not in want:
+        bad.append(f"amendment 80 registers no {fw} arm {tag!r}")
+    prof = r.get("_profile_file")
+    if not isinstance(prof, dict) or not (prof.get("summary") or {}).get("profiled_steps"):
+        bad.append("no _profile.json beside the receipt: amendment 80 reads engagement and device time from it")
+    else:
+        f2 = _pos80_helper("f15v2")
+        if f2 is None:
+            bad.append("f15v2.py at the kit's digest is not beside the reducer: F15 v2 and the kernels-only device time are unread")
+        else:
+            try:
+                f2.kernels_only_device_ms(prof)
+            except f2.AnnotationError as e:
+                bad.append(f"kernels-only device time: {e}")
+            if fw == "unsloth":
+                v, why, _ = f2.engagement(r, prof)
+                if v != "ENGAGED":
+                    bad.append(f"F15 v2: {why}")
+    cc = _pos80_helper("card_clock")
+    g = r.get("_gpuclk")
+    if cc is None or not isinstance(g, dict):
+        bad.append("no gpuclk log (or no card_clock.py at the kit's digest): the card floor is unread for this draw")
+    else:
+        ok, why = cc.passes(g, POS80_CLOCK_FLOOR, POS80_DRAW_MIN_CLEAN)
+        if not ok:
+            bad.append(f"card floor: {why}")
+    return "; ".join(bad)
+
+
+def _pos80_lines(d):
+    sp = os.path.join(d or "", "summary.txt")
+    return open(sp, errors="replace").read().splitlines() if d and os.path.exists(sp) else []
+
+
+def pos80_box(d):
+    """Amendment 80's box facts outside its rows, each fail-closed. Returns (facts, [failures]):
+    - the POS80_PINS line at the kit's pins and the three helpers' sha256 (release_proof, card_clock, f15v2);
+    - one RELEASE_PROOF fastcheck OK line and one binding OK line, the binding's prefix a fresh /tmp/tc1-pycache-*;
+    - the binding proof's JSON: one record per pinned distribution (its version and wheel, RECORD equal, no first_diff, a fresh prefix equal
+      to the summary's binding prefix, its own name among the imports);
+    - POS80_ARM_ENV empty and POS80_KNOB_ENV naming no e4b or grouped-nf4-gemm knob bar the harness's own;
+    - versions.txt's t212 lines (index installs at the pins);
+    - the card burn passed at POS80_CLOCK_FLOOR, and the single-thread floor;
+    - the host CPU (box.json)."""
+    fx = {"prefix": None, "proofs": {}, "cpu": None, "burn": None, "mops": None}
+    bad = []
+    lines = _pos80_lines(d)
+    hs = POS80_HELPER_SHA256
+    want = (f"POS80_PINS e4b {POS80_PINS['experts4bit-qlora']} @{POS80_E4B_SHA} gnf4 {POS80_PINS['grouped-nf4-gemm']} @{POS80_GNF4_SHA} "
+            f"unsloth {POS80_PINS['unsloth']} unsloth_zoo {POS80_PINS['unsloth_zoo']} release_proof {hs['release_proof']} "
+            f"card_clock {hs['card_clock']} f15v2 {hs['f15v2']}")
+    if any(len(v) != 64 for v in hs.values()) or len(POS80_E4B_SHA) != 40:
+        bad.append("the reducer's POS80 pins or helper digests are unfilled")
+    if want not in lines:
+        bad.append("no POS80_PINS line at the kit's pins and helper digests in summary.txt")
+    for kind in ("fastcheck", "binding"):
+        ok = [ln for ln in lines if ln.startswith(f"RELEASE_PROOF {kind} OK ")]
+        m = re.match(r"RELEASE_PROOF \w+ OK .* pycache_prefix (\S+)$", ok[-1]) if len(ok) == 1 else None
+        if not m or not m.group(1).startswith(POS80_PYCACHE_PREFIX):
+            bad.append(f"summary.txt carries {len(ok)} RELEASE_PROOF {kind} OK lines, not one with a fresh {POS80_PYCACHE_PREFIX}* prefix")
+        elif kind == "binding":
+            fx["prefix"] = m.group(1)
+    if [ln for ln in lines if ln.startswith("POS80_ARM_ENV ")] != ["POS80_ARM_ENV e4b=[] extra=[]"]:
+        bad.append("the arms' extra environment is not recorded empty (TC1_E4B_ENV / TC1_ARM_EXTRA_ENV)")
+    kl = [ln for ln in lines if ln.startswith("POS80_KNOB_ENV")]
+    if len(kl) != 1:
+        bad.append(f"summary.txt carries {len(kl)} POS80_KNOB_ENV lines, not one: the arms' knob environment is unread")
+    else:
+        knobs = sorted(k for k in kl[0].split()[1:] if k not in POS80_HARNESS_ENV and not k.startswith("E4B_RENT_"))
+        if knobs:
+            bad.append(f"knobs set in the arms' environment: {knobs} (amendment 80 reads every default unset)")
+    jp = os.path.join(d or "", "release_proof_pos80_binding.json")
+    recs = []
+    if d and os.path.exists(jp):
+        for ln in open(jp, errors="replace"):
+            try:
+                recs.append(json.loads(ln))
+            except ValueError:
+                bad.append("release_proof_pos80_binding.json holds a line that is not JSON")
+    for dist in POS80_PROVEN:
+        got = [x for x in recs if isinstance(x, dict) and x.get("dist") == dist]
+        x = got[0] if len(got) == 1 else {}
+        own = dist.replace("-", "_")
+        why = ("" if len(got) == 1 else f"{len(got)} proofs") or "; ".join(w for w in (
+            "" if x.get("version") == POS80_PINS[dist] else f"version {x.get('version')!r}",
+            "" if x.get("record_equal") is True and x.get("record") == "RECORD equal" and x.get("first_diff") is None else "not RECORD equal",
+            "" if x.get("pycache_fresh") is True else "pycache_fresh not true",
+            "" if fx["prefix"] and x.get("pycache_prefix") == fx["prefix"] else "a prefix other than the summary's binding prefix",
+            "" if POS80_OWN_IMPORT[dist] in (x.get("imports") or {}) else f"{POS80_OWN_IMPORT[dist]} not among the imports",
+            "" if str(x.get("wheel") or "").startswith(f"{own}-{POS80_PINS[dist]}-") else f"wheel {x.get('wheel')!r}") if w)
+        if why:
+            bad.append(f"release proof of {dist}: {why}")
+        else:
+            fx["proofs"][dist] = x
+    vp = os.path.join(d or "", "versions.txt")
+    vt = open(vp, errors="replace").read().splitlines() if d and os.path.exists(vp) else []
+    for ln_want in (f"e4b(t212) {POS80_PINS['experts4bit-qlora']} (PyPI)", f"gnf4(t212) {POS80_PINS['grouped-nf4-gemm']} (PyPI)"):
+        if ln_want not in vt:
+            bad.append(f"versions.txt has no line {ln_want!r} (the t212 tripwire's)")
+    cl = [ln for ln in lines if ln.startswith("CARD_CLOCK ")]
+    try:
+        burn = json.loads(cl[-1][len("CARD_CLOCK "):]) if len(cl) == 1 else None
+    except ValueError:
+        burn = None
+    if not (isinstance(burn, dict) and burn.get("pass") is True and burn.get("floor_mhz") == POS80_CLOCK_FLOOR
+            and burn.get("min_clean") == POS80_BURN_MIN_CLEAN and burn.get("hard_bits_every_sample") is True):
+        bad.append(f"no single passing CARD_CLOCK burn line at floor {POS80_CLOCK_FLOOR} MHz, min_clean {POS80_BURN_MIN_CLEAN}, hard bits on every sample")
+    fx["burn"] = burn
+    ms = [ln for ln in lines if ln.startswith("SINGLE_THREAD ")]
+    try:
+        fx["mops"] = float(ms[-1].split()[1]) if len(ms) == 1 else None
+    except (ValueError, IndexError):
+        fx["mops"] = None
+    if fx["mops"] is None or fx["mops"] < POS80_MIN_MOPS:
+        bad.append(f"single-thread speed {fx['mops']} Mops is unread or under the floor {POS80_MIN_MOPS}")
+    bp = os.path.join(d or "", "box.json")
+    try:
+        fx["cpu"] = (json.load(open(bp)) or {}).get("cpu") if d and os.path.exists(bp) else None
+    except ValueError:
+        fx["cpu"] = None
+    if not fx["cpu"]:
+        bad.append("no host CPU in box.json")
+    return fx, bad
+
+
+def _pos80_dev(r):
+    """Kernels-only device ms per profiled step (f15v2.kernels_only_device_ms on the full profile), or None."""
+    prof, f2 = (r or {}).get("_profile_file"), _pos80_helper("f15v2")
+    if not (isinstance(prof, dict) and f2):
+        return None
+    try:
+        return f2.kernels_only_device_ms(prof)[0]
+    except f2.AnnotationError:
+        return None
+
+
+def _pos80_sides(R):
+    """Over two VALID profiled draws a side: the medians of kernels-only device ms and s/step, and the mean held-out at N."""
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    def side(fw, tag):
+        rs = [rows.get(k) or {} for k in ((fw, tag), (fw, tag + "_d2"))]
+        if not all(x.get("verdict") == "VALID" for x in rs):
+            return None
+        rs = [x.get("r") or {} for x in rs]
+        q = {"dev": [_pos80_dev(x) for x in rs], "s": [x.get("s_per_step_median_11plus") for x in rs], "held": [x.get("eval_loss_final") for x in rs]}
+        return None if any(None in v for v in q.values()) else {"dev": statistics.median(q["dev"]), "s": statistics.median(q["s"]),
+                                                                 "held": statistics.mean(q["held"]), "draws": q}
+    return side("e4b", "fused_attn4_m_fd"), side("unsloth", "ckpt_unsloth_m_fv")
+
+
+def score_pos80(F, d, fam=POS80_FAM):
+    """TC1 amendment 80's rule, in order: the box facts (pos80_box), else NOT_READ; two VALID profiled draws a side (VALID now includes
+    F15 v2 on the Unsloth arms and the card floor on every draw), else NOT_READ; each side stable on s/step and on kernels-only device ms
+    (POS80_STABLE), else UNSTABLE; |mean held-out at N, e4b - Unsloth| <= POS80_HELDOUT_MAX, else QUALITY_DIFFERS; then QUOTED -- the
+    device ratio (Unsloth / e4b, kernels-only ms per profiled step) first, the wall ratio second, named with the host CPU. Returns
+    (verdict, [evidence lines], quote or None)."""
+    R = F.get(fam)
+    if not R:
+        return "NOT_READ", [f"no {fam} family on this box"], None
+    fx, bad = pos80_box(d)
+    if bad:
+        return "NOT_READ", bad, None
+    e, u = _pos80_sides(R)
+    if e is None or u is None:
+        return "NOT_READ", [f"two VALID profiled draws a side are registered: e4b {'ok' if e else 'missing'}, Unsloth {'ok' if u else 'missing'}"], None
+    ev = []
+    for fw, side in (("e4b", e), ("unsloth", u)):
+        for name, key in (("s/step", "s"), ("kernels-only device ms", "dev")):
+            x, y = (float(v) for v in side["draws"][key])
+            sp = abs(x - y) / ((x + y) / 2.0)
+            ev.append(f"{fw} {name} draws {x:.4g} / {y:.4g}: |d1-d2|/mean {sp:.4f} vs <= {POS80_STABLE[fw]}")
+            if sp > POS80_STABLE[fw]:
+                return "UNSTABLE", ev, None
+    dq = e["held"] - u["held"]
+    ev.append(f"mean held-out at N e4b {e['held']:.5f}, Unsloth {u['held']:.5f} (diff {dq:+.5f} vs |.| <= {POS80_HELDOUT_MAX})")
+    if abs(dq) > POS80_HELDOUT_MAX:
+        return "QUALITY_DIFFERS", ev, None
+    q = {"device": u["dev"] / e["dev"], "wall": u["s"] / e["s"], "cpu": fx["cpu"], "e4b_dev_ms": e["dev"], "unsloth_dev_ms": u["dev"],
+         "e4b_s": e["s"], "unsloth_s": u["s"], "burn": fx["burn"]}
+    lead = "Unsloth ahead" if q["device"] < 1 else "e4b ahead"
+    ev.append(f"Unsloth spends {q['device']:.3f}x e4b's GPU time per step, kernels only (device ms {u['dev']:.1f} / {e['dev']:.1f}; {lead}); "
+              f"wall-clock {q['wall']:.3f}x (s/step {u['s']:.3f} / {e['s']:.3f}) on {q['cpu']}")
+    return "QUOTED", ev, q
+
+
+def score_pos80_predictions(F, d, fam=POS80_FAM):
+    """TC1's P225: F15 v2 reads ENGAGED on both Unsloth draws. P226: the quoted device ratio Unsloth / e4b < 1.00 (Unsloth ahead), the
+    direction amendment 79's VOID rows suggested, registered so that it can be falsified."""
+    R = F.get(fam)
+    if not R:
+        return [(pid, fam, "UNTESTED", f"no {fam} family on this box") for pid in ("P225", "P226")]
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    f2 = _pos80_helper("f15v2")
+    reads = []
+    for tag in ("ckpt_unsloth_m_fv", "ckpt_unsloth_m_fv_d2"):
+        r = (rows.get(("unsloth", tag)) or {}).get("r") or {}
+        prof = r.get("_profile_file")
+        reads.append((tag,) + (f2.engagement(r, prof)[:2] if (f2 and isinstance(prof, dict)) else ("UNREAD", "no profile or no f15v2.py")))
+    if any(v == "UNREAD" for _, v, _ in reads):
+        p225 = ("P225", fam, "UNTESTED", "; ".join(f"{t}: {w}" for t, v, w in reads if v == "UNREAD"))
+    else:
+        p225 = ("P225", fam, "HELD" if all(v == "ENGAGED" for _, v, _ in reads) else "FALSIFIED",
+                "; ".join(f"{t}: {v} ({w})" for t, v, w in reads))
+    v, _, q = score_pos80(F, d, fam)
+    if v != "QUOTED":
+        p226 = ("P226", fam, "UNTESTED", f"the rule read {v}, so no ratio is quoted")
+    else:
+        p226 = ("P226", fam, "HELD" if q["device"] < 1.0 else "FALSIFIED", f"device ratio Unsloth / e4b (kernels only) {q['device']:.3f} vs < 1.00")
+    return [p225, p226]
+
+
 def score_pos68(F, fam=POS68_FAM):
     """TC1-PREREG amendment 68 (two VALID profiled draws a side, medians). P200: device ms per profiled step Unsloth / e4b defaults inside
     POS68_DEVICE_BAND. P201: busy_t (device ms per profiled step / timed s/step) e4b - Unsloth >= POS68_BUSY_GAP_MIN. P202: CPU ops per
@@ -4060,6 +4339,19 @@ def load(d):
             r = json.load(open(p))
         except Exception as e:
             r = {"framework": fw, "fam": fam, "tag": tag, "status": "unreadable", "reason": str(e)}
+        if fam == POS80_FAM and isinstance(r, dict):   # amendment 80: F15 v2 and the device time read the full profile, the per-draw floor the clock log
+            pp = os.path.join(d, base + "_profile.json")
+            try:
+                r["_profile_file"] = json.load(open(pp)) if os.path.exists(pp) else None
+            except ValueError:
+                r["_profile_file"] = None
+            cp = os.path.join(d, f"gpuclk_{base}.txt")
+            cc = _pos80_helper("card_clock")
+            r["_gpuclk"] = cc.summarize_log(cp) if (cc and os.path.exists(cp)) else None
+            lp = os.path.join(d, "logs", f"run_{base}.log")             # Unsloth's compile-cache state, reported beside the row
+            r["_megacache"] = ([re.sub(r"[0-9a-f]{16,}", "<key>", ln.strip())[:140] for ln in
+                                open(lp, errors="replace").read().replace("\r", "\n").splitlines() if "Mega-cache" in ln]
+                               if os.path.exists(lp) else [])
         out.setdefault(fam, {})[(fw, tag)] = r
     return out
 
@@ -4302,7 +4594,7 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
                     why.append(f"requested backend {req}: {key} engaged {mins.get(key, 0)} < {L}*accum {A} per step (moe_backend_selected {r.get('moe_backend_selected')})")
                 if req == "grouped_mm" and (mins.get("unsloth_loop", 0) or maxs.get("unsloth_loop", 0)):
                     why.append(f"grouped_mm requested but the per-expert loop ran (unsloth_loop min {mins.get('unsloth_loop')} max {maxs.get('unsloth_loop')})")
-            if req == "grouped_mm":                                 # E [F15]: the torch op itself, and the manual fallback
+            if req == "grouped_mm" and fam != POS80_FAM:            # E [F15]: the torch op itself, and the manual fallback (amendment 80: F15 v2 instead)
                 g, m = r.get("unsloth_grouped_mm_calls_per_step_min"), r.get("unsloth_manual_grouped_mm_calls_per_step_max")
                 if g is None or m is None:
                     why.append("grouped_mm requested but no torch._grouped_mm / manual-fallback counters on the receipt")
@@ -4446,6 +4738,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == POS79_FAM:                               # amendment 79: the kit's pins, every knob unset, the proof's prefix, a profile on every arm
         w = pos79_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == POS80_FAM:                               # amendment 80: the kit's pins, F15 v2 on the Unsloth arms, the card floor on every draw
+        w = pos80_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == POS69MC_FAM:                             # amendment 73: amendment 69's defaults without a profile, the claim's pins, the census
@@ -8166,6 +8462,31 @@ def render(F, d):
                        f"{f(_busy_vs_timed(r), 3)} | {pr.get('cpu_ops_per_step')} | {f(r.get('peak_vram_gb'), 3)} | {r.get('eval_loss_final')} |")
         v79, ev79, _ = score_pos79(F, d)
         out += [f"\n**Amendment 79 rule: {v79}**"] + [f"- {x}" for x in ev79]
+    if POS80_FAM in F:
+        f2 = _pos80_helper("f15v2")
+        out += ["\n## Amendment 80: the field recipe's same-stack position at the 0.58.1 release against Unsloth 2026.10.8 (PyPI wheels, F15 v2, the card floor)",
+                "| arm | VERDICT | s/step (11..N) | device ms / profiled step, kernels only | annotation ms (excluded) | F15 v2 | SM MHz busy median / clean | peak GB | held-out N |",
+                "|---|---|---|---|---|---|---|---|---|"]
+        for x in F[POS80_FAM]["rows"]:
+            r = x.get("r") or {}
+            prof = r.get("_profile_file")
+            try:
+                k = f2.kernels_only_device_ms(prof) if (f2 and isinstance(prof, dict)) else (None, None, [])
+            except f2.AnnotationError:
+                k = (None, None, [])
+            eng = f2.engagement(r, prof)[0] if (f2 and isinstance(prof, dict) and x["fw"] == "unsloth") else "—"
+            g = r.get("_gpuclk") or {}
+            out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(k[0], 1)} | {f(k[1], 1)} | {eng} | "
+                       f"{g.get('sm_median')} / {g.get('busy_clean_fraction')} | {f(r.get('peak_vram_gb'), 3)} | {r.get('eval_loss_final')} |")
+        if f2:
+            out += [f"- {x['fw']}/{x['tag']}: {f2.v1_line(x.get('r') or {})}" for x in F[POS80_FAM]["rows"] if x["fw"] == "unsloth" and x.get("r")]
+        out += [f"- {x['fw']}/{x['tag']} compile cache (reported, never ruled): {'; '.join((x.get('r') or {}).get('_megacache') or []) or 'no Mega-cache line'}"
+                for x in F[POS80_FAM]["rows"] if x["fw"] == "unsloth"]
+        v80, ev80, _ = score_pos80(F, d)
+        out += [f"\n**Amendment 80 rule: {v80}**"] + [f"- {x}" for x in ev80]
+        out += ["\n| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_pos80_predictions(F, d):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if SLADDER_FAM in F:
         out += ["\n## Amendment 70: the single padded block off vs on its ladder at the field recipe (descriptive)",
                 "| arm | VERDICT | s/step (11..N) | device ms / profiled step | busy_t | aten::bmm CPU us / call | laddered calls | peak GB | held-out 0 / N |",

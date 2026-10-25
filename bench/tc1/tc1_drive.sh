@@ -42,6 +42,8 @@ case " ${TC1_FAMILIES:-} " in *" qwen3hbd "*) STAGE="$STAGE $REPO/bench/hp1/hp1_
 case " ${TC1_FAMILIES:-} " in *" qwen3hp3 "*|*" qwen3hp3shake "*|*" qwen3hp3r "*|*" qwen3hp3rshake "*) STAGE="$STAGE $REPO/bench/hp1/hp1_lib.py $REPO/bench/hp1/hp1_eval.py $REPO/bench/hp1/hp1_trunc.py $REPO/bench/hp1/hp1_caltokens.py $REPO/bench/hp1/hp1_reduce.py $REPO/bench/tc1/axo1767_reduce.py $REPO/bench/hp3/hp3_build.py $REPO/bench/hp3/hp3_reduce.py";; esac
 # TC1 amendment 79: the release proof (bench/tc1/release_proof.py, byte-identical to loggetta's, its sha256 pinned in the PREREG and the tests)
 case " ${TC1_FAMILIES:-} " in *" qwen3pos79 "*) STAGE="$STAGE $HERE/release_proof.py";; esac
+# TC1 amendment 80: the release proof, the version-aware engagement check and the shared card-clock screen
+case " ${TC1_FAMILIES:-} " in *" qwen3pos80 "*) STAGE="$STAGE $HERE/release_proof.py $HERE/f15v2.py $REPO/bench/common/card_clock.py";; esac
 STAGE="$STAGE ${TC1_EXTRA_STAGE:-}"; RUNNER=${TC1_RUNNER:-tc1_run.sh}
 case " $STAGE " in *"/$RUNNER "*) ;; *) say "refusing: TC1_RUNNER=$RUNNER is not a staged file"; exit 78;; esac
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
@@ -85,6 +87,17 @@ case " ${TC1_FAMILIES:-} " in *" qwen3pos79 "*)
   [ "${TC1_UNSLOTH_ZOO_VERSION:-}" = "$(p79 POS79_UNSLOTH_ZOO)" ] || P79_WHY="${P79_WHY:+$P79_WHY; }TC1_UNSLOTH_ZOO_VERSION ${TC1_UNSLOTH_ZOO_VERSION:-unset} is not $(p79 POS79_UNSLOTH_ZOO)"
   [ -z "${TC1_E4B_ENV:-}" ] && [ -z "${TC1_ARM_EXTRA_ENV:-}" ] || P79_WHY="${P79_WHY:+$P79_WHY; }TC1_E4B_ENV / TC1_ARM_EXTRA_ENV must be empty"
   [ -z "$P79_WHY" ] || { say "refusing (amendment 79 pins): $P79_WHY"; exit 78; };;
+esac
+# TC1 amendment 80: the same, at its kit's pins (tc1_run.sh's POS80_*), before any box is rented
+case " ${TC1_FAMILIES:-} " in *" qwen3pos80 "*)
+  p80(){ sed -n "s/^$1=\([0-9a-f.]*\).*/\1/p; s/.*; $1=\([0-9a-f.]*\).*/\1/p" "$HERE/tc1_run.sh" | head -1; }
+  P80_WHY=""
+  [ "$E4B_SHA" = "$(p80 POS80_E4B_SHA)" ] || P80_WHY="E4B_SHA $E4B_SHA is not the kit's $(p80 POS80_E4B_SHA)"
+  [ "$GNF4_SHA" = "$(p80 POS80_GNF4_SHA)" ] || P80_WHY="${P80_WHY:+$P80_WHY; }GNF4_SHA $GNF4_SHA is not the kit's $(p80 POS80_GNF4_SHA)"
+  [ "${TC1_UNSLOTH_VERSION:-}" = "$(p80 POS80_UNSLOTH)" ] || P80_WHY="${P80_WHY:+$P80_WHY; }TC1_UNSLOTH_VERSION ${TC1_UNSLOTH_VERSION:-unset} is not $(p80 POS80_UNSLOTH)"
+  [ "${TC1_UNSLOTH_ZOO_VERSION:-}" = "$(p80 POS80_UNSLOTH_ZOO)" ] || P80_WHY="${P80_WHY:+$P80_WHY; }TC1_UNSLOTH_ZOO_VERSION ${TC1_UNSLOTH_ZOO_VERSION:-unset} is not $(p80 POS80_UNSLOTH_ZOO)"
+  [ -z "${TC1_E4B_ENV:-}" ] && [ -z "${TC1_ARM_EXTRA_ENV:-}" ] || P80_WHY="${P80_WHY:+$P80_WHY; }TC1_E4B_ENV / TC1_ARM_EXTRA_ENV must be empty"
+  [ -z "$P80_WHY" ] || { say "refusing (amendment 80 pins): $P80_WHY"; exit 78; };;
 esac
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
 SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"

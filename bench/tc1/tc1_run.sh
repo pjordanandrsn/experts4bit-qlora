@@ -131,6 +131,7 @@ case " $FAMILIES " in " qwen3hp2 ") NEED_AXOLOTL=0;; esac     # HP2 (bench/hp2/H
 case " $FAMILIES " in " qwen3hpn ") NEED_AXOLOTL=0;; esac     # HPN (bench/hpn/HPN-DESIGN.md): e4b + Unsloth readers only
 case " $FAMILIES " in " qwen3hbd ") NEED_AXOLOTL=0;; esac     # HBD (bench/hbd/PREREG-hbd.md): e4b + Unsloth cells only
 case " $FAMILIES " in " qwen3pos79 ") NEED_AXOLOTL=0;; esac   # TC1 amendment 79: amendment 69's four arms, all in venv-unsloth
+case " $FAMILIES " in " qwen3pos80 ") NEED_AXOLOTL=0;; esac   # TC1 amendment 80: amendment 79's four arms, all in venv-unsloth
 case " $FAMILIES " in " qwen3hp3 "|" qwen3hp3shake ") NEED_UNSLOTH=0; NEED_AXOLOTL=0;; esac   # HP3 (bench/hp3/HP3-PREREG.md): its own three venvs, on one build
 # HP3 Amendment 2, the (R) fallback (qwen3hp3r): e4b vs Unsloth 2026.9.14 on HPN's build, so only venv-unsloth-t28 (+ e4b in it, t28u);
 # no cu130 Unsloth venv and no axolotl
@@ -233,6 +234,49 @@ case " $FAMILIES " in *" qwen3pos79 "*)
   echo "POS79_PINS e4b $E4B_SHA gnf4 $GNF4_SHA unsloth $POS79_UNSLOTH unsloth_zoo $POS79_UNSLOTH_ZOO release_proof $(sha256sum "$W/release_proof.py" | cut -c1-64)" | tee -a summary.txt
   echo "POS79_ARM_ENV e4b=[${TC1_E4B_ENV:-}] extra=[${TC1_ARM_EXTRA_ENV:-}]" | tee -a summary.txt;;
 esac
+# TC1 amendment 80 -- e4b#2129's confirmation read: amendment 79's box at the 0.58.1 release, with the arms' e4b, grouped-nf4-gemm,
+# Unsloth and unsloth_zoo all PyPI's wheels, each proven by its bytes (release_proof.py); Unsloth's expert-GEMM engagement read by
+# f15v2.py; the card screened by card_clock.py (below, with the host floors). Every pin is a constant of this reviewed kit. E4B_SHA and
+# GNF4_SHA are the two tag commits: venv-e4b's git install, which no arm of this box uses. Any other value refuses here (rc 78).
+POS80_E4B_SHA=605d21e67958fa94d5e73fc3a95ffcb5c8eae02d     # v0.58.1's peeled tag commit
+POS80_GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca     # v0.51.0's peeled tag commit
+POS80_E4B=0.58.1; POS80_GNF4=0.51.0; POS80_UNSLOTH=2026.10.8; POS80_UNSLOTH_ZOO=2026.10.8
+POS80_CLOCK_FLOOR=2700     # MHz: the burn's busy SM median on the RTX 5090 (59 of TC1's 76 committed 5090 training medians clear it)
+POS80_PROFILE_WARM=20      # warm is a 0-based loop index: the profiled steps are 21..23 (counting from 1), past Unsloth's compile transient
+                           # (amendment 79's draw 1 compiled and saved its Mega-cache bundle and draw 2 loaded it, and its steps 4..6 differed
+                           # 16 % between them); 3 of the 50 median steps
+case " $FAMILIES " in *" qwen3pos80 "*)
+  why=""
+  [ "$FAMILIES" = qwen3pos80 ] || why="the qwen3pos80 token runs alone (got: $FAMILIES)"
+  [ ${#POS80_E4B_SHA} -eq 40 ] || why="${why:+$why; }the kit's POS80_E4B_SHA is not a 40-hex commit (unfilled)"
+  [ "$E4B_SHA" = "$POS80_E4B_SHA" ] || why="${why:+$why; }E4B_SHA $E4B_SHA is not the kit's $POS80_E4B_SHA"
+  [ "$GNF4_SHA" = "$POS80_GNF4_SHA" ] || why="${why:+$why; }GNF4_SHA $GNF4_SHA is not the kit's $POS80_GNF4_SHA"
+  [ "${TC1_UNSLOTH_VERSION:-}" = "$POS80_UNSLOTH" ] || why="${why:+$why; }TC1_UNSLOTH_VERSION ${TC1_UNSLOTH_VERSION:-unset} is not $POS80_UNSLOTH"
+  [ "${TC1_UNSLOTH_ZOO_VERSION:-}" = "$POS80_UNSLOTH_ZOO" ] || why="${why:+$why; }TC1_UNSLOTH_ZOO_VERSION ${TC1_UNSLOTH_ZOO_VERSION:-unset} is not $POS80_UNSLOTH_ZOO"
+  for f in release_proof.py card_clock.py f15v2.py; do [ -s "$W/$f" ] || why="${why:+$why; }$f is not staged"; done
+  [ -z "${TC1_E4B_ENV:-}" ] || why="${why:+$why; }TC1_E4B_ENV is set ($TC1_E4B_ENV): amendment 80 hands its arms no extra environment"
+  [ -z "${TC1_ARM_EXTRA_ENV:-}" ] || why="${why:+$why; }TC1_ARM_EXTRA_ENV is set ($TC1_ARM_EXTRA_ENV): amendment 80 hands its arms no extra environment"
+  if [ -n "$why" ]; then say "BOX REFUSED (amendment 80 pins): $why"; echo "BOX_REFUSED pos80_pins: $why" >> summary.txt; finish 78; fi
+  echo "POS80_PINS e4b $POS80_E4B @$E4B_SHA gnf4 $POS80_GNF4 @$GNF4_SHA unsloth $POS80_UNSLOTH unsloth_zoo $POS80_UNSLOTH_ZOO release_proof $(sha256sum "$W/release_proof.py" | cut -c1-64) card_clock $(sha256sum "$W/card_clock.py" | cut -c1-64) f15v2 $(sha256sum "$W/f15v2.py" | cut -c1-64)" | tee -a summary.txt
+  echo "POS80_ARM_ENV e4b=[${TC1_E4B_ENV:-}] extra=[${TC1_ARM_EXTRA_ENV:-}]" | tee -a summary.txt;;
+esac
+# pos80_release_proof KIND -- TC1 amendment 80: all four distributions the arms import (experts4bit-qlora, grouped-nf4-gemm, unsloth,
+# unsloth_zoo) must be byte-for-byte PyPI's wheels (release_proof.py: the RECORD compare on disk, the import origins, a fresh bytecode
+# prefix). KIND fastcheck runs right after the installs under a throwaway prefix of its own and fails fast. KIND binding runs as the arms
+# run (venv-unsloth's python, cwd $W, this environment), as the last step before the first arm. It makes a fresh prefix and EXPORTS it, so
+# the proof and every arm read under one fresh, empty prefix, and its JSON is the one the reducer reads. Any refusal ends the box (rc 9)
+# and no arm runs. The knob environment every arm inherits is recorded with the binding proof (POS80_KNOB_ENV). Defined here, above the
+# installs, because the fastcheck runs inside them.
+pos80_release_proof(){ local KIND=$1 PC rc
+  PC=$(mktemp -d /tmp/tc1-pycache-XXXXXX) || return 1
+  if [ "$KIND" = binding ]; then export PYTHONPYCACHEPREFIX=$PC RELEASE_PROOF_FRESH_PYCACHE=$PC; fi
+  (cd $W && PYTHONPYCACHEPREFIX=$PC RELEASE_PROOF_FRESH_PYCACHE=$PC perl -e 'alarm 1200; exec @ARGV' $PY_UNS $W/release_proof.py \
+     "experts4bit-qlora==$POS80_E4B" "grouped-nf4-gemm==$POS80_GNF4" "unsloth==$POS80_UNSLOTH" "unsloth_zoo==$POS80_UNSLOTH_ZOO") \
+    > $W/release_proof_pos80_$KIND.json 2> logs/release_proof_$KIND.log; rc=$?
+  if [ $rc -ne 0 ]; then tail -3 logs/release_proof_$KIND.log; say "RELEASE PROOF ($KIND) FAILED rc=$rc"; echo "RELEASE_PROOF $KIND FAILED rc=$rc $(tail -1 logs/release_proof_$KIND.log | cut -c1-300)" >> summary.txt; return 1; fi
+  echo "RELEASE_PROOF $KIND OK experts4bit-qlora==$POS80_E4B grouped-nf4-gemm==$POS80_GNF4 unsloth==$POS80_UNSLOTH unsloth_zoo==$POS80_UNSLOTH_ZOO pycache_prefix $PC" | tee -a summary.txt
+  [ "$KIND" = binding ] && echo "POS80_KNOB_ENV $(env | grep -E '^(E4B_|NF4_QLORA_|GNF4_)' | cut -d= -f1 | sort | tr '\n' ' ')" | tee -a summary.txt
+  return 0; }
 # TC1 amendment 78 -- the 24 GiB fit reading: the card's memory.total must be a 24 GiB card's, else a host refusal (rc 18) before any
 # staging. The GPU name alone admits a 48 GB "RTX 4090"; the screen bands the listing's gpu_ram, and this reads the card itself.
 POS78_MIB_MIN=23500; POS78_MIB_MAX=24600
@@ -298,6 +342,19 @@ case " $FAMILIES " in *" qwen3pos76co "*)
   echo "SINGLE_THREAD ${MOPS:-unreadable} Mops (median of 5; floor $POS77_MIN_MOPS; python $(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null); amendment 77)" | tee -a summary.txt
   python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "${MOPS:-0}" "$POS77_MIN_MOPS" 2>/dev/null \
     || { say "BOX REFUSED: single-thread speed ${MOPS:-unreadable} Mops is under amendment 77's floor ($POS77_MIN_MOPS): the 3 h guard would not cover the four arms with the load gate's re-runs (host floor)"; echo "BOX_REFUSED single_thread_mops=${MOPS:-unreadable} floor=$POS77_MIN_MOPS (amendment 77)" >> summary.txt; finish 18; };;
+esac
+# TC1 amendment 80's host floors, before any venv or fetch: amendment 77's single-thread floor, then the card's loaded SM clock
+# (bench/common/card_clock.py: a bf16 matmul burn; the busy median >= POS80_CLOCK_FLOOR, no hard slowdown or cap reason on any
+# sample, and SwPowerCap clear on >= 95 % of busy samples, else rc 18, a host floor). Amendment 79's box held a flat 2400 MHz with
+# NVML's Reliability reason set (e4b#2129).
+case " $FAMILIES " in *" qwen3pos80 "*)
+  MOPS=$(single_thread_mops)
+  echo "SINGLE_THREAD ${MOPS:-unreadable} Mops (median of 5; floor $POS77_MIN_MOPS; amendment 80)" | tee -a summary.txt
+  python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "${MOPS:-0}" "$POS77_MIN_MOPS" 2>/dev/null \
+    || { say "BOX REFUSED: single-thread speed ${MOPS:-unreadable} Mops is under the floor ($POS77_MIN_MOPS) (host floor)"; echo "BOX_REFUSED single_thread_mops=${MOPS:-unreadable} floor=$POS77_MIN_MOPS (amendment 80)" >> summary.txt; finish 18; }
+  perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $POS80_CLOCK_FLOOR --seconds 20 --min-clean 0.95 --out $W/card_clock_burn.json > logs/card_clock_burn.log 2>&1; crc=$?
+  grep "^CARD_CLOCK " logs/card_clock_burn.log | tail -1 | tee -a summary.txt
+  [ $crc -eq 0 ] || { say "BOX REFUSED: the card's loaded SM clock fails amendment 80's floor ($POS80_CLOCK_FLOOR MHz, no hard slowdown or cap reason, SwPowerCap on <= 5 %): $(tail -1 logs/card_clock_burn.log | cut -c1-300) (host floor)"; echo "BOX_REFUSED card_clock rc=$crc floor=$POS80_CLOCK_FLOOR (amendment 80)" >> summary.txt; finish 18; };;
 esac
 # P48 run 1 (2026-09-19) drew a host whose container overlay was 32 GB and died ENOSPC mid-fetch; box B fetches ~120 GB of
 # checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.
@@ -527,7 +584,34 @@ tripwire_unsloth(){ local TAG=$1 PY=$2 ok=1
 # J [F7]: e4b + grouped-nf4-gemm at the same pins into venv-unsloth (torch 2.12.1+cu130) for the `fused_attn4_m_t212` row; a failed install
 # or tripwire is a row (install_failed), the cu130 gate a refused row
 T212_OK=0; T212_REASON=""
-if [ "$UNS_OK" = 1 ]; then
+if [ "$UNS_OK" = 1 ] && [ "$FAMILIES" = qwen3pos80 ]; then
+  # TC1 amendment 80: the arms' e4b and grouped-nf4-gemm are PyPI's released wheels, not git installs. The tripwire asserts the pinned
+  # versions and an index install (no direct_url.json). release_proof.py then proves the bytes (pos80_release_proof).
+  say "venv-unsloth + experts4bit-qlora==$POS80_E4B + grouped-nf4-gemm==$POS80_GNF4 from PyPI (amendment 80)"
+  perl -e 'alarm 2400; exec @ARGV' $PY_UNS -m pip install -q --no-input --prefer-binary --index-url https://pypi.org/simple \
+    --extra-index-url https://download.pytorch.org/whl/cu130 --only-binary experts4bit-qlora,grouped-nf4-gemm \
+    "experts4bit-qlora==$POS80_E4B" "grouped-nf4-gemm==$POS80_GNF4" > logs/pip_e4b_t212.log 2>&1
+  rc=$?; echo "pip(e4b-t212, PyPI) rc=$rc"
+  if [ $rc -ne 0 ]; then tail -6 logs/pip_e4b_t212.log; T212_REASON="e4b/gnf4 install from PyPI into venv-unsloth failed rc=$rc (logs/pip_e4b_t212.log): $(tail -3 logs/pip_e4b_t212.log | tr '\n' ' ' | cut -c1-300)"
+  else
+    POS80_E4B="$POS80_E4B" POS80_GNF4="$POS80_GNF4" $PY_UNS - <<'PYT80' > logs/tripwire_e4b_t212.log 2>&1; trc=$?
+import importlib.metadata as md, inspect, os
+import experts4bit_qlora as e, torch
+from experts4bit_qlora import enable_fast_train, load_moe_4bit_streaming
+from nf4_qlora import fused_grouped_lora, LORA_PATH_STATS
+assert "dgrad_kernel" in inspect.signature(fused_grouped_lora).parameters
+for dist, want in (("experts4bit-qlora", os.environ["POS80_E4B"]), ("grouped-nf4-gemm", os.environ["POS80_GNF4"])):
+    d = md.distribution(dist)
+    assert d.version == want, (dist, d.version, want)
+    assert d.read_text("direct_url.json") is None, (dist, "not an index install", d.read_text("direct_url.json"))
+assert torch.cuda.is_available()
+print("tc1 tripwire OK (e4b-t212, PyPI):", e.__version__, "gnf4", md.version("grouped-nf4-gemm"), "torch", torch.__version__)
+open(os.path.join(os.environ.get("TC1_W", "/root/tc1"), "versions.txt"), "a").write(f"e4b(t212) {e.__version__} (PyPI)\ngnf4(t212) {md.version('grouped-nf4-gemm')} (PyPI)\ntorch(e4b-t212) {torch.__version__}\n")
+PYT80
+    if [ $trc -ne 0 ]; then tail -4 logs/tripwire_e4b_t212.log; T212_REASON="e4b-t212 (PyPI) tripwire failed (logs/tripwire_e4b_t212.log): $(tail -2 logs/tripwire_e4b_t212.log | tr '\n' ' ' | cut -c1-300)"; else T212_OK=1; tail -1 logs/tripwire_e4b_t212.log; fi
+  fi
+  [ "$T212_OK" = 1 ] && { pos80_release_proof fastcheck || T212_OK=0; }   # the fail-fast copy, right after the installs
+elif [ "$UNS_OK" = 1 ]; then
   say "venv-unsloth + e4b @$E4B_SHA + gnf4 @$GNF4_SHA (the t212 row)"
   perl -e 'alarm 2400; exec @ARGV' $PY_UNS -m pip install -q --no-input --prefer-binary --extra-index-url https://download.pytorch.org/whl/cu130 \
     "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" > logs/pip_e4b_t212.log 2>&1
@@ -1953,6 +2037,23 @@ pos79_release_proof(){ local PC rc
   if [ $rc -ne 0 ]; then tail -3 logs/release_proof.log; say "RELEASE PROOF FAILED rc=$rc"; echo "RELEASE_PROOF FAILED rc=$rc $(tail -1 logs/release_proof.log | cut -c1-300)" >> summary.txt; return 1; fi
   echo "RELEASE_PROOF OK unsloth==$POS79_UNSLOTH unsloth_zoo==$POS79_UNSLOTH_ZOO pycache_prefix $PC" | tee -a summary.txt
   echo "POS79_KNOB_ENV $(env | grep -E '^(E4B_|NF4_QLORA_|GNF4_)' | cut -d= -f1 | sort | tr '\n' ' ')" | tee -a summary.txt; }
+# tc1_pos80_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 80 (e4b#2129): amendment 79's box at the 0.58.1 release, unchanged
+# in its four arms, their ABBA order (fd fv fv fd) and their profiles. Every arm is profiled because F15 v2 (f15v2.py) reads Unsloth's
+# engagement from the profile's kernel counts, and the device time is read from the profile. The pins are the kit's (the gate above),
+# the card has cleared card_clock.py's floor, and pos80_release_proof has proven all four distributions before this runs.
+tc1_pos80_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
+  local ALL="e4b:fused_attn4_m_fd:fused unsloth:ckpt_unsloth_m_fv:unsloth unsloth:ckpt_unsloth_m_fv_d2:unsloth e4b:fused_attn4_m_fd_d2:fused"
+  say "===== RELEASE CONFIRMATION family $FAM ($MID @ $REV; e4b $POS80_E4B vs Unsloth $POS80_UNSLOTH on one stack, PyPI wheels, profiled; amendment 80)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7 --unsloth-moe-backend grouped_mm"
+  local PP="--profile-steps $PROFILE_STEPS --profile-warm $POS80_PROFILE_WARM"
+  can_run 600 $FAM/e4b/m_fd         && E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/unsloth/m_fv     && arm   $FAM unsloth ckpt_unsloth_m_fv unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS $MATCH $PP
+  can_run 600 $FAM/unsloth/m_fv_d2  && draw2 $FAM unsloth ckpt_unsloth_m_fv unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS $MATCH $PP
+  can_run 600 $FAM/e4b/m_fd_d2      && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_fd fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_pos69mc_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 73 (2026-10-21): amendment 69's field recipe with the memory census --
 # its two matched arms (fd, fv), one draw each in venv-unsloth, --mem-census 1 and no profile (a profiler would sit inside the census window);
 # 60 steps with the field recipe's in-loop evaluations, as the claim's peak counted them. e4b and grouped-nf4-gemm are the drive's E4B_SHA /
@@ -3439,6 +3540,7 @@ tc1_native_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=
 # ---------------------------------------------------------------- the plan (TC1-PREREG "Model", "Alarms": e4b 3600, Unsloth 3600, HF 1800, axolotl 2700, reference 5400, profiled 2400; fetch as tp4's qwen3)
 #      FAM    MID                 REV                                       FETCH E4B  UNS  HF   AX   REF  PROF
 [ "$FAMILIES" = qwen3pos79 ] && { pos79_release_proof || finish 9; }   # TC1 amendment 79: no arm runs on an unproven Unsloth
+[ "$FAMILIES" = qwen3pos80 ] && { { [ "$UNS_OK" = 1 ] && [ "$T212_OK" = 1 ] && pos80_release_proof binding; } || { echo "RELEASE_PROOF binding NOT_RUN_OR_FAILED uns_ok=$UNS_OK t212_ok=$T212_OK" >> summary.txt; finish 9; }; }   # TC1 amendment 80
 for FAM in $FAMILIES; do case "$FAM" in
   qwen3)       tc1_family        qwen3       Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700 5400 2400;;
   qwen3native) tc1_native_family qwen3native Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700;;
@@ -3492,6 +3594,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3pos68) tc1_pos68_family qwen3pos68 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 68: amendment 67's position profiled
   qwen3pos69) tc1_pos69_family qwen3pos69 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 69: the field recipe's same-stack position profiled
   qwen3pos79) tc1_pos79_family qwen3pos79 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 79: amendment 69's box at the 0.58.0 release vs Unsloth 2026.10.8
+  qwen3pos80) tc1_pos80_family qwen3pos80 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 80: amendment 79's box at the 0.58.1 release, PyPI wheels, F15 v2, the card floor
   qwen3pos69mc) tc1_pos69mc_family qwen3pos69mc Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 73: amendment 69's arms with the memory census
   qwen3pos74pd) tc1_pos74_family qwen3pos74pd Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 74: amendment 73's census at today's pins, one grouped-nf4-gemm switch per arm
   qwen3pos75cl) tc1_pos75_family qwen3pos75cl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 75: the 4090-fit read, the compact delta and the chunked LM loss

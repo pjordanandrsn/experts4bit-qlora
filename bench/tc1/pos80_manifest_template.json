@@ -1,0 +1,101 @@
+{
+  "run_id": "__POS80_RUN_ID__",
+  "work_id": "experts4bit-qlora#835",
+  "role": "CTO",
+  "agent_env": "POD_LAUNCH_AGENT",
+  "preregistration": "experts4bit-qlora bench/tc1/TC1-PREREG.md amendment 80 (e4b#2129's confirmation read: the 0.58.1 release against Unsloth 2026.10.8), at the launch commit",
+  "hypothesis": "Registered rule (amendment 80): amendment 79's box at the 0.58.1 release with every distribution PyPI's proven wheel -- after the pins, both release proofs and the card floor, two VALID profiled draws a side (VALID includes F15 v2 on the Unsloth arms and the card floor on every draw), each side stable, and the held-out gate, the quote is Unsloth's kernels-only device ms per profiled step over e4b's, then the wall ratio on the box's host CPU. P225: F15 v2 ENGAGED on both Unsloth draws. P226: the device ratio < 1.00.",
+  "expected_result": "receipts .../__POS80_RUN_ID__/tc1/: POS80_PINS, CARD_CLOCK, SINGLE_THREAD and two RELEASE_PROOF OK lines, release_proof_pos80_{fastcheck,binding}.json, card_clock_burn.json, the four qwen3pos80 cells and their _profile.json (fd fv fv fd), gpuclk_*.txt, versions.txt with the PyPI t212 lines, summary.txt, logs/.",
+  "success_criteria": "the pins, the host floors and both release proofs pass, the four arms run and are read by the rule; the receipts are fetched and the box is torn down.",
+  "failure_criteria": "a pin other than the kit's (rc 78), a release proof refusal (rc 9), the card floor, the single-thread floor, a card outside the 5090 band or a driver below 580 (rc 18, a host floor), dud box, install/tripwire, dataset, the deadline.",
+  "provider": "vast:verified-secure",
+  "gpu": "RTX 5090",
+  "image": "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+  "usd_per_hour": 1.0,
+  "wallclock_h": 3.5,
+  "est_usd": 1.5,
+  "role_daily_ceiling": 100,
+  "storage": 220,
+  "vast_disk_gb": 220,
+  "ram": 98,
+  "download_gb": 100,
+  "max_download_usd_per_gb": 0.02,
+  "ssh_ready_s": 420,
+  "avoid_vast_machine_receipts": [],
+  "command": "E4B_SHA=605d21e67958fa94d5e73fc3a95ffcb5c8eae02d GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca TC1_UNSLOTH_VERSION=2026.10.8 TC1_UNSLOTH_ZOO_VERSION=2026.10.8 TC1_BOX=A TC1_GPU_CLASS=5090 TC1_FAMILIES=qwen3pos80 TC1_STEPS=60 TC1_LOAD_GATE=6.0 TC1_LOAD_RETRIES=2 bash bench/tc1/tc1_drive.sh",
+  "command_cwd": "e4b",
+  "guards": [
+    {
+      "repo": "e4b",
+      "path": "bench/tc1/tc1_drive.sh",
+      "pattern": "lane TC1, CONTROLLER side"
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/tc1/tc1_drive.sh",
+      "pattern": "STAGE=\"$STAGE $HERE/release_proof.py $HERE/f15v2.py $REPO/bench/common/card_clock.py\""
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/tc1/tc1_run.sh",
+      "pattern": "lane TC1, BOX side"
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/tc1/tc1_run.sh",
+      "pattern": "tc1_pos80_family"
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/tc1/tc1_run.sh",
+      "pattern": "pos80_release_proof(){"
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/tc1/tc1_run.sh",
+      "pattern": "card_clock.py burn --floor $POS80_CLOCK_FLOOR"
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/tc1/TC1-PREREG.md",
+      "pattern": "### Amendment 80 "
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/tc1/tc1_reduce.py",
+      "pattern": "def score_pos80"
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/tc1/f15v2.py",
+      "pattern": "TRITON_GEMM_PER_E, TRITON_WGRAD_PER_E = 9, 2"
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/common/card_clock.py",
+      "pattern": "REFUSE_BITS = 0x4 | 0x8 | 0x20 | 0x40 | 0x80 | 0x200 | 0x400"
+    },
+    {
+      "repo": "e4b",
+      "path": "bench/tc1/pos80_kit.py",
+      "pattern": "WORST_CAP_USD = 6.00"
+    }
+  ],
+  "lane_record": {
+    "status": "TEMPLATE_NO_PAID_GO",
+    "run_ids": "tc1-5090-pos80 (the started box), tc1-5090-pos80-r1 (a box that did not start, a card-floor refusal included)",
+    "filled_at_launch": [
+      "run_id",
+      "heads",
+      "kit_sha256",
+      "the registration's store commit",
+      "the launcher's own guards (its pre-flight bandwidth rule and its owner gate)"
+    ],
+    "kit_files": "bench/tc1/{tc1_drive.sh,tc1_run.sh,tc1_arm.py,tc1_reduce.py,release_proof.py,f15v2.py,pos80_kit.py}, bench/common/card_clock.py, bench/tp4/tp4_alpaca.py, bench/flagship-matrix/{drivers/n9_datasets.py,ds_manifest.json} at the launch commit",
+    "screen": "bench/tc1/pos80_kit.py offer_why: one GPU, gpu_ram 31000-33000 MiB, at most 1.00 USD/h with 220 GB, download at most 0.02 USD/GB; the card itself is screened on the box (card_clock.py)",
+    "worst_usd": 5.5,
+    "worst_basis": "3.5 h x 1.00 USD/h (GPU + 220 GB storage) + 100 GB x 0.02 USD/GB download",
+    "lane_worst_usd": 5.94,
+    "lane_worst_basis": "1 started box x 5.50 + 1 retry id x 0.44 (1,470 s to a refusal at 1.00 USD/h, the host floors included, + 1.17 GB of pre-flight probes x 0.02 USD/GB, rounded up)"
+  }
+}
