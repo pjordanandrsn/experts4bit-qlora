@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-AM81_BASE = "42b6f2b99078bad1959546428435d8d49e88c952"        # main before amendment 81 (#2132's merge)
+AM81_BASE = "f372d65f629d29020eb2ad94683032e09ba752ed"        # main before amendment 81 (the machine-id pass's merge, #2143)
 AM = "bench/tc1/am81-rederive/"
 T = "e4b.train."
 

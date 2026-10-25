@@ -4004,7 +4004,7 @@ P129's tc1-5090-146, -147 and -150):
   device ratio, 1.141, reads 1.141 kernels-only too.
 
 **The quoted figures** (`device_rederive.py --quotes`; the table is `bench/tc1/am81-rederive/QUOTES.md`, generated on the register and
-documents as they stood at `42b6f2b9`, before this amendment). Two methods find every figure that moves:
+documents as they stood at `f372d65f`, before this amendment). Two methods find every figure that moves:
 - **reducer:** each number that changes on a paired line of a run's RESULTS diff;
 - **cell:** each corrected cell's busy fraction, device ms (total and per profiled step) and memcpy fraction, against its committed
   value. This finds figures a row quotes straight from a cell that the reducer never prints, such as e4b's busy fraction on
@@ -4030,7 +4030,7 @@ The table holds 16 register rows and 34 document lines. Each line was read by ha
 - **3 rows** quote one only in their notes. Each gets one correction sentence in notes, naming the corrected value and its am81-rederive
   path, with every other field unchanged: `h2h.unsloth.qwen3.5090.2026-10-02`, `h2h.unsloth.qwen3.h100.2026-10-04` and
   `h2h.unsloth.qwen3.h100.2026-10-04.moe-keep`.
-- `tests/test_tc1_am81_register.py` reads the register at `42b6f2b9` and holds all of this field by field. It also re-runs
+- `tests/test_tc1_am81_register.py` reads the register at `f372d65f` and holds all of this field by field. It also re-runs
   `--quotes` on the tree: every old figure left is meant to be there, each with its reason. A quote left behind is a mutant it kills.
 
 **Quotes that move with their entry** (schema: "when a quote moves, the entry moves"):
