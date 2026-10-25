@@ -231,7 +231,11 @@ unsloth_zoo 2026.10.8. Any lane that times Unsloth's MoE training imports it, so
 - **Unfused arm:** it binds on zero launches and zero calls (`check_unfused`).
 - **Auto arm:** declining above the row cap is its design. Its expected count is the calls the library's own `nf4_auto_fused`
   predicate admits, evaluated per call (`fused_calls_expected`, `check_auto`).
-- **The arm's environment:** `check_env` refuses any `UNSLOTH_MOE_*` value other than the arm's registered pins.
+- **The per-call dispatch** (`check_dispatch`): every grouped expert GEMM's Triton-or-torch decision is recorded from the library's
+  own predicate, in the package module and the compile-cache copy that may serve the forward. LoRA-class calls must decide
+  Triton, the library's fallback count must not move, and the generic counts must equal what the decisions imply.
+- **The arm's environment** (`check_env`): every `UNSLOTH_*` key the library modules read, found by scanning their source, is
+  unset or at its registered pin.
 - **The library cross-check** (`check_library`) catches a caller that bypassed the wrapper.
 - **A wrapper count binds only beside a compile-safe counterpart** (`check_equal`): a captured or traced block runs the wrapper
   once, at capture.

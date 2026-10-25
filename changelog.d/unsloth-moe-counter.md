@@ -12,7 +12,15 @@ unsloth_zoo 2026.10.8. Lanes that time Unsloth's MoE training import it, so they
   arm binds on zero launches and zero calls.
 - **The auto arm:** declining above the row cap is its design, so its expected count admits only the calls the library's own
   `nf4_auto_fused` predicate admits, evaluated per call on that call's shapes (`fused_calls_expected`, `check_auto`).
-- **The environment:** `check_env` refuses any unregistered `UNSLOTH_MOE_*` key or any value other than the arm's registered pin.
+- **The per-call dispatch:** it records Triton-or-torch for every grouped expert GEMM, from the library's own predicate, wrapped
+  in the package moe_utils AND in the compile-cache copy that `get_forward_moe_backend()` may return. It records which module
+  object served and the resolved per-class limits. `check_dispatch` VOIDs when:
+  - a LoRA-class GEMM decided torch;
+  - a Triton-decided call fell back eager;
+  - the generic counts differ from the counts the decisions imply (`implied_generic`);
+  - optionally, for a lane whose sweep sits inside every limit, a base GEMM decided torch.
+- **The environment:** `check_env` scans the three library modules' source for every `UNSLOTH_*` key they read. Each one is
+  unset or at the arm's registered pin; a prefix test would miss `UNSLOTH_DISABLE_MOE_TRITON` and others.
   Wrapper counts bind only beside a counterpart that counts per call even when Python does not run.
 - **Tests** (`tests/test_unsloth_moe_counter.py`), on CPU stand-ins at the real module paths:
   - a VOID for each silent decline and for a failed launch;
@@ -22,4 +30,8 @@ unsloth_zoo 2026.10.8. Lanes that time Unsloth's MoE training import it, so they
   - auto: a forced decline at an eligible shape VOIDs; a launch at an ineligible shape VOIDs; an ambient
     `UNSLOTH_MOE_NF4_AUTO_MAX_ROWS` VOIDs by `check_env`; the count follows the library's own constant;
   - a failed self-check leaves the generic counts at zero, so a lane's bar fails closed;
+  - dispatch: a cache-copy forward is counted, and one appearing after install is missed and VOIDs; a LoRA call deciding torch,
+    an eager fallback, a backward off the Triton branch and (with the guard) a base GEMM deciding torch each VOID; a
+    checkpointed double forward is counted twice; an ambient `UNSLOTH_DISABLE_MOE_TRITON=1` and an unscanned library each fail
+    `check_env`;
   - absent targets, an absent library and an unreadable auto predicate, which read unread, never pass.

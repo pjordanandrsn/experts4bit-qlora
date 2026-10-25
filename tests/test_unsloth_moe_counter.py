@@ -139,14 +139,96 @@ def _fake_zoo():
     return pkg, tp, mg, nf, moe_utils_expert_forward
 
 
+FAKE_MOE_UTILS = """
+import os
+import torch
+_AUTO = {"lora": -1, "many": 2048, "few": 256}            # sm_120's row (moe_utils.py:505)
+_FORCE_LORA_TORCH = False
+
+
+def _triton_grouped_mm_kind(K, N, E):                      # 561
+    return "lora" if min(K, N) <= 32 else ("many" if E >= 64 else "few")
+
+
+def _triton_grouped_mm_max_rows(index, kind="lora"):       # 521-558: the env read at first use
+    mode = os.environ.get("UNSLOTH_MOE_GROUPED_TRITON", "auto")
+    if mode == "0" or os.environ.get("UNSLOTH_DISABLE_MOE_TRITON") == "1":
+        return 0
+    return -1 if mode == "1" else _AUTO.get(kind, 0)
+
+
+def _triton_grouped_mm_wanted(inputs, weight):             # 572-589
+    if _triton_grouped_mm_max_rows(inputs.device.index, "lora") == 0 or weight.dim() != 3:
+        return False
+    E, K, N = weight.shape
+    if _FORCE_LORA_TORCH and min(K, N) <= 32:
+        return False                                       # e.g. a tensor subclass: False, silently
+    lim = _triton_grouped_mm_max_rows(inputs.device.index, _triton_grouped_mm_kind(K, N, E))
+    return lim != 0 and (lim < 0 or inputs.shape[0] <= lim * E)
+
+
+def _torch_gm(inputs, weight):
+    return inputs @ weight[0]
+
+
+def _grouped_mm_with_backward_fix(inputs, weight, offsets):   # 366-412
+    if _triton_grouped_mm_wanted(inputs, weight):
+        from unsloth_zoo.temporary_patches import moe_grouped_fp16 as mg
+        if not mg.triton_grouped_available(inputs.device):
+            mg.GENERIC_CALLS["fallback"] += 1                 # 600
+            return _torch_gm(inputs, weight)
+        return mg.generic_grouped_mm(inputs, weight, offsets)
+    return _torch_gm(inputs, weight)
+
+
+def _lora_rank_pad_needed(inputs, first_weight):           # 2997-3011: a padding probe, not a GEMM
+    return not _triton_grouped_mm_wanted(inputs, first_weight)
+
+
+def forward_moe_backend(x, base, lora_a, lora_b):
+    _lora_rank_pad_needed(x, lora_a)
+    with torch.no_grad():
+        y = _grouped_mm_with_backward_fix(x, base, None)     # the dequant path's recompute forward (1100): no backward node
+    h = _grouped_mm_with_backward_fix(x, lora_a, None)
+    return y + _grouped_mm_with_backward_fix(h, lora_b, None)
+
+
+_CACHE = None
+
+
+def get_forward_moe_backend():                             # 348-356
+    return _CACHE.forward_moe_backend if _CACHE is not None else forward_moe_backend
+"""
+
+
+def _module_from_source(name, source, path):
+    path.write_text(source, encoding="utf-8")
+    mod = types.ModuleType(name)
+    mod.__file__ = str(path)
+    exec(compile(source, str(path), "exec"), mod.__dict__)
+    return mod
+
+
+class _Zoo(tuple):
+    """(mg, nf, fwd), with the moe_utils stand-in and the test's tmp dir as attributes."""
+
+
 @pytest.fixture
-def zoo(monkeypatch):
+def zoo(monkeypatch, tmp_path):
     monkeypatch.setenv("UNSLOTH_MOE_NF4_FUSED", "1")
-    monkeypatch.delenv("UNSLOTH_MOE_NF4_AUTO_MAX_ROWS", raising=False)
+    for k in ("UNSLOTH_MOE_NF4_AUTO_MAX_ROWS", "UNSLOTH_MOE_GROUPED_TRITON", "UNSLOTH_DISABLE_MOE_TRITON", "UNSLOTH_MOE_NF4_AUTOTUNE"):
+        monkeypatch.delenv(k, raising=False)
     pkg, tp, mg, nf, fwd = _fake_zoo()
-    for name, mod in (("unsloth_zoo", pkg), ("unsloth_zoo.temporary_patches", tp), (C.FP16, mg), (C.NF4, nf)):
+    (tmp_path / "fp16.py").write_text('os.environ.get("UNSLOTH_GPTOSS_FP16_GEMM")\n', encoding="utf-8")
+    (tmp_path / "nf4.py").write_text('os.environ.get("UNSLOTH_MOE_NF4_FUSED", "0")\nos.environ.get("UNSLOTH_MOE_NF4_AUTO_MAX_ROWS")\n'
+                                     'os.environ.get("UNSLOTH_MOE_NF4_AUTOTUNE", "0")\n', encoding="utf-8")
+    mg.__file__, nf.__file__ = str(tmp_path / "fp16.py"), str(tmp_path / "nf4.py")
+    mu = _module_from_source(C.MOE_UTILS, FAKE_MOE_UTILS, tmp_path / "moe_utils.py")
+    for name, mod in (("unsloth_zoo", pkg), ("unsloth_zoo.temporary_patches", tp), (C.FP16, mg), (C.NF4, nf), (C.MOE_UTILS, mu)):
         monkeypatch.setitem(sys.modules, name, mod)
-    return mg, nf, fwd
+    z = _Zoo((mg, nf, fwd))
+    z.mu, z.tmp = mu, tmp_path
+    return z
 
 
 X, W, LORA = torch.ones(4, 2), torch.ones(2, 3), (torch.ones(2, 1), torch.ones(1, 3))
@@ -358,16 +440,14 @@ def test_auto_mutant_c_an_ambient_auto_max_rows_voids_by_the_env_check(zoo, monk
     pins = {"UNSLOTH_MOE_NF4_FUSED": "auto", "UNSLOTH_MOE_NF4_AUTO_MAX_ROWS": "128", "UNSLOTH_MOE_NF4_AUTOTUNE": "0"}
     for k, v in pins.items():
         monkeypatch.setenv(k, v)
-    assert C.check_env(dict(os.environ), pins) == (True, "")
+    snap = C.UnslothMoeCounter().install().snapshot()
+    assert C.check_env(snap, dict(os.environ), pins) == (True, "")
     monkeypatch.setenv("UNSLOTH_MOE_NF4_AUTO_MAX_ROWS", "4096")   # ambient: moves auto's cap
-    ok, why = C.check_env(dict(os.environ), pins)
+    ok, why = C.check_env(snap, dict(os.environ), pins)
     assert not ok and "UNSLOTH_MOE_NF4_AUTO_MAX_ROWS='4096' (registered '128')" in why
     monkeypatch.setenv("UNSLOTH_MOE_NF4_AUTO_MAX_ROWS", "128")
-    monkeypatch.setenv("UNSLOTH_MOE_SELECTIVE_DEQUANT", "1")      # an unregistered MoE knob
-    ok, why = C.check_env(dict(os.environ), pins)
-    assert not ok and "unregistered UNSLOTH_MOE_SELECTIVE_DEQUANT='1'" in why
     monkeypatch.delenv("UNSLOTH_MOE_NF4_AUTOTUNE")                # a registered pin missing
-    assert not C.check_env(dict(os.environ), pins)[0]
+    assert not C.check_env(snap, dict(os.environ), pins)[0]
 
 
 def test_the_auto_count_uses_the_librarys_own_predicate_never_a_retyped_formula(zoo, monkeypatch):
@@ -390,3 +470,137 @@ def test_an_unreadable_auto_predicate_reads_unread_and_voids(zoo, monkeypatch):
     assert s["counts"]["nf4_mode_unread"] == 3
     assert C.fused_calls_expected(s, "auto") is None
     assert not C.check_auto(s)[0]
+
+
+# -- the per-call dispatch (09:34:36Z ruling): moe_utils' own predicate, in every module object that can serve the forward -------
+E_BASE, R = 64, 16
+
+
+def _stacks(base_rows=8):
+    x = torch.ones(base_rows, 48, requires_grad=True)
+    base = torch.ones(E_BASE, 48, 40)                             # "many" (E >= 64, min(K, N) > 32), frozen
+    lora_a = torch.ones(E_BASE, 48, R, requires_grad=True)        # "lora" (min(K, N) <= 32)
+    lora_b = torch.ones(E_BASE, R, 40, requires_grad=True)
+    return x, base, lora_a, lora_b
+
+
+def _backward_as_the_library_would(mg, n_gx, n_dw):
+    """The Triton autograd's backward on CPU: gx through generic_grouped_mm (634-636), LoRA dW through generic_grouped_wgrad."""
+    for _ in range(n_gx):
+        mg.generic_grouped_mm(torch.ones(2, 3), torch.ones(1, 3, 2), None)
+    for _ in range(n_dw):
+        mg.generic_grouped_wgrad(torch.ones(2, 3), torch.ones(2, 2), None, 1)
+
+
+def test_dispatch_on_the_package_module_and_the_implied_counts(zoo):
+    mg, nf, fwd = zoo
+    mu = zoo.mu
+    c = C.UnslothMoeCounter().install()
+    mu.get_forward_moe_backend()(*_stacks())
+    _backward_as_the_library_would(mg, 2, 2)
+    s = c.snapshot()
+    assert s["served"]["is_package"] and s["dispatch_served"] == {"package": 4}       # 3 GEMM decisions + 1 pad probe
+    assert s["dispatch"] == {"probe:lora:triton": 1, "gemm:many:triton": 1, "gemm:lora:triton": 2}
+    assert C.implied_generic(s) == {"generic_gemm": 5, "generic_wgrad": 2}           # 3 forwards + 2 gx; 2 LoRA dW
+    assert C.check_dispatch(s, base_must_be_triton=True) == (True, "")
+    assert any(k.endswith(":many") and v == 2048 for k, v in s["limits"].items())    # the resolved limit is recorded
+
+
+def test_a_cache_copy_serving_the_forward_is_counted(zoo):
+    mg, nf, fwd = zoo
+    mu = zoo.mu
+    mu._CACHE = _module_from_source("unsloth_cached_moe_utils", FAKE_MOE_UTILS, zoo.tmp / "cached_moe_utils.py")
+    c = C.UnslothMoeCounter().install()
+    mu.get_forward_moe_backend()(*_stacks())
+    _backward_as_the_library_would(mg, 2, 2)
+    s = c.snapshot()
+    assert s["served"]["is_package"] is False and s["served"]["module"] == "unsloth_cached_moe_utils"
+    assert s["dispatch_served"] == {"cache_copy": 4}
+    assert C.check_dispatch(s) == (True, "")
+
+
+def test_mutant_a_cache_copy_appearing_after_install_is_missed_and_voids(zoo):
+    mg, nf, fwd = zoo
+    mu = zoo.mu
+    c = C.UnslothMoeCounter().install()                           # the package served at install
+    mu._CACHE = _module_from_source("unsloth_cached_moe_utils", FAKE_MOE_UTILS, zoo.tmp / "late_cache.py")
+    mu.get_forward_moe_backend()(*_stacks())                      # now served by an unpatched copy
+    s = c.snapshot()
+    ok, why = C.check_dispatch(s)
+    assert not ok and "no decision counted through the serving module" in why
+
+
+def test_mutant_a_lora_call_deciding_torch_voids(zoo):
+    mg, nf, fwd = zoo
+    zoo.mu._FORCE_LORA_TORCH = True
+    c = C.UnslothMoeCounter().install()
+    zoo.mu.get_forward_moe_backend()(*_stacks())
+    ok, why = C.check_dispatch(c.snapshot())
+    assert not ok and "LoRA-class GEMMs decided torch" in why
+
+
+def test_mutant_a_triton_decided_call_that_falls_back_eager_voids(zoo):
+    mg, nf, fwd = zoo
+
+    def failing_self_check(device):
+        raise RuntimeError("self-check")
+
+    mg._self_check_generic = failing_self_check                   # triton_grouped_available is now False (821-830)
+    c = C.UnslothMoeCounter().install()
+    zoo.mu.get_forward_moe_backend()(*_stacks())
+    ok, why = C.check_dispatch(c.snapshot())
+    assert not ok and "fallback moved by 3" in why
+
+
+def test_mutant_backward_off_the_triton_branch_voids_by_the_implied_count(zoo):
+    mg, nf, fwd = zoo
+    c = C.UnslothMoeCounter().install()
+    zoo.mu.get_forward_moe_backend()(*_stacks())
+    _backward_as_the_library_would(mg, 0, 2)                      # create_graph: gx went eager (642-645), not generic
+    ok, why = C.check_dispatch(c.snapshot())
+    assert not ok and "generic_gemm: wrapper 3 != 5 the decisions imply" in why
+
+
+def test_the_sm120_guard_voids_a_base_gemm_that_decided_torch(zoo):
+    mg, nf, fwd = zoo
+    c = C.UnslothMoeCounter().install()
+    x, base, la, lb = _stacks(base_rows=2048 * E_BASE + 1)        # one row past "many"'s 2048 x E
+    zoo.mu.get_forward_moe_backend()(x, base, la, lb)
+    _backward_as_the_library_would(mg, 2, 2)
+    s = c.snapshot()
+    assert s["dispatch"]["gemm:many:torch"] == 1
+    assert C.check_dispatch(s) == (True, "")                      # a mixed lane (P237's sm_89) registers this
+    ok, why = C.check_dispatch(s, base_must_be_triton=True)
+    assert not ok and "1 base GEMMs decided torch" in why
+
+
+def test_a_checkpointed_double_forward_is_counted_twice(zoo):
+    mg, nf, fwd = zoo
+    c = C.UnslothMoeCounter().install()
+    for _ in range(2):                                            # the forward, then its recompute under checkpointing
+        zoo.mu.get_forward_moe_backend()(*_stacks())
+    _backward_as_the_library_would(mg, 4, 4)
+    s = c.snapshot()
+    assert s["dispatch"]["gemm:lora:triton"] == 4 and C.check_dispatch(s) == (True, "")
+
+
+def test_check_env_scans_the_library_source_not_a_prefix(zoo, monkeypatch):
+    mg, nf, fwd = zoo
+    pins = {"UNSLOTH_MOE_NF4_FUSED": "1", "UNSLOTH_MOE_GROUPED_TRITON": "auto"}
+    monkeypatch.setenv("UNSLOTH_MOE_GROUPED_TRITON", "auto")
+    s = C.UnslothMoeCounter().install().snapshot()
+    assert {"UNSLOTH_DISABLE_MOE_TRITON", "UNSLOTH_MOE_GROUPED_TRITON", "UNSLOTH_GPTOSS_FP16_GEMM"} <= set(s["env_keys"])
+    assert C.check_env(s, dict(os.environ), pins) == (True, "")
+    monkeypatch.setenv("UNSLOTH_DISABLE_MOE_TRITON", "1")          # ambient, and not UNSLOTH_MOE_*: a prefix test misses it
+    ok, why = C.check_env(s, dict(os.environ), pins)
+    assert not ok and "ambient UNSLOTH_DISABLE_MOE_TRITON='1'" in why
+    monkeypatch.delenv("UNSLOTH_DISABLE_MOE_TRITON")
+    ok, why = C.check_env(s, dict(os.environ), {**pins, "UNSLOTH_MOE_TYPO": "1"})
+    assert not ok and "registered UNSLOTH_MOE_TYPO is not a key the library reads" in why
+
+
+def test_an_unscanned_library_fails_check_env(zoo, monkeypatch):
+    mg, nf, fwd = zoo
+    zoo.mu.__file__ = str(zoo.tmp / "missing.py")
+    s = C.UnslothMoeCounter().install().snapshot()
+    assert s["env_unscanned"] and not C.check_env(s, dict(os.environ), {})[0]

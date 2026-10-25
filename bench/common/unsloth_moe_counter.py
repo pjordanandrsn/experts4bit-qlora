@@ -42,14 +42,33 @@ What binds, and what doesn't:
   keeps counting. The tests show it on an exported program.
 - A caller that bound the function to a local name BEFORE :func:`install` bypasses the wrapper. The cross-check against the
   library's own ``GENERIC_CALLS`` catches that (:func:`check_library`), and the tests show it.
-- The compile-cache copy of moe_utils (``_load_cached_moe_utils_module``, moe_utils.py:297) is a separate module object, but every
-  path counted here resolves through ``moe_grouped_fp16`` / ``moe_nf4_grouped`` by absolute name, so it is counted the same.
+- ``generic_grouped_mm``, ``generic_grouped_wgrad`` and ``maybe_nf4_grouped_mm`` resolve by absolute import, so the compile-cache copy
+  of moe_utils (``_load_cached_moe_utils_module``, moe_utils.py:297) reaches the same wrapped objects.
+
+The per-call Triton-or-torch dispatch (moe_utils.py:572 ``_triton_grouped_mm_wanted``; the table at 503-508, the policy at 521-558):
+- Every grouped expert GEMM asks it at moe_utils.py:378 (``_grouped_mm_with_backward_fix``). ``_lora_rank_pad_needed`` (3004) asks it
+  too, as a padding probe, not a GEMM; the wrapper tells the two apart by the calling function and counts only 378 as a decision.
+- It is a moe_utils GLOBAL, so it is NOT resolved by absolute import: ``get_forward_moe_backend`` (348-356) returns the compile-cache
+  copy's ``forward_moe_backend`` when one is present and current, and that copy calls its OWN global. :func:`install` therefore patches
+  the predicate in the package module AND in the globals of the function ``get_forward_moe_backend()`` returns, and records which
+  object served (``served``: its ``__name__``, ``__file__``, and whether it is the package module).
+- Each decision is recorded by site, class (the library's own ``_triton_grouped_mm_kind``) and outcome, with whether grad was enabled
+  and whether the input / weight required grad; the resolved limit per class (``_triton_grouped_mm_max_rows``) is recorded on first
+  sight. :func:`implied_generic` turns the decisions into the generic counts they imply (a Triton forward; its backward gx when
+  grad was on and the input required it; its LoRA dW when the weight required it), and :func:`check_dispatch` holds the wrapper
+  counts to them, with every LoRA-class call deciding Triton and the library's ``GENERIC_CALLS["fallback"]`` delta 0.
+- :func:`check_env` works by SOURCE SCAN: every ``UNSLOTH_*`` key the three modules read from the environment (moe_utils,
+  moe_grouped_fp16, moe_nf4_grouped; scanned at :func:`install` from their files) is unset or at its registered value. A prefix test
+  would miss ``UNSLOTH_DISABLE_MOE_TRITON``, ``UNSLOTH_MOE_BACKEND``, ``UNSLOTH_COMPILE_LOCATION`` and others. The policy is cached
+  on the environment at first use (521-533), so every pin is set before the zoo is imported.
 
 Standard library plus nothing else at import time; the target modules are imported only by :func:`install`.
 """
 from __future__ import annotations
 
 import importlib
+import re
+import sys
 import threading
 
 FP16 = "unsloth_zoo.temporary_patches.moe_grouped_fp16"
@@ -66,6 +85,11 @@ COUNTS = ("generic_gemm", "generic_wgrad", "selfcheck_gemm", "selfcheck_wgrad", 
           "nf4_auto_eligible", "nf4_auto_ineligible", "nf4_mode_unread")
 #: the library's own predicate functions, read at call time from the NF4 module (never re-typed here)
 NF4_MODE_FN, NF4_AUTO_FN = "nf4_fused_mode", "nf4_auto_fused"
+MOE_UTILS = "unsloth_zoo.temporary_patches.moe_utils"
+DISPATCH, KIND_FN, LIMIT_FN, SERVER_FN = "_triton_grouped_mm_wanted", "_triton_grouped_mm_kind", "_triton_grouped_mm_max_rows", "get_forward_moe_backend"
+GEMM_SITE = "_grouped_mm_with_backward_fix"
+ENV_SOURCES = (MOE_UTILS, FP16, NF4)
+ENV_RE = re.compile(r"""(?:environ|getenv)[^\n]{0,20}?["'](UNSLOTH_[A-Z0-9_]+)["']""")
 
 
 class UnslothMoeCounter:
@@ -77,6 +101,15 @@ class UnslothMoeCounter:
         self._saved = []                     # (module, attr, original) to restore
         self._lib0 = {}
         self._local = threading.local()
+        self.dispatch = {}                   # "site:class:decision" -> calls
+        self.dispatch_grad = {"triton_grad_input": 0, "triton_grad_lora_weight": 0}
+        self.dispatch_served = {}            # "package" / "cache_copy" -> decisions counted through that module object
+        self.dispatch_absent = []
+        self.served = None
+        self.limits = {}
+        self.env_keys = []
+        self.env_unscanned = []
+        self._saved_globals = []
 
     # -- install / uninstall -------------------------------------------------------------------------------------------------
     def install(self):
@@ -101,13 +134,89 @@ class UnslothMoeCounter:
             setattr(m, SELF_CHECK[1], self._wrap_selfcheck(sc))
         else:
             self.absent.append(f"{SELF_CHECK[0]}.{SELF_CHECK[1]}: absent")
+        self._install_dispatch()
+        self._scan_env()
         self._lib0 = self._library()
         return self
+
+    def _install_dispatch(self):
+        try:
+            mu = importlib.import_module(MOE_UTILS)
+        except Exception as e:  # noqa: BLE001
+            self.dispatch_absent.append(f"{MOE_UTILS}: import failed: {type(e).__name__}")
+            return
+        globs = [("package", vars(mu))]
+        try:
+            fwd = getattr(mu, SERVER_FN)()
+            g = getattr(fwd, "__globals__", None)
+            if g is None:
+                self.dispatch_absent.append(f"{SERVER_FN}() returned {type(fwd).__name__} without __globals__")
+            else:
+                self.served = {"module": g.get("__name__"), "file": g.get("__file__"), "is_package": g is vars(mu)}
+                if g is not vars(mu):
+                    globs.append(("cache_copy", g))
+        except Exception as e:  # noqa: BLE001
+            self.dispatch_absent.append(f"{MOE_UTILS}.{SERVER_FN}: {type(e).__name__}")
+        for tag, g in globs:
+            fn = g.get(DISPATCH)
+            if not callable(fn):
+                self.dispatch_absent.append(f"{tag} {DISPATCH}: absent")
+                continue
+            self._saved_globals.append((g, DISPATCH, fn))
+            g[DISPATCH] = self._wrap_dispatch(tag, g, fn)
+
+    def _wrap_dispatch(self, tag, g, fn):
+        disp, grad, served, limits = self.dispatch, self.dispatch_grad, self.dispatch_served, self.limits
+
+        def wrapper(inputs, weight, *args, **kwargs):
+            decided = fn(inputs, weight, *args, **kwargs)
+            site = "gemm" if sys._getframe(1).f_code.co_name == GEMM_SITE else "probe"
+            try:
+                E, K, N = weight.shape
+                kind = g[KIND_FN](K, N, E)
+            except Exception:  # noqa: BLE001 -- a weight the library could not classify reads as "unknown", which VOIDs
+                kind = "unknown"
+            key = f"{site}:{kind}:{'triton' if decided else 'torch'}"
+            disp[key] = disp.get(key, 0) + 1
+            served[tag] = served.get(tag, 0) + 1
+            if site == "gemm" and decided:
+                try:
+                    import torch
+                    on = torch.is_grad_enabled()
+                    if on and getattr(inputs, "requires_grad", False):
+                        grad["triton_grad_input"] += 1
+                    if on and kind == "lora" and getattr(weight, "requires_grad", False):
+                        grad["triton_grad_lora_weight"] += 1
+                except Exception:  # noqa: BLE001
+                    pass
+            try:
+                lk = f"{tag}:{inputs.device.index}:{kind}"
+                if lk not in limits:
+                    limits[lk] = g[LIMIT_FN](inputs.device.index, kind)
+            except Exception:  # noqa: BLE001
+                pass
+            return decided
+
+        wrapper.__wrapped__ = fn
+        return wrapper
+
+    def _scan_env(self):
+        keys = set()
+        for mod in ENV_SOURCES:
+            try:
+                path = importlib.import_module(mod).__file__
+                keys |= set(ENV_RE.findall(open(path, encoding="utf-8", errors="replace").read()))
+            except Exception as e:  # noqa: BLE001 -- an unscanned module fails check_env
+                self.env_unscanned.append(f"{mod}: {type(e).__name__}")
+        self.env_keys = sorted(keys)
 
     def uninstall(self):
         while self._saved:
             m, attr, fn = self._saved.pop()
             setattr(m, attr, fn)
+        while self._saved_globals:
+            g, attr, fn = self._saved_globals.pop()
+            g[attr] = fn
 
     def _wrap(self, key, fn):
         counts, local = self.counts, self._local
@@ -176,7 +285,10 @@ class UnslothMoeCounter:
         for key, now in lib.items():
             base = self._lib0.get(key)
             delta[key] = None if (now is None or base is None) else {k: now[k] - base.get(k, 0) for k in now}
-        return {"counts": dict(self.counts), "library_delta": delta, "absent": list(self.absent)}
+        return {"counts": dict(self.counts), "library_delta": delta, "absent": list(self.absent),
+                "dispatch": dict(self.dispatch), "dispatch_grad": dict(self.dispatch_grad), "dispatch_served": dict(self.dispatch_served),
+                "dispatch_absent": list(self.dispatch_absent), "served": self.served, "limits": dict(self.limits),
+                "env_keys": list(self.env_keys), "env_unscanned": list(self.env_unscanned)}
 
 
 def check_library(snap):
@@ -261,10 +373,65 @@ def check_auto(snap):
     return True, ""
 
 
-def check_env(environ, registered):
-    """(ok, why): every ``UNSLOTH_MOE_*`` key in the arm's environment is registered, at its registered value, and every registered
-    key is present. ``registered`` maps key -> value (the lane's explicit pins: the mode, AUTO_MAX_ROWS, AUTOTUNE, ...)."""
-    seen = {k: v for k, v in environ.items() if k.startswith("UNSLOTH_MOE_")}
-    bad = [f"{k}={seen.get(k)!r} (registered {v!r})" for k, v in registered.items() if seen.get(k) != v]
-    bad += [f"unregistered {k}={v!r}" for k, v in seen.items() if k not in registered]
+def check_env(snap, environ, registered):
+    """(ok, why): every ``UNSLOTH_*`` key the three library modules read from the environment (scanned from their source at install)
+    is unset or at its registered value, and every registered key is one of them and set. ``registered`` maps key -> value: the
+    arm's explicit pins (the NF4 mode, AUTO_MAX_ROWS, AUTOTUNE, the grouped-Triton mode, ...)."""
+    keys = snap.get("env_keys") or []
+    if snap.get("env_unscanned") or not keys:
+        return False, f"the library's environment reads are unscanned ({snap.get('env_unscanned') or 'no keys found'})"
+    bad = [f"{k}={environ.get(k)!r} (registered {registered[k]!r})" if k in registered else f"ambient {k}={environ.get(k)!r}"
+           for k in keys if environ.get(k) is not None and environ.get(k) != registered.get(k)]
+    bad += [f"registered {k} is not a key the library reads" for k in registered if k not in keys]
+    bad += [f"registered {k}={v!r} is not set" for k, v in registered.items() if k in keys and environ.get(k) is None]
     return (not bad), ("arm environment: " + "; ".join(bad)) if bad else ""
+
+
+def implied_generic(snap):
+    """The generic GEMM and dW calls the recorded dispatch decisions imply: each Triton decision at the GEMM site is one forward
+    generic_grouped_mm; one taken with grad on and an input that required grad adds its backward gx (the Triton autograd's backward,
+    moe_utils.py:634-636, which asks no predicate); one on a LoRA-class weight that required grad adds its dW (generic_grouped_wgrad,
+    611-615). A decision under no_grad (the dequant path's recompute forward, and its own dX decision at 1110) adds no backward."""
+    d = snap["dispatch"]
+    fwd = sum(v for k, v in d.items() if k.startswith("gemm:") and k.endswith(":triton"))
+    return {"generic_gemm": fwd + snap["dispatch_grad"]["triton_grad_input"], "generic_wgrad": snap["dispatch_grad"]["triton_grad_lora_weight"]}
+
+
+def check_dispatch(snap, base_must_be_triton=False):
+    """(ok, why): the per-call dispatch is as the library decided it. Fails when:
+    - the predicate could not be wrapped, or the serving module object counted no decision while generic calls ran;
+    - any LoRA-class GEMM decided torch (the predicate returns False silently on a dtype, a tensor subclass or a dim);
+    - any GEMM's class is unknown;
+    - the library's GENERIC_CALLS["fallback"] moved (a Triton-decided call that ran eager, moe_utils.py:600 / 608);
+    - the wrapper's generic counts differ from :func:`implied_generic`;
+    - ``base_must_be_triton`` (a lane whose sweep sits inside every class limit, as P238 on sm_120) and a base GEMM decided torch."""
+    why = []
+    if snap["dispatch_absent"]:
+        why.append(f"dispatch not wrapped: {snap['dispatch_absent']}")
+    served = snap.get("served") or {}
+    tag = "package" if served.get("is_package") else "cache_copy"
+    if not served:
+        why.append("the serving forward was not identified")
+    elif (snap["counts"]["generic_gemm"] or snap["dispatch"]) and not snap["dispatch_served"].get(tag):
+        why.append(f"no decision counted through the serving module ({tag}: {served.get('module')})")
+    d = snap["dispatch"]
+    lora_torch = d.get("gemm:lora:torch", 0)
+    if lora_torch:
+        why.append(f"{lora_torch} LoRA-class GEMMs decided torch")
+    unknown = sum(v for k, v in d.items() if k.startswith("gemm:unknown:"))
+    if unknown:
+        why.append(f"{unknown} GEMMs of unknown class")
+    if base_must_be_triton:
+        base_torch = sum(v for k, v in d.items() if k.startswith("gemm:") and k.endswith(":torch") and ":lora:" not in k)
+        if base_torch:
+            why.append(f"{base_torch} base GEMMs decided torch where the registered sweep is inside every limit")
+    g = snap["library_delta"].get("generic")
+    if g is None:
+        why.append("GENERIC_CALLS unreadable")
+    elif g.get("fallback"):
+        why.append(f"GENERIC_CALLS fallback moved by {g.get('fallback')} (Triton-decided calls ran eager)")
+    imp = implied_generic(snap)
+    for k in ("generic_gemm", "generic_wgrad"):
+        if snap["counts"][k] != imp[k]:
+            why.append(f"{k}: wrapper {snap['counts'][k]} != {imp[k]} the decisions imply")
+    return (not why), "; ".join(why)
