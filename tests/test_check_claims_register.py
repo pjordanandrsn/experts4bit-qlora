@@ -205,6 +205,40 @@ def test_a_public_run_needs_a_location_first_and_a_private_run_its_private_recei
     assert _has(_findings(repo, _row(evidence="bench/RESULTS.md")), "evidence must be a list")
 
 
+@pytest.mark.parametrize("value", [
+    "receipts/experts4bit-qlora/2026-10-03/p108-5090-3/ (receipt.json, teardown-proof.json)",
+    "receipts/experts4bit-qlora/2026-10-03/p108-5090-1/ and p108-5090-2/ (logs/; receipt.json)",
+    "INT4B16/P25-PARITY.md (P26 section)",
+    "the private receipt store, run p153-5090-1 (receipt.json, a 1.2345678 ratio, 2026-10-19)",
+    "the private receipt store, run p1 (driver 580.95.05; ran on 172.16.4.5 inside the box)",
+    "receipts/experts4bit-qlora/2026-10-25/p1-refused-" + str(17 * 10 ** 17 + 4321) + "-4321/ (the pre-create refusal)",
+    "INT4B16/P25-PARITY.md (CUDA 12.8.0.38, out/<stack>/p23_detail.pt, fused/auto, 8/16)",
+])
+def test_an_evidence_private_in_a_public_form_passes(repo, value):
+    assert not _has(_findings(repo, _row(status="measured-private", evidence=[], evidence_private=[value])),
+                    "evidence_private[0] carries")
+
+
+@pytest.mark.parametrize("value,needle", [
+    ("/" + "Users/someone/runs/p1/receipt.json", "an absolute path"),
+    ("~/" + "runs/p1 (receipt.json)", "an absolute path"),
+    ("read `" + "/root/runs/p1` there", "an absolute path"),
+    ('the log "' + '/root/runs/p1.log"', "an absolute path"),
+    ("W=" + "/root/runs/p1", "an absolute path"),
+    ("[" + "/root/runs/p1]", "an absolute path"),
+    ("C:" + "\\Users\\someone\\runs\\p1", "an absolute path"),
+    ("ad" + "ertha://receipts/p1", "a URI"),
+    ("store/" + "receipts/experts4bit-qlora/2026-10-03/p1/", "a receipts path under a checkout directory"),
+    ("run p1 on box " + str(7 * 10 ** 7 + 4321), "a 7+ digit id"),
+    ("run p1, card " + "-".join(("1" * 8, "2" * 4, "3" * 4, "4" * 4, "5" * 12)), "a UUID"),
+    ("run p1 on host " + ".".join(("81", "2", "3", "4")), "a public IPv4 address"),
+    ("run p1, ssh root@" + ".".join(("81", "2", "3", "4")), "a public IPv4 address"),
+])
+def test_an_evidence_private_carrying_a_private_shape_is_refused(repo, value, needle):
+    f = _findings(repo, _row(status="measured-private", evidence=[], evidence_private=["INT4B16/ok.md", value]))
+    assert _has(f, "evidence_private[1] carries " + needle), f
+
+
 def test_cross_repository_evidence_is_skipped_without_a_sibling_and_resolved_in_one(tmp_path):
     rt, sib = _repo(tmp_path / "rt"), _repo(tmp_path / "k", package=KERNELS)
     row = _row(evidence=["bench/RESULTS.md", {"repository": KERNELS, "path": "bench/RESULTS.md#result"}])
