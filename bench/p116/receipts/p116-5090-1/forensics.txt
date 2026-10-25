@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-4454abfd-89c7-bd6e-517c-bd9f4f379a4f, 12.0
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-redacted-c31af00e, 12.0
 power.limit,clocks.max.sm 600.00 W, 3210 MHz
 CPU(s):                                  96
 Vendor ID:                               AuthenticAMD

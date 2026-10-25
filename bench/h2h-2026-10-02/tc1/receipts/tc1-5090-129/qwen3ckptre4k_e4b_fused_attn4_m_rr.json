@@ -139,7 +139,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-37b7f5b1-c861-d5fd-4178-a997564500d3",
+   "uuid": "GPU-redacted-5e5de911",
    "pci.bus_id": "00000000:2B:00.0",
    "pcie.link.gen.current": "4",
    "pcie.link.gen.max": "4",
@@ -153,7 +153,7 @@
    "cpu": "AMD Ryzen 9 5900XT 16-Core Processor",
    "cpu_threads": 32,
    "host_mem_gib": 125.7,
-   "vast_instance_id": "54652024",
+   "vast_instance_id": "instance-redacted-1dc92782",
    "container_host": "9362116443ff"
   },
   "anchor_json": null,

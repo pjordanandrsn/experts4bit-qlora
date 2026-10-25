@@ -26,7 +26,7 @@ True by the tripwire). **The transformers / peft version difference between the 
 difference, not a workload difference** (amendment 1). Every version is in [`versions.txt`](versions.txt) and in each
 receipt's `env`.
 
-**Box:** Vast.ai instance **49975389**, RTX 5090 (sm_120, driver 595.84, 32607 MiB, power limit 600 W, PCIe gen 5 ×16)
+**Box:** Vast.ai instance **redacted-4f9ef08b**, RTX 5090 (sm_120, driver 595.84, 32607 MiB, power limit 600 W, PCIe gen 5 ×16)
 on an Intel Core i9-14900K host (32 threads, 188.6 GiB; [`forensics.txt`](forensics.txt) is the lane script's probe at
 install; each receipt's `env.host` carries the GPU UUID, bus id, VBIOS and the instance id). **Train-anchor class
 `pcie-full/launch-fast`** ([`anchor.json`](anchor.json), gate log [`logs/anchor_gate.log`](logs/anchor_gate.log): FLOPs
@@ -350,7 +350,7 @@ semantic match to e4b's mode): 2.146 s/step, peak 23.14 GB, held-out 3.6968→0.
   cache), the regenerated `data/ds_*.json` (their registered shas are in `ds_manifest.json`; the lane refuses a
   mismatch), the helper copies the lane fetched from the repository (`n9_datasets.py`, `train_anchor.py`,
   `train_anchor_gate.py` — byte-identical to `bench/flagship-matrix/drivers/` and `bench/train-anchor/` at `f4b639f`),
-  `INSTANCE_ID` (49975389, also in every receipt's `env.host.vast_instance_id`), the empty waiter logs and `__pycache__`.
+  `INSTANCE_ID` (instance-redacted-4f9ef08b, also in every receipt's `env.host.vast_instance_id`), the empty waiter logs and `__pycache__`.
 
 ## Reproduce
 
@@ -373,8 +373,8 @@ is absent from any receipt).
   candidate. The position is never quoted without it.
 - **Nothing is licensed.** Not e4b's paths (tp1 does that, on its own rows) and not Unsloth's; the internal parity PASS
   here is informational.
-- **No cross-box ratio.** tp1's Qwen3 rows (box 49937730: reference 12.797 s/step, fused 5.003) sit beside these
-  (reference_attn4 4.437, fused_attn4 1.522 on box 49975389 with NF4 attention) with their dates and are never divided
+- **No cross-box ratio.** tp1's Qwen3 rows (box redacted-0cc9db7c: reference 12.797 s/step, fused 5.003) sit beside these
+  (reference_attn4 4.437, fused_attn4 1.522 on box redacted-4f9ef08b with NF4 attention) with their dates and are never divided
   into them; the two boxes differ in host class and the arms differ in attention precision.
 - **The prediction table is scored, not argued.** P2, P3, P7 (e4b's half) and P10 (e4b's half) were wrong; the lane
   ships them.

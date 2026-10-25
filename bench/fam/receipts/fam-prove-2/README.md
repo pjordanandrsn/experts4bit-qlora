@@ -1,6 +1,6 @@
 # `fam-prove-2`: the proving rental under Amendment 1 (not a reading)
 
-One RTX 5090 (cc 12.0, driver 595.91.07) on an Intel(R) Core(TM) Ultra 9 285K host (24 CPUs): Vast instance 54927731, launched
+One RTX 5090 (cc 12.0, driver 595.91.07) on an Intel(R) Core(TM) Ultra 9 285K host (24 CPUs): Vast instance redacted-7b15fd2b, launched
 2026-10-08T23:11:50Z, lane done 23:29:25Z, torn down 23:29:26Z. Cost $0.214. Code: e4b `9766fb4c` (the #1403
 merge, carrying #1395 and #1398), grouped-nf4-gemm 0.43.0 (`6ee2e10`). Granite-3.1-3b-a800m at 32 teacher-forced
 positions, every process kind, the anchor included.

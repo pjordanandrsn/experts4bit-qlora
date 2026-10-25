@@ -9,8 +9,8 @@ Both read through the merged `sv7_reduce.py`, and both had integrity clean in bo
 
 | run | from | Vast instance / machine | driver | spend |
 |---|---|---|---|---|
-| `sv7-4090-1` | `7431a8ed` (#1297) | 54619847 / 51613 | 580.95.05 | $0.611 |
-| `sv7-4090-2` | `35c8b7ba` (#1308) | 54642987 / 145317 | 595.84 | $0.408 |
+| `sv7-4090-1` | `7431a8ed` (#1297) | instance-redacted-b710e370 / 51613 | 580.95.05 | $0.611 |
+| `sv7-4090-2` | `35c8b7ba` (#1308) | instance-redacted-59e29afb / 145317 | 595.84 | $0.408 |
 
 - Lane total: **$1.019** of $5. Teardown was proven for both.
 - Software: experts4bit-qlora 0.48.0 at the launch SHAs, grouped-nf4-gemm 0.41.0 (`dc8f94a`), torch 2.8.0+cu128,

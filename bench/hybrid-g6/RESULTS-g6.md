@@ -27,7 +27,8 @@ digits, 3.124364 vs 3.124329), rented Zen 5 EPYC 9755 + RTX 5090 box
    invariant 9 is pinned by `test_free_when_unused` (no side stream, no
    staging, no demotions with the window unset).
 3. **Demotion off the critical path — nsys-verified.** In the arm-C trace
-   (`g6_nsys.nsys-rep`, streams summary `g6_nsys_streams.txt`): all
+   (`g6_nsys.nsys-rep`, since 2026-10-25 in the private receipt store only, its sha256 in
+   `STORE-ONLY.sha256` here; streams summary `g6_nsys_streams.txt`): all
    kernels on compute stream 7; **all 576 demotion copies on side stream
    13 — 9,437,184 bytes = 576 × 16,384, to the byte** — and zero
    row-sized KV copies from the cache on the compute stream. (Stream 7

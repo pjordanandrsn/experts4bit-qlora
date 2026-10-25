@@ -53,7 +53,8 @@ orders of magnitude below a single expert row, five below the ~255 GB of
 expert mass a streaming path moves for 32 tokens. The link carried
 activation-class traffic only (DRAM-bus contribution landings + router
 staging + logits). That is the disjoint-bus law at gate scale. Trace
-committed (`g3_nsys_235b.nsys-rep`).
+committed (`g3_nsys_235b.nsys-rep`; since 2026-10-25 in the private receipt store only, its sha256
+in `STORE-ONLY.sha256` here).
 
 ## Honest caveats
 

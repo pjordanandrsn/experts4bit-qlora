@@ -1,6 +1,6 @@
 # `p151-5090-1`: a host refusal before the install (rc 17), not a strike
 
-One RTX 5090 (cc 12.0, driver 570.133.20) on an AMD host (32 CPUs): Vast instance 56706882 on machine 43578,
+One RTX 5090 (cc 12.0, driver 570.133.20) on an AMD host (32 CPUs): Vast instance redacted-fe114ab1 on machine 43578,
 2026-10-19T09:42:36Z to 09:44:47Z. Cost $0.015. Code: e4b `309cd671` (the registration's merge, #1816), grouped-nf4-gemm
 `9b824155` (K35's merge).
 

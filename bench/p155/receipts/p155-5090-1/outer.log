@@ -1,6 +1,6 @@
 KNOBS e4b=4d3fd170edfd6cec774aab814115662fd06cd5bc gnf4=ef2faf3816b30ecfd0e2a69cb27fb049a7d56a59 gpu_class=5090 min_disk_gb=20 min_ram_gb=16 min_power_w=575 need_bench=2450
 CUDA_PROBE ok
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-494cdfeb-50c8-6125-8057-47b0bd8d9c74, 12.0
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-redacted-c65fc19f, 12.0
 power.limit,clocks.max.sm 575.00 W, 3090 MHz
 CPU(s):                                  96
 Vendor ID:                               AuthenticAMD

@@ -23,7 +23,7 @@ spread ≤ 2 × S_floor = 0.0296). No VOID condition fired:
 ## The reading (`p117-5090-1`)
 
 **Host:** one RTX 5090 (sm_120, driver 595.91.07) on an AMD Ryzen 9 9950X (32 threads, 123 GiB RAM), Vast instance
-54778599. **Cost:** $0.914. Teardown proven at 05:32:21Z.
+redacted-9fbb6fd2. **Cost:** $0.914. Teardown proven at 05:32:21Z.
 
 **Timeline:** install and tripwire from 04:55:46Z; premise 7 passed, none skipped (04:57:55Z); fetch until 05:25:53Z;
 bake until 05:26:57Z; the box (load 91 s with the int4 repack, ten passes 227 s); lane complete 05:32:20Z.

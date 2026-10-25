@@ -10,7 +10,7 @@ namespace.
 - P132 (bench/p132/PREREG-p132.md) asked this question against `sd2-5090-3`'s card. Its rule compared absolute
   milliseconds with that card's (verify within 5 %, the increment within 10 % of the desk's target), and Amendment 2
   refused every other card.
-- That card (machine 55913, offer 40421555, GPU-38c66e15) did not return: **0 listings in about 4,050 reads over
+- That card (machine 55913, offer 40421555, GPU-redacted-efc7954e) did not return: **0 listings in about 4,050 reads over
   34.5 h** (2026-10-16 18:52Z to 10-18 05:20Z). The machine's other card was listed 71 times.
 - **P132 closes "not run: the reference card was unavailable".** That is not a strike.
 

@@ -95,7 +95,7 @@ Seven rentals, two that ran:
 | `p101-5090-4` | NOT_RUN | 36204 | $0.0095 | the launcher's Vast API call timed out in the TLS handshake |
 | `p101-5090-5` | **OK, SUPPORTED** | 36204 | **$0.1937** | the reading, 1,302 s |
 
-- **The reading:** one RTX 5090 (sm_120, driver 580.95.05) on an AMD Ryzen 9 7950X, Vast instance 53959695.
+- **The reading:** one RTX 5090 (sm_120, driver 580.95.05) on an AMD Ryzen 9 7950X, Vast instance redacted-0addf2db.
   - Pre-flight 111.6 MB/s; the snapshot fetch took 16 min.
   - Destroyed at 2026-10-03T03:46:40Z, instance absent.
 - **The lane: $0.3192** of a $2.50 ceiling.

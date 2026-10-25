@@ -1,6 +1,6 @@
 # `fam-gemma4-prove-1`: Gemma-4-26B-A4B's own proof (not a reading); the family closed here
 
-One RTX 5090 (cc 12.0, driver 595.71.05) on an AMD EPYC 7C13 host (256 CPUs): Vast instance 55124966, launched
+One RTX 5090 (cc 12.0, driver 595.71.05) on an AMD EPYC 7C13 host (256 CPUs): Vast instance redacted-5dac5c70, launched
 2026-10-10T01:08:18Z, torn down 01:55:50Z. Cost $1.13. Code: e4b `68845bfc` (Amendment 9's merge, #1487),
 grouped-nf4-gemm 0.43.0 (`6ee2e10`). The box end to end at 32 positions: OFF, ON_epi and ON_auto.
 

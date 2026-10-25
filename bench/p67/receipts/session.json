@@ -4,7 +4,7 @@
    "loss_last": 1.12894,
    "eval_loss_final": 1.19205,
    "s_per_step": 42.0258,
-   "session": "/Users/jordananderson/adertha-receipts/receipts/experts4bit-qlora/2026-09-24/p67-gemma4-floor-1"
+   "session": "<home>/adertha-receipts/receipts/experts4bit-qlora/2026-09-24/p67-gemma4-floor-1"
   },
   "floor_draws": [
    {
@@ -161,7 +161,7 @@
   ],
   "consistency": [
    {
-    "session": "/Users/jordananderson/adertha-receipts/receipts/experts4bit-qlora/2026-09-19/tp4-c-parity-2",
+    "session": "<home>/adertha-receipts/receipts/experts4bit-qlora/2026-09-19/tp4-c-parity-2",
     "tag": "fused_attn4",
     "d_final_train": 0.08256999999999981,
     "d_med_train": 0.12420500000000001,
@@ -178,7 +178,7 @@
     "ratio_med": 0.974
    },
    {
-    "session": "/Users/jordananderson/adertha-receipts/receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3",
+    "session": "<home>/adertha-receipts/receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3",
     "tag": "fused_attn4",
     "d_final_train": 0.10223000000000004,
     "d_med_train": 0.10638999999999998,
@@ -195,7 +195,7 @@
     "ratio_med": 0.834
    },
    {
-    "session": "/Users/jordananderson/adertha-receipts/receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3",
+    "session": "<home>/adertha-receipts/receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3",
     "tag": "batched_attn4",
     "d_final_train": 0.05424999999999991,
     "d_med_train": 0.08487,
@@ -212,7 +212,7 @@
     "ratio_med": 0.666
    },
    {
-    "session": "/Users/jordananderson/adertha-receipts/receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3",
+    "session": "<home>/adertha-receipts/receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3",
     "tag": "fused_attn4_nodgrad",
     "d_final_train": 0.10274000000000005,
     "d_med_train": 0.11677999999999988,

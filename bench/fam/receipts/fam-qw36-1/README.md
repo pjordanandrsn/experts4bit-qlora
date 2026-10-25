@@ -1,6 +1,6 @@
 # `fam-qw36-1`: Qwen3.6-35B-A3B, the B=1 fused stack at T == 1 (VOID: a harness bug)
 
-One RTX 5090 (cc 12.0, driver 595.91.07) on an AMD EPYC 7763 host (256 CPUs): Vast instance 54930776, launched
+One RTX 5090 (cc 12.0, driver 595.91.07) on an AMD EPYC 7763 host (256 CPUs): Vast instance redacted-3b24147a, launched
 2026-10-08T23:33:38Z, torn down 2026-10-09T00:37:40Z. Cost $1.639. Code: e4b `9766fb4c`, grouped-nf4-gemm 0.43.0
 (`6ee2e10`).
 

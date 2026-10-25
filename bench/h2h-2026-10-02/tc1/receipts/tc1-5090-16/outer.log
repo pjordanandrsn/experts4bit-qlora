@@ -1,9 +1,9 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3; e4b 079a4220b4b334903b0e77725eb94a0f58848018 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-16 instance 53773622 deadline 1790915628; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3; e4b 079a4220b4b334903b0e77725eb94a0f58848018 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-16 instance redacted-3a751047 deadline 1790915628; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=32 (physical cores) box_class=RTX 5090
 [2026-10-02T00:09:18Z] tc1/boxA: driver 580.178.04: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 580.178.04 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 580.178.04, GPU-c655fe82-312f-65e6-b949-3e225f1ec587, 575.00 W, 3090 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.178.04, GPU-redacted-001e591d, 575.00 W, 3090 MHz
 CPU(s):                                  64
 Model name:                              AMD Ryzen Threadripper PRO 3975WX 32-Cores
 MemTotal:       263745776 kB
@@ -142,7 +142,7 @@ QWEN3 DONE
 | P10 | qwen3 | **UNTESTED** | C1 bit-exact; expert slots ['N-A', 'N-A'] (regime differs: anchor nf4/64 vs nf4/64+dq); attention SAME-BYTES |
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3; e4b 079a4220b4b334903b0e77725eb94a0f58848018 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-16 instance 53773622 deadline 1790915628; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3; e4b 079a4220b4b334903b0e77725eb94a0f58848018 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-16 instance redacted-3a751047 deadline 1790915628; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=32 (physical cores) box_class=RTX 5090
 DRIVER 580.178.04 cu130_ok=1
 AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType

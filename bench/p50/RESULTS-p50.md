@@ -1,6 +1,6 @@
 # Results — P50: what the bf16-early-layers remedy costs for Gemma-4 (H100 NVL, 2026-09-19)
 
-Pre-registration: [`P50-PREREG.md`](P50-PREREG.md). Run `p50-gemma4keep` (H100 NVL, vast 51577120, e4b `6979120`, gnf4 v0.32.0), receipt `receipts/experts4bit-qlora/2026-09-19/p50-gemma4keep/p47/`, read by `bench/p50/p50_reduce.py`. K0 passed; control (i) refused the decode scorer again (reference self-KL 0.2787) → prefill on both sides, the same cached bf16 reference and 200 prompts as P44-b / P47 / P48 / P49. Every row carries `verify_moe_4bit`'s k bf16 / 30−k quantised counts and an expert-bytes census.
+Pre-registration: [`P50-PREREG.md`](P50-PREREG.md). Run `p50-gemma4keep` (H100 NVL, vast redacted-55807d29, e4b `6979120`, gnf4 v0.32.0), receipt `receipts/experts4bit-qlora/2026-09-19/p50-gemma4keep/p47/`, read by `bench/p50/p50_reduce.py`. K0 passed; control (i) refused the decode scorer again (reference self-KL 0.2787) → prefill on both sides, the same cached bf16 reference and 200 prompts as P44-b / P47 / P48 / P49. Every row carries `verify_moe_4bit`'s k bf16 / 30−k quantised counts and an expert-bytes census.
 
 ## The curve
 

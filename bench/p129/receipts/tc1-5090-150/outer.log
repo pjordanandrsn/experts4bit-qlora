@@ -1,11 +1,11 @@
 FIXTURE field: template=alpaca steps=60 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407 pack=0
-BOX A families: qwen3fqkv3; e4b 2d0ed913867b9cbed42af1ccc9f3bfc47b6dd6c1 gnf4 d1f64ba50afce94533e0166ba3332ef075aa43bb; run tc1-5090-150 instance 55149329 deadline 1791622514; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3fqkv3; e4b 2d0ed913867b9cbed42af1ccc9f3bfc47b6dd6c1 gnf4 d1f64ba50afce94533e0166ba3332ef075aa43bb; run tc1-5090-150 instance redacted-03132d2a deadline 1791622514; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=48 (physical cores) box_class=RTX 5090
 CPU allotment 24 (cgroup quota capped by affinity; physical cores 48)
 CUDA_PROBE ok
 [2026-10-10T04:56:31Z] tc1/boxA: driver 595.91.07: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 595.91.07 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-4c4700b4-2e11-7da4-8b22-cffe057e3b37, 575.00 W, 3090 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-redacted-f3f8d930, 575.00 W, 3090 MHz
 CPU(s):                                  96
 Model name:                              AMD EPYC 7K62 48-Core Processor
 MemTotal:       527994556 kB
@@ -137,7 +137,7 @@ Each line: the arm, the attempt, the median host load1 over that attempt's run, 
 - `qwen3fqkv3/e4b/fused_attn4_shipped_q0_d2 attempt 0 load1_median 2.73 gate 6.0 status ok over 0`
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=60 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407 pack=0
-BOX A families: qwen3fqkv3; e4b 2d0ed913867b9cbed42af1ccc9f3bfc47b6dd6c1 gnf4 d1f64ba50afce94533e0166ba3332ef075aa43bb; run tc1-5090-150 instance 55149329 deadline 1791622514; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3fqkv3; e4b 2d0ed913867b9cbed42af1ccc9f3bfc47b6dd6c1 gnf4 d1f64ba50afce94533e0166ba3332ef075aa43bb; run tc1-5090-150 instance redacted-03132d2a deadline 1791622514; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=48 (physical cores) box_class=RTX 5090
 CPU allotment 24 (cgroup quota capped by affinity; physical cores 48)
 CUDA_PROBE ok

@@ -40,3 +40,10 @@ b7928f126052db9dafcde201445597f07f62e2339ca41e197196bf6452970339  P105_RUN_NONCE
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  P105_SUCCESS.9f76b1038635eda9f275f48aad1b922be8e6f4ed768ee907dc2377204e18d640
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  TP_DONE.9f76b1038635eda9f275f48aad1b922be8e6f4ed768ee907dc2377204e18d640
 6b537d1fa2be15cd4fbcec3bc11c801ec28b2a5e411c65db2039668599521a45  constraints.txt
+# Originals of files this receipt carries with rented-hardware identifiers replaced by tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p105/receipts/p105-5090-1/forensics.txt at 069a029befd4
+2c2f332cec9d58cdb226e685fca21d365e8339a77e32e3cbdd6da0a26cf94d6d  forensics.txt
+# same bytes: bench/p105/receipts/p105-5090-1/teardown-proof.json at 069a029befd4
+f83f9c0b5fa3a3feef9e5fef05ee5c219a58d66d54921dcf36ea86b7f9733c38  teardown-proof.json

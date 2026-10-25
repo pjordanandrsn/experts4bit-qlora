@@ -74,7 +74,7 @@ This lane has no PASS/FAIL: its product is a **position** — the ratio vLLM / e
 3. **A green skipped path is not evidence.** A vLLM arm that returns fewer tokens than asked, an e4b arm with recompiles in the window, a pre-flight that reads exactly 0 — each is an instrument fault (P20's list) and the row says so.
 4. **FAIL stays FAIL; DRIFT stays DRIFT.** No re-registration out of dissatisfaction; a second lane is a second lane.
 5. **Quality is quoted, never equated.** e4b's arm is licensed by the register's gate on two texts; vLLM's checkpoint carries its author's evaluation; this lane scores neither and never says "at equal quality".
-6. **The old numbers are historical.** ×1.47 / ×1.55 remain true as measured (0.27.0/0.21.0 vs vLLM 0.28.0, 2026-09-03, box 49702459) and are cited as such; the new claim ids carry the current position with vLLM's version pinned at launch.
+6. **The old numbers are historical.** ×1.47 / ×1.55 remain true as measured (0.27.0/0.21.0 vs vLLM 0.28.0, 2026-09-03, box redacted-7e2f3d24) and are cited as such; the new claim ids carry the current position with vLLM's version pinned at launch.
 7. **Three axes** for e4b's arm every time it is quoted; vLLM's number is quoted with its version, the checkpoint revision and the arm's knobs.
 8. **Every receipt carries `prompts_sha`, the box forensics, and the engine versions**; the reducer refuses to divide two receipts with different `prompts_sha`.
 

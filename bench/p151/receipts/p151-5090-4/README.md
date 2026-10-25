@@ -1,7 +1,7 @@
 # `p151-5090-4`: the served read (NOISY: a VOID and strike one)
 
 One RTX 5090 (cc 12.0, 170 SMs, driver 595.71.05, a **600 W** power limit) on an AMD host (128 CPUs): Vast instance
-56714196 on machine 45379, 2026-10-19T10:43:48Z to 11:14:04Z. Cost $0.429.
+redacted-8c9501a2 on machine 45379, 2026-10-19T10:43:48Z to 11:14:04Z. Cost $0.429.
 - **Code:** e4b `63b21b13` (Amendment 1's merge, #1819), grouped-nf4-gemm `9b824155` (K35's merge, 0.47.1 + `dense_gemv`).
 - **Stack:** torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ `ad44e777`.
 

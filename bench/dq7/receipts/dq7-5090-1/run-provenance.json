@@ -9,7 +9,7 @@
   "guard_armed_at": "2026-10-08T18:58:48Z",
   "final_fetch_at": "2026-10-08T19:36:58Z",
   "teardown_at": "2026-10-08T19:36:59Z",
-  "provider_instance": "54895866",
+  "provider_instance": "instance-redacted-8a5153c6",
   "scope": "architecture-only synthetic weights; not quality",
   "transport_variance": "Declared runtime cap1.70 plus default100GB transport allowance1.10 gave launcher reservation2.80. Singular adapter output escaped plural adapters rsync exclusion, adding transfer. Generated artifacts archived recoverably outside Git with sha256s in original receipt store."
 }

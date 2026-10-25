@@ -10,3 +10,18 @@ accef982e749f5f3d44b0cc43ea35b1fa40bd70b52d1f3595c40a16c8e039d4a  logs/arm_c2048
 360878d7e8a9657263947224060df935d83ce4731c734324c8486d3e7fd61f70  logs/bake_qwen3.log
 f35643680eea9e689a6e7eef0d3923a5c57117586a34faeadf97c83ae18bda9e  logs/fetch_qwen3.log
 90a3b36029e7a46cf52277aa559086c522496b3d6aa6b777e95202558879599a  logs/prompts.log
+# Originals of files this receipt carries with rented-hardware identifiers replaced by tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p100/receipts/p100-5090-2/forensics.txt at 069a029befd4
+356d7243fad2920ae60dfd47e8c8bcb6600bda27bbccccb7ec860b33d5a36bff  forensics.txt
+# same bytes: bench/p100/receipts/p100-5090-2/teardown-proof.json at 069a029befd4
+d8d46e0861b0e39c3f5277f1dede280b7056ed5be563a52874acc1d2b27ad6dd  teardown-proof.json
+# same bytes: bench/p100/receipts/p100-5090-2/ttft_c1024_t4096.json at 069a029befd4
+90b021200cc44905beb08073e3f71a5ddc100913e5e658191114f0aaac827e83  ttft_c1024_t4096.json
+# same bytes: bench/p100/receipts/p100-5090-2/ttft_c2048_t4096.json at 069a029befd4
+22dad03fdba46ebe335b303a05cb9e9e74419dd37b194d15fe1cd7ab892fd5f4  ttft_c2048_t4096.json
+# same bytes: bench/p100/receipts/p100-5090-2/ttft_c512_t4096.json at 069a029befd4
+36edad0c3c920972ee53a76be0293b553346e41ec4701663ddb34a5c76288e93  ttft_c512_t4096.json
+# same bytes: bench/p100/receipts/p100-5090-2/ttft_c512_t512.json at 069a029befd4
+264b2a7dfef9b3b6802a6e197c7564cd6fd6c5fd1c762d48051744829efc663d  ttft_c512_t512.json

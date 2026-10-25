@@ -128,7 +128,7 @@
    9
   ],
   "host": {
-   "uuid": "GPU-956b55e4-9619-e56b-e05b-1c184db23446",
+   "uuid": "GPU-redacted-03ab6738",
    "pci.bus_id": "00000000:46:00.0",
    "pcie.link.gen.current": "4",
    "pcie.link.gen.max": "4",
@@ -142,7 +142,7 @@
    "cpu": "AMD EPYC 7B13 64-Core Processor",
    "cpu_threads": 128,
    "host_mem_gib": 503.5,
-   "vast_instance_id": "53804549",
+   "vast_instance_id": "instance-redacted-f112b77e",
    "container_host": "c4d8dd892048"
   },
   "anchor_json": null,

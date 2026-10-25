@@ -1,6 +1,6 @@
 # `fam-speed-prove-1`: Amendment 4's speed proof on Qwen3.6-35B-A3B (not a reading)
 
-One RTX 5090 (cc 12.0, driver 580.126.09) on an AMD EPYC 7713 host (128 CPUs): Vast instance 54967271, launched
+One RTX 5090 (cc 12.0, driver 580.126.09) on an AMD EPYC 7713 host (128 CPUs): Vast instance redacted-c1562a65, launched
 2026-10-09T04:51:23Z, torn down 05:03:41Z. Cost $0.632. Code: e4b `48cfccaa` (#1436's merge), grouped-nf4-gemm 0.43.0
 (`6ee2e10`). The speed box end to end at 32 timed steps a setting.
 

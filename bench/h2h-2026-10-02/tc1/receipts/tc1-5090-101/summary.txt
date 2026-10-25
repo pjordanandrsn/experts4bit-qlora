@@ -1,5 +1,5 @@
 FIXTURE field: template=alpaca steps=40 seq=4096 micro_batch=1 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=40 eval_n=8 autocast=0 matched_seed=3407 pack=1
-BOX A families: qwen3padbk; e4b 087e04570df153ffab300c50a4dcd8a38788f7b2 gnf4 d3e7788939fbad98a63a8c06badd253764c6dac0; run tc1-5090-101 instance 54425329 deadline 1791272081; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3padbk; e4b 087e04570df153ffab300c50a4dcd8a38788f7b2 gnf4 d3e7788939fbad98a63a8c06badd253764c6dac0; run tc1-5090-101 instance redacted-55db0fe5 deadline 1791272081; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=16 (physical cores) box_class=RTX 5090
 CPU allotment 31 (cgroup quota capped by affinity; physical cores 16)
 DRIVER 580.65.06 cu130_ok=1

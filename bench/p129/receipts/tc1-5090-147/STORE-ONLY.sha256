@@ -1,0 +1,61 @@
+# Files of this receipt kept only in the private receipt store, byte-exact: sha256, then the path
+# within this receipt.
+# Originals of files this receipt carries with rented-hardware identifiers replaced by tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/p129/receipts/tc1-5090-147/RESULTS-tc1.md at 069a029befd4
+b45376fa4347bf3951203ba424ae44134931c3a2b3398c7efc528e74f4ebfa27  RESULTS-tc1.md
+# same bytes: bench/p129/receipts/tc1-5090-147/RESULTS.txt at 069a029befd4
+b45376fa4347bf3951203ba424ae44134931c3a2b3398c7efc528e74f4ebfa27  RESULTS.txt
+# same bytes: bench/p129/receipts/tc1-5090-147/box.json at 069a029befd4
+b950021651326e0b0b8001a242771ca8fbbb0cd4b3b45631a40c8e9c64dd7c74  box.json
+# same bytes: bench/p129/receipts/tc1-5090-147/forensics.txt at 069a029befd4
+129251f14da4076ed36e9ccc6616b675b228f7c42486608b5ebd3bd47a1f9b42  forensics.txt
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q0.json.a1 at 069a029befd4
+43eb999ed823e646fc2dbfb431ac8a1ade3c8130143f3ec612557483ab100eb4  loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q0.json.a1
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q0.json.a2 at 069a029befd4
+ae57fc128b8595e3e0bb671f1ff01b48531e76569db4802388727b49c6ab375f  loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q0.json.a2
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q0_d2.json.a1 at 069a029befd4
+a9380dac60c727193ac37e16963a001b7bb34824edb2100bf485d6c368de7651  loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q0_d2.json.a1
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q0_d2.json.a2 at 069a029befd4
+30a17fdf9c2de627201a6f49862d8c2aae4f2cd93b34844626711da64614a645  loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q0_d2.json.a2
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q1.json.a1 at 069a029befd4
+af2b7519e684791c28ab1c920f010249afc7547da251276c3bbdcde30844fb55  loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q1.json.a1
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q1.json.a2 at 069a029befd4
+0936ed867f066112fd27a15fb23d0b839959985e2e7da65529acd5f99ad667d7  loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q1.json.a2
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q1_d2.json.a1 at 069a029befd4
+ba239ad4adb88ed3ded351390d86c69ead0115e1051f3711e219f88aae671d3b  loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q1_d2.json.a1
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q1_d2.json.a2 at 069a029befd4
+d37f81216279cacee8087dfea37e3bc5c80f8bf867dff9bed6af48c81f880f49  loadvoid/qwen3fqkv3_e4b_fused_attn4_m_q1_d2.json.a2
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_shipped_q0.json.a1 at 069a029befd4
+d28f3c053037809a2c72f3dcf697748371e6a6f509927ba69770f9ba3b96f866  loadvoid/qwen3fqkv3_e4b_fused_attn4_shipped_q0.json.a1
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_shipped_q0.json.a2 at 069a029befd4
+33bde311963fffcb483f16f2cf8d46bc3c5de52d953381794785564e06aefb0a  loadvoid/qwen3fqkv3_e4b_fused_attn4_shipped_q0.json.a2
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_shipped_q1.json.a1 at 069a029befd4
+2baaf36bf51d7a296f3a3caa487f08472f4f8ac000ba37b81115ae7a9f9d8159  loadvoid/qwen3fqkv3_e4b_fused_attn4_shipped_q1.json.a1
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_shipped_q1.json.a2 at 069a029befd4
+66437c86732aa4802dcfd40dc38def1f10a5f4bd80b734dd486ed6893bd90884  loadvoid/qwen3fqkv3_e4b_fused_attn4_shipped_q1.json.a2
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_shipped_q1_d2.json.a1 at 069a029befd4
+33640cd260588c4e57ce59d37ec74913285420fcf37fe18ceb2d7b78254cc3e8  loadvoid/qwen3fqkv3_e4b_fused_attn4_shipped_q1_d2.json.a1
+# same bytes: bench/p129/receipts/tc1-5090-147/loadvoid/qwen3fqkv3_e4b_fused_attn4_shipped_q1_d2.json.a2 at 069a029befd4
+d7d5b3006025f6700aedc68a06ed2017214cf8a6cb0219e97bc3645f47960ab5  loadvoid/qwen3fqkv3_e4b_fused_attn4_shipped_q1_d2.json.a2
+# same bytes: bench/p129/receipts/tc1-5090-147/outer.log at 069a029befd4
+65b69268280d47b68939b20a3b14f0790cd92409665a79f2e8650b33b3ffc72b  outer.log
+# same bytes: bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_m_q0.json at 069a029befd4
+4e6a8dd6cb01e35bf2a105eef7b0dd6608328b38967315071a824ebac3ee006c  qwen3fqkv3_e4b_fused_attn4_m_q0.json
+# same bytes: bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_m_q0_d2.json at 069a029befd4
+a19e10c871fe4cc59eaae9ab212ecbe51b5dc124e545807cd2714a4bb0172926  qwen3fqkv3_e4b_fused_attn4_m_q0_d2.json
+# same bytes: bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_m_q1.json at 069a029befd4
+16934ce7f178bb7a58d9acd0e63b17b189790a8c8df38a8197508b570b1e6b4a  qwen3fqkv3_e4b_fused_attn4_m_q1.json
+# same bytes: bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_m_q1_d2.json at 069a029befd4
+8581bebf4370ca61c91fd2d3ec54a706a9e9d75aab9bf51285abd872f431d30e  qwen3fqkv3_e4b_fused_attn4_m_q1_d2.json
+# same bytes: bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_shipped_q0.json at 069a029befd4
+601d3fe0aa0190a477b285c571fd7d9ff23b8b998702da55b3daf78880f2e634  qwen3fqkv3_e4b_fused_attn4_shipped_q0.json
+# same bytes: bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_shipped_q0_d2.json at 069a029befd4
+37568237e64bfe209b159cd891254e3162e0049c5a02aa12ca0ae9af1922fe40  qwen3fqkv3_e4b_fused_attn4_shipped_q0_d2.json
+# same bytes: bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_shipped_q1.json at 069a029befd4
+744d8600842092ea2597b6c7571f690a88a0b33e30da930f0cc923ff311cf133  qwen3fqkv3_e4b_fused_attn4_shipped_q1.json
+# same bytes: bench/p129/receipts/tc1-5090-147/qwen3fqkv3_e4b_fused_attn4_shipped_q1_d2.json at 069a029befd4
+2dd79217d9771a9768392ef785dad4a31ec358f525ed8239e037268b59c70965  qwen3fqkv3_e4b_fused_attn4_shipped_q1_d2.json
+# same bytes: bench/p129/receipts/tc1-5090-147/summary.txt at 069a029befd4
+8fb7881c255d313fd5b43cae9b4c858d0658b4a9f42ab30238d0b9382e2a9fe6  summary.txt

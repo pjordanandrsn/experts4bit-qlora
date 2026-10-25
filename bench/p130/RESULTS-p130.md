@@ -30,7 +30,7 @@ Code under test:
 ## The reading (`p130-5090-1`)
 
 **Host:** one RTX 5090 (sm_120, driver 595.91.07) on an AMD Ryzen 9 9950X (32 threads, 123 GiB RAM), Vast instance
-55252018. **Cost:** $1.094. Teardown proven at 18:15:54Z.
+redacted-aa4dfbd0. **Cost:** $1.094. Teardown proven at 18:15:54Z.
 
 **Timeline:**
 - pre-quote gates on the controller: the driver's dry run, and STOP-0's fetch gate passed;

@@ -20,7 +20,7 @@ Code under test:
 ## The reading (`p111-5090-1`)
 
 **Host:** one RTX 5090 (sm_120, driver 610.57.04) on an AMD Ryzen 9 9950X3D (32 threads, 123 GiB RAM), Vast instance
-54083342 at $0.576/h. **Cost:** $0.1586. Teardown was proven at 00:42:26Z.
+redacted-5be19943 at $0.576/h. **Cost:** $0.1586. Teardown was proven at 00:42:26Z.
 
 **Timeline (the box's own log):**
 - install at 00:26:49Z;

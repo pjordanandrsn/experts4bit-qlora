@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 580.178.04, GPU-c655fe82-312f-65e6-b949-3e225f1ec587, 575.00 W, 3090 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.178.04, GPU-redacted-001e591d, 575.00 W, 3090 MHz
 CPU(s):                                  64
 Model name:                              AMD Ryzen Threadripper PRO 3975WX 32-Cores
 MemTotal:       263745776 kB

@@ -10,15 +10,15 @@ Nobody had put the six hosts' forensics side by side. Done now, from `~/.vast/{g
 |---|---|---|---|---|
 | `parity` (49749308) | 5090 / 580.105.08 | — | **30 GiB** (31 GiB cgroup) | **`safe_open` refused**: `unable to mmap 49907246508 bytes … Cannot allocate memory (12)` |
 | `genE` (P24-GEN-E) | 5090 / 580.159.03 | Ryzen 9 9950X (consumer) | not recorded | **FAILED** — `CUDA error: invalid argument` at the **first** expert read |
-| box 49753736 | 5090 / 580.159.03 | — | **64 GiB** | **FAILED** — same error, in the **non-expert** pass |
+| box redacted-5d1a8583 | 5090 / 580.159.03 | — | **64 GiB** | **FAILED** — same error, in the **non-expert** pass |
 | `genB` | 5090 / 580.95.05 | EPYC 7502 (server) | not recorded | **OK**, twice |
-| box 49779056 | 5090 / — | — | 96 GiB | OK |
-| box 49804632 | 5090 / 580.159.03 | EPYC (server) | 125 GiB | **OK under `CUDA_LAUNCH_BLOCKING=1`** |
-| box 49760421 | 5090 / — | — | 188 GiB | OK |
+| box redacted-d77ad325 | 5090 / — | — | 96 GiB | OK |
+| box redacted-7fa73804 | 5090 / 580.159.03 | EPYC (server) | 125 GiB | **OK under `CUDA_LAUNCH_BLOCKING=1`** |
+| box redacted-3a696e3a | 5090 / — | — | 188 GiB | OK |
 
 Three facts the table settles, and one it opens:
 
-1. **Driver is refuted, again and by construction.** 580.159.03 appears on both sides (genE fails, 49804632 passes); a third 580.159.03 host was rented deliberately for #344 and passed the whole bake under launch-blocking.
+1. **Driver is refuted, again and by construction.** 580.159.03 appears on both sides (genE fails, instance-redacted-7fa73804 passes); a third 580.159.03 host was rented deliberately for #344 and passed the whole bake under launch-blocking.
 2. **The GPU is refuted.** Every host is the same RTX 5090, 32607 MiB.
 3. **It is not "the box is broken".** `genE` ran granite bakes, five K8 perplexity runs and six decode arms — roughly two hours of CUDA — cleanly, and failed only on the one model in the corpus that ships a **49.9 GiB single shard**. Gemma-4's two shards are 49.9 GiB + 1.7 GiB; every other family in the lane shards at ~5 GiB.
 4. **The axis that orders every outcome is host RAM against that shard.** 30 GiB refuses the map outright; 64 GiB maps it and dies opaquely; 96 / 125 / 188 GiB pass. The two failures and the one clean refusal are the same failure family at three severities, and all three are inside the `safe_open(device="cuda")` mapping — which maps the whole 49.9 GiB shard and copies each tensor to the GPU out of that mapping.

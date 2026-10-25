@@ -1,9 +1,9 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3nativebest; e4b 2ad31872d1ced9218e5f701544fcb0785a17c46a gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-34 instance 53927504 deadline 1790995862; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3nativebest; e4b 2ad31872d1ced9218e5f701544fcb0785a17c46a gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-34 instance redacted-e51d74b4 deadline 1790995862; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=32 (physical cores) box_class=RTX 5090
 [2026-10-02T22:23:22Z] tc1/boxA: driver 590.48.01: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 590.48.01 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 590.48.01, GPU-96fb75e3-e935-ea7f-350f-5a47c71abc21, 600.00 W, 3150 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 590.48.01, GPU-redacted-c25c27b1, 600.00 W, 3150 MHz
 CPU(s):                                  64
 Model name:                              AMD EPYC 9334 32-Core Processor
 MemTotal:       659622416 kB
@@ -116,7 +116,7 @@ QWEN3NATIVEBEST DONE
 | P13 | qwen3nativebest | **UNTESTED** | axolotl half UNTESTED; Unsloth half HELD |
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3nativebest; e4b 2ad31872d1ced9218e5f701544fcb0785a17c46a gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-34 instance 53927504 deadline 1790995862; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3nativebest; e4b 2ad31872d1ced9218e5f701544fcb0785a17c46a gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-34 instance redacted-e51d74b4 deadline 1790995862; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=32 (physical cores) box_class=RTX 5090
 DRIVER 590.48.01 cu130_ok=1
 AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType

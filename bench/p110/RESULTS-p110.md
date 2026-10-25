@@ -22,7 +22,7 @@ Code under test:
 ## The reading (`p110-5090-1`)
 
 **Host:** one RTX 5090 (sm_120, driver 580.95.05) on an AMD EPYC 7C13 (256 threads, 818 GiB RAM), Vast instance
-54072289. **Cost:** $0.1904. Teardown was proven at 22:46:27Z.
+redacted-ff40af5f. **Cost:** $0.1904. Teardown was proven at 22:46:27Z.
 
 **Timeline (the box's own log):**
 - install at 22:28:05Z;

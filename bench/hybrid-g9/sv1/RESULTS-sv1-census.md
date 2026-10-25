@@ -1,6 +1,6 @@
 # RESULTS — SV1: current-stack decode census + dot-pad×F2 composition
 
-Adjudicated 2026-08-26. Box: instance 48709950 (post-F2 anchor
+Adjudicated 2026-08-26. Box: instance redacted-933abf0f (post-F2 anchor
 7.25 ms). Receipts in `receipts-sv1/`.
 
 ## Composition cert: PARTIAL (K6-B frame) — knob stays opt-in
@@ -43,7 +43,7 @@ wall. Device work cannot exceed wall-clock on a single stream, so the
 correct bound for the certified path is 6.476 ms. See "Basis
 correction" at the end of this file. -->
 
-The re-run on box 48728047 delivered the lost number:
+The re-run on box redacted-c248d28c delivered the lost number:
 **Self-CUDA 8.43 ms/step** (101.169 ms over the 12-step active
 window, `bv3b/receipts-bv3b/bv3b_kernels.txt.gz`; eager-path basis,
 disclosed — the graphed 7.25 ms wall bounds device work in the same
@@ -68,18 +68,18 @@ Three figures have been used as bounds on single-stream device work:
 
 | basis | box | anchor | ms/step | implied tok/s |
 |---|---|---|---|---|
-| Self-CUDA sum, **eager** path | 48728047 | 7.27 ms | 8.430 | 118.6 |
-| graphed **default** wall | 48709950 | 7.25 ms | 7.250 | 137.9 |
-| **certified opt-in wall** (dot-pad × F2) | 48709950 | 7.25 ms | **6.476** | **154.4** |
+| Self-CUDA sum, **eager** path | instance-redacted-c248d28c | 7.27 ms | 8.430 | 118.6 |
+| graphed **default** wall | instance-redacted-933abf0f | 7.25 ms | 7.250 | 137.9 |
+| **certified opt-in wall** (dot-pad × F2) | instance-redacted-933abf0f | 7.25 ms | **6.476** | **154.4** |
 
 **Box provenance, stated because this correction would otherwise commit the error
 it names.** The 8.43 census and the certified ladder are from *different rentals*:
-8.43 on 48728047, 6.476 on 48709950. Their anchors agree to **0.3%** (7.27 vs
+8.43 on instance-redacted-c248d28c, 6.476 on instance-redacted-933abf0f. Their anchors agree to **0.3%** (7.27 vs
 7.25 ms), so they are the same class under this project's own anchor discipline —
 tighter than the 2.2% SV2's box was accepted at.
 
 The argument does not actually rest on that cross-box step. It rests on a
-**within-run** inequality: on the certified run itself, on 48709950, the wall was
+**within-run** inequality: on the certified run itself, on instance-redacted-933abf0f, the wall was
 6.476 ms, and device work on a single stream cannot exceed the wall-clock of the
 run it occurred in. So device work on the certified path is ≤ 6.476 ms no matter
 what any other box measured. The cross-box anchor agreement is corroboration, not

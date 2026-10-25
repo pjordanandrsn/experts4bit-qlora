@@ -1,8 +1,8 @@
 {
   "method": "vast-destroy",
   "reason": "completion",
-  "evidence": "{\"destroy\": {\"at\": \"2026-10-18T18:09:27Z\", \"http\": 200, \"instance_id\": \"56596124\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": [\"56593481\"]}",
+  "evidence": "{\"destroy\": {\"at\": \"2026-10-18T18:09:27Z\", \"http\": 200, \"instance_id\": \"instance-redacted-b6a651a0\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": [\"instance-redacted-601b9402\"]}",
   "complete": true,
-  "instance_id": "56596124",
+  "instance_id": "instance-redacted-b6a651a0",
   "at": "2026-10-18T18:09:27Z"
 }

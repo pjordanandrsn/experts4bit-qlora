@@ -1,4 +1,4 @@
-# tp1 — training parity on real weights, results (2026-09-05, box 49937730, one RTX 5090 on an EPYC 7Q83 host)
+# tp1 — training parity on real weights, results (2026-09-05, box redacted-0cc9db7c, one RTX 5090 on an EPYC 7Q83 host)
 
 **All 18 rows are in: `TP_DONE` 2026-09-05T15:22:26Z (the six families through the registered arms) and `TP2_DONE`
 15:33Z (Granite's `fused` corrected-counter re-run, `logs/tp1b.sh`, on the same box).** The table below is the verbatim

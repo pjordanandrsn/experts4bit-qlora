@@ -1,4 +1,4 @@
-NVIDIA GeForce RTX 5090, 32607 MiB, 590.48.01, GPU-af083d3f-54ef-df0a-aff4-ad90ab72c06c, 575.00 W, 3090 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 590.48.01, GPU-redacted-5ab562de, 575.00 W, 3090 MHz
 CPU(s):                                  32
 Model name:                              AMD Ryzen Threadripper PRO 3955WX 16-Cores
 MemTotal:       263771780 kB

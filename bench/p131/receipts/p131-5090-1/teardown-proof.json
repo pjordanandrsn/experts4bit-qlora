@@ -1,8 +1,8 @@
 {
   "method": "vast-destroy",
   "reason": "preflight-failed",
-  "evidence": "{\"destroy\": {\"at\": \"2026-10-19T06:05:41Z\", \"http\": 200, \"instance_id\": \"56679757\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": []}",
+  "evidence": "{\"destroy\": {\"at\": \"2026-10-19T06:05:41Z\", \"http\": 200, \"instance_id\": \"instance-redacted-4e55dcf5\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": []}",
   "complete": true,
-  "instance_id": "56679757",
+  "instance_id": "instance-redacted-4e55dcf5",
   "at": "2026-10-19T06:05:42Z"
 }

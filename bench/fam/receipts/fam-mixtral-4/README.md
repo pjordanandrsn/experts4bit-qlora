@@ -1,6 +1,6 @@
 # `fam-mixtral-4`: Mixtral-8x7B-Instruct, the B=1 fused stack at T == 1 (the reading)
 
-One RTX 5090 (cc 12.0, driver 595.71.05) on an AMD EPYC 7C13 host (256 CPUs): Vast instance 55108544, launched
+One RTX 5090 (cc 12.0, driver 595.71.05) on an AMD EPYC 7C13 host (256 CPUs): Vast instance redacted-be5fd72e, launched
 2026-10-09T22:54:13Z, torn down 2026-10-10T01:04:31Z. Cost $2.59. Code: e4b `68845bfc` (Amendment 9's merge, #1487),
 grouped-nf4-gemm 0.43.0 (`6ee2e10`).
 

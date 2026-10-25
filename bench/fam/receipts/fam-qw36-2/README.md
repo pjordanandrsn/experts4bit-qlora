@@ -1,6 +1,6 @@
 # `fam-qw36-2`: Qwen3.6-35B-A3B, the B=1 fused stack at T == 1 (a reading; the registration's one rerun)
 
-One RTX 5090 (cc 12.0, driver 595.71.05) on an AMD EPYC 7C13 host (256 CPUs): Vast instance 54944654, launched
+One RTX 5090 (cc 12.0, driver 595.71.05) on an AMD EPYC 7C13 host (256 CPUs): Vast instance redacted-89cf1554, launched
 2026-10-09T01:26:37Z, torn down 03:34:29Z. Cost $2.345. Code: e4b `98d59921` (Amendment 2's merge, #1420),
 grouped-nf4-gemm 0.43.0 (`6ee2e10`). Qwen3.6 at 128 teacher-forced positions, OFF and ON_auto, the largest shape first.
 

@@ -153,7 +153,7 @@ It does not compare against bo6c's pack, which does not exist.
   ~15, bake ~5, the two NF4 arms ~8, `build1` + dump ~60, the four candidate arms ~45, `build2` ~55, reduce ~2
   — about 3.2 h, with the artifact fetch overlapped.
 - **The path proof.** The standing rule wants a cheap proving run before any guard over an hour. `p54-fqkv-1`
-  ran this path **today** (2026-09-21, instance 51951835, same launcher head `8542e8d`, same provider class and
+  ran this path **today** (2026-09-21, instance redacted-be568d5a, same launcher head `8542e8d`, same provider class and
   image, staged by the same drive skeleton, reached `TP_DONE` and fetched its receipts), so the path is proven
   on hardware hours old. What differs is the e4b head, because this lane adds files — and that difference is
   covered where it is cheap: `tests/test_p55x_staged_pin.py` in CI, and a controller-side

@@ -1,9 +1,9 @@
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3tileab; e4b 43f36c79f6f2b0c028744a5e8f9acc43acb15c58 gnf4 c8f0adcc67f4cbd954b4c12e50dd48bf8d024efd; run tc1-5090-43 instance 54011443 deadline 1791035995; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3tileab; e4b 43f36c79f6f2b0c028744a5e8f9acc43acb15c58 gnf4 c8f0adcc67f4cbd954b4c12e50dd48bf8d024efd; run tc1-5090-43 instance redacted-9eba24b4 deadline 1791035995; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=16 (physical cores) box_class=RTX 5090
 [2026-10-03T12:31:14Z] tc1/boxA: driver 580.159.03: cu130 venvs (venv-unsloth, venv-axolotl) will be built
 DRIVER 580.159.03 cu130_ok=1
-NVIDIA GeForce RTX 5090, 32607 MiB, 580.159.03, GPU-b59c7979-74a7-fdfc-280d-0d81c32ec602, 500.00 W, 3105 MHz
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.159.03, GPU-redacted-0ca5c0c7, 500.00 W, 3105 MHz
 CPU(s):                               32
 Model name:                           AMD Ryzen 9 7950X 16-Core Processor
 MemTotal:       130979720 kB
@@ -113,7 +113,7 @@ QWEN3TILEAB DONE
 | P23 | qwen3tileab | **HELD** | matched: tilecost / tilemax 0.968 [0.964, 0.971 over 4 cross-draw ratios] vs [0.88, 0.98]; decision reading: flip-eligible; s/step tilemax 2.618 / 2.628 (within 0.4%), tilecost 2.533 / 2.543 (within 0.4%); held-out at N tilemax 0.8499 / tilecost 0.8470; tile heights launched (process) tilemax {"128": 15562, "16": 0, "32": 110, "64": 1224} tilecost {"128": 1320, "16": 756, "32": 4052, "64": 10768} |
 ----- summary.txt -----
 FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
-BOX A families: qwen3tileab; e4b 43f36c79f6f2b0c028744a5e8f9acc43acb15c58 gnf4 c8f0adcc67f4cbd954b4c12e50dd48bf8d024efd; run tc1-5090-43 instance 54011443 deadline 1791035995; prereg tc1/TC1-PREREG.md
+BOX A families: qwen3tileab; e4b 43f36c79f6f2b0c028744a5e8f9acc43acb15c58 gnf4 c8f0adcc67f4cbd954b4c12e50dd48bf8d024efd; run tc1-5090-43 instance redacted-9eba24b4 deadline 1791035995; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=16 (physical cores) box_class=RTX 5090
 DRIVER 580.159.03 cu130_ok=1
 DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb

@@ -51,7 +51,7 @@
   "speculative": false,
   "prefix_cache_reuse": "fresh Generator per call"
  },
- "vast_instance_id": "53955591",
+ "vast_instance_id": "instance-redacted-c0a4e39b",
  "env_knobs": {
   "EXL3_BC_ATTN": null,
   "EXL3_GEMV": null,

@@ -12,8 +12,8 @@ canary with rc 26 (HARNESS_ERROR, $0.731, teardown verified). The tests that rea
 | `canary_drv_n2_node.json` | `862123a5d959a70b62e43f2aec4da256904f7eecddfff7529beeeb0e487ebaf5` |
 | `forensics.txt` | `8937620ac7926dec900fa58d1fe2c6978fcadcc953b2c45bc51c54733dc450eb` |
 
-`forensics.txt` was added by Amendment 2. Its first line names the card, GPU-280958b0, not the reference card
-GPU-38c66e15. `tests/test_p132_card.py` uses it as the record the card-identity check must refuse.
+`forensics.txt` was added by Amendment 2. Its first line names the card, GPU-redacted-52f1f988, not the reference card
+GPU-redacted-efc7954e. `tests/test_p132_card.py` uses it as the record the card-identity check must refuse.
 
 **What they hold:**
 - `canary.json` is `p132_box.py --mode canary`'s record, plus the census verdict that `p132_run.sh` merged into it.

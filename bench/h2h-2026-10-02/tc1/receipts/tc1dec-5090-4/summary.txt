@@ -1,5 +1,5 @@
 FIXTURE field: template=alpaca steps=60 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407 pack=0
-BOX A families: olmoedecab qwen3decab; e4b ac3adf9608b47be7f3663985dab7874ef626a68f gnf4 aaefbf8d1a20d22a18114b0a2091ffd5235777cf; run tc1dec-5090-4 instance 54403153 deadline 1791260485; prereg tc1/TC1-PREREG.md
+BOX A families: olmoedecab qwen3decab; e4b ac3adf9608b47be7f3663985dab7874ef626a68f gnf4 aaefbf8d1a20d22a18114b0a2091ffd5235777cf; run tc1dec-5090-4 instance redacted-bb98f17d deadline 1791260485; prereg tc1/TC1-PREREG.md
 OMP_NUM_THREADS=64 (physical cores) box_class=RTX 5090
 CPU allotment 31 (cgroup quota capped by affinity; physical cores 64)
 DRIVER 580.126.09 cu130_ok=1

@@ -1,0 +1,7 @@
+# Files of this receipt kept only in the private receipt store, byte-exact: sha256, then the path
+# within this receipt.
+# Originals of files this receipt carries with rented-hardware identifiers replaced by tokens
+# (docs/receipts-redaction.md). Each original is in the private receipt store byte-exact, and is
+# also git's bytes at the commit named on its line.
+# same bytes: bench/dq6/receipts/dq6-4090-1/teardown-proof.json at 069a029befd4
+c55be9dc3844ad5e0491449cfc56f70b4b859d58224f910a21c1264663a5b184  teardown-proof.json

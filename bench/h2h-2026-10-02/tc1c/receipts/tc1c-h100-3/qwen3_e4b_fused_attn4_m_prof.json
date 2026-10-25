@@ -103,7 +103,7 @@
    0
   ],
   "host": {
-   "uuid": "GPU-3c4853d0-0d16-e7b2-b0f5-efc76ca6203e",
+   "uuid": "GPU-redacted-a42dd811",
    "pci.bus_id": "00000000:01:00.0",
    "pcie.link.gen.current": "5",
    "pcie.link.gen.max": "5",
@@ -117,7 +117,7 @@
    "cpu": "AMD EPYC 9534 64-Core Processor",
    "cpu_threads": 224,
    "host_mem_gib": 1511.5,
-   "vast_instance_id": "54091206",
+   "vast_instance_id": "instance-redacted-f05760d7",
    "container_host": "99610503f250"
   },
   "anchor_json": null,

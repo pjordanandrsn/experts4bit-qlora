@@ -39,7 +39,7 @@ pack on the real kernels (bitwise at 1, 4 and 24 rows), #750's direct cold landi
 
 ## Box and cost
 
-RTX 5090 (compute capability 12.0, driver 610.57.04, 32 607 MiB), Vast verified/secure, instance `53249558`,
+RTX 5090 (compute capability 12.0, driver 610.57.04, 32 607 MiB), Vast verified/secure, instance `redacted-b202e078`,
 `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`. torch 2.8.0+cu128 and triton 3.4.0 from the image (held by
 `constraints.txt`), grouped-nf4-gemm 0.33.5 (`fb15cf5`), transformers 5.17.0, bitsandbytes 0.50.2. The tripwires held:
 the import resolved to the clone, and torch was unchanged. **Cost $0.0666** over a 447 s lifetime, estimate $0.75.
