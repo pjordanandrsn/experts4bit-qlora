@@ -106,6 +106,29 @@ def test_a_torch_that_cannot_tell_keeps_the_legacy_sum_and_says_so(tmp_path):
     assert abs(s["device_ms"] - round(sum(r["self_device_ms"] for r in prof["top_device"]), 1)) < 0.2
 
 
+def test_a_profile_with_no_cuda_row_never_claims_the_kernels_only_method(tmp_path):
+    """No CUDA row at all (a CPU-only profile): all() over nothing is True, but no method was exercised, so the stamp is
+    no_device_rows, never kernels_only_at_source, and f15v2 does not legacy-correct it either."""
+    ev, _ = _events()
+    cpu_only = [e for e in ev if e.device_type != torch.autograd.DeviceType.CUDA]
+    s, out = _summarize(tmp_path, cpu_only)
+    assert s["device_ms_method"] == "no_device_rows" and s["device_ms"] == 0.0 and s["user_annotation_ms"] == 0.0
+    with pytest.raises(F2.AnnotationError):
+        F2.kernels_only_device_ms(out)
+
+
+def test_mutant_dropping_the_cuda_row_guard_is_caught(tmp_path):
+    """The guard removed in a copy of summarize_profile's source: the CPU-only profile would claim kernels_only_at_source."""
+    src = inspect.getsource(ARM_MOD.summarize_profile)
+    guard = "flag_seen = bool(cuda_rows) and all("
+    assert src.count(guard) == 1
+    ns = dict(vars(ARM_MOD))
+    exec(compile(src.replace(guard, "flag_seen = all("), str(ARM), "exec"), ns)
+    ev, _ = _events()
+    s, _ = _summarize(tmp_path, [e for e in ev if e.device_type != torch.autograd.DeviceType.CUDA], fn=ns["summarize_profile"])
+    assert s["device_ms_method"] != "no_device_rows"
+
+
 def test_the_mutant_that_sums_annotations_is_caught(tmp_path):
     """The rule disabled in a copy of summarize_profile's own source: device time takes the span back, and the kernels-only check
     fails. Only a source mutant shows the filter is in the code path; a fixture mutant cannot."""

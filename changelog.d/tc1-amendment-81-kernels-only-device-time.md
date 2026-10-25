@@ -2,8 +2,8 @@
 
 - **At the source.** `bench/tc1/tc1_arm.py`'s profile summary leaves torch's user-annotation rows out of `device_ms`, the memcpy figure
   and the family fractions, since the `Optimizer.step#…` span covers kernels that are rows of their own (e4b#2129). It reports their time
-  as `user_annotation_ms`, and names its method: `device_ms_method` is `kernels_only_at_source`, or `all_cuda` on a torch without the
-  flag. `f15v2.kernels_only_device_ms` refuses anything but a legacy profile, so no figure is corrected twice. Amendments 78-80's tests
+  as `user_annotation_ms`, and names its method: `device_ms_method` is `kernels_only_at_source`, `all_cuda` on a torch without the
+  flag, or `no_device_rows` when the profile has no CUDA row. `f15v2.kernels_only_device_ms` refuses anything but a legacy profile, so no figure is corrected twice. Amendments 78-80's tests
   read the arm at their frozen commits.
 - **The re-derivation.** `bench/tc1/device_rederive.py` (new) reads each committed TC1 run twice with the run's own staged reducer:
   - as recorded, which must reproduce the committed RESULTS (a proof step);

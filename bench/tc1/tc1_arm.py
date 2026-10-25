@@ -3574,8 +3574,9 @@ def summarize_profile(prof, wall_s: float, n_steps: int, out_path: str) -> dict:
     from torch.autograd import DeviceType
     ka = list(prof.key_averages())
     # The method is decided BEFORE any sum, so a torch that flags only some rows can never yield a half-corrected summary.
-    flag_seen = all(getattr(e, "is_user_annotation", None) is not None
-                    for e in ka if getattr(e, "device_type", None) == DeviceType.CUDA)
+    # A profile with no CUDA row exercised neither method: it says so (no_device_rows), never kernels_only_at_source.
+    cuda_rows = [e for e in ka if getattr(e, "device_type", None) == DeviceType.CUDA]
+    flag_seen = bool(cuda_rows) and all(getattr(e, "is_user_annotation", None) is not None for e in cuda_rows)
     dev_ms = 0.0; memcpy_ms = 0.0; n_dev = 0; n_cpu = 0; cpu_ms = 0.0; n_launch = 0
     ann_ms = 0.0
     by_fam_cpu, by_fam_dev = {}, {}
@@ -3611,7 +3612,7 @@ def summarize_profile(prof, wall_s: float, n_steps: int, out_path: str) -> dict:
     summ = {
         "profiled_steps": n_steps, "wall_ms": round(wall_ms, 1), "wall_ms_per_step": round(wall_ms / max(n_steps, 1), 1),
         "device_ms": round(dev_ms, 1), "device_busy_fraction": round(dev_ms / wall_ms, 4) if wall_ms else None,
-        "device_ms_method": DEVICE_MS_METHOD if flag_seen else "all_cuda", "user_annotation_ms": round(ann_ms, 1),
+        "device_ms_method": DEVICE_MS_METHOD if flag_seen else ("all_cuda" if cuda_rows else "no_device_rows"), "user_annotation_ms": round(ann_ms, 1),
         "memcpy_ms": round(memcpy_ms, 1), "memcpy_fraction_of_device": round(memcpy_ms / dev_ms, 4) if dev_ms else None,
         "device_events_per_step": round(n_dev / max(n_steps, 1)), "cpu_ops_per_step": round(n_cpu / max(n_steps, 1)),
         "launches_per_step": round(n_launch / max(n_steps, 1)),                         # P129 Amendment 2's recount (the launch APIs)

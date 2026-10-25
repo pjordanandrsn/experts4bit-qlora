@@ -3942,8 +3942,8 @@ twice (e4b#2129 deliverable 2, confirmed by independent review). torch 2.8's own
 
 **At the source** (`bench/tc1/tc1_arm.py`). A row torch flags `is_user_annotation` is left out of `device_ms`, the memcpy figure and the
 family fractions, and its time is reported as `user_annotation_ms`; the row is still listed, marked `"user_annotation": true`. The summary
-says which method it used: `device_ms_method` is `kernels_only_at_source` when torch flags every CUDA row, else `all_cuda` (the legacy sum,
-on a torch that does not carry the flag). `bench/tc1/f15v2.kernels_only_device_ms` refuses a profile whose method is not `all_cuda`, so no
+says which method it used: `device_ms_method` is `kernels_only_at_source` when torch flags every CUDA row, `all_cuda` (the legacy sum,
+on a torch that does not carry the flag), or `no_device_rows` for a profile with no CUDA row, which exercised neither method. `bench/tc1/f15v2.kernels_only_device_ms` refuses a profile whose method is not `all_cuda`, so no
 figure is ever corrected twice. Amendments 78, 79 and 80 ran the arm before this change: their tests now read `tc1_arm.py` at their
 frozen commits (`Q235_FROZEN`, `POS79_FROZEN`, `POS80_FROZEN`), and staging amendment 78's kit from the live tree refuses. Amendment 80's
 box pins its own merge, so its profiles are legacy and its rule subtracts the span itself.
