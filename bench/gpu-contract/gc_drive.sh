@@ -49,6 +49,12 @@ done
 NEED=${GC_NEED_E4B_S:-600}
 { [[ "$NEED" =~ ^[1-9][0-9]{0,5}$ ]] && [ "$NEED" -le 1800 ]; } || { say "refusing: GC_NEED_E4B_S='$NEED' is not 1-1800 whole seconds without a leading zero"; exit 78; }
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
+# The driver's OWN exit code is what the launcher reads (it excludes a machine on 13 14 17 18), so its last step is the shared
+# bench/common/drive_tail.sh: the host codes always pass through, and so do the codes gc_run.sh exits with (9 install, checkout or
+# tripwire; 10 dud box; 15 outside the declared class; 28 not the image's torch; 30 the contract failed; 78 refused input; 130
+# interrupted); 23 no readable exit file, 24 the box said 0 without this nonce's GC_SUCCESS marker, 26 any other code.
+BOX_CODES="9 10 15 28 30 78 130"
+. "$REPO/bench/common/drive_tail.sh" || { say "refusing: bench/common/drive_tail.sh is missing"; exit 78; }
 # the class must parse: gc_box answers 0 (inside) or 15 (outside) for a well-formed class against this dummy probe; 78 (malformed)
 # or anything else (the check itself failed) refuses
 python3 "$HERE/gc_box.py" --card "cc=0.0 sms=0" --declared "${GC_CARD:-}" > /dev/null; crc=$?
@@ -74,7 +80,7 @@ else
   SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
   box(){ $SSH "$1"; }
   box_stage(){ $SCP $STAGE "root@$HOST:$W/"; }
-  box_fetch(){ rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
+  box_fetch(){ rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
       --exclude '__pycache__' --exclude '.cache' --exclude 'gnf4src' --exclude 'e4bsrc' "root@$HOST:$W/" "$1/"; }
 fi
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
@@ -100,12 +106,13 @@ while :; do
 done
 mkdir -p "$RUN_DIR/gc" || { say "fetch failed: local dir"; exit 22; }
 box_fetch "$RUN_DIR/gc" < /dev/null || { say "fetch failed"; exit 22; }
+# bench/common rule 8: a fetch never imports links (the rsync skips them; the dry run's tar stream could carry one)
+LINK=$(find "$RUN_DIR/gc" -type l | head -1)
+[ -z "$LINK" ] || { say "refusing: a symlink in the fetched artifacts, $LINK (bench/common rule 8)"; exit 22; }
 say "fetched $(ls "$RUN_DIR/gc" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/gc/GC_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/gc/TP_DONE.$NONCE" ] || {
   [ "$LANE_DEAD" = 1 ] && { say "lane DIED on the box: no GC_EXIT_CODE and no TP_DONE -- artifacts fetched"; exit 25; }
   say "lane did not finish (no TP_DONE for this run)"; exit 23; }
-RC=$(cat "$RUN_DIR/gc/GC_EXIT_CODE.$NONCE" 2>/dev/null); case "$RC" in ''|*[!0-9]*) say "malformed exit code"; exit 24;; esac
 grep -E '^(gnf4|e4b) .*tests rc=|^GC_SUITE|^GC CONTRACT|^SKIPPED' "$RUN_DIR/gc/summary.txt" | cut -c1-300 | while read -r l; do say "result: $l"; done
-[ -f "$RUN_DIR/gc/GC_SUCCESS.$NONCE" ] && [ "$RC" = 0 ] || { say "lane exit rc=$RC without success marker"; exit "$RC"; }
-say "contract passed rc=0"; exit 0
+drive_finish "$RUN_DIR/gc" "$NONCE" GC "$BOX_CODES"

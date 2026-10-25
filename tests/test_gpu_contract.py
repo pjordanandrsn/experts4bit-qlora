@@ -45,6 +45,8 @@ def tool(tmp_path: Path) -> Path:
     (root / "bench" / "gpu-contract").mkdir(parents=True)
     for f in ("gc_drive.sh", "gc_run.sh", "gc_box.py"):
         shutil.copy(GC / f, root / "bench" / "gpu-contract" / f)
+    (root / "bench" / "common").mkdir()
+    shutil.copy(GC.parent / "common" / "drive_tail.sh", root / "bench" / "common" / "drive_tail.sh")
     env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
     for cmd in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "tool"]):
         subprocess.run(["git", "-C", str(root), *cmd], check=True, env=env, capture_output=True)
@@ -156,3 +158,68 @@ def test_each_suite_is_gated_on_the_time_left_and_the_required_tests_are_read():
     assert 'if can_run "${GC_NEED_E4B_S:-600}" "e4b served tests"; then' in text
     assert text.count('perl -e "alarm $(alarm); exec @ARGV"') == 2, "each suite's alarm stops at the receipt margin"
     assert 'python $W/gc_box.py --require "$GC_REQUIRE" --junits logs/gnf4.xml logs/e4b.xml' in text
+
+
+def test_the_driver_refuses_without_the_shared_tail(tool, tmp_path):
+    (tool / "bench" / "common" / "drive_tail.sh").unlink()
+    r = _drive(tool, tmp_path)
+    assert r.returncode == 78 and "drive_tail.sh is missing" in r.stdout, r.stdout + r.stderr
+
+
+# -- the whole driver on a stub box (GC_DRY=1): staging, the nonce handshake, the poll, the fetch and the shared tail ---------------
+FAKE_RUN = """#!/bin/bash
+# a stand-in for gc_run.sh: binds the nonce and leaves the records the case asks for
+cd "$(dirname "$0")" || exit 1
+printf '%s\\n' "$GC_RUN_NONCE" > GC_RUN_NONCE
+echo "GC CONTRACT FAKE" > summary.txt
+case "$FAKE_CASE" in
+  ok) echo 0 > "GC_EXIT_CODE.$GC_RUN_NONCE"; : > "GC_SUCCESS.$GC_RUN_NONCE";;
+  nomarker) echo 0 > "GC_EXIT_CODE.$GC_RUN_NONCE";;
+  link) echo 0 > "GC_EXIT_CODE.$GC_RUN_NONCE"; : > "GC_SUCCESS.$GC_RUN_NONCE"; ln -s /etc/hostname leak;;
+  *) echo "$FAKE_CASE" > "GC_EXIT_CODE.$GC_RUN_NONCE";;
+esac
+: > "TP_DONE.$GC_RUN_NONCE"
+sleep 3   # a real runner outlives the driver's start handshake, which reads an exited child as a failed start
+"""
+# the box: every command runs locally, with the box's /root/gc moved into the test's own directory
+STUB_BOX = """#!/bin/bash
+exec bash -c "${1//\\/root\\/gc/$BOX_ROOT}"
+"""
+
+
+@pytest.fixture
+def dry_tool(tmp_path: Path) -> Path:
+    root = tmp_path / "repo"
+    (root / "bench" / "gpu-contract").mkdir(parents=True)
+    (root / "bench" / "common").mkdir()
+    for f in ("gc_drive.sh", "gc_box.py"):
+        shutil.copy(GC / f, root / "bench" / "gpu-contract" / f)
+    (root / "bench" / "gpu-contract" / "gc_run.sh").write_text(FAKE_RUN)
+    shutil.copy(GC.parent / "common" / "drive_tail.sh", root / "bench" / "common" / "drive_tail.sh")
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    for cmd in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "tool"]):
+        subprocess.run(["git", "-C", str(root), *cmd], check=True, env=env, capture_output=True)
+    return root
+
+
+@pytest.mark.parametrize("case,want", [
+    ("ok", 0),             # rc 0 with this nonce's marker
+    ("nomarker", 24),      # rc 0 without it: a success the box never recorded
+    ("13", 13), ("14", 14), ("17", 17), ("18", 18),   # the launcher's host codes pass through
+    ("30", 30),            # gc_run.sh's own code: the contract failed
+    ("5", 26),             # a code gc_run.sh never exits with
+    ("link", 22),          # rule 8: a link the box left behind refuses the fetch
+])
+def test_the_dry_run_end_to_end_hands_the_launcher_the_box_code(dry_tool, tmp_path, case, want):
+    box = tmp_path / "box"
+    stub = tmp_path / "box_exec.sh"
+    stub.write_text(STUB_BOX)
+    stub.chmod(0o755)
+    r = _drive(dry_tool, tmp_path, GC_DRY="1", GC_DRIVE_DRYRUN=None, GC_BOX_EXEC=str(stub), GC_POLL_S="1",
+               E4B_RENT_RUN_ID="gc-dry-tail-1", E4B_RENT_SSH_HOST=None, E4B_RENT_SSH_PORT=None, E4B_RENT_SSH_OPTS=None,
+               BOX_ROOT=str(box), FAKE_CASE=case)
+    assert r.returncode == want, r.stdout + r.stderr
+    if case == "link":
+        assert "symlink in the fetched artifacts" in r.stdout, r.stdout
+    else:
+        assert (tmp_path / "run" / "gc" / "summary.txt").is_file()          # the receipts were fetched before the verdict
