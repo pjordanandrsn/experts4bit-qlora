@@ -2961,15 +2961,16 @@ def _probe_e4b_stack(inner, slot, pk, am, shp, offload=None):
     with) on expert 0, to bf16; the control re-dequantises a 1-row COPY of the packed storage with one byte flipped.
 
     Under expert offload (`offload`, the handle) the base holds 0-element placeholders between forwards, so the packed storage
-    and absmax are the handle's HOME copies (the bytes every forward stages), moved to the handle's device and dequantised
-    there, as the staged forward does. (Offload refuses a double-quantized absmax, so the two never meet.)"""
+    and absmax are the handle's HOME copies (the bytes every forward stages); expert 0's rows alone are moved to the handle's
+    device and dequantised there, as the staged forward does, rather than the whole layer (about 1.2 GB at Qwen3-235B-A22B).
+    (Offload refuses a double-quantized absmax, so the two never meet.)"""
     dq = "_e4b_absmax_dq" in getattr(inner, "__dict__", {})     # ABSMAX-DQ: the absmax is stored double-quantized
     if offload is not None:
         if dq:
             raise RuntimeError(f"{slot}: an offloaded stack carries a double-quantized absmax, which offload refuses")
-        dev = offload.device
-        packed, absmax = offload.home[pk].to(dev), offload.home[am].to(dev)
-        source = f"{pk}[0] (offload home, staged to {dev})"
+        dev = offload.device                    # expert 0 only: _dequantize_expert indexes both by expert on dim 0
+        packed, absmax = offload.home[pk][0:1].to(dev), offload.home[am][0:1].to(dev)
+        source = f"{pk}[0] (offload home, expert 0 staged to {dev})"
     else:
         if dq:                                          # ... so it is read the way the library's per-expert loop reads it
             from experts4bit_qlora.absmax_dq import expert_absmax_rows
@@ -3552,6 +3553,8 @@ def _family(name: str) -> str:
 
 #: The kernel-launch API calls a profiled step makes (P129 Amendment 2's recount; P128's census counted the same four names).
 LAUNCH_API_NAMES = ("cudaLaunchKernel", "cuLaunchKernel", "cuLaunchKernelEx", "cudaLaunchKernelExC")
+#: TC1 amendment 81: the stamp a kernels-only device time carries (bench/tc1/f15v2.py refuses to correct a profile that has it).
+DEVICE_MS_METHOD = "kernels_only_at_source"
 
 
 def summarize_profile(prof, wall_s: float, n_steps: int, out_path: str) -> dict:
@@ -3559,10 +3562,24 @@ def summarize_profile(prof, wall_s: float, n_steps: int, out_path: str) -> dict:
     overlapping streams can push it past 1.0 and that is reported, not clipped), device events (launches + memcpys)
     per step, and CPU self time by op family from key_averages(). Full top tables go to `out_path`; the returned dict
     is the summary the CELL line carries. Nothing here is a timed number: the timed s/step excludes nothing, the
-    profiled steps simply carry the profiler's overhead and are flagged in the receipt."""
+    profiled steps simply carry the profiler's overhead and are flagged in the receipt.
+
+    TC1 amendment 81: device time is KERNELS ONLY, at the source. A user-annotation row (the optimizer's ``Optimizer.step#…`` span) is
+    CUDA-typed but is a span over kernels that are rows of their own, so it is left out of every device-time sum (device_ms, memcpy, the
+    family fractions), exactly as torch 2.8.0's own device total does (profiler_util.py:1010-1020, ``not evt.is_user_annotation``; the
+    flag is part of key_averages()'s grouping key, line 331, so an annotation never merges with a kernel row). The row stays in the
+    tables, flagged ``user_annotation``, and its time is recorded as ``user_annotation_ms``; event counts are unchanged. The summary
+    states the method: ``device_ms_method`` is ``kernels_only_at_source`` only when EVERY device row carried the flag; otherwise
+    (a torch without it) the sum is the legacy all-CUDA one and the method says ``all_cuda``, so bench/tc1/f15v2.py's legacy correction
+    still applies and nothing is corrected twice or not at all."""
     from torch.autograd import DeviceType
-    ka = prof.key_averages()
+    ka = list(prof.key_averages())
+    # The method is decided BEFORE any sum, so a torch that flags only some rows can never yield a half-corrected summary.
+    # A profile with no CUDA row exercised neither method: it says so (no_device_rows), never kernels_only_at_source.
+    cuda_rows = [e for e in ka if getattr(e, "device_type", None) == DeviceType.CUDA]
+    flag_seen = bool(cuda_rows) and all(getattr(e, "is_user_annotation", None) is not None for e in cuda_rows)
     dev_ms = 0.0; memcpy_ms = 0.0; n_dev = 0; n_cpu = 0; cpu_ms = 0.0; n_launch = 0
+    ann_ms = 0.0
     by_fam_cpu, by_fam_dev = {}, {}
     rows = []
     for e in ka:
@@ -3572,22 +3589,31 @@ def summarize_profile(prof, wall_s: float, n_steps: int, out_path: str) -> dict:
         cnt = int(e.count)
         fam = _family(name)
         is_dev = getattr(e, "device_type", None) == DeviceType.CUDA
+        is_ann = bool(flag_seen and is_dev and getattr(e, "is_user_annotation", False))
         if is_dev:
-            n_dev += cnt; dev_ms += dev_self
-            if "Memcpy" in name or "Memset" in name:
-                memcpy_ms += dev_self
-            by_fam_dev[fam] = by_fam_dev.get(fam, 0.0) + dev_self
+            n_dev += cnt
+            if is_ann:
+                ann_ms += dev_self
+            else:
+                dev_ms += dev_self
+                if "Memcpy" in name or "Memset" in name:
+                    memcpy_ms += dev_self
+                by_fam_dev[fam] = by_fam_dev.get(fam, 0.0) + dev_self
         else:
             n_cpu += cnt; cpu_ms += cpu_self
             by_fam_cpu[fam] = by_fam_cpu.get(fam, 0.0) + cpu_self
             if name in LAUNCH_API_NAMES:
                 n_launch += cnt
-        rows.append({"name": name[:120], "family": fam, "device": bool(is_dev), "count": cnt,
-                     "self_cpu_ms": round(cpu_self, 3), "self_device_ms": round(dev_self, 3)})
+        row = {"name": name[:120], "family": fam, "device": bool(is_dev), "count": cnt,
+               "self_cpu_ms": round(cpu_self, 3), "self_device_ms": round(dev_self, 3)}
+        if is_ann:
+            row["user_annotation"] = True
+        rows.append(row)
     wall_ms = wall_s * 1e3
     summ = {
         "profiled_steps": n_steps, "wall_ms": round(wall_ms, 1), "wall_ms_per_step": round(wall_ms / max(n_steps, 1), 1),
         "device_ms": round(dev_ms, 1), "device_busy_fraction": round(dev_ms / wall_ms, 4) if wall_ms else None,
+        "device_ms_method": DEVICE_MS_METHOD if flag_seen else ("all_cuda" if cuda_rows else "no_device_rows"), "user_annotation_ms": round(ann_ms, 1),
         "memcpy_ms": round(memcpy_ms, 1), "memcpy_fraction_of_device": round(memcpy_ms / dev_ms, 4) if dev_ms else None,
         "device_events_per_step": round(n_dev / max(n_steps, 1)), "cpu_ops_per_step": round(n_cpu / max(n_steps, 1)),
         "launches_per_step": round(n_launch / max(n_steps, 1)),                         # P129 Amendment 2's recount (the launch APIs)

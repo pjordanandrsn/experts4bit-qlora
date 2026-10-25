@@ -1,0 +1,202 @@
+{
+ "receipt": "tc1-5090-138",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3sladder_e4b_fused_attn4_m_l0.json": {
+   "recorded_ms": 5211.6,
+   "kernels_only_ms": 5015.6,
+   "annotation_ms": 196.0,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 195.958
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3sladder_e4b_fused_attn4_m_l0_d2.json": {
+   "recorded_ms": 5173.2,
+   "kernels_only_ms": 5004.6,
+   "annotation_ms": 168.6,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 168.59
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3sladder_e4b_fused_attn4_m_l1.json": {
+   "recorded_ms": 5403.5,
+   "kernels_only_ms": 5237.8,
+   "annotation_ms": 165.7,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 165.661
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3sladder_e4b_fused_attn4_m_l1_d2.json": {
+   "recorded_ms": 5410.9,
+   "kernels_only_ms": 5243.2,
+   "annotation_ms": 167.7,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 167.717
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3sladder_e4b_fused_attn4_shipped_l0.json": {
+   "recorded_ms": 4043.0,
+   "kernels_only_ms": 3880.2,
+   "annotation_ms": 162.8,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 162.828
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3sladder_e4b_fused_attn4_shipped_l0_d2.json": {
+   "recorded_ms": 4049.4,
+   "kernels_only_ms": 3886.3,
+   "annotation_ms": 163.1,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 163.118
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3sladder_e4b_fused_attn4_shipped_l1.json": {
+   "recorded_ms": 4167.9,
+   "kernels_only_ms": 4009.4,
+   "annotation_ms": 158.5,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 158.499
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3sladder_e4b_fused_attn4_shipped_l1_d2.json": {
+   "recorded_ms": 4184.2,
+   "kernels_only_ms": 4009.6,
+   "annotation_ms": 174.6,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 174.615
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-| e4b/fused_attn4_shipped_l0 | VALID | 3.231 | 1347.7 | 0.417 | 27.9 | 0 | 23.321 | 1.95917 / 0.7552 |",
+  "-| e4b/fused_attn4_shipped_l1 | VALID | 3.251 | 1389.3 | 0.427 | 23.5 | 49152 | 23.321 | 1.95917 / 0.75578 |",
+  "-| e4b/fused_attn4_m_l0 | VALID | 4.137 | 1737.2 | 0.420 | 306.0 | 0 | 26.168 | 1.95917 / 0.75871 |",
+  "-| e4b/fused_attn4_m_l1 | VALID | 3.286 | 1801.2 | 0.548 | 24.6 | 49152 | 26.495 | 1.95917 / 0.75814 |",
+  "-| e4b/fused_attn4_m_l1_d2 | VALID | 3.334 | 1803.6 | 0.541 | 24.3 | 49152 | 26.495 | 1.95917 / 0.75721 |",
+  "-| e4b/fused_attn4_m_l0_d2 | VALID | 4.167 | 1724.4 | 0.414 | 304.8 | 0 | 26.156 | 1.95917 / 0.75561 |",
+  "-| e4b/fused_attn4_shipped_l1_d2 | VALID | 3.280 | 1394.7 | 0.425 | 24.0 | 49152 | 23.321 | 1.95917 / 0.75286 |",
+  "-| e4b/fused_attn4_shipped_l0_d2 | VALID | 3.201 | 1349.8 | 0.422 | 27.6 | 0 | 23.321 | 1.95917 / 0.75614 |",
+  "+| e4b/fused_attn4_shipped_l0 | VALID | 3.231 | 1293.4 | 0.400 | 27.9 | 0 | 23.321 | 1.95917 / 0.7552 |",
+  "+| e4b/fused_attn4_shipped_l1 | VALID | 3.251 | 1336.5 | 0.411 | 23.5 | 49152 | 23.321 | 1.95917 / 0.75578 |",
+  "+| e4b/fused_attn4_m_l0 | VALID | 4.137 | 1671.9 | 0.404 | 306.0 | 0 | 26.168 | 1.95917 / 0.75871 |",
+  "+| e4b/fused_attn4_m_l1 | VALID | 3.286 | 1745.9 | 0.531 | 24.6 | 49152 | 26.495 | 1.95917 / 0.75814 |",
+  "+| e4b/fused_attn4_m_l1_d2 | VALID | 3.334 | 1747.7 | 0.524 | 24.3 | 49152 | 26.495 | 1.95917 / 0.75721 |",
+  "+| e4b/fused_attn4_m_l0_d2 | VALID | 4.167 | 1668.2 | 0.400 | 304.8 | 0 | 26.156 | 1.95917 / 0.75561 |",
+  "+| e4b/fused_attn4_shipped_l1_d2 | VALID | 3.280 | 1336.5 | 0.408 | 24.0 | 49152 | 23.321 | 1.95917 / 0.75286 |",
+  "+| e4b/fused_attn4_shipped_l0_d2 | VALID | 3.201 | 1295.4 | 0.405 | 27.6 | 0 | 23.321 | 1.95917 / 0.75614 |",
+  "-| P210 | qwen3sladder | **HELD** | l1 / l0 0.797 [0.789, 0.806 over 4 cross-draw ratios] vs <= 0.97; s/step l1 3.286 / 3.334, l0 4.137 / 4.167; matched l0 busy_t 0.417 (premise <= 0.85) |",
+  "-| P211 | qwen3sladder | **FALSIFIED** | l1 / l0 1.015 [1.006, 1.025 over 4 cross-draw ratios] vs <= 0.97; s/step l1 3.251 / 3.280, l0 3.231 / 3.201; matched l0 busy_t 0.417 (premise <= 0.85) |",
+  "+| P210 | qwen3sladder | **HELD** | l1 / l0 0.797 [0.789, 0.806 over 4 cross-draw ratios] vs <= 0.97; s/step l1 3.286 / 3.334, l0 4.137 / 4.167; matched l0 busy_t 0.402 (premise <= 0.85) |",
+  "+| P211 | qwen3sladder | **FALSIFIED** | l1 / l0 1.015 [1.006, 1.025 over 4 cross-draw ratios] vs <= 0.97; s/step l1 3.251 / 3.280, l0 3.231 / 3.201; matched l0 busy_t 0.402 (premise <= 0.85) |",
+  "-| P213 | qwen3sladder | **HELD** | device ms per profiled step l1 / l0: m: 1730.8 -> 1802.4 ms = 1.041; shipped: 1348.7 -> 1392.0 ms = 1.032 (each <= 1.05) |",
+  "+| P213 | qwen3sladder | **HELD** | device ms per profiled step l1 / l0: m: 1670.0 -> 1746.8 ms = 1.046; shipped: 1294.4 -> 1336.5 ms = 1.033 (each <= 1.05) |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [
+  [
+   "| P213 | qwen3sladder | **HELD** | device ms per profiled step l1 / l0: m: 1670.0 -> 1746.8 ms = 1.046; shipped: 1294.4 -> 1336.5 ms = 1.033 (each <= 1.05) |",
+   [
+    [
+     "1.046",
+     "<=",
+     "1.05",
+     0.0038
+    ],
+    [
+     "1.033",
+     "<=",
+     "1.05",
+     0.0162
+    ]
+   ]
+  ]
+ ],
+ "unparsed": [],
+ "reworded": [],
+ "share": 0.0417,
+ "corrected_results_sha256": "fb4c0fe5301ffa1e6b278ebfa93b5c376a30509b00c625088bb95f10c9fc345d",
+ "path": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-138",
+ "reducer_sha256": "7c34627b6e556a707f150068e866230460f1dcb530f92f9b9036daa7efcc2306"
+}

@@ -1,0 +1,98 @@
+{
+ "receipt": "tc1-5090-pos79-r1",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3pos79_e4b_fused_attn4_m_fd.json": {
+   "recorded_ms": 6194.3,
+   "kernels_only_ms": 5938.5,
+   "annotation_ms": 255.8,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 255.846
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3pos79_e4b_fused_attn4_m_fd_d2.json": {
+   "recorded_ms": 6149.7,
+   "kernels_only_ms": 5915.3,
+   "annotation_ms": 234.4,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 234.363
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3pos79_unsloth_ckpt_unsloth_m_fv.json": {
+   "recorded_ms": 5177.7,
+   "kernels_only_ms": 5010.6,
+   "annotation_ms": 167.1,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 167.082
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3pos79_unsloth_ckpt_unsloth_m_fv_d2.json": {
+   "recorded_ms": 4406.6,
+   "kernels_only_ms": 4250.9,
+   "annotation_ms": 155.7,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 155.657
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-| e4b/fused_attn4_m_fd | VALID | 4.490 | 2064.8 | 0.460 | 497556 | 26.500 | 0.75455 |",
+  "-| unsloth/ckpt_unsloth_m_fv | VOID | 3.275 | 1725.9 | 0.527 | 200437 | 24.221 | 0.75511 |",
+  "-| unsloth/ckpt_unsloth_m_fv_d2 | VOID | 3.235 | 1468.9 | 0.454 | 159119 | 24.221 | 0.75436 |",
+  "-| e4b/fused_attn4_m_fd_d2 | VALID | 4.377 | 2049.9 | 0.468 | 497517 | 26.500 | 0.75629 |",
+  "+| e4b/fused_attn4_m_fd | VALID | 4.490 | 1979.5 | 0.441 | 497556 | 26.500 | 0.75455 |",
+  "+| unsloth/ckpt_unsloth_m_fv | VOID | 3.275 | 1670.2 | 0.510 | 200437 | 24.221 | 0.75511 |",
+  "+| unsloth/ckpt_unsloth_m_fv_d2 | VOID | 3.235 | 1417.0 | 0.438 | 159119 | 24.221 | 0.75436 |",
+  "+| e4b/fused_attn4_m_fd_d2 | VALID | 4.377 | 1971.8 | 0.451 | 497517 | 26.500 | 0.75629 |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [],
+ "unparsed": [],
+ "reworded": [],
+ "share": 0.0413,
+ "corrected_results_sha256": "2b1ed9fb2d74e342579adedf54ea2a6484d8b5ddfbc4f1598ff314cb8a919f82",
+ "path": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-pos79-r1",
+ "reducer_sha256": "94587a3895b88bedc187deccdca6910591ae146e3b2b894ea6881ba26c6c726f"
+}

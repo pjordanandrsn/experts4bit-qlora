@@ -1,0 +1,58 @@
+{
+ "receipt": "tc1c-h100-10",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3_e4b_fused_attn4_m_prof.json": {
+   "recorded_ms": 3503.7,
+   "kernels_only_ms": 3370.6,
+   "annotation_ms": 133.1,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 133.134
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3_unsloth_ckpt_unsloth_prof.json": {
+   "recorded_ms": 3440.1,
+   "kernels_only_ms": 3314.4,
+   "annotation_ms": 125.7,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 125.727
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-- where Unsloth's step goes (`unsloth/ckpt_unsloth_prof`, descriptive): device busy fraction 0.302, device events/step 81780, CPU ops/step 515750, CPU self by family {'other': 0.3704, 'autograd': 0.2989, 'norm_act': 0.1292, 'matmul': 0.072, 'fused_kernel': 0.0556, 'memcpy': 0.0517, 'routing': 0.0169, 'optimizer': 0.0052}",
+  "+- where Unsloth's step goes (`unsloth/ckpt_unsloth_prof`, descriptive): device busy fraction 0.291, device events/step 81780, CPU ops/step 515750, CPU self by family {'other': 0.3704, 'autograd': 0.2989, 'norm_act': 0.1292, 'matmul': 0.072, 'fused_kernel': 0.0556, 'memcpy': 0.0517, 'routing': 0.0169, 'optimizer': 0.0052}",
+  "-| P8 | qwen3 | **FALSIFIED** | device_busy_fraction 0.302 (>= 0.5 predicted on the grouped_mm arm); device events/step 81780 |",
+  "+| P8 | qwen3 | **FALSIFIED** | device_busy_fraction 0.291 (>= 0.5 predicted on the grouped_mm arm); device events/step 81780 |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [],
+ "unparsed": [],
+ "reworded": [],
+ "share": 0.038,
+ "corrected_results_sha256": "d5eaed8aaf0cab54c8551a7256c066471ef83b0d16ef07088b3d74f9f4086e58",
+ "path": "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-10",
+ "reducer_sha256": "609dbdf01168829c169a8cbc7b5a4a88b21e2a38955ad7d1e037302f0788127c"
+}

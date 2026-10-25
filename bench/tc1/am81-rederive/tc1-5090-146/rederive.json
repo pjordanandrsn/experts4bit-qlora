@@ -1,0 +1,184 @@
+{
+ "receipt": "tc1-5090-146",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3fqkv_e4b_fused_attn4_m_q0.json": {
+   "recorded_ms": 5194.8,
+   "kernels_only_ms": 5016.6,
+   "annotation_ms": 178.2,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 178.229
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv_e4b_fused_attn4_m_q0_d2.json": {
+   "recorded_ms": 5212.3,
+   "kernels_only_ms": 5017.3,
+   "annotation_ms": 195.0,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 194.97
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv_e4b_fused_attn4_m_q1.json": {
+   "recorded_ms": 5137.9,
+   "kernels_only_ms": 4974.4,
+   "annotation_ms": 163.5,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 163.455
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv_e4b_fused_attn4_m_q1_d2.json": {
+   "recorded_ms": 5129.1,
+   "kernels_only_ms": 4963.2,
+   "annotation_ms": 165.9,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 165.931
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv_e4b_fused_attn4_shipped_q0.json": {
+   "recorded_ms": 3848.1,
+   "kernels_only_ms": 3691.2,
+   "annotation_ms": 156.9,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 156.874
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv_e4b_fused_attn4_shipped_q0_d2.json": {
+   "recorded_ms": 3844.5,
+   "kernels_only_ms": 3685.4,
+   "annotation_ms": 159.1,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 159.088
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv_e4b_fused_attn4_shipped_q1.json": {
+   "recorded_ms": 3793.2,
+   "kernels_only_ms": 3635.7,
+   "annotation_ms": 157.5,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 157.492
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3fqkv_e4b_fused_attn4_shipped_q1_d2.json": {
+   "recorded_ms": 3787.4,
+   "kernels_only_ms": 3630.1,
+   "annotation_ms": 157.3,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 157.337
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-| e4b/fused_attn4_shipped_q0 | VALID | 3.193 | 1282.7 | 0.402 | 75833 | 0 | 23.321 | 1.95917 / 0.75512 |",
+  "-| e4b/fused_attn4_shipped_q1 | VALID | 2.842 | 1264.4 | 0.445 | 64761 | 48 | 23.344 | 1.94684 / 0.7572 |",
+  "-| e4b/fused_attn4_m_q0 | VALID | 3.302 | 1731.6 | 0.524 | 79582 | 0 | 26.495 | 1.95917 / 0.75805 |",
+  "-| e4b/fused_attn4_m_q1 | VALID | 2.939 | 1712.6 | 0.583 | 68524 | 48 | 26.500 | 1.94684 / 0.75478 |",
+  "-| e4b/fused_attn4_m_q1_d2 | VALID | 3.003 | 1709.7 | 0.569 | 68510 | 48 | 26.500 | 1.94684 / 0.75722 |",
+  "-| e4b/fused_attn4_m_q0_d2 | VALID | 3.332 | 1737.4 | 0.522 | 79580 | 0 | 26.495 | 1.95917 / 0.75549 |",
+  "-| e4b/fused_attn4_shipped_q1_d2 | VALID | 2.801 | 1262.5 | 0.451 | 64761 | 48 | 23.344 | 1.94684 / 0.7538 |",
+  "-| e4b/fused_attn4_shipped_q0_d2 | VALID | 3.227 | 1281.5 | 0.397 | 75833 | 0 | 23.321 | 1.95917 / 0.75895 |",
+  "+| e4b/fused_attn4_shipped_q0 | VALID | 3.193 | 1230.4 | 0.385 | 75833 | 0 | 23.321 | 1.95917 / 0.75512 |",
+  "+| e4b/fused_attn4_shipped_q1 | VALID | 2.842 | 1211.9 | 0.426 | 64761 | 48 | 23.344 | 1.94684 / 0.7572 |",
+  "+| e4b/fused_attn4_m_q0 | VALID | 3.302 | 1672.2 | 0.506 | 79582 | 0 | 26.495 | 1.95917 / 0.75805 |",
+  "+| e4b/fused_attn4_m_q1 | VALID | 2.939 | 1658.1 | 0.564 | 68524 | 48 | 26.500 | 1.94684 / 0.75478 |",
+  "+| e4b/fused_attn4_m_q1_d2 | VALID | 3.003 | 1654.4 | 0.551 | 68510 | 48 | 26.500 | 1.94684 / 0.75722 |",
+  "+| e4b/fused_attn4_m_q0_d2 | VALID | 3.332 | 1672.4 | 0.502 | 79580 | 0 | 26.495 | 1.95917 / 0.75549 |",
+  "+| e4b/fused_attn4_shipped_q1_d2 | VALID | 2.801 | 1210.0 | 0.432 | 64761 | 48 | 23.344 | 1.94684 / 0.7538 |",
+  "+| e4b/fused_attn4_shipped_q0_d2 | VALID | 3.227 | 1228.5 | 0.381 | 75833 | 0 | 23.321 | 1.95917 / 0.75895 |",
+  "-| PREMISE | qwen3fqkv | **HELD** | matched q0 busy_t 0.523 vs <= 0.85 |",
+  "+| PREMISE | qwen3fqkv | **HELD** | matched q0 busy_t 0.504 vs <= 0.85 |",
+  "-| DEVICE | qwen3fqkv | **REPORTED** | m: device 1734.5 -> 1711.2 ms = 0.987, peak 26.495 -> 26.5 GB; shipped: device 1282.1 -> 1263.4 ms = 0.985, peak 23.321 -> 23.344 GB |",
+  "+| DEVICE | qwen3fqkv | **REPORTED** | m: device 1672.3 -> 1656.3 ms = 0.990, peak 26.495 -> 26.5 GB; shipped: device 1229.4 -> 1211.0 ms = 0.985, peak 23.321 -> 23.344 GB |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [],
+ "unparsed": [
+  "| DEVICE | qwen3fqkv | **REPORTED** | m: device 1672.3 -> 1656.3 ms = 0.990, peak 26.495 -> 26.5 GB; shipped: device 1229.4 -> 1211.0 ms = 0.985, peak 23.321 -> 23.344 GB |"
+ ],
+ "reworded": [],
+ "share": 0.0415,
+ "corrected_results_sha256": "1372da5d4d21101c7c199f3a47c1ceb53a5cb7565575bed87264b479b58504c3",
+ "path": "bench/p129/receipts/tc1-5090-146",
+ "reducer_sha256": "6ef2537932a66dc96743f2bfe880bc38c5ed25f9c68148d10ce0970c9f04340a"
+}

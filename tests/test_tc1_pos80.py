@@ -112,9 +112,19 @@ def test_the_three_staged_helpers_are_pinned_by_digest_in_the_reducer_and_the_re
     assert 'STAGE="$STAGE $HERE/release_proof.py $HERE/f15v2.py $REPO/bench/common/card_clock.py"' in DRIVE
 
 
+#: TC1 amendment 80's merge (e4b#2130): the arm driver this amendment left byte-identical. Read there, not in the live tree, since TC1
+#: amendment 81 edits tc1_arm.py on main (bench/common rule 6, as ruled for amendment 81 on 2026-10-25).
+POS80_FROZEN = "b8f618b10f9f82bff2f0267d06fc0112f47d3f06"
+
+
 def test_the_arm_driver_is_not_changed_by_this_amendment():
+    r = subprocess.run(["git", "-C", str(REPO), "show", f"{POS80_FROZEN}:bench/tc1/tc1_arm.py"], capture_output=True)
+    if r.returncode != 0:
+        if os.environ.get("CI") == "true":
+            pytest.fail(f"amendment 80's merge {POS80_FROZEN[:12]} is not readable: {r.stderr.decode()[:200]}")
+        pytest.skip(f"amendment 80's merge {POS80_FROZEN[:12]} is not in this clone (shallow)")
     want = [ln.split()[0] for ln in (REPO / "bench" / "q235" / "q235.sha256").read_text().splitlines() if ln.endswith(" tc1_arm.py")]
-    assert want == [_sha(TC1 / "tc1_arm.py")]
+    assert want == [hashlib.sha256(r.stdout).hexdigest()]
 
 
 # ------------------------------------------------------------------ the box: gate, floors, installs, proofs, family

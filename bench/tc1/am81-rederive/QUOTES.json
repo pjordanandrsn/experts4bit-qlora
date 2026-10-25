@@ -1,0 +1,1217 @@
+{
+ "docs": [
+  {
+   "form": "1.92",
+   "line": 95,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "README.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| Qwen3-30B-A3B QLoRA \u00b7 RTX 5090 \u00b7 TC1's field recipe, both frameworks on one stack, e4b at every default (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`) | Unsloth spends **1.92\u00d7** ",
+   "where": "P205"
+  },
+  {
+   "form": "1.92",
+   "line": 95,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "README.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| Qwen3-30B-A3B QLoRA \u00b7 RTX 5090 \u00b7 TC1's field recipe, both frameworks on one stack, e4b at every default (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`) | Unsloth spends **1.92\u00d7** ",
+   "where": "P208"
+  },
+  {
+   "form": "1.160",
+   "line": 96,
+   "new": "1.161",
+   "old": "1.160",
+   "path": "README.md",
+   "run": "tc1-5090-136",
+   "source": "reducer",
+   "text": "| Packed 4,096-token Qwen3 training \u00b7 RTX 5090 \u00b7 e4b at its defaults (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`) | Unsloth spends **1.160\u00d7** e4b's GPU time per step (medians",
+   "where": "P200"
+  },
+  {
+   "form": "1.924",
+   "line": 228,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "docs/CHOOSING.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| RTX 5090, 32 GB | Qwen3-30B-A3B | train | Resident, `enable_fast_train(model, dgrad=True)` at its defaults | Unsloth's device time per profiled step is 1.924\u00d7 e4b's (medians of two draws); e4b peaks",
+   "where": "P205"
+  },
+  {
+   "form": "1.924",
+   "line": 228,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "docs/CHOOSING.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| RTX 5090, 32 GB | Qwen3-30B-A3B | train | Resident, `enable_fast_train(model, dgrad=True)` at its defaults | Unsloth's device time per profiled step is 1.924\u00d7 e4b's (medians of two draws); e4b peaks",
+   "where": "P208"
+  },
+  {
+   "form": "0.45",
+   "line": 69,
+   "new": "0.442",
+   "old": "0.454",
+   "path": "docs/COMPARATORS.md",
+   "run": "tc1c-h100-9",
+   "source": "cell",
+   "text": "| axolotl | `e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0` | 2026-10-04 |",
+   "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+  },
+  {
+   "form": "0.49",
+   "line": 21,
+   "new": "0.478",
+   "old": "0.493",
+   "path": "docs/REPRODUCE.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| Training, TC1's field recipe (Qwen3-30B-A3B, seq 2048, micro-batch 2 x accum 4) | Unsloth 2026.10.8 | not read at 0.58.1. Both Unsloth draws failed TC1's standing engagement check (it counts torch-l",
+   "where": "e4b/fused_attn4_m_fd"
+  },
+  {
+   "form": "1.924",
+   "line": 21,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "docs/REPRODUCE.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| Training, TC1's field recipe (Qwen3-30B-A3B, seq 2048, micro-batch 2 x accum 4) | Unsloth 2026.10.8 | not read at 0.58.1. Both Unsloth draws failed TC1's standing engagement check (it counts torch-l",
+   "where": "P205"
+  },
+  {
+   "form": "1.924",
+   "line": 21,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "docs/REPRODUCE.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| Training, TC1's field recipe (Qwen3-30B-A3B, seq 2048, micro-batch 2 x accum 4) | Unsloth 2026.10.8 | not read at 0.58.1. Both Unsloth draws failed TC1's standing engagement check (it counts torch-l",
+   "where": "P208"
+  },
+  {
+   "form": "0.49",
+   "line": 21,
+   "new": "0.470",
+   "old": "0.486",
+   "path": "docs/REPRODUCE.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| Training, TC1's field recipe (Qwen3-30B-A3B, seq 2048, micro-batch 2 x accum 4) | Unsloth 2026.10.8 | not read at 0.58.1. Both Unsloth draws failed TC1's standing engagement check (it counts torch-l",
+   "where": "P208"
+  },
+  {
+   "form": "1.160",
+   "line": 22,
+   "new": "1.161",
+   "old": "1.160",
+   "path": "docs/REPRODUCE.md",
+   "run": "tc1-5090-136",
+   "source": "reducer",
+   "text": "| Training, packed 4,096-token rows | Unsloth | not read today (no lane registered it) | Unsloth spends **1.160x** e4b's GPU time per step; e4b's peak is 1.04 GB above Unsloth's (`e4b.train.h2h.unslot",
+   "where": "P200"
+  },
+  {
+   "form": "0.49",
+   "line": 22,
+   "new": "0.478",
+   "old": "0.493",
+   "path": "docs/REPRODUCE.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| Training, packed 4,096-token rows | Unsloth | not read today (no lane registered it) | Unsloth spends **1.160x** e4b's GPU time per step; e4b's peak is 1.04 GB above Unsloth's (`e4b.train.h2h.unslot",
+   "where": "e4b/fused_attn4_m_fd"
+  },
+  {
+   "form": "0.49",
+   "line": 22,
+   "new": "0.470",
+   "old": "0.486",
+   "path": "docs/REPRODUCE.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| Training, packed 4,096-token rows | Unsloth | not read today (no lane registered it) | Unsloth spends **1.160x** e4b's GPU time per step; e4b's peak is 1.04 GB above Unsloth's (`e4b.train.h2h.unslot",
+   "where": "P208"
+  },
+  {
+   "form": "0.49",
+   "line": 25,
+   "new": "0.478",
+   "old": "0.493",
+   "path": "docs/REPRODUCE.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| Training Mixtral-8x7B, both frameworks on one stack | Unsloth | not read today (its lane didn't register it) | Unsloth/e4b **1.144** at the matched position (`e4b.train.h2h.unsloth.mixtral.5090.2026",
+   "where": "e4b/fused_attn4_m_fd"
+  },
+  {
+   "form": "0.49",
+   "line": 25,
+   "new": "0.470",
+   "old": "0.486",
+   "path": "docs/REPRODUCE.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| Training Mixtral-8x7B, both frameworks on one stack | Unsloth | not read today (its lane didn't register it) | Unsloth/e4b **1.144** at the matched position (`e4b.train.h2h.unsloth.mixtral.5090.2026",
+   "where": "P208"
+  },
+  {
+   "form": "1.160",
+   "line": 82,
+   "new": "1.161",
+   "old": "1.160",
+   "path": "docs/REPRODUCE.md",
+   "run": "tc1-5090-136",
+   "source": "reducer",
+   "text": "- **Claim:** `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`. Unsloth spends **1.160\u00d7** e4b's GPU",
+   "where": "P200"
+  },
+  {
+   "form": "1.924",
+   "line": 102,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "docs/REPRODUCE.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "- **The other recipe:** at TC1's field recipe (seq 2048, micro-batch 2 \u00d7 accum 4) the device ratio read 1.924 (medians",
+   "where": "P205"
+  },
+  {
+   "form": "1.924",
+   "line": 102,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "docs/REPRODUCE.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "- **The other recipe:** at TC1's field recipe (seq 2048, micro-batch 2 \u00d7 accum 4) the device ratio read 1.924 (medians",
+   "where": "P208"
+  },
+  {
+   "form": "0.48",
+   "line": 176,
+   "new": "0.473",
+   "old": "0.480",
+   "path": "docs/STATUS-RECORD.md",
+   "run": "tc1-5090-16",
+   "source": "cell",
+   "text": "(device-busy 0.48 e4b vs 0.23 Unsloth; the fused path records 4.3 \u00d7 fewer",
+   "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+  },
+  {
+   "form": "1.92",
+   "line": 194,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "docs/STATUS-RECORD.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "every current default, both frameworks profiled on one stack): **Unsloth spends 1.92\u00d7 e4b's GPU time per step; wall-clock 2.80\u00d7 on an",
+   "where": "P205"
+  },
+  {
+   "form": "1.92",
+   "line": 194,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "docs/STATUS-RECORD.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "every current default, both frameworks profiled on one stack): **Unsloth spends 1.92\u00d7 e4b's GPU time per step; wall-clock 2.80\u00d7 on an",
+   "where": "P208"
+  },
+  {
+   "form": "0.49",
+   "line": 196,
+   "new": "0.478",
+   "old": "0.493",
+   "path": "docs/STATUS-RECORD.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "against e4b's 0.49, so a slower host stretches Unsloth's step more. The GPU-time ratio is what remains as host overhead goes to zero.",
+   "where": "e4b/fused_attn4_m_fd"
+  },
+  {
+   "form": "0.49",
+   "line": 196,
+   "new": "0.470",
+   "old": "0.486",
+   "path": "docs/STATUS-RECORD.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "against e4b's 0.49, so a slower host stretches Unsloth's step more. The GPU-time ratio is what remains as host overhead goes to zero.",
+   "where": "P208"
+  },
+  {
+   "form": "0.33",
+   "line": 221,
+   "new": "0.317",
+   "old": "0.330",
+   "path": "docs/STATUS-RECORD.md",
+   "run": "tc1-5090-138",
+   "source": "cell",
+   "text": "**0.797** of its time. `aten::bmm`'s CPU time per call fell from 305 \u00b5s to 24.5 \u00b5s, for 4.1 % more device time and 0.33 GB more peak. With",
+   "where": "qwen3sladder_e4b_fused_attn4_m_l0 device_busy_fraction"
+  },
+  {
+   "form": "0.33",
+   "line": 221,
+   "new": "0.320",
+   "old": "0.331",
+   "path": "docs/STATUS-RECORD.md",
+   "run": "tc1-5090-138",
+   "source": "cell",
+   "text": "**0.797** of its time. `aten::bmm`'s CPU time per call fell from 305 \u00b5s to 24.5 \u00b5s, for 4.1 % more device time and 0.33 GB more peak. With",
+   "where": "qwen3sladder_e4b_fused_attn4_m_l0_d2 device_busy_fraction"
+  },
+  {
+   "form": "1.05",
+   "line": 229,
+   "new": "1.056",
+   "old": "1.055",
+   "path": "docs/STATUS-RECORD.md",
+   "run": "tc1-5090-141",
+   "source": "reducer",
+   "text": "with `auto`, inside the registered 1.05, and the bf16 arm 1.002. `bmm`'s CPU time per call fell to 0.092 of `l0`'s, device time rose",
+   "where": "P218"
+  },
+  {
+   "form": "1.160",
+   "line": 299,
+   "new": "1.161",
+   "old": "1.160",
+   "path": "docs/STATUS-RECORD.md",
+   "run": "tc1-5090-136",
+   "source": "reducer",
+   "text": "amendment 68, every arm profiled): Unsloth spends **1.160\u00d7** e4b's GPU time per step, against 1.141 on amendment 66's host. Unsloth also",
+   "where": "P200"
+  },
+  {
+   "form": "0.665",
+   "line": 370,
+   "new": "0.653",
+   "old": "0.665",
+   "path": "docs/STATUS-RECORD.md",
+   "run": "tc1c-h100-3",
+   "source": "cell",
+   "text": "EQUIVALENT. e4b's own step fell \u00d70.768 since the first H100 box; on this card it is now mostly device-bound (device-busy 0.665), and",
+   "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+  },
+  {
+   "form": "0.45",
+   "line": 374,
+   "new": "0.442",
+   "old": "0.454",
+   "path": "docs/STATUS-RECORD.md",
+   "run": "tc1c-h100-9",
+   "source": "cell",
+   "text": "peak VRAM (34.08 vs 24.27 GB) and about equal energy \u2014 quoted beside the default-settings 0.817, never in place of it. grouped-nf4-gemm's opt-in grouped_mm route made e4b SLOWER on this card as shippe",
+   "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+  },
+  {
+   "form": "1.92",
+   "line": 92,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "docs/STATUS.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "**Qwen3-30B-A3B against Unsloth 2026.9.14: Unsloth spends 1.92\u00d7 e4b's GPU time per step (medians of two draws);",
+   "where": "P205"
+  },
+  {
+   "form": "1.92",
+   "line": 92,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "docs/STATUS.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "**Qwen3-30B-A3B against Unsloth 2026.9.14: Unsloth spends 1.92\u00d7 e4b's GPU time per step (medians of two draws);",
+   "where": "P208"
+  },
+  {
+   "form": "0.49",
+   "line": 95,
+   "new": "0.478",
+   "old": "0.493",
+   "path": "docs/STATUS.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "the host: Unsloth runs 14\u00d7 e4b's CPU ops per step and keeps its GPU busy for 0.33 of its step against e4b's 0.49, so a",
+   "where": "e4b/fused_attn4_m_fd"
+  },
+  {
+   "form": "0.49",
+   "line": 95,
+   "new": "0.470",
+   "old": "0.486",
+   "path": "docs/STATUS.md",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "the host: Unsloth runs 14\u00d7 e4b's CPU ops per step and keeps its GPU busy for 0.33 of its step against e4b's 0.49, so a",
+   "where": "P208"
+  },
+  {
+   "form": "1.160",
+   "line": 119,
+   "new": "1.161",
+   "old": "1.160",
+   "path": "docs/STATUS.md",
+   "run": "tc1-5090-136",
+   "source": "reducer",
+   "text": "**On packed 4,096-token rows, Unsloth 2026.9.14 spends 1.160\u00d7 e4b's GPU time per step (medians of two draws).** The",
+   "where": "P200"
+  },
+  {
+   "form": "0.45",
+   "line": 237,
+   "new": "0.442",
+   "old": "0.454",
+   "path": "docs/capabilities.json",
+   "run": "tc1c-h100-9",
+   "source": "cell",
+   "text": "\"e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0\",",
+   "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+  },
+  {
+   "form": "0.45",
+   "line": 182,
+   "new": "0.442",
+   "old": "0.454",
+   "path": "docs/solutions/qlora-fused-moe-experts.md",
+   "run": "tc1c-h100-9",
+   "source": "cell",
+   "text": "- `e4b.train.h2h.unsloth.qwen3.5090.2026-10-03` \u2014 TC1 amendment 19, the matched position after amendments 10-15: Unsloth/e4b 1.997 [1.980, 2.014] (medians of two draws), matched set inside the draw no",
+   "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+  },
+  {
+   "form": "0.45",
+   "line": 666,
+   "new": "0.442",
+   "old": "0.454",
+   "path": "llms-full.txt",
+   "run": "tc1c-h100-9",
+   "source": "cell",
+   "text": "- `e4b.train.h2h.unsloth.qwen3.5090.2026-10-03` \u2014 TC1 amendment 19, the matched position after amendments 10-15: Unsloth/e4b 1.997 [1.980, 2.014] (medians of two draws), matched set inside the draw no",
+   "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+  },
+  {
+   "form": "0.45",
+   "line": 1142,
+   "new": "0.442",
+   "old": "0.454",
+   "path": "llms-full.txt",
+   "run": "tc1c-h100-9",
+   "source": "cell",
+   "text": "\"e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0\",",
+   "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+  },
+  {
+   "form": "1.92",
+   "line": 2199,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "**Qwen3-30B-A3B against Unsloth 2026.9.14: Unsloth spends 1.92\u00d7 e4b's GPU time per step (medians of two draws);",
+   "where": "P205"
+  },
+  {
+   "form": "1.92",
+   "line": 2199,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "**Qwen3-30B-A3B against Unsloth 2026.9.14: Unsloth spends 1.92\u00d7 e4b's GPU time per step (medians of two draws);",
+   "where": "P208"
+  },
+  {
+   "form": "0.49",
+   "line": 2202,
+   "new": "0.478",
+   "old": "0.493",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "the host: Unsloth runs 14\u00d7 e4b's CPU ops per step and keeps its GPU busy for 0.33 of its step against e4b's 0.49, so a",
+   "where": "e4b/fused_attn4_m_fd"
+  },
+  {
+   "form": "0.49",
+   "line": 2202,
+   "new": "0.470",
+   "old": "0.486",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "the host: Unsloth runs 14\u00d7 e4b's CPU ops per step and keeps its GPU busy for 0.33 of its step against e4b's 0.49, so a",
+   "where": "P208"
+  },
+  {
+   "form": "1.160",
+   "line": 2226,
+   "new": "1.161",
+   "old": "1.160",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-136",
+   "source": "reducer",
+   "text": "**On packed 4,096-token rows, Unsloth 2026.9.14 spends 1.160\u00d7 e4b's GPU time per step (medians of two draws).** The",
+   "where": "P200"
+  },
+  {
+   "form": "1.924",
+   "line": 2962,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| RTX 5090, 32 GB | Qwen3-30B-A3B | train | Resident, `enable_fast_train(model, dgrad=True)` at its defaults | Unsloth's device time per profiled step is 1.924\u00d7 e4b's (medians of two draws); e4b peaks",
+   "where": "P205"
+  },
+  {
+   "form": "1.924",
+   "line": 2962,
+   "new": "1.953",
+   "old": "1.924",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "| RTX 5090, 32 GB | Qwen3-30B-A3B | train | Resident, `enable_fast_train(model, dgrad=True)` at its defaults | Unsloth's device time per profiled step is 1.924\u00d7 e4b's (medians of two draws); e4b peaks",
+   "where": "P208"
+  },
+  {
+   "form": "0.480",
+   "line": 3489,
+   "new": "0.473",
+   "old": "0.480",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-16",
+   "source": "cell",
+   "text": "- e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.dispatch-profile [measured]: Lane TC1c with TC1, 2026-10-02: the profiled matched arms on the two cards. e4b fused_attn4_m_prof: RTX 5090 6.169 s/step, de",
+   "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+  },
+  {
+   "form": "0.562",
+   "line": 3489,
+   "new": "0.553",
+   "old": "0.562",
+   "path": "llms-full.txt",
+   "run": "tc1c-h100-2",
+   "source": "cell",
+   "text": "- e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.dispatch-profile [measured]: Lane TC1c with TC1, 2026-10-02: the profiled matched arms on the two cards. e4b fused_attn4_m_prof: RTX 5090 6.169 s/step, de",
+   "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+  },
+  {
+   "form": "0.45",
+   "line": 3541,
+   "new": "0.442",
+   "old": "0.454",
+   "path": "llms-full.txt",
+   "run": "tc1c-h100-9",
+   "source": "cell",
+   "text": "- e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0 [measured]: TC1c amendment 8, one rented H100 NVL (tc1c-h100-15): the matched position at DEFAULT settings on experts4bit-qlora 0.45.0's code with gro",
+   "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+  },
+  {
+   "form": "0.49",
+   "line": 3618,
+   "new": "0.478",
+   "old": "0.493",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "- e4b.train.padded-delta-switches.field.5090.2026-10-22 [measured]: TC1 amendment 74 (#835), descriptive with one fixed rule, one rented RTX 5090 (tc1-5090-154, AMD EPYC 7402P): TC1's field recipe ove",
+   "where": "e4b/fused_attn4_m_fd"
+  },
+  {
+   "form": "0.49",
+   "line": 3618,
+   "new": "0.470",
+   "old": "0.486",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-137",
+   "source": "reducer",
+   "text": "- e4b.train.padded-delta-switches.field.5090.2026-10-22 [measured]: TC1 amendment 74 (#835), descriptive with one fixed rule, one rented RTX 5090 (tc1-5090-154, AMD EPYC 7402P): TC1's field recipe ove",
+   "where": "P208"
+  },
+  {
+   "form": "0.49",
+   "line": 3618,
+   "new": "0.477",
+   "old": "0.492",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-139",
+   "source": "reducer",
+   "text": "- e4b.train.padded-delta-switches.field.5090.2026-10-22 [measured]: TC1 amendment 74 (#835), descriptive with one fixed rule, one rented RTX 5090 (tc1-5090-154, AMD EPYC 7402P): TC1's field recipe ove",
+   "where": "e4b/fused_attn4_m_l0"
+  },
+  {
+   "form": "0.884",
+   "line": 3625,
+   "new": "0.871",
+   "old": "0.884",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-141",
+   "source": "reducer",
+   "text": "- e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08 [measured]: TC1 amendment 72 (#835), amendment 71's box unchanged on a third host (tc1-5090-141, AMD Ryzen 9 9950X3D, Vast machine 18967, GPU-b",
+   "where": "P215"
+  },
+  {
+   "form": "0.43",
+   "line": 3626,
+   "new": "0.411",
+   "old": "0.427",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-138",
+   "source": "reducer",
+   "text": "- e4b.serve.p123.default-decode-census.qwen3.5090.2026-10-09 [measured]: Lane P123, one RTX 5090: a kernel-class census (SC1b's Nsight Systems instrument, P123's v1.1 NF4 class map) of the shipped def",
+   "where": "e4b/fused_attn4_shipped_l1"
+  },
+  {
+   "form": "0.464",
+   "line": 3635,
+   "new": "0.446",
+   "old": "0.464",
+   "path": "llms-full.txt",
+   "run": "tc1-5090-147",
+   "source": "reducer",
+   "text": "- e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10 [measured]: Lane P129 Amendment 3 (#835), one RTX 5090 (tc1-5090-147, AMD EPYC 7B13, Vast machine 27708, host-bound: the matched q0's GPU busy 0.464 of",
+   "where": "PREMISE"
+  }
+ ],
+ "rows": {
+  "e4b.train.ckpt-flavour.default.5090.2026-10-07": [
+   {
+    "field": "claim",
+    "form": "0.404",
+    "new": "0.389",
+    "old": "0.404",
+    "run": "tc1-5090-128",
+    "source": "reducer",
+    "where": "P182"
+   }
+  ],
+  "e4b.train.ckpt-offload.field-torch28.5090.2026-10-07": [
+   {
+    "field": "claim",
+    "form": "0.775",
+    "new": "0.764",
+    "old": "0.775",
+    "run": "tc1-5090-125",
+    "source": "reducer",
+    "where": "P174"
+   },
+   {
+    "field": "claim",
+    "form": "0.795",
+    "new": "0.782",
+    "old": "0.795",
+    "run": "tc1-5090-125",
+    "source": "reducer",
+    "where": "P175"
+   }
+  ],
+  "e4b.train.env-gap.torch28.profile.qwen3.5090.2026-10-06": [
+   {
+    "field": "claim",
+    "form": "0.850",
+    "new": "0.846",
+    "old": "0.850",
+    "run": "tc1-5090-110",
+    "source": "reducer",
+    "where": "P136"
+   },
+   {
+    "field": "claim",
+    "form": "0.965",
+    "new": "0.961",
+    "old": "0.965",
+    "run": "tc1-5090-110",
+    "source": "reducer",
+    "where": "P136"
+   }
+  ],
+  "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02": [
+   {
+    "field": "notes",
+    "form": "0.234",
+    "new": "0.232",
+    "old": "0.234",
+    "run": "tc1-5090-16",
+    "source": "reducer",
+    "where": "P8"
+   },
+   {
+    "field": "notes",
+    "form": "0.234",
+    "new": "0.232",
+    "old": "0.234",
+    "run": "tc1-5090-16",
+    "source": "reducer",
+    "where": "- where Unsloth's step goes (`unsloth/ck"
+   },
+   {
+    "field": "notes",
+    "form": "0.480",
+    "new": "0.473",
+    "old": "0.480",
+    "run": "tc1-5090-16",
+    "source": "cell",
+    "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+   },
+   {
+    "field": "notes",
+    "form": "0.234",
+    "new": "0.232",
+    "old": "0.234",
+    "run": "tc1-5090-16",
+    "source": "cell",
+    "where": "qwen3_unsloth_ckpt_unsloth_prof device_busy_fraction"
+   }
+  ],
+  "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.host-variance": [
+   {
+    "field": "claim",
+    "form": "0.234",
+    "new": "0.232",
+    "old": "0.234",
+    "run": "tc1-5090-16",
+    "source": "reducer",
+    "where": "P8"
+   },
+   {
+    "field": "claim",
+    "form": "0.234",
+    "new": "0.232",
+    "old": "0.234",
+    "run": "tc1-5090-16",
+    "source": "reducer",
+    "where": "- where Unsloth's step goes (`unsloth/ck"
+   },
+   {
+    "field": "claim",
+    "form": "0.480",
+    "new": "0.473",
+    "old": "0.480",
+    "run": "tc1-5090-16",
+    "source": "cell",
+    "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+   },
+   {
+    "field": "claim",
+    "form": "0.234",
+    "new": "0.232",
+    "old": "0.234",
+    "run": "tc1-5090-16",
+    "source": "cell",
+    "where": "qwen3_unsloth_ckpt_unsloth_prof device_busy_fraction"
+   }
+  ],
+  "e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio": [
+   {
+    "field": "claim",
+    "form": "3259.1",
+    "new": "3203.2",
+    "old": "3259.1",
+    "run": "tc1-5090-137",
+    "source": "reducer",
+    "where": "P205"
+   },
+   {
+    "field": "claim",
+    "form": "1693.9",
+    "new": "1639.9",
+    "old": "1693.9",
+    "run": "tc1-5090-137",
+    "source": "reducer",
+    "where": "P205"
+   },
+   {
+    "field": "claim",
+    "form": "1.924",
+    "new": "1.953",
+    "old": "1.924",
+    "run": "tc1-5090-137",
+    "source": "reducer",
+    "where": "P205"
+   },
+   {
+    "field": "claim",
+    "form": "1.924",
+    "new": "1.953",
+    "old": "1.924",
+    "run": "tc1-5090-137",
+    "source": "reducer",
+    "where": "P208"
+   },
+   {
+    "field": "claim",
+    "form": "1.457",
+    "new": "1.435",
+    "old": "1.457",
+    "run": "tc1-5090-137",
+    "source": "reducer",
+    "where": "P208"
+   },
+   {
+    "field": "claim",
+    "form": "0.486",
+    "new": "0.470",
+    "old": "0.486",
+    "run": "tc1-5090-137",
+    "source": "reducer",
+    "where": "P208"
+   },
+   {
+    "field": "claim",
+    "form": "0.333",
+    "new": "0.328",
+    "old": "0.333",
+    "run": "tc1-5090-137",
+    "source": "reducer",
+    "where": "P208"
+   },
+   {
+    "field": "value",
+    "form": "1.924",
+    "new": "1.953",
+    "old": "1.924",
+    "run": "tc1-5090-137",
+    "source": "reducer",
+    "where": "P205"
+   },
+   {
+    "field": "value",
+    "form": "1.924",
+    "new": "1.953",
+    "old": "1.924",
+    "run": "tc1-5090-137",
+    "source": "reducer",
+    "where": "P208"
+   }
+  ],
+  "e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio": [
+   {
+    "field": "claim",
+    "form": "0.783",
+    "new": "0.780",
+    "old": "0.783",
+    "run": "tc1-5090-136",
+    "source": "reducer",
+    "where": "unsloth/ckpt_unsloth_m_pv_d2"
+   },
+   {
+    "field": "claim",
+    "form": "11649.4",
+    "new": "11613.2",
+    "old": "11649.4",
+    "run": "tc1-5090-136",
+    "source": "reducer",
+    "where": "P200"
+   },
+   {
+    "field": "claim",
+    "form": "10042.8",
+    "new": "10006.7",
+    "old": "10042.8",
+    "run": "tc1-5090-136",
+    "source": "reducer",
+    "where": "P200"
+   },
+   {
+    "field": "claim",
+    "form": "1.160",
+    "new": "1.161",
+    "old": "1.160",
+    "run": "tc1-5090-136",
+    "source": "reducer",
+    "where": "P200"
+   },
+   {
+    "field": "claim",
+    "form": "0.993",
+    "new": "0.990",
+    "old": "0.993",
+    "run": "tc1-5090-136",
+    "source": "reducer",
+    "where": "P201"
+   },
+   {
+    "field": "claim",
+    "form": "0.783",
+    "new": "0.780",
+    "old": "0.783",
+    "run": "tc1-5090-136",
+    "source": "reducer",
+    "where": "P201"
+   },
+   {
+    "field": "claim",
+    "form": "0.783",
+    "new": "0.780",
+    "old": "0.783",
+    "run": "tc1-5090-136",
+    "source": "reducer",
+    "where": "P203"
+   },
+   {
+    "field": "claim",
+    "form": "11649.4",
+    "new": "11613.2",
+    "old": "11649.4",
+    "run": "tc1-5090-136",
+    "source": "reducer",
+    "where": "P203"
+   },
+   {
+    "field": "value",
+    "form": "1.16",
+    "new": "1.161",
+    "old": "1.160",
+    "run": "tc1-5090-136",
+    "source": "reducer",
+    "where": "P200"
+   }
+  ],
+  "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.dispatch-profile": [
+   {
+    "field": "claim",
+    "form": "0.234",
+    "new": "0.232",
+    "old": "0.234",
+    "run": "tc1-5090-16",
+    "source": "reducer",
+    "where": "P8"
+   },
+   {
+    "field": "claim",
+    "form": "0.234",
+    "new": "0.232",
+    "old": "0.234",
+    "run": "tc1-5090-16",
+    "source": "reducer",
+    "where": "- where Unsloth's step goes (`unsloth/ck"
+   },
+   {
+    "field": "claim",
+    "form": "0.480",
+    "new": "0.473",
+    "old": "0.480",
+    "run": "tc1-5090-16",
+    "source": "cell",
+    "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+   },
+   {
+    "field": "claim",
+    "form": "0.234",
+    "new": "0.232",
+    "old": "0.234",
+    "run": "tc1-5090-16",
+    "source": "cell",
+    "where": "qwen3_unsloth_ckpt_unsloth_prof device_busy_fraction"
+   },
+   {
+    "field": "claim",
+    "form": "0.308",
+    "new": "0.297",
+    "old": "0.308",
+    "run": "tc1c-h100-2",
+    "source": "reducer",
+    "where": "P8"
+   },
+   {
+    "field": "claim",
+    "form": "0.308",
+    "new": "0.297",
+    "old": "0.308",
+    "run": "tc1c-h100-2",
+    "source": "reducer",
+    "where": "- where Unsloth's step goes (`unsloth/ck"
+   },
+   {
+    "field": "claim",
+    "form": "0.562",
+    "new": "0.553",
+    "old": "0.562",
+    "run": "tc1c-h100-2",
+    "source": "cell",
+    "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+   },
+   {
+    "field": "claim",
+    "form": "0.308",
+    "new": "0.297",
+    "old": "0.308",
+    "run": "tc1c-h100-2",
+    "source": "cell",
+    "where": "qwen3_unsloth_ckpt_unsloth_prof device_busy_fraction"
+   }
+  ],
+  "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04": [
+   {
+    "field": "notes",
+    "form": "0.305",
+    "new": "0.294",
+    "old": "0.305",
+    "run": "tc1c-h100-3",
+    "source": "reducer",
+    "where": "P8"
+   },
+   {
+    "field": "notes",
+    "form": "0.305",
+    "new": "0.294",
+    "old": "0.305",
+    "run": "tc1c-h100-3",
+    "source": "reducer",
+    "where": "- where Unsloth's step goes (`unsloth/ck"
+   },
+   {
+    "field": "notes",
+    "form": "0.665",
+    "new": "0.653",
+    "old": "0.665",
+    "run": "tc1c-h100-3",
+    "source": "cell",
+    "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+   },
+   {
+    "field": "notes",
+    "form": "0.305",
+    "new": "0.294",
+    "old": "0.305",
+    "run": "tc1c-h100-3",
+    "source": "cell",
+    "where": "qwen3_unsloth_ckpt_unsloth_prof device_busy_fraction"
+   }
+  ],
+  "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep": [
+   {
+    "field": "notes",
+    "form": "0.306",
+    "new": "0.294",
+    "old": "0.306",
+    "run": "tc1c-h100-4",
+    "source": "reducer",
+    "where": "P8"
+   },
+   {
+    "field": "notes",
+    "form": "0.306",
+    "new": "0.294",
+    "old": "0.306",
+    "run": "tc1c-h100-4",
+    "source": "reducer",
+    "where": "- where Unsloth's step goes (`unsloth/ck"
+   },
+   {
+    "field": "notes",
+    "form": "0.659",
+    "new": "0.643",
+    "old": "0.659",
+    "run": "tc1c-h100-4",
+    "source": "cell",
+    "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+   },
+   {
+    "field": "notes",
+    "form": "0.306",
+    "new": "0.294",
+    "old": "0.306",
+    "run": "tc1c-h100-4",
+    "source": "cell",
+    "where": "qwen3_unsloth_ckpt_unsloth_prof device_busy_fraction"
+   }
+  ],
+  "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route-v2": [
+   {
+    "field": "claim",
+    "form": "0.454",
+    "new": "0.442",
+    "old": "0.454",
+    "run": "tc1c-h100-9",
+    "source": "cell",
+    "where": "qwen3_e4b_fused_attn4_m_prof device_busy_fraction"
+   }
+  ],
+  "e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10": [
+   {
+    "field": "claim",
+    "form": "0.987",
+    "new": "0.990",
+    "old": "0.987",
+    "run": "tc1-5090-146",
+    "source": "reducer",
+    "where": "DEVICE"
+   },
+   {
+    "field": "claim",
+    "form": "0.464",
+    "new": "0.446",
+    "old": "0.464",
+    "run": "tc1-5090-147",
+    "source": "reducer",
+    "where": "PREMISE"
+   },
+   {
+    "field": "claim",
+    "form": "0.987",
+    "new": "0.988",
+    "old": "0.987",
+    "run": "tc1-5090-147",
+    "source": "reducer",
+    "where": "DEVICE"
+   },
+   {
+    "field": "claim",
+    "form": "0.987",
+    "new": "0.984",
+    "old": "0.987",
+    "run": "tc1-5090-147",
+    "source": "reducer",
+    "where": "DEVICE"
+   }
+  ],
+  "e4b.train.p129.fused-qkv.second-host.5090.2026-10-10": [
+   {
+    "field": "claim",
+    "form": "0.464",
+    "new": "0.446",
+    "old": "0.464",
+    "run": "tc1-5090-147",
+    "source": "reducer",
+    "where": "PREMISE"
+   },
+   {
+    "field": "claim",
+    "form": "0.539",
+    "new": "0.521",
+    "old": "0.539",
+    "run": "tc1-5090-150",
+    "source": "reducer",
+    "where": "e4b/fused_attn4_m_q0_d2"
+   },
+   {
+    "field": "claim",
+    "form": "0.539",
+    "new": "0.521",
+    "old": "0.539",
+    "run": "tc1-5090-150",
+    "source": "reducer",
+    "where": "PREMISE"
+   },
+   {
+    "field": "claim",
+    "form": "0.988",
+    "new": "0.984",
+    "old": "0.988",
+    "run": "tc1-5090-150",
+    "source": "reducer",
+    "where": "DEVICE"
+   }
+  ],
+  "e4b.train.single-ladder-auto.field.5090.2026-10-08": [
+   {
+    "field": "claim",
+    "form": "1.043",
+    "new": "1.045",
+    "old": "1.043",
+    "run": "tc1-5090-139",
+    "source": "reducer",
+    "where": "P218"
+   },
+   {
+    "field": "notes",
+    "form": "0.475",
+    "new": "0.460",
+    "old": "0.475",
+    "run": "tc1-5090-139",
+    "source": "reducer",
+    "where": "P215"
+   }
+  ],
+  "e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08": [
+   {
+    "field": "claim",
+    "form": "0.884",
+    "new": "0.871",
+    "old": "0.884",
+    "run": "tc1-5090-141",
+    "source": "reducer",
+    "where": "P215"
+   },
+   {
+    "field": "claim",
+    "form": "1.055",
+    "new": "1.056",
+    "old": "1.055",
+    "run": "tc1-5090-141",
+    "source": "reducer",
+    "where": "P218"
+   },
+   {
+    "field": "claim",
+    "form": "0.999",
+    "new": "1.000",
+    "old": "0.999",
+    "run": "tc1-5090-141",
+    "source": "reducer",
+    "where": "P218"
+   }
+  ],
+  "e4b.train.single-ladder.field.5090.2026-10-08": [
+   {
+    "field": "claim",
+    "form": "0.417",
+    "new": "0.400",
+    "old": "0.417",
+    "run": "tc1-5090-138",
+    "source": "reducer",
+    "where": "e4b/fused_attn4_shipped_l0"
+   },
+   {
+    "field": "claim",
+    "form": "0.417",
+    "new": "0.402",
+    "old": "0.417",
+    "run": "tc1-5090-138",
+    "source": "reducer",
+    "where": "P210"
+   },
+   {
+    "field": "claim",
+    "form": "0.417",
+    "new": "0.402",
+    "old": "0.417",
+    "run": "tc1-5090-138",
+    "source": "reducer",
+    "where": "P211"
+   },
+   {
+    "field": "claim",
+    "form": "0.33",
+    "new": "0.317",
+    "old": "0.330",
+    "run": "tc1-5090-138",
+    "source": "cell",
+    "where": "qwen3sladder_e4b_fused_attn4_m_l0 device_busy_fraction"
+   }
+  ]
+ }
+}

@@ -6,7 +6,6 @@
  "bench/b771b/b771b_drive.sh": "a60150b35fc5df482423ace77f66ffdf7b204fdc745c790b900a410cf9ac6cae",
  "bench/fam/fam_drive.sh": "aaa425e9513d5df118f02dddfd241939562903f1d69a1d29fb577e7655965c3c",
  "bench/g4census/g4census_drive.sh": "9c1d7a98b42853f542b9c2dc0fe8e53bca03aa65fd0be69619fd6d4b3ab27d77",
- "bench/gpu-contract/gc_drive.sh": "7d4012bdd29cc9e5180d623e8abfa3da5800a80a2f257226c41028e1587851fc",
  "bench/ho2/ho2_drive.sh": "68423e90180aa73e43adefcea255d739bf70c6fb8f097be5340402a11606a064",
  "bench/i8dense/i8_drive.sh": "8420e5c9cc80dbcf3021ec4ed667dd1bb22ebfc8dc04f5d0e69f45c9cd3f6a79",
  "bench/k14/k14_drive.sh": "5846ceedac561d31295728d8a7a9663dc517bfe1be97fc8cb345e8f1e075496f",

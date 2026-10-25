@@ -1,0 +1,188 @@
+"""TC1 amendment 81: tc1_arm.summarize_profile counts device time from KERNEL rows only, tested on a second real profile and with a
+SOURCE mutant. (The cases and the fixture design are from a draft of this amendment by another contributor; tests/test_tc1_am81.py holds
+the at-source = f15v2 equality on tc1-5090-110.)
+
+A user-annotation row (record_function's GPU-side span, ``Optimizer.step#AdamW8bit.step`` in every TC1 profile) covers the kernels
+launched in its range. Those kernels are rows of their own, so the old sum counted them twice (e4b#2129). The rule is torch's own,
+``evt.is_user_annotation``, never a name. The events here are built from amendment 79's stored e4b profile (tc1-5090-pos79-r1), with the
+attribute set on the annotation row as torch sets it, and fed to the real summarize_profile. No GPU is needed.
+"""
+from __future__ import annotations
+
+import importlib.util
+import inspect
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+torch = pytest.importorskip("torch")
+
+REPO = Path(__file__).resolve().parents[1]
+ARM = REPO / "bench" / "tc1" / "tc1_arm.py"
+PROFILE = REPO / "bench" / "h2h-2026-10-02" / "tc1" / "receipts" / "tc1-5090-pos79-r1" / "tc1" / "qwen3pos79_e4b_fused_attn4_m_fd_profile.json"
+ANNOTATION = "Optimizer.step#AdamW8bit.step"
+RULE = 'is_ann = bool(flag_seen and is_dev and getattr(e, "is_user_annotation", False))'
+
+
+def _load(path, name):
+    spec = importlib.util.spec_from_file_location(name, path)
+    m = importlib.util.module_from_spec(spec)
+    sys.modules[name] = m
+    spec.loader.exec_module(m)
+    return m
+
+
+ARM_MOD = _load(ARM, "tc1_arm_device_time")
+F2 = _load(REPO / "bench" / "tc1" / "f15v2.py", "f15v2_device_time")
+
+
+class _Ev:
+    """The FunctionEventAvg fields summarize_profile reads; times in microseconds, as torch keeps them."""
+
+    def __init__(self, key, cpu_ms, dev_ms, count, cuda, annotation=None):
+        self.key, self.count = key, count
+        self.self_cpu_time_total, self.self_device_time_total = cpu_ms * 1e3, dev_ms * 1e3
+        self.device_type = torch.autograd.DeviceType.CUDA if cuda else torch.autograd.DeviceType.CPU
+        if annotation is not None:
+            self.is_user_annotation = annotation
+
+
+class _Prof:
+    def __init__(self, events):
+        self.events = events
+
+    def key_averages(self):
+        return self.events
+
+
+def _events(extra=(), attribute=True):
+    prof = json.loads(PROFILE.read_text())
+    ev = [_Ev(r["name"], 0.0, r["self_device_ms"], r["count"], True, (r["name"] == ANNOTATION) if attribute else None)
+          for r in prof["top_device"]]
+    ev += [_Ev(r["name"], r["self_cpu_ms"], 0.0, r["count"], False, False if attribute else None) for r in prof["top_cpu"]]
+    return ev + list(extra), prof
+
+
+def _kernel_ms(prof):
+    return sum(r["self_device_ms"] for r in prof["top_device"] if r["name"] != ANNOTATION)
+
+
+def _summarize(tmp_path, events, fn=None):
+    out = tmp_path / "x_profile.json"
+    s = (fn or ARM_MOD.summarize_profile)(_Prof(events), wall_s=17.95, n_steps=3, out_path=str(out))
+    return s, json.loads(out.read_text())
+
+
+def _counts_kernels_only(s, prof):
+    return abs(s["device_ms"] - round(_kernel_ms(prof), 1)) < 0.2
+
+
+def test_device_time_is_the_kernels_and_the_span_is_recorded_apart(tmp_path):
+    ev, prof = _events()
+    s, out = _summarize(tmp_path, ev)
+    span = next(r["self_device_ms"] for r in prof["top_device"] if r["name"] == ANNOTATION)
+    assert s["device_ms_method"] == "kernels_only_at_source" and _counts_kernels_only(s, prof)
+    assert abs(s["user_annotation_ms"] - span) < 0.2 and round(span / 3, 1) == 85.3      # the real row: 85.3 ms a profiled step
+    row = next(r for r in out["top_device"] if r["name"] == ANNOTATION)
+    assert row.get("user_annotation") is True and not any(r.get("user_annotation") for r in out["top_device"] if r["name"] != ANNOTATION)
+    # event counts are unchanged by the rule (the annotation row stays a counted event), so no other figure moves
+    assert s["device_events_per_step"] == round(sum(r["count"] for r in prof["top_device"]) / 3)
+
+
+def test_an_injected_annotation_never_moves_device_time(tmp_path):
+    ev, _ = _events()
+    base, _ = _summarize(tmp_path, ev)
+    more, _ = _summarize(tmp_path, ev + [_Ev("ProfilerStep#7", 0.0, 400.0, 3, True, True)])
+    assert more["device_ms"] == base["device_ms"] and more["user_annotation_ms"] > base["user_annotation_ms"]
+
+
+def test_a_torch_that_cannot_tell_keeps_the_legacy_sum_and_says_so(tmp_path):
+    """No is_user_annotation attribute: the profile is marked all_cuda (the old rule), never reported as corrected."""
+    ev, prof = _events(attribute=False)
+    s, _ = _summarize(tmp_path, ev)
+    assert s["device_ms_method"] == "all_cuda"
+    assert abs(s["device_ms"] - round(sum(r["self_device_ms"] for r in prof["top_device"]), 1)) < 0.2
+
+
+def test_a_profile_with_no_cuda_row_never_claims_the_kernels_only_method(tmp_path):
+    """No CUDA row at all (a CPU-only profile): all() over nothing is True, but no method was exercised, so the stamp is
+    no_device_rows, never kernels_only_at_source, and f15v2 does not legacy-correct it either."""
+    ev, _ = _events()
+    cpu_only = [e for e in ev if e.device_type != torch.autograd.DeviceType.CUDA]
+    s, out = _summarize(tmp_path, cpu_only)
+    assert s["device_ms_method"] == "no_device_rows" and s["device_ms"] == 0.0 and s["user_annotation_ms"] == 0.0
+    with pytest.raises(F2.AnnotationError, match="no_device_rows"):        # refused by its method, before any row is read
+        F2.kernels_only_device_ms(out)
+
+
+RED = _load(REPO / "bench" / "tc1" / "tc1_reduce.py", "tc1_reduce_device_time")
+GUARD = 'if not n or dev is None or pr.get("device_ms_method") == "no_device_rows" or float(dev) <= 0.0:'
+
+
+def _cpu_only_cell(tmp_path):
+    ev, _ = _events()
+    s, _ = _summarize(tmp_path, [e for e in ev if e.device_type != torch.autograd.DeviceType.CUDA])
+    return {"profile": s, "s_per_step_median_11plus": 6.0}
+
+
+def test_the_reducer_reads_a_no_device_rows_cell_as_unread(tmp_path):
+    """A device figure built on a profile with no CUDA row is UNREAD (None) at every device_ms site of tc1_reduce, never 0 or inf: a
+    busy_t of 0 would pass a host-bound premise it never measured."""
+    r = _cpu_only_cell(tmp_path)
+    assert r["profile"]["device_ms_method"] == "no_device_rows"
+    assert RED._device_ms_per_step(r["profile"]) is None
+    assert RED._busy_vs_timed(r) is None
+    assert RED._cbk_device_ms(r) is None
+
+
+def test_the_reducer_still_reads_a_real_profile(tmp_path):
+    ev, prof = _events()
+    s, _ = _summarize(tmp_path, ev)
+    r = {"profile": s, "s_per_step_median_11plus": 6.0}
+    assert RED._device_ms_per_step(s) == pytest.approx(s["device_ms"] / 3)
+    assert RED._busy_vs_timed(r) == pytest.approx(s["device_ms"] / 3 / 6000.0)
+    assert RED._cbk_device_ms(r) == pytest.approx(s["device_ms"] / 3)
+
+
+def test_mutant_reading_a_missing_device_time_as_zero_is_caught(tmp_path):
+    """The reducer's old rule (device_ms or 0.0) restored in a copy of the helper: busy_t reads 0.0 on the CPU-only cell."""
+    src = inspect.getsource(RED._device_ms_per_step)
+    assert src.count(GUARD) == 1
+    ns = dict(vars(RED))
+    exec(compile(src.replace(GUARD, "if not n or dev is None:"), str(REPO / "bench" / "tc1" / "tc1_reduce.py"), "exec"), ns)
+    pr = _cpu_only_cell(tmp_path)["profile"]
+    assert ns["_device_ms_per_step"](pr) == 0.0                        # the mutant reads 0, which the real helper refuses
+
+
+def test_mutant_dropping_the_cuda_row_guard_is_caught(tmp_path):
+    """The guard removed in a copy of summarize_profile's source: the CPU-only profile would claim kernels_only_at_source."""
+    src = inspect.getsource(ARM_MOD.summarize_profile)
+    guard = "flag_seen = bool(cuda_rows) and all("
+    assert src.count(guard) == 1
+    ns = dict(vars(ARM_MOD))
+    exec(compile(src.replace(guard, "flag_seen = all("), str(ARM), "exec"), ns)
+    ev, _ = _events()
+    s, _ = _summarize(tmp_path, [e for e in ev if e.device_type != torch.autograd.DeviceType.CUDA], fn=ns["summarize_profile"])
+    assert s["device_ms_method"] != "no_device_rows"
+
+
+def test_the_mutant_that_sums_annotations_is_caught(tmp_path):
+    """The rule disabled in a copy of summarize_profile's own source: device time takes the span back, and the kernels-only check
+    fails. Only a source mutant shows the filter is in the code path; a fixture mutant cannot."""
+    src = inspect.getsource(ARM_MOD.summarize_profile)
+    assert src.count(RULE) == 1
+    ns = dict(vars(ARM_MOD))
+    exec(compile(src.replace(RULE, "is_ann = False"), str(ARM), "exec"), ns)
+    ev, prof = _events()
+    s, _ = _summarize(tmp_path, ev, fn=ns["summarize_profile"])
+    assert not _counts_kernels_only(s, prof)
+
+
+def test_amendment_80s_by_name_correction_refuses_a_profile_corrected_at_source(tmp_path):
+    """The two instruments never stack: f15v2 refuses a profile this summary marks kernels_only_at_source."""
+    ev, _ = _events()
+    _, out = _summarize(tmp_path, ev)
+    with pytest.raises(F2.AnnotationError, match="corrected twice"):
+        F2.kernels_only_device_ms(out)

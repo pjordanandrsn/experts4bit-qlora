@@ -24,8 +24,36 @@ import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MARKERS = ROOT / ".github" / "private-markers.txt"
-MANIFEST = ROOT / "docs" / "receipts-redaction.sha256"
 ORIGIN = "069a029befd42b617e3da1682e76070831bc381f"   # the commit whose bytes are the git-held originals
+# The redaction's own merge commit. The proofs below read the redacted bytes FROM IT, never from the working tree: a
+# later edit to a redacted file (a release's CHANGELOG fold, a register successor) is not the redaction and must not
+# fail them. The forward guarantees (no identifier outside the holds, the holds' pins) read the working tree.
+REDACTED = "ac352c2532ca3aa656485fdd462f98b321a6822f"
+
+
+def _blobs(rev, paths):
+    """{path: bytes or None} at REV, read in one `git cat-file --batch` pass. A missing commit FAILS, never skips."""
+    if subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", f"{rev}^{{commit}}"], capture_output=True).returncode:
+        pytest.fail(f"commit {rev[:12]} is not in this checkout: the redaction proofs need full history "
+                    f"(actions/checkout with fetch-depth: 0)")
+    req = "".join(f"{rev}:{p}\n" for p in paths).encode()
+    out = subprocess.run(["git", "-C", str(ROOT), "cat-file", "--batch"], input=req, capture_output=True,
+                         check=True).stdout
+    got, i = {}, 0
+    for p in paths:
+        nl = out.index(b"\n", i)
+        head = out[i:nl].split()
+        if head[-1] == b"missing":
+            got[p], i = None, nl + 1
+            continue
+        size = int(head[2])
+        got[p], i = out[nl + 1:nl + 1 + size], nl + 1 + size + 1
+    return got
+
+
+def _manifest_rows():
+    text = _blobs(REDACTED, ["docs/receipts-redaction.sha256"])["docs/receipts-redaction.sha256"].decode("utf-8")
+    return [ln.split("  ", 3) for ln in text.splitlines() if ln and ln[0] != "#"]
 
 HOLDS = {   # path -> (why it keeps its identifiers, its sha256)
     "bench/dq11/DQ11-AMENDMENT-3.md": ("sealed: science.sha256 pins it", "f79c920cf55bed0c354d05c48c90591e2efad59e7e500041ba19468fcc1cc149"),
@@ -144,8 +172,8 @@ def scan_file(path):
 
 ALLOWED = {   # (path, rule) -> (count, why it stays)
     ("tests/fixtures/dq11-census-refused/receipt.json", "instance id in context"):
-        (1, "a Vast OFFER id inside Vast's own error text ('Instance type by id <offer>'); offer ids go to the "
-            "machine-id follow-up with the fixture's offer_ids"),
+        (1, "a Vast OFFER id inside Vast's own error text ('Instance type by id <offer>'): a test source, "
+            "kept as the census tests read it (the offer-id ruling, 2026-10-25)"),
     ("tests/test_host_facts.py", "instance id in context"):
         (2, "CPU clocks in kHz (max_khz) for a fixture directory named box, not an id"),
     ("tests/test_p159.py", "instance id in context"):
@@ -228,8 +256,16 @@ def test_the_matcher_leaves_tokens_canaries_and_other_numbers_alone():
 
 
 # ---- the manifest: every redacted file is its recorded bytes, every removed file is held by the store ----
-def test_the_manifest_matches_the_tree():
-    rows = [ln.split("  ", 3) for ln in MANIFEST.read_text(encoding="utf-8").splitlines() if ln and ln[0] != "#"]
+def test_a_missing_commit_fails_loudly():
+    with pytest.raises(pytest.fail.Exception, match="fetch-depth: 0"):
+        _blobs("0" * 40, ["docs/claims.json"])
+
+
+def test_the_manifest_matches_the_redaction_commit():
+    rows = _manifest_rows()
+    paths = [r[3] for r in rows]
+    notes = sorted({str(pathlib.PurePosixPath(fx).parent / "STORE-ONLY.sha256") for _, red, _, fx in rows if red == "removed"})
+    at = _blobs(REDACTED, paths + notes)
     assert len(rows) == 2227
     removed = [r for r in rows if r[1] == "removed"]
     assert len(removed) == 7
@@ -237,17 +273,17 @@ def test_the_manifest_matches_the_tree():
         assert origin in ("store", "git:" + ORIGIN[:8]), origin
         assert orig != red and fx not in HOLDS and fx not in TEST_SOURCES
         if red == "removed":
-            assert origin == "store" and not (ROOT / fx).exists(), fx
-            note = (ROOT / fx).parent / "STORE-ONLY.sha256"
-            assert f"{orig}  {(ROOT / fx).name}" in note.read_text(encoding="utf-8"), f"{fx}: no STORE-ONLY line"
+            assert origin == "store" and at[fx] is None, fx
+            note = at[str(pathlib.PurePosixPath(fx).parent / "STORE-ONLY.sha256")]
+            assert f"{orig}  {pathlib.PurePosixPath(fx).name}".encode() in note, f"{fx}: no STORE-ONLY line"
         else:
-            assert hashlib.sha256((ROOT / fx).read_bytes()).hexdigest() == red, f"{fx} is not its redacted bytes"
+            assert hashlib.sha256(at[fx]).hexdigest() == red, f"{fx} is not its redacted bytes at {REDACTED[:8]}"
 
 
 def test_a_redacted_receipt_is_its_original_with_tokens_in_place():
     """Spot-check a git-held original: the redacted file is the original with identifier-shaped spans swapped for
     tokens, and nothing else; equal values take equal tokens."""
-    rows = [ln.split("  ", 3) for ln in MANIFEST.read_text(encoding="utf-8").splitlines() if ln and ln[0] != "#"]
+    rows = _manifest_rows()
     checked = 0
     for orig, red, origin, fx in rows:
         if origin == "store" or red == "removed" or fx.endswith(".gz"):
@@ -311,7 +347,7 @@ def claims_problems(old, new):
 def _registers():
     old = json.loads(subprocess.run(["git", "-C", str(ROOT), "show", f"{ORIGIN}:docs/claims.json"],
                                     capture_output=True, check=True).stdout)
-    return old, json.loads((ROOT / "docs" / "claims.json").read_text(encoding="utf-8"))
+    return old, json.loads(_blobs(REDACTED, ["docs/claims.json"])["docs/claims.json"])
 
 
 def test_the_register_changed_only_by_identifiers_turned_into_tokens():
@@ -390,7 +426,7 @@ def _id_files():
 @pytest.mark.parametrize("fx", _id_files())
 def test_an_id_file_changed_only_by_identifiers_turned_into_tokens(fx):
     old = subprocess.run(["git", "-C", str(ROOT), "show", f"{ORIGIN}:{fx}"], capture_output=True, check=True).stdout
-    new = (ROOT / fx).read_bytes()
+    new = _blobs(REDACTED, [fx])[fx]
     assert old != new, f"{fx} is an ID_FILE the redaction did not touch"
     assert substitution_problems(old.decode("utf-8"), new.decode("utf-8")) == [], fx
 

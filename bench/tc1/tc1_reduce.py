@@ -1566,6 +1566,18 @@ def prof28_why(tag, r):
                                f"env {env!r}; chunked {c})")
 
 
+def _device_ms_per_step(pr):
+    """Device ms per profiled step from a cell's profile, or None (UNREAD): no profiled steps, no device_ms, a non-positive device_ms,
+    or a profile that recorded no CUDA row at all (TC1 amendment 81's ``device_ms_method`` ``no_device_rows``). A device figure built
+    on such a profile is never 0, inf or a crash."""
+    pr = pr or {}
+    n = int(pr.get("profiled_steps") or 0)
+    dev = pr.get("device_ms")
+    if not n or dev is None or pr.get("device_ms_method") == "no_device_rows" or float(dev) <= 0.0:
+        return None
+    return float(dev) / n
+
+
 def prof28_table(F, fam=PROF28_FAM):
     """Amendment 53, descriptive: per arm the timed s/step and the profile summary (steps profiled, wall and device ms per profiled step,
     device busy fraction, device events and CPU ops per step, CPU self ms per step by op family, device ms per step by family)."""
@@ -1578,7 +1590,7 @@ def prof28_table(F, fam=PROF28_FAM):
         pr = r.get("profile") or {}
         n = int(pr.get("profiled_steps") or 0)
         cpu = float(pr.get("cpu_self_ms") or 0.0) / n if n else None
-        dev = float(pr.get("device_ms") or 0.0) / n if n else None
+        dev = _device_ms_per_step(pr)
         out.append({"arm": k[1], "side": prof28_side(k[1]), "verdict": R["verdicts"].get(k, "missing"), "s_per_step": r.get("s_per_step_median_11plus"),
                     "profiled": bool(n), "wall_ms_per_step": pr.get("wall_ms_per_step"), "device_ms_per_step": None if dev is None else round(dev, 1),
                     "device_busy_fraction": pr.get("device_busy_fraction"), "device_events_per_step": pr.get("device_events_per_step"),
@@ -2205,9 +2217,10 @@ def _busy_vs_timed(r):
     """Device ms per profiled step / timed ms per step (s/step of steps 11..N), or None without a profile -- amendment 53's busy_t."""
     pr = (r or {}).get("profile") or {}
     n, s = int(pr.get("profiled_steps") or 0), (r or {}).get("s_per_step_median_11plus")
-    if not n or not s:
+    dev = _device_ms_per_step(pr)
+    if not n or not s or dev is None:
         return None
-    return float(pr.get("device_ms") or 0.0) / n / (1000.0 * float(s))
+    return dev / (1000.0 * float(s))
 
 
 def score_ckptoff28(F, fam=CKPTOFF28_FAM):
@@ -2387,9 +2400,7 @@ def cbk_why(tag, r):
 
 def _cbk_device_ms(r):
     """Amendment 66's P194 quantity: device ms per profiled step, or None without a profile."""
-    pr = (r or {}).get("profile") or {}
-    n = int(pr.get("profiled_steps") or 0)
-    return float(pr["device_ms"]) / n if n and pr.get("device_ms") is not None else None
+    return _device_ms_per_step((r or {}).get("profile"))
 
 
 def score_cbk(F, fam=CBK_FAM):

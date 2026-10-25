@@ -89,13 +89,13 @@ MLP-adapter fusion build closed at NO_GAIN (Phase 2, 2026-10-20; [results](../be
 
 ### Training against other frameworks
 
-**Qwen3-30B-A3B against Unsloth 2026.9.14: Unsloth spends 1.92× e4b's GPU time per step (medians of two draws);
+**Qwen3-30B-A3B against Unsloth 2026.9.14: Unsloth spends 1.95× e4b's GPU time per step (medians of two draws);
 wall-clock 2.80× on an AMD EPYC 7713.** TC1's field recipe (alpaca, seq 2048, micro-batch 2 × accum 4, r 16, AdamW-8bit)
 on one RTX 5090, the work matched, both frameworks on one stack, e4b at every current default. The wall ratio depends on
-the host: Unsloth runs 14× e4b's CPU ops per step and keeps its GPU busy for 0.33 of its step against e4b's 0.49, so a
+the host: Unsloth runs 14× e4b's CPU ops per step and keeps its GPU busy for 0.33 of its step against e4b's 0.47, so a
 slower host stretches Unsloth's step more. Held-out loss agrees within 0.0012; e4b peaks 1.89 GB higher (26.16 against
 24.27 GB). HF + PEFT runs out of memory on the 32 GB card.
-`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`, `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.hf-oom`
+`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio.am81`, `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.hf-oom`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos69.md)).
 
 **Where those 1.89 GB sit:** the 1.883 GB peak gap is transient. 2.044 GB of e4b's transient at the peak is grouped-nf4-gemm's padded
@@ -116,10 +116,10 @@ credits both savings, and no arm fits). The compact delta's own backward is the 
 total left at the fullest step (TC1 amendment 78, FIT for this fixture only; the levers stay opt-in until a default-change PR).
 `e4b.train.4090-fit.field.4090.2026-10-24` ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos78fit.md)).
 
-**On packed 4,096-token rows, Unsloth 2026.9.14 spends 1.160× e4b's GPU time per step (medians of two draws).** The
+**On packed 4,096-token rows, Unsloth 2026.9.14 spends 1.161× e4b's GPU time per step (medians of two draws).** The
 wall-clock ratio follows the host: 1.472 on the profiled host, 1.287 and 1.773 on two others. At e4b's defaults its
 training phase peaks 1.04 GB above Unsloth's 24.86 GB (medians of two draws), and 0.30 GB above with the opt-in
-`E4B_CKPT_OFFLOAD=1`. `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`,
+`E4B_CKPT_OFFLOAD=1`. `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio.am81`,
 `e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`
 ([results](../bench/h2h-2026-10-02/tc1/RESULTS-tc1-pos68.md)).
 
@@ -206,7 +206,7 @@ host reuse) each stepped the field recipe at 0.847–0.968 of the code before, h
 
 **Opt-ins, each read and left off:**
 - `E4B_CKPT_OFFLOAD=1`: 0.74 GB off the packed-row training peak for 1.023 of the step.
-  `e4b.train.ckpt-flavour.default.5090.2026-10-07`
+  `e4b.train.ckpt-flavour.default.5090.2026-10-07.am81`
 - `E4B_MOE_KEEP_LAYERS` (with grouped-nf4-gemm's compact delta): 0.835 of the step with 32 of 48 layers' MoE activations
   kept (medians of two draws), at +4.5 GB; use it where that headroom exists ([CHOOSING](CHOOSING.md)).
   `e4b.train.moe-keep.qwen3.5090.2026-10-04`
@@ -215,7 +215,7 @@ host reuse) each stepped the field recipe at 0.847–0.968 of the code before, h
 - `NF4_QLORA_SINGLE_LADDER` (grouped-nf4-gemm): its `auto`, the ladder only with fp32 adapters, becomes the default.
   With fp32 adapters it stepped 0.797 of the time on a host-bound box and 1.031 on a GPU-bound one (medians of two
   draws; registered bound 1.05). With bf16 adapters, the shipped arm, it does not engage (1.002).
-  `e4b.train.single-ladder.field.5090.2026-10-08`, `e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08`
+  `e4b.train.single-ladder.field.5090.2026-10-08.am81`, `e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08.am81`
 
 **Energy: on a card that already fits the model, 4-bit costs energy.** `bnb.matmul_4bit` costs 1.748× native bf16's
 J/op at decode, 1.601× at prefill and 1.965× in training. The fused 4-bit MoE forward's J/token at batch 4096 is 0.063
@@ -537,10 +537,10 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | chunked LM loss where fp32 logits would reach 1 GiB | `enable_fast_train` | `E4B_CHUNKED_LM_LOSS=0` | `e4b.train.chunked-lm-loss.auto.default-decision.5090.2026-10-05` |
 | double-quantized expert absmax | `enable_fast_train` | `E4B_ABSMAX_DQ=0` or `absmax_dq=False` (offload, batched, residency and NVMe engines need fp32) | `e4b.train.absmax-dq.qwen3.5090.2026-10-05`, `e4b.train.absmax-dq.packed-4k.5090.2026-10-07` |
 | prebound Triton launches | e4b, grouped-nf4-gemm | `E4B_TRITON_PREBIND=0`, `GNF4_TRITON_PREBIND=0` | `e4b.train.prebind.qwen3.5090.2026-10-05` |
-| PyTorch's reentrant checkpoint | `enable_fast_train` (a `Trainer` with `gradient_checkpointing=True` re-enables Hugging Face's) | `E4B_CKPT_OFFLOAD=0` | `e4b.train.ckpt-flavour.default.5090.2026-10-07` |
+| PyTorch's reentrant checkpoint | `enable_fast_train` (a `Trainer` with `gradient_checkpointing=True` re-enables Hugging Face's) | `E4B_CKPT_OFFLOAD=0` | `e4b.train.ckpt-flavour.default.5090.2026-10-07.am81` |
 | chunked held-out loss | `enable_fast_train` | `E4B_CHUNKED_EVAL_LOSS=0` | `e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07` |
 | expert combine over row chunks | `enable_fast_train` | `E4B_COMBINE_CHUNK=0` | `e4b.train.combine-row-chunks.packed-4k.5090.2026-10-07` |
-| fused q/k/v training projection (Qwen3-MoE, NF4 attention with adapters; 0.868–0.906 of the step on two RTX 5090 hosts (medians of two draws), 13.9–14.6 % fewer launches, about 24 MB; `disable_fast_train` restores the three projections) | `enable_fast_train` | `E4B_TRAIN_FUSE_QKV=0` | `e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10`, `e4b.train.p129.fused-qkv.second-host.5090.2026-10-10` |
+| fused q/k/v training projection (Qwen3-MoE, NF4 attention with adapters; 0.868–0.906 of the step on two RTX 5090 hosts (medians of two draws), 13.9–14.6 % fewer launches, about 24 MB; `disable_fast_train` restores the three projections) | `enable_fast_train` | `E4B_TRAIN_FUSE_QKV=0` | `e4b.train.p129.fused-qkv.qwen3.5090.2026-10-10.am81`, `e4b.train.p129.fused-qkv.second-host.5090.2026-10-10.am81` |
 | bucketed LoRA-delta padding, compact | grouped-nf4-gemm | `NF4_QLORA_PAD_BUCKETS=0`, `NF4_QLORA_COMPACT_BUCKETS=0` | `e4b.train.pad-buckets.auto.default-decision.5090.2026-10-06`, `e4b.train.compact-buckets.packed-4k.5090.2026-10-07` |
 | bucketed CUDA-graph decode (sm_89+) | `serve_paged` | `E4B_PAGED_GRAPHS=0` | `e4b.serve.p109.decode-graphs-vs-eager-default.qwen3.5090.2026-10-03`, `e4b.serve.p110.graph-arithmetic-quality.qwen3.5090.2026-10-03` |
 | estimate-sized slots | `serve_paged` | `E4B_PAGED_MAX_SEQS=16` | `e4b.serve.sc2e.64-slots-default-buckets.qwen3.5090.2026-10-07` |

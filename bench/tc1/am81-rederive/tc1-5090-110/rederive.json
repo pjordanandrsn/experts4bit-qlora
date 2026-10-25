@@ -1,0 +1,155 @@
+{
+ "receipt": "tc1-5090-110",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3prof28_e4b_fused_attn4_m_q212.json": {
+   "recorded_ms": 28848.2,
+   "kernels_only_ms": 28693.2,
+   "annotation_ms": 155.0,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 155.042
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3prof28_e4b_fused_attn4_m_q212_d2.json": {
+   "recorded_ms": 28792.0,
+   "kernels_only_ms": 28641.1,
+   "annotation_ms": 150.9,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 150.877
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3prof28_e4b_fused_attn4_m_q28.json": {
+   "recorded_ms": 32008.1,
+   "kernels_only_ms": 31861.8,
+   "annotation_ms": 146.3,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 146.301
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3prof28_e4b_fused_attn4_m_q28_d2.json": {
+   "recorded_ms": 31996.0,
+   "kernels_only_ms": 31850.9,
+   "annotation_ms": 145.1,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 145.126
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3prof28_e4b_fused_attn4_m_q28k0.json": {
+   "recorded_ms": 35758.5,
+   "kernels_only_ms": 35618.5,
+   "annotation_ms": 140.0,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 140.021
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3prof28_e4b_fused_attn4_m_q28k0_d2.json": {
+   "recorded_ms": 35781.0,
+   "kernels_only_ms": 35640.3,
+   "annotation_ms": 140.7,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 140.732
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-| fused_attn4_m_q212 | VALID | 9.924 | True | 10648.0 | 9616.1 | 0.9031 | 137438 | 963645 |",
+  "-| fused_attn4_m_q28 | VALID | 12.562 | True | 14733.4 | 10669.4 | 0.7242 | 137656 | 962394 |",
+  "-| fused_attn4_m_q28k0 | VALID | 12.337 | True | 12830.4 | 11919.5 | 0.929 | 111643 | 697181 |",
+  "-| fused_attn4_m_q28k0_d2 | VALID | 12.375 | True | 12858.4 | 11927.0 | 0.9276 | 112823 | 703776 |",
+  "-| fused_attn4_m_q28_d2 | VALID | 12.535 | True | 14772.3 | 10665.3 | 0.722 | 137777 | 963712 |",
+  "-| fused_attn4_m_q212_d2 | VALID | 9.914 | True | 10611.9 | 9597.3 | 0.9044 | 137438 | 963761 |",
+  "+| fused_attn4_m_q212 | VALID | 9.924 | True | 10648.0 | 9564.4 | 0.8982 | 137438 | 963645 |",
+  "+| fused_attn4_m_q28 | VALID | 12.562 | True | 14733.4 | 10620.6 | 0.7209 | 137656 | 962394 |",
+  "+| fused_attn4_m_q28k0 | VALID | 12.337 | True | 12830.4 | 11872.8 | 0.9254 | 111643 | 697181 |",
+  "+| fused_attn4_m_q28k0_d2 | VALID | 12.375 | True | 12858.4 | 11880.1 | 0.9239 | 112823 | 703776 |",
+  "+| fused_attn4_m_q28_d2 | VALID | 12.535 | True | 14772.3 | 10617.0 | 0.7187 | 137777 | 963712 |",
+  "+| fused_attn4_m_q212_d2 | VALID | 9.914 | True | 10611.9 | 9547.0 | 0.8997 | 137438 | 963761 |",
+  "-- device ms per profiled step by family, q28 - q212 (median of two draws, largest increase first): fused_kernel +988.5, matmul +67.8, other +29.0, autograd +0.6, routing -0.6, optimizer -2.4, memcpy -10.4, norm_act -11.2",
+  "-- device ms per profiled step by family, q28 - q28k0 (median of two draws, largest increase first): optimizer +2.0, autograd +0.7, norm_act -1.0, routing -1.3, fused_kernel -10.5, memcpy -13.6, other -20.2, matmul -1210.9",
+  "+- device ms per profiled step by family, q28 - q212 (median of two draws, largest increase first): fused_kernel +988.5, matmul +67.8, other +29.0, autograd +0.6, optimizer +0.0, routing -0.6, memcpy -10.4, norm_act -11.2",
+  "+- device ms per profiled step by family, q28 - q28k0 (median of two draws, largest increase first): autograd +0.7, optimizer +0.2, norm_act -1.0, routing -1.3, fused_kernel -10.5, memcpy -13.6, other -20.2, matmul -1210.9",
+  "-| P135 | qwen3prof28 | **HELD** | timed ms/step q28 12548.5 vs q212 9918.9 (D +2629.6); device/step 10667.3 vs 9606.7 ms (+1060.6); share not device time 0.597 vs >= 0.5; profiled wall/step 14752.8 vs 10630.0 (gap +4122.9, reported); largest CPU-self increases (ms/step): matmul +4816.5, fused_kernel +21.8, optimizer +1.4 |",
+  "-| P136 | qwen3prof28 | **HELD** | device busy fraction (device / timed step) q28 0.850 vs q28k0 0.965 (drop +0.115 vs >= 0.03); timed ms/step 12548.5 vs 12356.1, device/step 10667.3 vs 11923.2 ms; against the profiled wall (reported) 0.723 vs 0.928 |",
+  "+| P135 | qwen3prof28 | **HELD** | timed ms/step q28 12548.5 vs q212 9918.9 (D +2629.6); device/step 10618.8 vs 9555.7 ms (+1063.1); share not device time 0.596 vs >= 0.5; profiled wall/step 14752.8 vs 10630.0 (gap +4122.9, reported); largest CPU-self increases (ms/step): matmul +4816.5, fused_kernel +21.8, optimizer +1.4 |",
+  "+| P136 | qwen3prof28 | **HELD** | device busy fraction (device / timed step) q28 0.846 vs q28k0 0.961 (drop +0.115 vs >= 0.03); timed ms/step 12548.5 vs 12356.1, device/step 10618.8 vs 11876.5 ms; against the profiled wall (reported) 0.720 vs 0.925 |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [],
+ "unparsed": [],
+ "reworded": [
+  [
+   "- device ms per profiled step by family, q28 - q212 (median of two draws, largest increase first): fused_kernel +988.5, matmul +67.8, other +29.0, autograd +0.6, routing -0.6, optimizer -2.4, memcpy -10.4, norm_act -11.2",
+   "- device ms per profiled step by family, q28 - q212 (median of two draws, largest increase first): fused_kernel +988.5, matmul +67.8, other +29.0, autograd +0.6, optimizer +0.0, routing -0.6, memcpy -10.4, norm_act -11.2"
+  ],
+  [
+   "- device ms per profiled step by family, q28 - q28k0 (median of two draws, largest increase first): optimizer +2.0, autograd +0.7, norm_act -1.0, routing -1.3, fused_kernel -10.5, memcpy -13.6, other -20.2, matmul -1210.9",
+   "- device ms per profiled step by family, q28 - q28k0 (median of two draws, largest increase first): autograd +0.7, optimizer +0.2, norm_act -1.0, routing -1.3, fused_kernel -10.5, memcpy -13.6, other -20.2, matmul -1210.9"
+  ]
+ ],
+ "share": 0.0054,
+ "corrected_results_sha256": "a1af3cf51c334c30a4a598b4c0118ebd13beea3fe23737b67639d3d82414415d",
+ "path": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-110",
+ "reducer_sha256": "ca6b8b29eabf380a796d093ceacda74b574863832793c43eda037e9a4d8560e7"
+}
