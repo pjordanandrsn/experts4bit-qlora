@@ -159,7 +159,7 @@ def _floors(tmp: Path, mops="20.00", burn_rc=0):
 def test_the_host_floors_pass_a_fast_host_and_a_clean_card(tmp_path):
     p, summary, args = _floors(tmp_path)
     assert "PASSED" in p.stdout and p.returncode == 0, p.stdout + p.stderr
-    assert "--floor 2700 --seconds 20 --min-clean 1.0" in args and "CARD_CLOCK" in summary and "SINGLE_THREAD 20.00" in summary
+    assert "--floor 2700 --seconds 20 --min-clean 0.95" in args and "CARD_CLOCK" in summary and "SINGLE_THREAD 20.00" in summary
 
 
 def test_a_capped_card_refuses_with_the_host_floor_code_before_any_install(tmp_path):
@@ -359,7 +359,7 @@ def _run_dir(tmp: Path, clocks: str = "clean", pins: bool = True, burn: bool = T
     hs = RED.POS80_HELPER_SHA256
     summary += (f"\nPOS80_PINS e4b 0.58.1 @{E4B} gnf4 0.51.0 @{GNF4} unsloth 2026.10.8 unsloth_zoo 2026.10.8 release_proof {hs['release_proof']} "
                 f"card_clock {hs['card_clock']} f15v2 {hs['f15v2']}\nPOS80_ARM_ENV e4b=[] extra=[]\nSINGLE_THREAD 18.20 Mops (median of 5; floor 15; amendment 80)\n"
-                + ("CARD_CLOCK " + json.dumps({"pass": True, "floor_mhz": 2700, "min_clean": 1.0, "sm_median": 2895}) + "\n" if burn else "")
+                + ("CARD_CLOCK " + json.dumps({"pass": True, "floor_mhz": 2700, "min_clean": 0.95, "hard_bits_every_sample": True, "sm_median": 2895}) + "\n" if burn else "")
                 + "RELEASE_PROOF fastcheck OK experts4bit-qlora==0.58.1 grouped-nf4-gemm==0.51.0 unsloth==2026.10.8 unsloth_zoo==2026.10.8 pycache_prefix /tmp/tc1-pycache-zzz999\n"
                 f"RELEASE_PROOF binding OK experts4bit-qlora==0.58.1 grouped-nf4-gemm==0.51.0 unsloth==2026.10.8 unsloth_zoo==2026.10.8 pycache_prefix {pfx}\n"
                 "POS80_KNOB_ENV E4B_SHA GNF4_SHA\n")

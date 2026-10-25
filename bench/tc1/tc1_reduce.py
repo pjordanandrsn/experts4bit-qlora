@@ -1137,14 +1137,14 @@ POS80_PROVEN = tuple(POS80_PINS)                                   # all four ar
 #: the import each proof must show among its origins: the arms' entry module (grouped-nf4-gemm installs flat modules, no package of its name)
 POS80_OWN_IMPORT = {"experts4bit-qlora": "experts4bit_qlora", "grouped-nf4-gemm": "nf4_qlora", "unsloth": "unsloth", "unsloth_zoo": "unsloth_zoo"}
 POS80_HELPER_SHA256 = {"release_proof": "aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0",
-                       "card_clock": "5e0a2bc19b6fe99af9b8160c80d61bf90d3548f89247cf48ffe0a39fa6eb071f", "f15v2": "a7ed7d74ea1674e27bac11ef6e4357b484cdfc893283b39cabc88a3c2a9cf508"}
+                       "card_clock": "fed8a3df23f3933fba8d27050c56c1afd578a77851cdfd8c827e42e721f74450", "f15v2": "a7ed7d74ea1674e27bac11ef6e4357b484cdfc893283b39cabc88a3c2a9cf508"}
 POS80_HARNESS_ENV = POS79_HARNESS_ENV
 POS80_PYCACHE_PREFIX = "/tmp/tc1-pycache-"
 POS80_HELDOUT_MAX = POS79_HELDOUT_MAX                              # amendment 69's P209
 POS80_STABLE = POS79_STABLE
 POS80_CLOCK_FLOOR = 2700                                           # MHz, the RTX 5090's: before install (the burn) and per draw
 POS80_DRAW_MIN_CLEAN = 0.95                                        # per draw: no slowdown or cap reason on >= 95 % of busy samples
-POS80_BURN_MIN_CLEAN = 1.0                                         # the burn: on every busy sample
+POS80_BURN_MIN_CLEAN = 0.95                                        # the burn: SwPowerCap clear on >= 95 % of busy samples; every hard reason on every sample
 POS80_MIN_MOPS = 15                                                # amendment 77's single-thread floor
 FAMS.append(POS80_FAM)
 NAMES[POS80_FAM] = "Qwen3-30B-A3B (amendment 80: amendment 79's box at the 0.58.1 release, PyPI wheels, F15 v2, the card floor; two profiled draws each)"
@@ -3474,8 +3474,8 @@ def pos80_box(d):
     except ValueError:
         burn = None
     if not (isinstance(burn, dict) and burn.get("pass") is True and burn.get("floor_mhz") == POS80_CLOCK_FLOOR
-            and burn.get("min_clean") == POS80_BURN_MIN_CLEAN):
-        bad.append(f"no single passing CARD_CLOCK burn line at floor {POS80_CLOCK_FLOOR} MHz, min_clean {POS80_BURN_MIN_CLEAN}")
+            and burn.get("min_clean") == POS80_BURN_MIN_CLEAN and burn.get("hard_bits_every_sample") is True):
+        bad.append(f"no single passing CARD_CLOCK burn line at floor {POS80_CLOCK_FLOOR} MHz, min_clean {POS80_BURN_MIN_CLEAN}, hard bits on every sample")
     fx["burn"] = burn
     ms = [ln for ln in lines if ln.startswith("SINGLE_THREAD ")]
     try:

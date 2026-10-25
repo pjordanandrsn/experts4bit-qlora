@@ -14,7 +14,7 @@
   A mixed dispatch, a bypass or a double dispatch VOIDs the draw. It also gives a profile's kernels-only device time, without the
   `Optimizer.step` annotation span TC1's `device_ms` includes. F15 v1 is printed for this family, not binding.
 - **`bench/common/card_clock.py`, new, shared:** a loaded SM-clock host floor. A 20 s bf16 burn must read a busy median >= 2700 MHz on the
-  RTX 5090 with no slowdown or cap reason, else rc 18. The same check runs on each draw's clock log, which VOIDs a capped draw. The reason
+  RTX 5090, with no hard slowdown or cap reason on any sample and SwPowerCap clear on >= 95 % of busy samples, else rc 18. The same check runs on each draw's clock log, which VOIDs a capped draw. The reason
   names are NVML's, from nvidia-ml-py 13.615.71. The 2700 MHz floor is calibrated on TC1's 76 committed RTX 5090 runs: 59 clear it.
 - **The profile window moves to steps 20..22.** Amendment 79's two Unsloth draws differed 16 % in steps 3..5 because draw 1 compiled
   Unsloth's Mega-cache bundle and draw 2 loaded it. Each draw's cache state is reported beside its row.

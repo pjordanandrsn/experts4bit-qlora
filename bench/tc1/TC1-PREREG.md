@@ -3818,11 +3818,15 @@ stay VOID.
 - TC1's field recipe and tokens (alpaca, seq 2048, micro-batch 2 x accum 4, r 16, fp32 matched adapters, `matched:3407`) over 60 steps;
 - both frameworks in venv-unsloth (torch 2.12.1+cu130);
 - e4b `fused_attn4_m_fd` and Unsloth `ckpt_unsloth_m_fv` (grouped_mm), two draws each in ABBA order (fd fv fv fd);
-- every arm profiled, at steps **20..22** (`--profile-steps 3 --profile-warm 20`; amendment 79 profiled 3..5). Amendment 79's first
-  Unsloth draw compiled locally and saved Unsloth's Mega-cache bundle, and its second draw loaded it. Their steps 3..5 differed 16 % in
-  kernels-only device time, almost all of it memcpy and fill, while their s/step medians differed 1.2 %. Steps 20..22 sit past that
-  transient, inside the timed median of steps 11..60: 3 of its 50 steps carry the profiler, which a median absorbs. Each Unsloth draw's
-  Mega-cache lines (compiled locally, or loaded a bundle) are reported beside its row;
+- every arm, e4b and Unsloth alike, profiled at the same steps, **20..22** (`--profile-steps 3 --profile-warm 20`; amendment 79 profiled
+  3..5). **Why**, chosen before any amendment-80 data:
+  - amendment 79's first Unsloth draw printed "Mega-cache no trusted bundle ... will compile locally and save" and saved a 42 MB bundle,
+    and its second draw printed "Mega-cache loaded bundle";
+  - their steps 3..5 differed 16 % in kernels-only device time (1670 vs 1417 ms), almost all of it memcpy and fill (342 vs 109 ms), while
+    their s/step medians differed 1.2 %;
+  - steps 20..22 sit past that transient, and after it the second draw runs the kernels the first compiled.
+  The timed s/step median stays steps 11..60, so the three profiled steps sit inside it: a known overhead on 3 of its 50 steps, which a
+  median absorbs. Each Unsloth draw's Mega-cache lines (compiled locally, or loaded a bundle) are reported beside its row, never ruled;
 - `TC1_LOAD_GATE=6.0` and `TC1_LOAD_RETRIES=2`, on one RTX 5090. No axolotl venv.
 
 **The pins: constants of the reviewed kit.** `tc1_run.sh` (`POS80_*`), `tc1_reduce.py` (`POS80_*`), the launch template and this text
@@ -3844,16 +3848,18 @@ origins, and a fresh bytecode prefix.
 
 **The host floors, before any install, each a refusal with rc 18** (the launcher excludes the machine on its next draw):
 - amendment 77's single-thread floor, 15 Mops;
-- **the card's loaded SM clock**: `bench/common/card_clock.py` (sha256 `5e0a2bc19b6fe99af9b8160c80d61bf90d3548f89247cf48ffe0a39fa6eb071f`) runs a 20 s bf16 matmul burn sampled by nvidia-smi.
-  The busy SM median must be **>= 2700 MHz**, and no slowdown or cap reason may be set on **any** busy sample. The refusing reasons are
-  SwPowerCap 0x4, HwSlowdown 0x8, SwThermalSlowdown 0x20, HwThermalSlowdown 0x40, HwPowerBrakeSlowdown 0x80, BoardLimit 0x200 and
-  Reliability 0x400. The bit names are NVML's, copied from `nvidia_ml_py-13.615.71`, `pynvml.py` lines 2190-2199 and 2215-2226.
+- **the card's loaded SM clock**: `bench/common/card_clock.py` (sha256 `fed8a3df23f3933fba8d27050c56c1afd578a77851cdfd8c827e42e721f74450`) runs a 20 s bf16 matmul burn sampled by nvidia-smi.
+  It passes when all three hold:
+  - the busy SM median is **>= 2700 MHz**;
+  - no hard reason is set on **any** sample: HwSlowdown 0x8, SwThermalSlowdown 0x20, HwThermalSlowdown 0x40, HwPowerBrakeSlowdown 0x80,
+    BoardLimit 0x200 or Reliability 0x400;
+  - SwPowerCap 0x4 is clear on **>= 95 %** of busy samples. A healthy 575 W card can touch it briefly under a full-power burn, and
+    refusing that would spend the only retry for nothing.
+  The bit names are NVML's, copied from `nvidia_ml_py-13.615.71`, `pynvml.py` lines 2190-2199 and 2215-2226. tc1-5090-136, a card
+  capped with SwPowerCap at a 2377 MHz median, still refuses on its median (`tests/test_card_clock.py`).
 - **Why 2700 MHz:** among TC1's 76 committed RTX 5090 runs, 59 had a training-time busy median at or above it (62 at 2600, 70 at 2500).
   Amendment 79's box read 2400. A burn clock sits above a training median, so the pass rate on a normal card should be higher. A card
   that refuses uses the retry id.
-- **One risk, stated:** a healthy 575 W card under a full-power bf16 burn might set SwPowerCap briefly. Because the burn's rule is "no
-  refusing bit on any busy sample", such a card refuses (rc 18). That is the registered rule; a refusal here costs the retry id, never a
-  wrong reading.
 
 **Validity** (`pos80_why`, per row, each fail-closed). This adds to TC1's standing predicates. F15 v1's `torch._grouped_mm` bar is
 **reported, not binding** for this family, printed as "F15 v1 (reported, not binding)":

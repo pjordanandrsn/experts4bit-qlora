@@ -343,16 +343,17 @@ case " $FAMILIES " in *" qwen3pos76co "*)
     || { say "BOX REFUSED: single-thread speed ${MOPS:-unreadable} Mops is under amendment 77's floor ($POS77_MIN_MOPS): the 3 h guard would not cover the four arms with the load gate's re-runs (host floor)"; echo "BOX_REFUSED single_thread_mops=${MOPS:-unreadable} floor=$POS77_MIN_MOPS (amendment 77)" >> summary.txt; finish 18; };;
 esac
 # TC1 amendment 80's host floors, before any venv or fetch: amendment 77's single-thread floor, then the card's loaded SM clock
-# (bench/common/card_clock.py: a bf16 matmul burn; the busy median >= POS80_CLOCK_FLOOR and no slowdown or cap reason on any busy
-# sample, else rc 18, a host floor). Amendment 79's box held a flat 2400 MHz with NVML's Reliability reason set (e4b#2129).
+# (bench/common/card_clock.py: a bf16 matmul burn; the busy median >= POS80_CLOCK_FLOOR, no hard slowdown or cap reason on any
+# sample, and SwPowerCap clear on >= 95 % of busy samples, else rc 18, a host floor). Amendment 79's box held a flat 2400 MHz with
+# NVML's Reliability reason set (e4b#2129).
 case " $FAMILIES " in *" qwen3pos80 "*)
   MOPS=$(single_thread_mops)
   echo "SINGLE_THREAD ${MOPS:-unreadable} Mops (median of 5; floor $POS77_MIN_MOPS; amendment 80)" | tee -a summary.txt
   python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "${MOPS:-0}" "$POS77_MIN_MOPS" 2>/dev/null \
     || { say "BOX REFUSED: single-thread speed ${MOPS:-unreadable} Mops is under the floor ($POS77_MIN_MOPS) (host floor)"; echo "BOX_REFUSED single_thread_mops=${MOPS:-unreadable} floor=$POS77_MIN_MOPS (amendment 80)" >> summary.txt; finish 18; }
-  perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $POS80_CLOCK_FLOOR --seconds 20 --min-clean 1.0 --out $W/card_clock_burn.json > logs/card_clock_burn.log 2>&1; crc=$?
+  perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $POS80_CLOCK_FLOOR --seconds 20 --min-clean 0.95 --out $W/card_clock_burn.json > logs/card_clock_burn.log 2>&1; crc=$?
   grep "^CARD_CLOCK " logs/card_clock_burn.log | tail -1 | tee -a summary.txt
-  [ $crc -eq 0 ] || { say "BOX REFUSED: the card's loaded SM clock fails amendment 80's floor ($POS80_CLOCK_FLOOR MHz, no slowdown or cap reason): $(tail -1 logs/card_clock_burn.log | cut -c1-300) (host floor)"; echo "BOX_REFUSED card_clock rc=$crc floor=$POS80_CLOCK_FLOOR (amendment 80)" >> summary.txt; finish 18; };;
+  [ $crc -eq 0 ] || { say "BOX REFUSED: the card's loaded SM clock fails amendment 80's floor ($POS80_CLOCK_FLOOR MHz, no hard slowdown or cap reason, SwPowerCap on <= 5 %): $(tail -1 logs/card_clock_burn.log | cut -c1-300) (host floor)"; echo "BOX_REFUSED card_clock rc=$crc floor=$POS80_CLOCK_FLOOR (amendment 80)" >> summary.txt; finish 18; };;
 esac
 # P48 run 1 (2026-09-19) drew a host whose container overlay was 32 GB and died ENOSPC mid-fetch; box B fetches ~120 GB of
 # checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.

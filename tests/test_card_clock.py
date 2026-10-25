@@ -100,6 +100,43 @@ def test_mutant_a_clean_card_clocked_down_refuses(tmp_path):
     assert not _cc().passes(s, FLOOR, 0.95)[0]
 
 
+def test_the_burn_rule_refuses_the_power_capped_card_on_its_clock():
+    """The burn holds SwPowerCap to 95 % of busy samples, not to every one. tc1-5090-136 (SwPowerCap on about half its samples, 2377 MHz)
+    still refuses, on its median and on its SwPowerCap share."""
+    s = _cc().summarize_log(str(POWER_CAPPED))
+    ok, why = _cc().passes(s, FLOOR, 0.95, burn=True)
+    assert not ok and "2377 MHz < floor" in why and "SwPowerCap on" in why
+
+
+def test_the_burn_rule_passes_a_brief_power_cap_and_refuses_any_hard_reason(tmp_path):
+    """SwPowerCap on 3 % of busy samples passes the burn. A single Reliability sample refuses it."""
+    n = {"i": 0}
+
+    def sprinkle(bit, every):
+        def f(ln, r):
+            if r[1] > 1000:
+                n["i"] += 1
+                if n["i"] % every == 0:
+                    return ln.replace("0x0000000000000000", f"0x{bit:016x}", 1)
+            return ln
+        return f
+    soft = tmp_path / "soft.txt"
+    _rewrite(CLEAN, soft, sprinkle(0x4, 33))
+    s = _cc().summarize_log(str(soft))
+    assert 0.96 < s["busy_soft_clean_fraction"] < 0.98 and _cc().passes(s, FLOOR, 0.95, burn=True) == (True, "")
+    n["i"] = 0
+    hard = tmp_path / "hard.txt"
+    _rewrite(CLEAN, hard, sprinkle(0x400, 10_000))                          # one busy sample at most
+    lines = hard.read_text().splitlines()
+    i = next(k for k, ln in enumerate(lines) if (_cc().parse_gpuclk_line(ln) or (0, 0))[1] > 1000)
+    lines[i] = lines[i].replace("0x0000000000000000", "0x0000000000000400", 1)
+    hard.write_text("\n".join(lines) + "\n")
+    s = _cc().summarize_log(str(hard))
+    ok, why = _cc().passes(s, FLOOR, 0.95, burn=True)
+    assert not ok and "Reliability" in why
+    assert _cc().passes(s, FLOOR, 0.95)[0] is True                          # on a run's log one sample in 345 is inside the 95 %
+
+
 def test_an_unread_card_never_passes():
     cc = _cc()
     assert cc.passes(cc.summarize([]), FLOOR, 0.95)[0] is False
