@@ -3804,3 +3804,120 @@ $0.02/GB. The screen (`bench/tc1/pos79_kit.py`, `offer_why`) and the launch temp
 - **The started box:** 3.5 h x $1.00 + 100 GB x $0.02 = **$5.50**.
 - **A box that does not start:** at most 1,440 s at the box rate plus 1.17 GB of probes, **$0.43** (amendment 78's arithmetic).
 - **The row:** one started box plus one retry id is **$5.93**, inside the $6 cap for this row.
+
+### Amendment 80 (2026-10-25T02:27Z, after amendment 79's NOT_READ, before any box): e4b#2129's confirmation read -- amendment 79's box at the 0.58.1 release, every distribution proven by its bytes, a version-aware engagement check, and a card floor (one fixed rule)
+
+**Why.** Amendment 79 read NOT_READ. Both Unsloth 2026.10.8 draws were VOID on F15 v1, which counts `torch._grouped_mm`, and
+2026.10.8 sends every expert GEMM of this model through its own Triton grouped GEMM instead (e4b#2129). The same box's card held a flat
+2400 MHz SM clock with NVML's *Reliability* reason set on every sample, the 1st percentile of TC1's 76 RTX 5090 boxes. So its device time
+can't be compared across boxes. This amendment reads the position again with both defects closed, before any figure from amendment 79's
+VOID rows is used as anything but a diagnostic. A new predicate is never applied backwards to rows it would rescue: amendment 79's rows
+stay VOID.
+
+**The box** (token `qwen3pos80`, `tc1_pos80_family`). Amendment 79's, unchanged in every recipe term:
+- TC1's field recipe and tokens (alpaca, seq 2048, micro-batch 2 x accum 4, r 16, fp32 matched adapters, `matched:3407`) over 60 steps;
+- both frameworks in venv-unsloth (torch 2.12.1+cu130);
+- e4b `fused_attn4_m_fd` and Unsloth `ckpt_unsloth_m_fv` (grouped_mm), two draws each in ABBA order (fd fv fv fd);
+- every arm profiled, at steps **20..22** (`--profile-steps 3 --profile-warm 20`; amendment 79 profiled 3..5). Amendment 79's first
+  Unsloth draw compiled locally and saved Unsloth's Mega-cache bundle, and its second draw loaded it. Their steps 3..5 differed 16 % in
+  kernels-only device time, almost all of it memcpy and fill, while their s/step medians differed 1.2 %. Steps 20..22 sit past that
+  transient, inside the timed median of steps 11..60: 3 of its 50 steps carry the profiler, which a median absorbs. Each Unsloth draw's
+  Mega-cache lines (compiled locally, or loaded a bundle) are reported beside its row;
+- `TC1_LOAD_GATE=6.0` and `TC1_LOAD_RETRIES=2`, on one RTX 5090. No axolotl venv.
+
+**The pins: constants of the reviewed kit.** `tc1_run.sh` (`POS80_*`), `tc1_reduce.py` (`POS80_*`), the launch template and this text
+carry one value each, and `tests/test_tc1_pos80.py` holds them equal. The box refuses any other value before staging (rc 78), and so does
+the drive before any box is rented.
+- The arms' distributions, **all from PyPI**: `experts4bit-qlora` **0.58.1**, `grouped-nf4-gemm` **0.51.0**, `unsloth` **2026.10.8** and
+  `unsloth_zoo` **2026.10.8**.
+- `E4B_SHA` = `605d21e67958fa94d5e73fc3a95ffcb5c8eae02d` (v0.58.1's peeled tag commit) and `GNF4_SHA` =
+  `30adb1bfa76f95f9ce4a4c29734b8f36de907eca` (v0.51.0's). These are venv-e4b's git install; no arm of this box imports from it. They
+  also name the source the released wheels were built from.
+
+**The release proofs.** `bench/tc1/release_proof.py` (sha256 `aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0`,
+loggetta's frozen helper) proves all four distributions against PyPI's published wheels: the RECORD compare on disk, the import
+origins, and a fresh bytecode prefix.
+- A **fail-fast** copy runs right after the installs, under a throwaway prefix.
+- The **binding** copy runs in the arms' own import environment (venv-unsloth's python, cwd `$W`) as the last step before the first arm.
+  It exports its fresh prefix, which every arm inherits.
+- Either refusal ends the box (rc 9). The t212 tripwire asserts the pinned versions and an index install (no `direct_url.json`).
+
+**The host floors, before any install, each a refusal with rc 18** (the launcher excludes the machine on its next draw):
+- amendment 77's single-thread floor, 15 Mops;
+- **the card's loaded SM clock**: `bench/common/card_clock.py` (sha256 `5e0a2bc19b6fe99af9b8160c80d61bf90d3548f89247cf48ffe0a39fa6eb071f`) runs a 20 s bf16 matmul burn sampled by nvidia-smi.
+  The busy SM median must be **>= 2700 MHz**, and no slowdown or cap reason may be set on **any** busy sample. The refusing reasons are
+  SwPowerCap 0x4, HwSlowdown 0x8, SwThermalSlowdown 0x20, HwThermalSlowdown 0x40, HwPowerBrakeSlowdown 0x80, BoardLimit 0x200 and
+  Reliability 0x400. The bit names are NVML's, copied from `nvidia_ml_py-13.615.71`, `pynvml.py` lines 2190-2199 and 2215-2226.
+- **Why 2700 MHz:** among TC1's 76 committed RTX 5090 runs, 59 had a training-time busy median at or above it (62 at 2600, 70 at 2500).
+  Amendment 79's box read 2400. A burn clock sits above a training median, so the pass rate on a normal card should be higher. A card
+  that refuses uses the retry id.
+- **One risk, stated:** a healthy 575 W card under a full-power bf16 burn might set SwPowerCap briefly. Because the burn's rule is "no
+  refusing bit on any busy sample", such a card refuses (rc 18). That is the registered rule; a refusal here costs the retry id, never a
+  wrong reading.
+
+**Validity** (`pos80_why`, per row, each fail-closed). This adds to TC1's standing predicates. F15 v1's `torch._grouped_mm` bar is
+**reported, not binding** for this family, printed as "F15 v1 (reported, not binding)":
+1. torch 2.12, and the four pins as the arm recorded them;
+2. the registered tags; e4b's chunked LM loss with no run-time refusal; the arm's full `_profile.json` beside its receipt;
+3. **F15 v2 on each Unsloth arm** (`bench/tc1/f15v2.py`, sha256 `a7ed7d74ea1674e27bac11ef6e4357b484cdfc893283b39cabc88a3c2a9cf508`; it reads the full profile). E = the arm's own expert-module forward
+   count (recompute included). The bars are **exact** (`==`): the clean records sit exactly at them, and a double dispatch is a defect too.
+   - Triton path: grouped GEMM launches (`_grouped_gemm_kernel`) == **9E** and dW launches (`_grouped_wgrad_kernel`) == **2E**. Both are
+     derived from the release-proven unsloth_zoo 2026.10.8 source, as f15v2.py's docstring cites line by line.
+   - torch path: == 11E, registered for unsloth_zoo 2026.9.9 only (observed, not derived). On 2026.10.8 a torch-path dispatch has no bar
+     and VOIDs.
+   - A mixed dispatch VOIDs. E == 2·L·A, and the manual fallback counter is 0.
+   - Any other count VOIDs the draw. A counted row ranked below the profile's kept 80 counts 0, so it can only VOID.
+4. **The card floor on every draw:** the arm's own `gpuclk_<arm>.txt` (card_clock.summarize_log) has a busy SM median >= 2700 MHz, with
+   the refusing reasons clear on >= 95 % of busy samples. Otherwise that draw is VOID.
+
+**The box facts** (`pos80_box`, each fail-closed; a failure reads NOT_READ):
+- the POS80_PINS line at the pins and the three helpers' digests;
+- one fastcheck and one binding RELEASE_PROOF OK line, the binding prefix a fresh `/tmp/tc1-pycache-*`;
+- `release_proof_pos80_binding.json`: one record per distribution, RECORD equal, its wheel and version, a fresh prefix equal to the
+  summary's, and its entry module among the imports (`experts4bit_qlora`, `nf4_qlora`, `unsloth`, `unsloth_zoo`);
+- POS80_ARM_ENV empty, and POS80_KNOB_ENV naming no knob bar the harness's own;
+- versions.txt's two PyPI t212 lines;
+- one passing CARD_CLOCK burn line at 2700 MHz and min_clean 1.0;
+- the SINGLE_THREAD line >= 15;
+- the host CPU.
+
+**Device time, kernels only.** `tc1_arm.summarize_profile` sums every CUDA-typed event into `device_ms`, the `Optimizer.step#…`
+user-annotation span included. That span overlaps the optimizer kernels it encloses (e4b#2129 deliverable 2, confirmed by independent
+review). This family's device time is the recorded `device_ms` minus the profile's user-annotation rows, by name
+(`f15v2.kernels_only_device_ms`), because the stored profile keeps no annotation flag. The recorded total and the removed annotation ms
+are printed beside it. TC1 amendment 81 corrects the instrument at its source, separately.
+
+**The rule** (`score_pos80`, in this order; the first that applies is the reading):
+1. **NOT_READ** on any box fact, or without two VALID profiled draws a side;
+2. **UNSTABLE** when either side's draws differ by more than TC1's stability rule (|d1-d2|/mean <= 5 % e4b, 10 % Unsloth), on s/step or on
+   kernels-only device ms;
+3. **QUALITY_DIFFERS** when |mean held-out at step 60, e4b - Unsloth| > 0.01 (amendment 69's P209);
+4. **QUOTED** otherwise: Unsloth / e4b kernels-only device ms per profiled step first, then the wall ratio (s/step, median of steps
+   11..60), named with the host CPU. The verdict states which side is ahead, losses as well as wins.
+
+**Predictions** (TC1's P225 and P226, registered before any box):
+- **P225:** F15 v2 reads ENGAGED on both Unsloth draws.
+- **P226:** the quoted device ratio Unsloth / e4b is **< 1.00**, Unsloth ahead. That's the direction amendment 79's VOID rows suggested,
+  registered so that it can be falsified, not because it is assumed.
+
+**The quote's scope.** One RTX 5090 that cleared the card floor, one host CPU, TC1's field recipe on Qwen3-30B-A3B at `ad44e777`, and
+these pins. It says nothing about another recipe, model, card or host, or another release of either framework. Amendment 69's and 79's
+readings are reported beside it, never divided into it.
+
+**bench/common's registration rules, stated:**
+1. **Launch commit:** this amendment's merge.
+2. **Run ids:** `tc1-5090-pos80` for the started box, and `tc1-5090-pos80-r1` for a box that does not start, a card-floor refusal
+   included. No code parses an id.
+3. **Outcome classes:** as in bench/common's table. The pin gate (rc 78) and the proofs (rc 9) are kit refusals. The host floors (rc 18)
+   are host refusals, never strikes.
+4. **The cap:** at most one box STARTS. A started box that isn't read leaves the row NOT_READ.
+5. **Boot slack:** a 3.5 h guard against amendment 79's box at about 1.2 h (4,386 s from create to teardown).
+6. **Frozen pins:** once the row is read, the tests assert this amendment's pins at its frozen commit.
+7. **Fail closed:** every gate fails closed, and `tests/test_tc1_pos80.py` removes each piece.
+8. **The fetch imports no links.**
+
+**Budget.** One RTX 5090 at a declared $1.00/h with 220 GB of storage, a 3.5 h guard, and up to 100 GB downloaded at no more than
+$0.02/GB. The screen (`bench/tc1/pos80_kit.py`, `offer_why`) and the launch template carry the same caps.
+- **The started box:** 3.5 h x $1.00 + 100 GB x $0.02 = **$5.50**.
+- **A box that does not start**, the host floors included: at most 1,470 s at the box rate plus 1.17 GB of probes, **$0.44**.
+- **The row:** one started box plus one retry id is **$5.94**, inside the $6 cap for this row.
