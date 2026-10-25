@@ -9,6 +9,24 @@
 #   bash bench/p238/p238_drive.sh        (from a clean experts4bit-qlora checkout: the launch commit is its HEAD)
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p238_drive] $*"; }
+# The driver's OWN exit code is what the launcher reads (it writes "command exited {rc}" and excludes the machine on 13/14/17/18),
+# so the box's registered code passes through unchanged. 23: no readable exit file was fetched. 24: the box said 0 but wrote no
+# P238_SUCCESS marker (never read as success). 26: the box wrote a code the PREREG does not register.
+BOX_CODES=" 9 10 13 15 16 18 27 28 41 78 130 "
+finish(){   # finish OUT NONCE -> exits with the driver's code
+  local out=$1 nonce=$2 rc
+  [ -f "$out/P238_EXIT_CODE.$nonce" ] || { say "no exit file P238_EXIT_CODE.$nonce in the fetch"; exit 23; }
+  rc=$(tr -d '[:space:]' < "$out/P238_EXIT_CODE.$nonce")
+  case "$rc" in ''|*[!0-9]*) say "unreadable exit file: '$rc'"; exit 23;; esac
+  say "box rc=$rc"
+  if [ "$rc" = 0 ]; then
+    [ -f "$out/P238_SUCCESS.$nonce" ] && exit 0
+    say "box rc 0 without P238_SUCCESS.$nonce: not a success"; exit 24
+  fi
+  case "$BOX_CODES" in *" $rc "*) exit "$rc";; esac
+  say "box rc $rc is not a registered code"; exit 26
+}
+if [ -n "${P238_DRIVE_TAIL_DIR:-}" ]; then finish "$P238_DRIVE_TAIL_DIR" "${P238_DRIVE_TAIL_NONCE:?}"; fi   # the tail, alone (tests)
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set"; exit 78; }
 done
@@ -59,7 +77,4 @@ OUT="$RUN_DIR/p238"
 mkdir -p "$OUT" && [ -z "$(find "$OUT" -mindepth 1 -maxdepth 1 -print -quit)" ] || { say "fetch failed: $OUT is not an empty directory"; exit 22; }
 rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "root@$HOST:$W/" "$OUT/" || { say "fetch failed"; exit 22; }
 say "fetched $(find "$OUT" -type f | wc -l | tr -d ' ') files into $OUT"
-RC=$(cat "$OUT/P238_EXIT_CODE.$NONCE" 2>/dev/null || echo none)
-say "box rc=$RC"
-[ "$RC" = 0 ] && exit 0
-exit 23
+finish "$OUT" "$NONCE"

@@ -436,3 +436,37 @@ def test_the_driver_parses_and_refuses_unregistered_ids(tmp_path):
     for rid in ("p238-5090-3", "p238-shake-2", "p238-5090-1c", "p236-5090-1", ""):
         r = subprocess.run(["bash", str(drive)], env={**env, "E4B_RENT_RUN_ID": rid}, capture_output=True, text=True)
         assert r.returncode == 78, (rid, r.stdout, r.stderr)
+
+
+@pytest.mark.parametrize("files,want", [
+    ({}, 23),                                                     # no exit file fetched
+    ({"P238_EXIT_CODE.n1": "x\n"}, 23),                          # unreadable
+    ({"P238_EXIT_CODE.n1": "0\n", "P238_SUCCESS.n1": ""}, 0),    # a success
+    ({"P238_EXIT_CODE.n1": "0\n"}, 24),                          # 0 without the success marker: never success
+    ({"P238_EXIT_CODE.n1": "0\n", "P238_SUCCESS.n0": ""}, 24),   # another run's marker does not count
+    ({"P238_EXIT_CODE.n1": "13\n"}, 13),                         # disk: the launcher excludes the machine
+    ({"P238_EXIT_CODE.n1": "18\n"}, 18),                         # card floor / CUDA: excluded
+    ({"P238_EXIT_CODE.n1": "15\n"}, 15),                         # card: passed through for the pin walk
+    ({"P238_EXIT_CODE.n1": "16\n"}, 16),
+    ({"P238_EXIT_CODE.n1": "27\n"}, 27),                         # VOID
+    ({"P238_EXIT_CODE.n1": "41\n"}, 41),                         # fit
+    ({"P238_EXIT_CODE.n1": "130\n"}, 130),
+    ({"P238_EXIT_CODE.n1": "5\n"}, 26),                          # not a registered code
+])
+def test_the_driver_exit_passes_box_codes_through(tmp_path, files, want):
+    import subprocess
+    for name, body in files.items():
+        (tmp_path / name).write_text(body, encoding="utf-8")
+    drive = ROOT / "bench" / "p238" / "p238_drive.sh"
+    r = subprocess.run(["bash", str(drive)], env={**os.environ, "P238_DRIVE_TAIL_DIR": str(tmp_path), "P238_DRIVE_TAIL_NONCE": "n1"},
+                       capture_output=True, text=True)
+    assert r.returncode == want, (files, r.stdout, r.stderr)
+
+
+def test_mutant_the_old_tail_collapses_host_codes_to_23(tmp_path):
+    """P236's tail (`[ "$RC" = 0 ] && exit 0; exit 23`) turns 13 and 18 into 23, so the launcher never excludes the machine."""
+    import subprocess
+    old = '[ "$RC" = 0 ] && exit 0\nexit 23\n'
+    for rc in ("13", "18"):
+        r = subprocess.run(["bash", "-c", f"RC={rc}\n" + old])
+        assert r.returncode == 23 != int(rc)
