@@ -719,3 +719,39 @@ def test_an_unscanned_library_fails_check_env(zoo, monkeypatch):
     zoo.mu.__file__ = str(zoo.tmp / "missing.py")
     s = C.UnslothMoeCounter().install().snapshot()
     assert s["env_unscanned"] and not C.check_env(s, dict(os.environ), {})[0]
+
+
+def test_expected_launches_count_a_dx_only_for_fused_calls_under_grad(zoo):
+    """Training (grad on, input requiring grad) gets a dX launch per fused call; an eval or a checkpoint's no-grad first pass gets
+    none. expected_launches = fused calls + fused calls under grad, for any checkpointing pattern."""
+    mg, nf, fwd = zoo
+    c = C.UnslothMoeCounter().install()
+    xg = X.clone().requires_grad_(True)
+    for _ in range(2):
+        with torch.no_grad():
+            fwd(X, W, LORA)                                       # the checkpoint's first pass: no dX
+        fwd(xg, W, LORA)                                          # the recompute under grad ...
+        nf.nf4_dx(torch.ones(4, 3), W)                            # ... and its dX in backward
+    with torch.no_grad():
+        fwd(xg, W, LORA)                                          # an eval forward: grad off, no dX
+    s = c.snapshot()
+    assert s["counts"]["nf4_fused_calls"] == 5 and s["counts"]["nf4_fused_calls_grad"] == 2
+    assert C.expected_launches(s) == 7 == s["library_delta"]["nf4"]["launches"]
+    assert C.check_fused(s, C.expected_launches(s)) == (True, "")
+
+
+def test_mutant_a_dx_that_ran_outside_the_op_voids_the_launch_equality(zoo):
+    mg, nf, fwd = zoo
+    c = C.UnslothMoeCounter().install()
+    fwd(X.clone().requires_grad_(True), W, LORA)                  # under grad: the counter expects a dX launch ...
+    s = c.snapshot()                                              # ... that never ran in the op (e.g. an eager dX)
+    ok, why = C.check_fused(s, C.expected_launches(s))
+    assert not ok and "launches 1 != expected 2" in why
+
+
+def test_expected_launches_reads_unread_when_the_mode_was_unread(zoo, monkeypatch):
+    mg, nf, fwd = zoo
+    c = C.UnslothMoeCounter().install()
+    c.counts["nf4_mode_unread"] = 1
+    assert C.expected_launches(c.snapshot()) is None
+    assert C.check_fused(c.snapshot(), None)[0] is False

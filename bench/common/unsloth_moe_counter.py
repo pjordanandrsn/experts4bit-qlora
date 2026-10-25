@@ -20,8 +20,10 @@ What it counts, in the release-proven unsloth_zoo 2026.10.8 (wheel sha256 db8c28
   the call decodes eagerly, uncounted) is the compile-safe counter; ``calls`` (546) and ``fallbacks`` (531) count only in eager mode.
 
 What binds, and what doesn't:
-- A fused arm binds on ``NF4_FUSED_STATS.launches`` == the expected number of fused base GEMMs, exact (forward + dX per projection;
-  the lane computes the number). That equality catches the silent paths: a shape mismatch (moe_nf4_grouped.py:534-537) and a
+- A fused arm binds on ``NF4_FUSED_STATS.launches`` == :func:`expected_launches`, exact: one forward launch per fused call, plus one
+  dX launch per fused call made under grad with an input that requires grad (``nf4_fused_calls_grad``; the custom op's backward is
+  dX only). That holds for mode 1 and auto and for any checkpointing pattern (an eval or a checkpoint's no-grad first pass adds no
+  dX). That equality catches the silent paths: a shape mismatch (moe_nf4_grouped.py:534-537) and a
   ``FAILED_SHAPES`` entry (538-542), which return None with no counter, and the failed-launch decrement (275), whose eager decode is
   uncounted.
 - ``auto`` declining above its row cap (523) is that arm's DESIGN, not a fault. So the expected count of an auto arm admits only the
@@ -87,7 +89,7 @@ TARGETS = {
 SELF_CHECK = (FP16, "_self_check_generic")
 LIBRARY_STATS = {"generic": (FP16, "GENERIC_CALLS"), "nf4": (NF4, "NF4_FUSED_STATS")}
 COUNTS = ("generic_gemm", "generic_wgrad", "selfcheck_gemm", "selfcheck_wgrad", "nf4_maybe_calls", "nf4_fused_calls", "nf4_declined",
-          "nf4_auto_eligible", "nf4_auto_ineligible", "nf4_mode_unread")
+          "nf4_auto_eligible", "nf4_auto_ineligible", "nf4_mode_unread", "nf4_fused_calls_grad")
 #: the library's own predicate functions, read at call time from the NF4 module (never re-typed here)
 NF4_MODE_FN, NF4_AUTO_FN = "nf4_fused_mode", "nf4_auto_fused"
 MOE_UTILS = "unsloth_zoo.temporary_patches.moe_utils"
@@ -294,6 +296,8 @@ class UnslothMoeCounter:
             if key == "nf4_maybe":
                 counts["nf4_maybe_calls"] += 1
                 counts["nf4_fused_calls" if out is not None else "nf4_declined"] += 1
+                if out is not None and _grad_call(args, kwargs):
+                    counts["nf4_fused_calls_grad"] += 1
             elif getattr(local, "in_selfcheck", 0):
                 counts["selfcheck_" + key.split("_", 1)[1]] += 1
             else:
@@ -410,6 +414,28 @@ def check_unfused(snap):
     if snap["counts"]["nf4_fused_calls"]:
         bad.append(f"wrapper nf4_fused_calls {snap['counts']['nf4_fused_calls']}")
     return (not bad), ("an unfused arm took the fused path: " + ", ".join(bad)) if bad else ""
+
+
+def _grad_call(args, kwargs):
+    """Whether a fused call will get a dX in backward: grad on, and its input requires grad (the custom op's autograd backward is dX
+    only, moe_nf4_grouped.py:370-411)."""
+    try:
+        import torch
+        inputs = kwargs.get("inputs", args[0] if args else None)
+        return bool(torch.is_grad_enabled() and getattr(inputs, "requires_grad", False))
+    except Exception:  # noqa: BLE001 -- unreadable reads as no dX; the launch equality then VOIDs a call that did launch one
+        return False
+
+
+def expected_launches(snap):
+    """The fused launches the recorded calls imply: one forward launch per fused call (269), plus one dX launch in backward per
+    fused call made under grad with an input that requires grad. It holds for mode 1 and for auto (only admitted calls fuse), and
+    for any checkpointing pattern: a no-grad forward (an eval, or a checkpoint's first pass) adds no dX. None when the mode or the
+    predicate was unread."""
+    c = snap["counts"]
+    if c["nf4_mode_unread"]:
+        return None
+    return c["nf4_fused_calls"] + c["nf4_fused_calls_grad"]
 
 
 def fused_calls_expected(snap, mode):

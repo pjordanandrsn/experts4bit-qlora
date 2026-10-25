@@ -7,7 +7,8 @@ unsloth_zoo 2026.10.8. Lanes that time Unsloth's MoE training import it, so they
     every caller is counted. The library's own self-check is counted separately;
   - the NF4-fused grouped GEMM (unsloth-zoo#1935, `maybe_nf4_grouped_mm`), fused or declined;
   - the library's own counters (`GENERIC_CALLS`, `NF4_FUSED_STATS`) as deltas.
-- **What binds:** a fused arm binds on `NF4_FUSED_STATS.launches` equal to the expected fused base GEMMs, exact. That one
+- **What binds:** a fused arm binds on `NF4_FUSED_STATS.launches` equal to `expected_launches`, exact: a forward launch per
+  fused call plus a dX launch per fused call made under grad (counted per call), for mode 1 and auto and any checkpointing. That one
   equality catches the silent declines (a shape mismatch, a `FAILED_SHAPES` entry) and the failed-launch fallback. An unfused
   arm binds on zero launches and zero calls.
 - **The auto arm:** declining above the row cap is its design, so its expected count admits only the calls the library's own
