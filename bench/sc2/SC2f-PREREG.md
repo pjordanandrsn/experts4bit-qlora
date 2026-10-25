@@ -556,9 +556,11 @@ admission and the checks in `bench/sc2/sc2_qualify.py`). It replaces the receipt
   a host power policy. So a controller-side sampler, outside the staged kit (the HOLD is untouched), starts on the
   box before `sc1_drive.sh`: `nvidia-smi --query-gpu=timestamp,clocks.sm,clocks_event_reasons.active,power.draw
   --format=csv -lms 1000`. It is stopped and fetched after the run. After a clean run (the driver exits 0) it is
-  judged by `card_clock.py`'s rule over the whole timed run: no hard reason bit on any sample, and SwPowerCap clear
-  on ≥ 95 % of the samples. Read and failed: rc 18. Missing or unreadable (no header, fewer than 10 readable rows,
-  or more than 5 % unreadable): rc 25. An SC1 box's `box.json` carries no per-block timestamps, so there is no
+  judged by `card_clock.py`'s rule over the whole timed run: no hard reason bit on any sample, idle ones included, and
+  SwPowerCap clear on ≥ 95 % of the **busy** samples (SM above card_clock's 1000 MHz), so idle install and download
+  time cannot dilute the share; the busy SM median is recorded, not ruled. Read and failed: rc 18. Missing or
+  unreadable (no header, fewer than 10 readable rows, more than 5 % unreadable, or fewer than 10 busy samples, a
+  sampler that never saw the load): rc 25. An SC1 box's `box.json` carries no per-block timestamps, so there is no
   per-block judgment.
 - **After a clean proof**, also the proof's own host records, both always passed: `forensics.txt`'s `power.limit` and
   the launcher's `host_facts.json` `gpu_power_limit_w` must each read 575 W. A record read at another limit is rc 18;
@@ -648,13 +650,14 @@ was read on the old pair, so nothing is lost and no reading crosses releases.
   cross-lane read is VOID.
 
 **Evidence.**
-- `sc2_qualify.py --self-test` (48 cases) covers:
+- `sc2_qualify.py --self-test` (51 cases) covers:
   - the open walk's tiers, a machine that appears mid-screen (admitted on its third read, not before), the order by
     clean runs then id, unknown listed power last, another listed power never admitted;
   - the exclusions, attempt accounting, PARK, continuity, and stability by offer id;
   - the power parse's three ways, the post-proof judge's three ways (missing `host_facts.json` is UNREAD, 450 W is
-    REFUSE, 575 W is PASS), and the run sampler's (a hard bit, SwPowerCap at 5 % and 6 %, GpuIdle, missing, no
-    header, too few rows, too many unreadable rows).
+    REFUSE, 575 W is PASS), and the run sampler's (a hard bit, on a busy or an idle sample; SwPowerCap at 5 % and
+    6 % of busy samples; half the run idle with SwPowerCap on 10 % of busy samples; GpuIdle; fewer than 10 busy
+    samples; missing, no header, too few rows, too many unreadable rows).
 - `tests/test_sc2f_am7.py` adds:
   - the admission from a fixture receipt store;
   - the post-proof judge on sc2j-prove-2's own `host_facts.json`;

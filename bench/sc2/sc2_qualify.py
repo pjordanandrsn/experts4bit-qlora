@@ -41,7 +41,9 @@ approves compute; the launcher (``tools/pod-launch.sh``) creates, and applies it
       The controller-side sampler over the whole timed run (``nvidia-smi --query-gpu=timestamp,clocks.sm,
       clocks_event_reasons.active,power.draw --format=csv -lms 1000``, started on the box before the lane's driver and
       fetched after it), judged by ``bench/common/card_clock.py``'s rule: no HARD reason bit on ANY sample, and
-      SwPowerCap clear on at least 95 % of the samples. A sampler that READ and failed is below_floor, a host fault
+      SwPowerCap clear on at least 95 % of the BUSY samples (SM above card_clock's 1000 MHz), so idle install and
+      download time cannot dilute it; the busy SM median is recorded, not ruled. Fewer than 10 busy samples means the
+      sampler never saw the load: probe_error (rc 25). A sampler that READ and failed is below_floor, a host fault
       (rc 18). A missing or unreadable file (no header, fewer than 10 readable rows, or more than 5 % of rows
       unreadable) is probe_error, a HARNESS fault (rc 25): it voids the run and never excludes the machine.
   --self-test
@@ -52,6 +54,7 @@ strike, and excludes the machine from its next draws.
 import argparse
 import json
 import re
+import statistics
 import sys
 from pathlib import Path
 
@@ -67,6 +70,7 @@ FIRST_ID = {"sc2f": 11, "sc2h": 1, "sc2i": 1}      # the first <lane>-prove-<n> 
 LANE_ORDER = ("sc2f", "sc2h", "sc2i")             # SC2f Amendment 3: the three run in this order and share a host
 LISTED_W = 575.0
 SAMPLER_MIN_ROWS = 10
+SAMPLER_MIN_BUSY = 10                             # card_clock.passes' min_busy
 SAMPLER_MAX_BAD = 0.05
 SOFT_MIN_CLEAN = 0.95
 EXIT_ADMIT, EXIT_NONE, EXIT_PARK, EXIT_POWER, EXIT_FLOOR, EXIT_UNREAD = 0, 1, 2, 17, 18, 25
@@ -286,15 +290,20 @@ def judge_run(text) -> dict:
                     why=[f"{len(masks)} readable rows of {rows} (need >= {SAMPLER_MIN_ROWS}, <= {SAMPLER_MAX_BAD:.0%} unreadable)"])
     hard = 0
     for _, m in masks:
-        hard |= m & cc.HARD_BITS
-    soft_clean = sum(1 for _, m in masks if not m & cc.SOFT_BITS) / len(masks)
-    rec.update(hard_reasons_any_sample=cc.decode(hard), soft_clean_fraction=round(soft_clean, 4),
-               sm_max=max(c for c, _ in masks))
+        hard |= m & cc.HARD_BITS                  # over ANY sample, idle ones included
+    busy = [(c, m) for c, m in masks if c > cc.BUSY_MHZ]   # card_clock's busy samples: the SwPowerCap share is theirs
+    rec.update(busy_samples=len(busy), hard_reasons_any_sample=cc.decode(hard), sm_max=max(c for c, _ in masks),
+               busy_sm_median=statistics.median(c for c, _ in busy) if busy else None)   # reported, not ruled
+    if len(busy) < SAMPLER_MIN_BUSY:
+        return dict(rec, verdict="UNREAD", refusal="probe_error",
+                    why=[f"{len(busy)} busy samples (SM > {cc.BUSY_MHZ} MHz) < {SAMPLER_MIN_BUSY}: the sampler never saw the load"])
+    soft_clean = sum(1 for _, m in busy if not m & cc.SOFT_BITS) / len(busy)
+    rec["busy_soft_clean_fraction"] = round(soft_clean, 4)
     why = []
     if hard:
         why.append(f"a hard slowdown or cap reason on a sample: {cc.decode(hard)}")
     if soft_clean < SOFT_MIN_CLEAN:
-        why.append(f"SwPowerCap clear on {soft_clean:.1%} of samples < {SOFT_MIN_CLEAN:.0%}")
+        why.append(f"SwPowerCap clear on {soft_clean:.1%} of busy samples < {SOFT_MIN_CLEAN:.0%}")
     return dict(rec, verdict="PASS" if not why else "REFUSE", refusal=None if not why else "below_floor", why=why)
 
 
@@ -306,7 +315,7 @@ def self_test() -> int:
         return [{"machine_id": m, "offer_id": o, "usd_h": p, "disk_gb": d, "listed_power_w": w} for m, o, p, d, w in offers]
     named = [rd(("52780", "1", 0.9, 400, 575.0), ("145701", "2", 0.95, 400, 575.0))] * 3
     hdr = "timestamp, clocks.sm [MHz], clocks_event_reasons.active, power.draw [W]\n"
-    row = lambda r="0x0000000000000000": f"2026/10/26 10:00:00.000, 2800 MHz, {r}, 540.00 W\n"  # noqa: E731
+    row = lambda r="0x0000000000000000", mhz=2800: f"2026/10/26 10:00:00.000, {mhz} MHz, {r}, 540.00 W\n"  # noqa: E731
     cases = [
         ("admit: 52780 first on stable reads", admit([], named, False).get("machine") == "52780"),
         ("admit: 52780 tried -> 145701", admit([a(11, "52780")], named, False).get("machine") == "145701"),
@@ -383,7 +392,14 @@ def self_test() -> int:
         ("run: SwPowerCap on 5 % passes", judge_run(hdr + row() * 95 + row("0x0000000000000004") * 5)["verdict"] == "PASS"),
         ("run: SwPowerCap on 6 % refuses", judge_run(hdr + row() * 94 + row("0x0000000000000004") * 6)["verdict"]
          == "REFUSE"),
-        ("run: GpuIdle is no refusal", judge_run(hdr + row("0x0000000000000001") * 30)["verdict"] == "PASS"),
+        ("run: GpuIdle is no refusal", judge_run(hdr + row("0x0000000000000001", 210) * 30 + row() * 10)["verdict"]
+         == "PASS"),
+        ("run: half idle plus SwPowerCap on 10 % of busy samples refuses (idle never dilutes)",
+         judge_run(hdr + row("0x0000000000000001", 210) * 100 + row() * 90 + row("0x0000000000000004") * 10)["verdict"]
+         == "REFUSE"),
+        ("run: a hard bit on an IDLE sample still refuses", judge_run(hdr + row("0x0000000000000008", 210) + row() * 30)
+         ["verdict"] == "REFUSE"),
+        ("run: fewer than 10 busy samples is UNREAD", judge_run(hdr + row(mhz=210) * 40 + row() * 9)["verdict"] == "UNREAD"),
         ("run: a missing file is UNREAD", judge_run(None)["verdict"] == "UNREAD"),
         ("run: no header is UNREAD", judge_run(row() * 30)["verdict"] == "UNREAD"),
         ("run: 9 rows is UNREAD", judge_run(hdr + row() * 9)["verdict"] == "UNREAD"),
