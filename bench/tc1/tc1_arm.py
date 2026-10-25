@@ -286,6 +286,18 @@ timing and kernel-call counters, refusal/OOM/fault receipts with exit codes. Wha
       mocked kernels (nf4_qlora.fused_grouped_lora, unsloth_zoo's forward_moe_backend_bnb4bit and the U8 predicate),
       the same receipt writer and the same stub paths. Verifies the file here, on a box with no GPU.
   T9  Device abstraction (cuda_sync / peak_gb / reset_peak / autocast) so T8 runs; every torch.cuda call is guarded.
+  X1  The harness extension P237 and P238 share (ruled 2026-10-25), each part off unless set; unset, a receipt keeps its exact
+      key set:
+      - TC1_ARM_HOOK=module:factory (with TC1_ARM_HOOK_SHA256, the lane's staged pin): a generic OBSERVE-ONLY hook with the phases
+        post_import(args), post_load(args, model) before the first forward, step_edge(i) before step i and once after the last
+        (i = N), and record() into the receipt's `arm_hook`. A wrong sha, an import or a factory failure exits 10;
+      - --vram-cap-gib X: the per-process memory fraction before the load, the getter read back (`vram_cap`);
+      - --unsloth-offload-layers N|auto (Unsloth only, needs the cap): from_pretrained(offload_layers, max_memory), the swapped
+        layers recorded (`unsloth_offload_layers`);
+      - --layer-major 1 (e4b only): the step body is experts4bit_qlora's layer_major_step, with its drift guard run once before the
+        window (`layer_major`). Any option adds `step_contract` (steps, accum, micro-batch, the tokens-per-step sha), which a lane's
+        reducer compares across its arms;
+      - build_parser(): the command line as a function (tests pin every action against the pre-extension parser).
 
 Exit codes: 0 ok; 3 refused; 4 C1 failed (receipt written, arm void); 5 OOM; 6 load fault; 7 verify failed;
 13 dataset/tokens mismatch; 15 void_trainable (non-adapter trainable); 18 matched init impossible (TC1, see above).
