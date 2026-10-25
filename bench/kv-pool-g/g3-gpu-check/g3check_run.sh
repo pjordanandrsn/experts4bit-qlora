@@ -54,6 +54,7 @@ for f in g3check_run.sh g3check.py k8_bake.py calib.json card_clock.py staged.sh
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,power.limit,enforced.power.limit --format=csv,noheader > forensics.txt 2>&1 || { say "DUD BOX (nvidia-smi)"; finish 10; }
 cat forensics.txt; line "CARD $(cut -d, -f1-3,5- forensics.txt)"   # the GPU UUID stays in forensics.txt (store-only)
 QWEN=Qwen/Qwen3-30B-A3B
+FASTAPI_PIN=0.141.1; UVICORN_PIN=0.54.0   # bench/sc2/sc2_box_e.sh install_sc2_client's pins
 PY=python3
 pipx(){ local log=$1 secs=$2; shift 2
   perl -e "alarm $secs; exec @ARGV" "$PY" -m pip install -q --no-input "$@" > "$log" 2>&1 && return 0
@@ -66,8 +67,13 @@ pipx logs/pip_torch.log "$(cap 1800)" "torch==2.8.0" --index-url https://downloa
 # the card, recorded before anything else loads it (bench/common/card_clock.py; RTX 5090 floor 2700 MHz, TC1 Am. 80)
 perl -e 'alarm 180; exec @ARGV' "$PY" $W/card_clock.py burn --floor 2700 --out $W/card_clock.json > logs/card_clock.log 2>&1; CC=$?
 line "CARD_CLOCK rc=$CC (recorded, not a gate) $(tail -1 logs/card_clock.log | cut -c1-200)"
-pipx logs/pip_e4b.log "$(cap 1800)" --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
-  "transformers==5.16.1" "bitsandbytes==0.50.1" accelerate sentencepiece safetensors "huggingface_hub>=0.23" "brotli>=1.2.0" || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
+pipx logs/pip_e4b.log "$(cap 1800)" --prefer-binary "experts4bit-qlora[serve] @ git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
+  "transformers==5.16.1" "bitsandbytes==0.50.1" accelerate sentencepiece safetensors "huggingface_hub>=0.23" "brotli>=1.2.0" \
+  "fastapi==$FASTAPI_PIN" "uvicorn==$UVICORN_PIN" || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
+# ^ e4b WITH its own serve extra (fastapi>=0.110, uvicorn>=0.29, pydantic>=2, ...): the shipped dependency set of the
+#   server this box runs. The two exact pins sit inside the extra's ranges, at bench/sc2/sc2_box_e.sh
+#   install_sc2_client's versions, for reproducibility. g3-gpu-check-1 died at the server's start with "No module named
+#   'uvicorn'": its install came from the in-process g3-smoke kit, which starts no server.
 pipx logs/pip_gnf4.log "$(cap 900)" --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
 WANT_E4B=$E4B_SHA WANT_GNF4=$GNF4_SHA "$PY" - <<'PYT' 2>&1 | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "TRIPWIRE FAIL"; finish 9; }
 import os, json, inspect, importlib.metadata as md
@@ -78,6 +84,7 @@ assert dg.get("vcs_info", {}).get("commit_id") == os.environ["WANT_GNF4"], f"ins
 import torch
 assert torch.cuda.is_available(), "no CUDA"
 from experts4bit_qlora import serve_recipe as r, serve_paged as s
+from experts4bit_qlora.serve_paged import create_app, main as serve_main     # noqa: F401 -- the entry point the box runs
 from experts4bit_qlora.engines.paged_runner import PagedModelRunner
 assert hasattr(r, "prefill_graph_headroom_bytes") and hasattr(r, "bulk_flush_bytes"), "e4b lacks #2087's headroom rule"
 assert "prefill_graph_headroom_bytes" in inspect.getsource(r.size_shared_pool), "size_shared_pool does not hold back the headroom (#2087)"
@@ -86,6 +93,21 @@ assert "kv_pool_sizing" in inspect.getsource(s.create_app), "e4b lacks /health e
 import experts4bit_qlora as e
 print("G3C_TRIPWIRE ok: e4b", e.__version__, "torch", torch.__version__, torch.cuda.get_device_name(0))
 PYT
+# the server's web stack, by NAME and at its pins, before the 61 GB fetch: serve_paged imports fastapi, its responses
+# and pydantic inside create_app, and uvicorn inside main, so importing serve_paged proves none of them
+# (g3-gpu-check-1). Exit 9 on any miss.
+WANT_FASTAPI=$FASTAPI_PIN WANT_UVICORN=$UVICORN_PIN "$PY" - <<'PYW' 2>&1 | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "WEBSTACK TRIPWIRE FAIL"; finish 9; }
+import os
+import fastapi
+import uvicorn
+import pydantic
+from fastapi import Depends, FastAPI, Header, HTTPException, Request  # noqa: F401 -- create_app's call-time imports
+from fastapi.responses import StreamingResponse  # noqa: F401
+from pydantic import BaseModel  # noqa: F401
+assert fastapi.__version__ == os.environ["WANT_FASTAPI"], f"fastapi {fastapi.__version__}, not the pin"
+assert uvicorn.__version__ == os.environ["WANT_UVICORN"], f"uvicorn {uvicorn.__version__}, not the pin"
+print("G3C_WEBSTACK ok: fastapi", fastapi.__version__, "uvicorn", uvicorn.__version__, "pydantic", pydantic.VERSION)
+PYW
 need_left $((FETCH_BAKE_S + NEED_SERVER)) "the fetch, bake and server"
 say "fetch $QWEN @ $QWEN_REV"
 # e4b#2041's fix, as bench/sc1/sc1_run.sh's fetch(): huggingface_hub on httpx decodes brotli with an API that needs
@@ -128,14 +150,23 @@ done
 # the start record is kept whatever happened: a refused graph or an engine error is read from it
 curl -fsS -m 30 "$URL/health" -o $W/health_start.json 2>/dev/null || say "no /health at start"
 line "SERVER ready_rc=$RDY after $(( $(date +%s) - t0 ))s"
-RC=0
+DRV=0
 if [ "$RDY" = 0 ]; then
   perl -e 'alarm 900; exec @ARGV' "$PY" $W/g3check.py drive --port $PORT --model "$QWEN" --n 6 --max-tokens 8 2>&1 | tee logs/drive.log | grep -a '^G3CHECK drive' | tee -a summary.txt
-  [ "${PIPESTATUS[0]}" = 0 ] || RC=1
-  curl -fsS -m 30 "$URL/health" -o $W/health_end.json || { say "no /health after the prompts"; RC=1; }
+  [ "${PIPESTATUS[0]}" = 0 ] || DRV=1
+  curl -fsS -m 30 "$URL/health" -o $W/health_end.json || say "no /health after the prompts"
 fi
 HF=$W/health_end.json; [ -s "$HF" ] || HF=$W/health_start.json
 "$PY" $W/g3check.py verdict --health "$HF" --out $W/verdict_g3check.json 2>&1 | tee -a summary.txt
-[ "${PIPESTATUS[0]}" = 0 ] || RC=1
-[ "$RDY" = 0 ] || RC=1
+VRC=${PIPESTATUS[0]}
+# one exit code per cause (CHECK.md's exit table; none is the launcher's host-excluding 13/14/17/18):
+#   0 PASS; 1 FAIL (a server record read, and it fails the check; a server that stopped on an engine error is read, its
+#   own record the evidence); 31 UNREAD (no server state, or a server that never reached ready: the check never read,
+#   a harness fault, never a G3 FAIL); 32 the prompts failed (the server answered, its premise did not hold)
+ST=$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status",""))' "$HF" 2>/dev/null)
+if [ "$VRC" = 3 ]; then RC=31
+elif [ "$RDY" != 0 ] && [ "$ST" != error ]; then RC=31       # answered but never ready (still loading at the cap): unread
+elif [ "$DRV" != 0 ]; then RC=32
+elif [ "$VRC" = 0 ]; then RC=0
+else RC=1; fi
 finish "$RC"

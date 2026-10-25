@@ -12,8 +12,11 @@ One RTX 5090, launched with `tools/pod-launch.sh` on a 1.0 h guard. The driver (
 checkout is clean, HEAD is on `origin/main`, and HEAD carries `fc1f630a`. The box (`g3check_run.sh`):
 
 1. runs the canonical guard-fit check before any install (rc 41, the cross-lane code, not a strike);
-2. installs torch 2.8.0+cu128, e4b at HEAD and grouped-nf4-gemm at main's CI pin (`30adb1bf`), and runs a tripwire on
-   the installed commits and #2087's rule;
+2. installs torch 2.8.0+cu128, e4b at HEAD **with its own `serve` extra** (fastapi and uvicorn pinned at
+   `bench/sc2/sc2_box_e.sh`'s versions, inside the extra's ranges) and grouped-nf4-gemm at main's CI pin
+   (`30adb1bf`). It then runs two tripwires before the fetch. One checks the installed commits, #2087's rule and the
+   server's entry point. The other imports the web stack by name at its pins: serve_paged imports fastapi inside
+   `create_app` and uvicorn inside `main`, so importing serve_paged alone proves neither;
 3. records the card (`nvidia-smi` with the enforced power limit, and `bench/common/card_clock.py burn --floor 2700`).
    This is recorded, not a gate;
 4. fetches Qwen3-30B-A3B at SC1's pin (`ad44e777`) and bakes the NF4 arena (`bench/p39/k8_bake.py`);
@@ -60,6 +63,31 @@ graph reads PASS. Each of these reads FAIL: the box's refusal, a graph with no r
 sc2j-5090-1's own shared-arm `/health` (a fixture, pinned by sha256 to the receipt store) reads FAIL for its refusal
 and its missing hold-back. With only a capture and the hold-back added, it reads PASS. That shows the verdict's field
 names are the server's.
+
+## Exit codes
+
+One code per cause. None is the launcher's host-excluding 13, 14, 17 or 18, so none excludes a host.
+
+| code | cause |
+|---|---|
+| 0 | PASS |
+| 1 | FAIL: a server record was read and fails the check. A server that stopped on an engine error is read, and its own record is the evidence. |
+| 9 | an install or a tripwire failed |
+| 10 | no GPU (`nvidia-smi` did not answer) |
+| 11 | the checkpoint fetch failed |
+| 12 | the bake failed |
+| 23 | DEADLINE: too little time left for the next phase |
+| 31 | UNREAD: no server state, or a server that never reached ready. The check never read, which is a harness fault and never a FAIL of the fix under test. |
+| 32 | the prompts failed: the server answered, but the check's premise (six completed prompts longer than T) did not hold |
+| 41 | the guard-fit refusal before the install (not a strike) |
+| 78 | a refusal at start (an unset variable or a malformed sha) |
+
+The controller adds 20 to 24 for staging, start, fetch, nonce and record faults. Among them, 24 covers rc 0 without
+the success marker.
+
+g3-gpu-check-1 (2026-10-25) died at the server's start with `No module named 'uvicorn'`. The kit's install had come
+from the in-process g3-smoke kit, which starts no server. That run read nothing and is recorded as HARNESS_ERROR, not
+as a G3 verdict.
 
 ## Cost
 

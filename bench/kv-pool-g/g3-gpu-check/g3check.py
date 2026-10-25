@@ -30,7 +30,9 @@ is a FAIL (fail closed):
     bytes; ``prefill_graph_stats`` reports "on" only while that attribute is set, and "refused" with the reason
     otherwise. So "on" under "auto" is the capture evidence;
   - prefill_graph.T == 512 and prefill_graph.replays > 0 after the prompts: the captured graph served first chunks.
-A refused graph (sc2j-5090-1's record) is a FAIL. The MiB fields /health reports are rounded, so the verdict records
+A refused graph (sc2j-5090-1's record) is a FAIL. No server state at all (no /health record: the server never answered)
+is UNREAD, exit 3: the check did not read, which is a harness fault and never a FAIL of the fix under test
+(g3-gpu-check-1: the server died at import). The MiB fields /health reports are rounded, so the verdict records
 free_after_mib - (pool_mib + bulk_flush_mib) as information only and never binds on it (the gate already compared the
 unrounded bytes).
 """
@@ -70,6 +72,9 @@ def drive(port: int, model: str, n: int, max_tokens: int) -> int:
 
 
 def verdict(h: dict) -> dict:
+    if not isinstance(h, dict) or not h:
+        return {"verdict": "UNREAD", "why": ["no server state: no /health record was read"], "prefill_graph": None,
+                "max_seqs": None, "kv_pool": None}
     why = []
     e = (h or {}).get("engine") or {}
     lv = (h or {}).get("levers") or {}
@@ -194,7 +199,9 @@ def self_test() -> int:
         ("rtn count missing", _health(levers__attn_int4_rtn_projections=KeyError), "FAIL"),
         ("fuse_qkv_n missing", _health(levers__fuse_qkv_n=KeyError), "FAIL"),
         ("no levers record", _health(levers=KeyError), "FAIL"),
-        ("empty health", {}, "FAIL"),
+        ("empty health: the server never answered", {}, "UNREAD"),
+        ("no health at all", None, "UNREAD"),
+        ("a server record with nothing in it but an error", {"status": "error", "error": "OOM"}, "FAIL"),
     ]
     fails = 0
     for name, h, want in cases:
@@ -235,7 +242,7 @@ def main(argv=None) -> int:
             with open(a.out, "w") as f:
                 json.dump(v, f, indent=1)
         print("G3CHECK_VERDICT " + json.dumps({k: v[k] for k in ("verdict", "why", "max_seqs", "kv_pool")}), flush=True)
-        return 0 if v["verdict"] == "PASS" else 1
+        return {"PASS": 0, "UNREAD": 3}.get(v["verdict"], 1)
     ap.error("nothing to do")
     return 2
 
