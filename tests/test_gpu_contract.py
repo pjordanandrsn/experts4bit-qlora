@@ -223,3 +223,17 @@ def test_the_dry_run_end_to_end_hands_the_launcher_the_box_code(dry_tool, tmp_pa
         assert "symlink in the fetched artifacts" in r.stdout, r.stdout
     else:
         assert (tmp_path / "run" / "gc" / "summary.txt").is_file()          # the receipts were fetched before the verdict
+
+
+def test_the_driver_passes_exactly_the_codes_the_box_can_exit_with():
+    """BOX_CODES is bound both ways: every code gc_run.sh can exit with (its literal finish calls, its rc= assignments, and what
+    gc_box.py returns into finish "$crc"), minus 0 and the launcher's host codes that drive_finish always passes, and nothing else."""
+    lines = [ln for ln in (GC / "gc_drive.sh").read_text().splitlines() if ln.startswith("BOX_CODES=")]
+    assert len(lines) == 1, lines
+    m = re.fullmatch(r'BOX_CODES="([0-9 ]+)"', lines[0])
+    assert m, lines[0]
+    run_sh, box_py = (GC / "gc_run.sh").read_text(), (GC / "gc_box.py").read_text()
+    box = {int(c) for c in re.findall(r"\bfinish (\d+)\b", run_sh)} | {int(c) for c in re.findall(r"\brc=(\d+)\b", run_sh)}
+    box |= {int(c) for pair in re.findall(r"\breturn (\d+)(?: if .+ else (\d+))?", box_py) for c in pair if c}
+    assert {9, 10, 15, 28, 30, 78, 130} <= box                       # the parse itself still finds the codes it was written for
+    assert sorted(map(int, m.group(1).split())) == sorted(box - {0, 13, 14, 17, 18})
