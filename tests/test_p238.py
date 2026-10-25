@@ -299,3 +299,11 @@ def test_the_adapter_census_matches_for_the_same_per_expert_tensors_in_the_two_l
     u.layers[0].mlp.experts.down = PW("down_proj", lo.down_lora_A.detach(), HID)
     un = HOOK.adapter_census(u, "unsloth")
     assert e == un
+
+
+# -- p238_reduce.py: the rule's own self-test (every gate fails closed with its evidence removed) ---------------------------------
+def test_the_reducer_selftest():
+    if not (ROOT / "bench" / "common" / "unsloth_moe_counter.py").exists():
+        pytest.skip("bench/common/unsloth_moe_counter.py lands with e4b#2132; this PR merges after it")
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    assert R.selftest() >= 37

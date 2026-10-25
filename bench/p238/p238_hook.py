@@ -36,6 +36,7 @@ def _sha_t(t):
 class P238Hook:
     def __init__(self, args):
         self.fw = getattr(args, "framework", None)
+        self.micro_batches = int(getattr(args, "accum", 1) or 1)   # tc1_arm: one optimizer step = accum micro-batches
         self.counter = None
         self.route_log = {}                  # "n_groups:route" -> calls
         self.fwd = {"calls": 0, "under_grad": 0}
@@ -108,10 +109,15 @@ class P238Hook:
         return s
 
     def step_edge(self, i):
+        if self.counter is not None:
+            self.counter.mark_step(i)        # passes after this edge belong to step i (observation: a bookkeeping index)
         self.edges.append({"i": int(i), **self.snapshot()})
 
     def record(self):
-        return {"p238_hook": 1, "framework": self.fw, "facts": self.facts, "edges": self.edges}
+        rec = {"p238_hook": 1, "framework": self.fw, "facts": self.facts, "edges": self.edges, "micro_batches": self.micro_batches}
+        if self.counter is not None:         # the backward BY STRUCTURE over the marked steps (edges 0..N close N steps)
+            rec["structural"] = self.counter.structural(self.micro_batches, max(len(self.edges) - 1, 0))
+        return rec
 
 
 def adapter_census(model, fw):

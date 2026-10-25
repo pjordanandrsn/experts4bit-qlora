@@ -30,9 +30,15 @@ library's fused path.
 - **UA at the 4,096-token point sits exactly AT its cap:** 4,096 x 8 = 32,768 rows = 128 x 256, and the cap is inclusive (`<=`), so
   UA fuses there and not at 8,192 tokens.
 - **Every other knob of both libraries is set explicitly** to the value the comparison is about, and recorded:
-  `UNSLOTH_MOE_NF4_AUTO_MAX_ROWS=128`, `UNSLOTH_MOE_NF4_AUTOTUNE=0` (fixed tiles, line 316), `UNSLOTH_MOE_GROUPED_TRITON=auto`.
-  Every other `UNSLOTH_*` key the three zoo modules read (found by scanning their source, `check_env` in
-  `bench/common/unsloth_moe_counter.py`) is unset.
+  `UNSLOTH_MOE_NF4_AUTO_MAX_ROWS=128`, `UNSLOTH_MOE_NF4_AUTOTUNE=0` (fixed tiles, line 316), `UNSLOTH_MOE_GROUPED_TRITON=auto`,
+  and `UNSLOTH_MOE_FUSED_ROUTER=0` (its shipped default: opt-in, `moe_router_triton.py:69`; it switches the router inside the timed
+  step). No other `UNSLOTH_*` key may be SET in an Unsloth arm's environment: `check_env` (`bench/common/unsloth_moe_counter.py`)
+  refuses any set key that is not registered at its value, and holds the registered names to a scan of every source file of the
+  installed unsloth and unsloth_zoo packages (the per-module counts are in the receipt). The env dump proves each pin.
+- **Gradient checkpointing, explicit on both sides:** the Unsloth arms pass `--grad-ckpt unsloth` (the shipped default, made explicit:
+  each layer's forward runs once without grad and is replayed under grad in backward); e4b's arms checkpoint HF non-reentrant
+  (`gradient_checkpointing_enable(use_reentrant=False)`, `bench/tc1/tc1_arm.py:1996`), where both passes run under grad and one is
+  backwarded. The engagement bars below are built BY STRUCTURE, so they hold under either.
 - **e4b's frozen absmax is double-quantized: a PIN of the shipped default, not a deviation.** At v0.58.1, nested absmax is
   `enable_fast_train`'s and the CLI trainer's default for resident training (`absmax_dq.py:1-2`, `44-46`), and it is the form
   Unsloth's loader builds (`bnb_4bit_use_double_quant=True`) and the premise compares. The same docstring keeps TC1's switch explicit,
@@ -212,8 +218,8 @@ one micro-batch):
 - Every row records its global load index (1..40) and its order position within its point.
 
 **Each load:** 60 optimizer steps, `adamw_8bit`, lr 2e-4 constant, each framework's gradient checkpointing as TC1's field recipe
-sets it (`--grad-ckpt unsloth`), bf16 autocast, the same packed batches in the same order for every arm at a point. Profiled steps 21..23 (counting from 1,
-`--profile-steps 3 --profile-warm 20`), as amendment 80.
+sets it (above), bf16 autocast, the same packed batches in the same order for every arm at a point. Profiled steps 21..23
+(counting from 1, `--profile-steps 3 --profile-warm 20`), as amendment 80.
 
 **What is measured per load:**
 - **wall s/step:** the median over steps 11..60 (the profiled steps sit inside it, a known overhead a median absorbs, as amendment 80);
@@ -227,23 +233,37 @@ sets it (`--grad-ckpt unsloth`), bf16 autocast, the same packed batches in the s
 
 ## Engagement (every arm, every load; each fails closed)
 
-- **E_F:** `FAST_TRAIN_STATS["patched"]` == 40 and `skipped` empty; `DGRAD_STATS["kernel"]` == the expected dX calls (2 per
-  expert-module forward under grad); `ROUTE_STATS` dense, grouped_mm and decoded all 0; the profiled `_gemm_nf4_grouped` kernel count
-  == the expected forward GEMMs in the profiled steps.
-- **E_A:** the same patch and dgrad checks; a module-attribute wrapper on `nf4_route.train_gemm_route` logs (n_groups, route) per
-  call; every route == `route_for`'s answer for its own n_groups; `ROUTE_STATS` dense == the logged dense calls; the per-route counts
-  are reported.
-- **All Unsloth arms** (`bench/common/unsloth_moe_counter.py`, installed by `patch_loaded` at post_load):
-  - `check_env` on the source-scanned keys against the arm's registered pins; `check_library`; `check_dispatch` with
-    `base_must_be_triton=True` (every point is inside every class limit on sm_120);
-  - the counter records each expert type's forward and the module object that serves it; a served object that decides no GEMM, a
-    GEMM decided through an object that serves no forward, or an expert left on a forward without the predicate VOIDs.
+**One rule for both frameworks: the backward BY STRUCTURE.** Each optimizer step backwards every expert module once per micro-batch
+(here one), so the expected dX launches are 2 projections x 40 layers x 60 steps = **4,800** per load, counting only the backward
+passes whose forward was admitted to the fused path (the auto arms). Forward launches count ALL admitted forwards, recompute and
+evals included. Never "forwards under grad": under HF non-reentrant checkpointing both passes run under grad and one is backwarded,
+and tc1_arm's eval runs with grad on and backwards none. The per-call under-grad split is recorded beside the structural count as
+information only (it includes the grad-on eval forwards, so it never binds).
+
+- **E_F:** `FAST_TRAIN_STATS["patched"]` == 40 and `skipped` empty; `DGRAD_STATS["kernel"]` == 4,800 over the run;
+  `ROUTE_STATS` dense, grouped_mm and decoded all 0; the logged routes all `fused`; the profiled `_gemm_nf4_grouped` count == all
+  admitted forward GEMMs in the three profiled steps (2 passes x 2 projections x 40 layers x 3 steps, the recompute included).
+- **E_A:** the same patch check; `DGRAD_STATS["kernel"]` + `ROUTE_STATS["dense_dgrad"]` == 4,800; a module-attribute wrapper on
+  `nf4_route.train_gemm_route` logs (n_groups, route) per call; every route == `route_for`'s answer for its own n_groups;
+  `ROUTE_STATS` dense_fwd == the logged dense calls; the per-route counts are reported.
+- **All Unsloth arms** (`bench/common/unsloth_moe_counter.py`; the hook installs it at post_import, calls `patch_loaded` with the
+  loaded experts at post_load, and `mark_step` at every step edge):
+  - `check_env` against the arm's registered pins (above); `check_library`; `check_dispatch(snap, structural,
+    base_must_be_triton=True)` (every point is inside every class limit on sm_120), where `structural` is the counter's
+    `structural(1, 60)`: each module's training passes inside a step must agree on every decision, else VOID;
+  - bnb 4-bit experts are served by the PACKAGE moe_utils (`forward_moe_backend` hands them to `moe_utils_bnb4bit`, whose relative
+    import reaches the package, moe_utils.py:2065-2075 and moe_utils_bnb4bit.py:367-376); the counter decides that per module with
+    the library's own `_moe_uses_bnb4bit_expert_weights`. A served object that decides no GEMM, a GEMM decided through an object
+    that serves no forward, or an expert left on a forward without the predicate VOIDs.
 - **U0:** `check_unfused` (no fused launch, no fused call), and F15 v2 (`bench/tc1/f15v2.py`) at amendment 80's Triton-path bars.
-- **U1:** `check_fused` with expected launches = 2 x F + 2 x G, where F is the expert-module forwards (under checkpointing, the
-  no-grad forward and its recompute) and G the forwards under grad (each adds a dX per projection); the wrapper's fused calls ==
-  the in-op `launches` (`check_equal`).
-- **UA:** `check_auto` plus `check_fused(snap, 2 x fused_calls_expected(snap, "auto") ...)` by the same arithmetic over the calls the
-  library's own predicate admitted. At 8k (above the cap) it reads like U0, by design.
+- **U1:** `check_fused(snap, expected_launches(snap, structural))`: the in-op `launches` (forward and the separate dX op,
+  moe_nf4_grouped.py:384) equals every fused call plus the structural dX (one per fused projection per backward). Also every
+  `maybe_nf4_grouped_mm` call fused (`nf4_declined` 0), and the wrapper's fused calls equal the library's eager `calls`
+  (`check_library`). The lane's own forward count is independent of `nf4_maybe_calls`: a decline before the call
+  (`_base_is_recomputable` false, moe_utils.py:1185) never reaches the wrapper.
+- **UA:** `check_auto` (every call the library's own predicate admitted fused, every other declined) plus the same
+  `check_fused(snap, expected_launches(snap, structural))`, where the structural dX counts only backwards whose forward was
+  admitted. At 8k (above the cap) it reads like U0, by design.
 - **The shakedown proves every one of these on a real record.** If any arm's binding counter does not fire on a real step there:
   STOP and report. No substitution.
 
@@ -322,6 +342,11 @@ attention-only training (except the stated e4b property), other ranks, other mod
     from the shakedown's receipt and stated before the reading launches.
 - A box is started at its `STARTED` marker (after the refusals and the pre-install fit). Two strikes end the lane. The runner's exit
   codes follow P236's table (13, 15, 16, 18 host refusals before `STARTED`; 41 fit; 9, 10, 28, 78, 130 halts; 27 VOID).
+- **Host refusals and the pin walk.** The launcher excludes a machine on 13, 14, 17 and 18 only (its host-refusal set). 15 (card,
+  compute capability, SM count or VRAM) and 16 (host RAM) end the box WITHOUT excluding the machine, so P238's pin walk excludes it
+  itself: the driver records the machine of every 15 / 16 refusal and the screen skips it for the rest of the lane (a card that
+  failed those once does not change by itself). Each such refusal is a retry id at the non-start cost (its boot slack, about
+  USD 0.25 at USD 1.05/h), never a strike.
 
 ## Budget
 
