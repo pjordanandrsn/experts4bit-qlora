@@ -24,6 +24,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "common"))
 import unsloth_moe_counter as C  # noqa: E402
 
+sys.path.insert(0, os.path.join(HERE, "..", "tc1"))
+import f15v2  # noqa: E402  -- TC1 amendment 80's merged F15 v2 bars, read, never re-typed
+
 N_LAYERS, STEPS, TIMED = 40, 60, (10, 60)            # timed steps 11..60 (0-based 10..59)
 POINT_TOKENS = {"2k": 2048, "4k": 4096, "8k": 8192, "field": None}
 ARMS = {"E_F": "e4b", "E_A": "e4b", "U0": "unsloth", "U1": "unsloth", "UA": "unsloth"}
@@ -35,7 +38,12 @@ DENSE_AUTO_MAX_GROUPS = 16                           # gnf4 0.51.0 nf4_route: au
 UNSLOTH_PINS = {"UNSLOTH_MOE_NF4_AUTO_MAX_ROWS": "128", "UNSLOTH_MOE_NF4_AUTOTUNE": "0", "UNSLOTH_MOE_GROUPED_TRITON": "auto",
                 "UNSLOTH_MOE_FUSED_ROUTER": "0", "UNSLOTH_ENABLE_LOGGING": "1"}
 NF4_MODE = {"U0": "0", "U1": "1", "UA": "auto"}
-DEVICE_MS_METHOD = "at_source"                       # amendment 81's marker value; the kit's test pins it to 81's merged constant
+DEVICE_MS_METHOD = "kernels_only_at_source"         # amendment 81's marker (f15v2.py's docstring names it; the kit test pins it)
+FUSED_KERNEL = "_gemm_nf4_grouped"                   # grouped-nf4-gemm's fused grouped forward kernel
+PROFILED = (20, 23)                                  # --profile-warm 20 --profile-steps 3: loop steps 20..22, edges 20 and 23
+E_F_PROFILED_FORWARDS = 2 * 2 * N_LAYERS * 3         # 2 passes (HF non-reentrant recompute) x 2 projections x 40 x 3 = 480
+OP_ROWS, OP_ROUTINGS, OP_REPS, OP_TOL = (32, 64, 128, 256, 512), ("uniform", "skew"), 20, 2e-2
+OP_ARMS = {"e4b": ("E_F", "E_A"), "unsloth": ("U0", "U1", "UA")}
 WITHIN_STEP0, WITHIN_HELD = 1e-3, 0.01
 ACROSS_STEP0, ACROSS_HELD = 0.01, 0.05               # TC1-PREREG.md:63 (step 0) and TC1's COMPARABLE (held-out)
 STABLE = {"e4b": 0.05, "unsloth": 0.10}
@@ -155,15 +163,29 @@ def check_e4b_engagement(row):
         n = sum(_delta(first, last, "route", k) or 0 for k in keys)
         if n:
             why.append(f"{n} {name} route calls")
+    prof = row.get("profile") or {}
+    kernels = sum(r.get("count", 0) for r in prof.get("top_device") or [] if r.get("name") == FUSED_KERNEL)
+    plog_a, plog_b = (edges[PROFILED[0]].get("route_log") or {}), (edges[PROFILED[1]].get("route_log") or {})
+    fused_logged = sum(v - plog_a.get(k, 0) for k, v in plog_b.items() if k.endswith(":fused"))
+    if not prof.get("top_device"):
+        why.append("no profiled device kernels")
+    elif kernels != fused_logged:
+        why.append(f"profiled {FUSED_KERNEL} {kernels} != {fused_logged} fused routes logged in the profiled steps")
     if arm == "E_F":
+        if kernels != E_F_PROFILED_FORWARDS:
+            why.append(f"profiled {FUSED_KERNEL} {kernels} != {E_F_PROFILED_FORWARDS}")
         if any(not k.endswith(":fused") for k, v in log.items() if v):
             why.append(f"a non-fused route at GNF4_TRAIN_GEMM=fused: {log}")
         if kernel != want or dense_dgrad:
             why.append(f"dgrad kernel {kernel} (dense {dense_dgrad}) != {want}")
     elif arm == "E_A":
         for k, v in log.items():
-            n, route = k.split(":")
-            expect = "dense" if n not in ("None", "") and 1 <= int(n) <= DENSE_AUTO_MAX_GROUPS else "fused"
+            try:
+                n, route = k.split(":")
+                expect = "dense" if n not in ("None", "") and 1 <= int(n) <= DENSE_AUTO_MAX_GROUPS else "fused"
+            except ValueError:
+                why.append(f"an unreadable route-log key {k!r}")
+                continue
             if v and route != expect:
                 why.append(f"{v} calls at n_groups {n} took {route}, route_for says {expect}")
         dense_logged = sum(v for k, v in log.items() if k.endswith(":dense"))
@@ -206,6 +228,12 @@ def check_unsloth_engagement(row):
         ok, w = _safe(C.check_unfused, snap)
         if not ok:
             why.append(w)
+        try:
+            verdict, w, _ = f15v2.engagement(row.get("cell") or {}, row.get("profile") or None)
+        except (KeyError, TypeError, ZeroDivisionError) as e:
+            verdict, w = "VOID", f"unreadable cell or profile ({type(e).__name__}: {e})"
+        if verdict != "ENGAGED":
+            why.append(f"F15 v2: {w}")
     elif arm in ("U1", "UA"):
         try:
             exp = C.expected_launches(snap, st)
@@ -237,8 +265,9 @@ def check_steps(row):
         why.append(f"point {row.get('point')!r}")
     elif want is not None and any(t != want for t in steps):
         why.append(f"a step is not {want} tokens: {sorted(set(steps))[:4]}")
-    if (row.get("profile") or {}).get("device_ms_method") != DEVICE_MS_METHOD:
-        why.append(f"profile device_ms_method {(row.get('profile') or {}).get('device_ms_method')!r}, not {DEVICE_MS_METHOD!r}")
+    m = ((row.get("profile") or {}).get("summary") or {}).get("device_ms_method")
+    if m != DEVICE_MS_METHOD:
+        why.append(f"profile device_ms_method {m!r}, not {DEVICE_MS_METHOD!r}")
     return why
 
 
@@ -280,13 +309,50 @@ def stable(d1, d2):
     fw = ARMS.get(d1.get("arm"))
     bar = STABLE.get(fw)
     why = []
-    for name, get in (("wall", s_per_step), ("device", lambda r: (r.get("profile") or {}).get("device_ms"))):
+    for name, get in (("wall", s_per_step), ("device", lambda r: ((r.get("profile") or {}).get("summary") or {}).get("device_ms"))):
         x, y = get(d1), get(d2)
         if x is None or y is None or bar is None:
             why.append(f"{name}: unread")
         elif abs(x - y) / ((x + y) / 2) > bar:
             why.append(f"{name}: draws {x:.4g} / {y:.4g} apart by more than {bar:.0%}")
     return (not why), "; ".join(why)
+
+
+def op_faults(o):
+    """An op process's record (p238_op.py): the registered cells, every arm's parity (the non-zero-B layout check; a miss is the
+    PREREG's STOP), B restored, the visit count, and every timing sample positive and finite."""
+    import math
+    why = []
+    if not o or o.get("p238_op") != 1:
+        return ["no op record"]
+    if o.get("dry"):
+        why.append("a dry run")
+    if o.get("capture") != "eager":
+        why.append(f"capture {o.get('capture')!r}, not eager")
+    arms = OP_ARMS.get(o.get("framework"))
+    if not arms or list(o.get("arms") or []) != list(arms):
+        return why + [f"framework {o.get('framework')!r} with arms {o.get('arms')}"]
+    cells = {(c.get("rows"), c.get("routing")): c for c in o.get("cells") or []}
+    want = {(r, k) for r in OP_ROWS for k in OP_ROUTINGS}
+    if set(cells) != want:
+        why.append(f"cells {sorted(set(cells) ^ want, key=str)[:4]} missing or unregistered")
+    for key, c in sorted(cells.items(), key=str):
+        par = c.get("parity") or {}
+        for arm in arms:
+            p = par.get(arm) or {}
+            errs = p.get("errs") or {}
+            if not errs or not all(isinstance(v, (int, float)) and v <= OP_TOL for v in errs.values()):
+                why.append(f"LAYOUT/PARITY STOP: {key} {arm} errs {errs}")
+        if c.get("b_restored_zero") is not True:
+            why.append(f"{key}: B not restored to zero")
+        v = c.get("visits") or []
+        if len(v) != OP_REPS * 2 * len(arms):
+            why.append(f"{key}: {len(v)} visits, not {OP_REPS * 2 * len(arms)}")
+        bad = [x for x in v for t in ("device_ms_per_call", "wall_ms_per_call")
+               if not isinstance(x.get(t), (int, float)) or not math.isfinite(x[t]) or x[t] <= 0]
+        if bad:
+            why.append(f"{key}: {len(bad)} timing samples missing, non-positive or not finite")
+    return why
 
 
 def reduce(rows, op_rows):
@@ -296,7 +362,7 @@ def reduce(rows, op_rows):
     ref_table, ref_census = ref.get("premise_table"), ref.get("adapters")
     out = {"rows": [], "op_rows": []}
     for o in op_rows or []:
-        why = check_present(o) + check_premise(o, ref_table) + check_census(o, ref_census)
+        why = op_faults(o.get("record")) + check_premise(o, ref_table) + check_census(o, ref_census)
         out["op_rows"].append({"framework": o.get("framework"), "draw": o.get("draw"), "verdict": "VOID" if why else "READ", "why": why})
     for r in rows:
         why = row_faults(r, ref_table, ref_census)
@@ -314,11 +380,13 @@ def _good_rows():
             "card": {"name": "NVIDIA GeForce RTX 5090", "cap": [12, 0], "sm_count": 170},
             "clock": {"busy_median_mhz": 2800, "hard_reason_any": False, "swpowercap_clear_frac": 1.0},
             "premise_table": table, "adapters": census, "point": "2k", "tokens_per_step": [2048] * STEPS,
-            "step_ms": [1000.0] * STEPS, "micro_batches_per_step": 1, "profile": {"device_ms_method": DEVICE_MS_METHOD, "device_ms": 900.0},
+            "step_ms": [1000.0] * STEPS, "micro_batches_per_step": 1,
+            "profile": {"summary": {"device_ms_method": DEVICE_MS_METHOD, "device_ms": 900.0, "profiled_steps": 3},
+                        "top_device": [{"name": FUSED_KERNEL, "count": E_F_PROFILED_FORWARDS}], "top_cpu": []},
             "step0_loss": 2.0, "heldout_loss": 1.5}
     e_edges = [{"dgrad": {"kernel": 2 * N_LAYERS * i}, "route": {"fwd": 0, "dgrad": 0, "dense_fwd": 0, "dense_dgrad": 0,
                                                                  "decoded_fwd": 0, "decoded_dgrad": 0},
-                "route_log": {"256:fused": 2 * N_LAYERS * i}} for i in range(STEPS + 1)]
+                "route_log": {"256:fused": 2 * 2 * N_LAYERS * i}} for i in range(STEPS + 1)]   # 2 passes x 2 projections
     e = dict(base, framework="e4b", arm="E_F",
              absmax={"tc1_modules": N_LAYERS, "compressed_now": N_LAYERS, "fast_train": {"required": True, "kept_fp32": None}},
              hook={"facts": {"fast_train_patched": N_LAYERS, "fast_train_skipped": {}}, "edges": e_edges})
@@ -353,6 +421,10 @@ def selftest():
         (lambda r: r["clock"].update(busy_median_mhz=2400), "a capped card"),
         (lambda r: r.update(dry=True), "a dry record"),
         (lambda r: r["versions"].update(peft="0.22.0"), "another PEFT"),
+        (lambda r: r["profile"]["top_device"][0].update(count=E_F_PROFILED_FORWARDS - 1), "one profiled fused forward short"),
+        (lambda r: r["profile"].update(top_device=[]), "no profiled kernels"),
+        (lambda r: r["profile"]["summary"].update(device_ms_method="legacy"), "another device-time method"),
+        (lambda r: r["hook"]["edges"][PROFILED[1]]["route_log"].update({"256:fused": 0}), "a window whose routes disagree"),
     ]:
         r = copy.deepcopy(e)
         mutate(r)
@@ -368,6 +440,19 @@ def selftest():
     assert row_faults(a, table, census) == [], row_faults(a, table, census)
     a["hook"]["edges"][-1]["route_log"]["20:dense"] = 1        # 20 groups took dense: route_for says fused
     assert any("route_for says fused" in w for w in row_faults(a, table, census))
+    a["hook"]["edges"][-1]["route_log"]["x:fused:y"] = 1        # an unreadable key VOIDs, never a crash
+    assert any("unreadable route-log key" in w for w in row_faults(a, table, census))
+    cases += 3
+    # U0: F15 v2 (TC1 amendment 80's merged bars) on the cell and its profile
+    E = 2 * N_LAYERS
+    cell = {"n_layers": N_LAYERS, "accum": 1, "moe_backend_selected": "grouped_mm", "env": {"unsloth_zoo": "2026.10.8"},
+            "unsloth_backend_calls_per_step_min": {"unsloth_grouped_mm": E}, "unsloth_manual_grouped_mm_calls_per_step_max": 0}
+    prof = {"summary": {"profiled_steps": 3}, "top_cpu": [],
+            "top_device": [{"name": f15v2.TRITON_GEMM, "count": 9 * E * 3}, {"name": f15v2.TRITON_WGRAD, "count": 2 * E * 3}]}
+    assert f15v2.engagement(cell, prof)[0] == "ENGAGED"
+    prof_short = copy.deepcopy(prof)
+    prof_short["top_device"][0]["count"] -= 1
+    assert f15v2.engagement(cell, prof_short)[0] == "VOID"
     cases += 2
     # Unsloth: no snapshot, no structure, a faulted structure, and a wrong loader
     u = dict(copy.deepcopy(e), framework="unsloth", arm="U1", absmax={"loaded_nested": True}, loader_used="FastModel",
@@ -393,12 +478,39 @@ def selftest():
     assert quality(e, {"arm": "U1"})[0] is False
     assert stable(e, e)[0] is True and stable(e, dict(e, step_ms=[1100.0] * STEPS))[0] is False
     assert stable(e, dict(e, profile={}))[0] is False
+    assert stable(e, dict(e, profile={"summary": {"device_ms": 920.0}}))[0] is True
     cases += 6
+    # op records: a clean one reads, and every rule removes it
+    good_op = {"p238_op": 1, "dry": False, "capture": "eager", "framework": "e4b", "arms": ["E_F", "E_A"], "cells": [
+        {"rows": r, "routing": k, "b_restored_zero": True,
+         "parity": {a_: {"errs": {"out": 1e-3, "dx": 1e-3}, "ok": True} for a_ in ("E_F", "E_A")},
+         "visits": [{"device_ms_per_call": 1.0, "wall_ms_per_call": 1.1}] * (OP_REPS * 2 * 2)}
+        for r in OP_ROWS for k in OP_ROUTINGS]}
+    assert op_faults(good_op) == [], op_faults(good_op)
+    for mutate, label in [
+        (lambda o: o.update(dry=True), "a dry op record"),
+        (lambda o: o.update(capture="graph"), "another capture mode"),
+        (lambda o: o["cells"].pop(), "a missing cell"),
+        (lambda o: o["cells"][3]["parity"]["E_A"]["errs"].update(dx=0.5), "a parity miss (the layout STOP)"),
+        (lambda o: o["cells"][3]["parity"].pop("E_F"), "an arm with no parity record"),
+        (lambda o: o["cells"][0].update(b_restored_zero=False), "B not restored"),
+        (lambda o: o["cells"][1]["visits"].pop(), "a visit short"),
+        (lambda o: o["cells"][2].update(visits=[{"device_ms_per_call": 0.0, "wall_ms_per_call": 1.0}] * (OP_REPS * 4)),
+         "a zero timing sample"),
+        (lambda o: o.update(framework="unsloth"), "arms that are not the framework's"),
+    ]:
+        o = copy.deepcopy(good_op)
+        mutate(o)
+        assert op_faults(o), f"{label} still reads clean"
+        cases += 1
+    assert op_faults(None) and op_faults({})
     # the reduce wiring: an op row is the reference; a step row equal to it reads READ
-    out = reduce([e], [{"status": "ok", "premise_table": table, "adapters": census, "framework": "e4b", "draw": 1}])
-    assert out["rows"][0]["verdict"] == "READ" and out["op_rows"][0]["verdict"] == "READ"
+    op = {"record": good_op, "premise_table": table, "adapters": census, "framework": "e4b", "draw": 1}
+    out = reduce([e], [op])
+    assert out["rows"][0]["verdict"] == "READ" and out["op_rows"][0]["verdict"] == "READ", out
     assert reduce([e], [])["rows"][0]["verdict"] == "VOID"      # no op row -> no reference -> fails closed
-    cases += 2
+    assert reduce([e], [dict(op, record=None)])["op_rows"][0]["verdict"] == "VOID"
+    cases += 4
     return cases
 
 

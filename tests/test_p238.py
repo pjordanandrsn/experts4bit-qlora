@@ -5,6 +5,7 @@ builds it; e4b's ExpertsNbit + compress_expert_absmax_, as enable_fast_train bui
 differ: one packed byte, an fp32 absmax left uncompressed, a lost layer, an empty table.
 """
 import importlib.util
+import os
 import pathlib
 
 import pytest
@@ -307,3 +308,102 @@ def test_the_reducer_selftest():
         pytest.skip("bench/common/unsloth_moe_counter.py lands with e4b#2132; this PR merges after it")
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
     assert R.selftest() >= 37
+
+
+# -- the reducer's POSITIVE Unsloth rows: a real UnslothMoeCounter driven through 60 checkpointed steps on stand-in zoo modules -----
+def _counter_helpers():
+    if not (ROOT / "tests" / "test_unsloth_moe_counter.py").exists():
+        pytest.skip("tests/test_unsloth_moe_counter.py (the counter's stand-ins) lands with e4b#2132; this PR merges after it")
+    return _load("p238_counter_helpers", "tests/test_unsloth_moe_counter.py")
+
+
+def _unsloth_row(monkeypatch, tmp_path, arm, drop_dx_step=None):
+    """One U0 / U1 / UA load as the reducer reads it: the counter's real snapshot and structural count after 60 steps under Unsloth's
+    checkpointing (a no-grad pass, then the replay under grad and its backward), the arm's real environment, and the cell and profile
+    F15 v2 reads. The stand-in experts forward tries the NF4-fused base first (moe_utils.py:5322), else the dequant path."""
+    import sys
+
+    T = _counter_helpers()
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    for k in [k for k in os.environ if k.startswith("UNSLOTH_")]:
+        monkeypatch.delenv(k)
+    pins = {**R.UNSLOTH_PINS, "UNSLOTH_MOE_NF4_FUSED": R.NF4_MODE[arm]}
+    for k, v in pins.items():
+        monkeypatch.setenv(k, v)
+    pkg, tp, mg, nf, _ = T._fake_zoo()
+    zroot, uroot = tmp_path / "pkgs" / "unsloth_zoo", tmp_path / "pkgs" / "unsloth"
+    tdir = zroot / "temporary_patches"
+    tdir.mkdir(parents=True)
+    uroot.mkdir(parents=True)
+    (tdir / "knobs.py").write_text("".join(f'os.environ.get("{k}")\n' for k in pins), encoding="utf-8")
+    (uroot / "__init__.py").write_text("", encoding="utf-8")
+    src = T.FAKE_MOE_UTILS.replace('''def forward_native(x, base, lora_a, lora_b):               # forward_native_grouped_mm, 5244-
+    _lora_rank_pad_needed(x, lora_a)
+    with torch.no_grad():
+        y = _grouped_mm_with_backward_fix(x, base, None)     # the dequant path's recompute forward (1100): no backward node
+''', '''def forward_native(x, base, lora_a, lora_b):
+    _lora_rank_pad_needed(x, lora_a)
+    from unsloth_zoo.temporary_patches.moe_nf4_grouped import maybe_nf4_grouped_mm
+    y = maybe_nf4_grouped_mm(x, torch.ones(base.shape[0], dtype=torch.int32), base[0], None)
+    if y is None:
+        with torch.no_grad():
+            y = _grouped_mm_with_backward_fix(x, base, None)
+''')
+    assert src != T.FAKE_MOE_UTILS
+    mg.__file__, nf.__file__ = str(tdir / "moe_grouped_fp16.py"), str(tdir / "moe_nf4_grouped.py")
+    mu = T._module_from_source("unsloth_zoo.temporary_patches.moe_utils", src, tdir / "moe_utils.py")
+    for name, mod in (("unsloth_zoo", T._package("unsloth_zoo", zroot)), ("unsloth_zoo.temporary_patches", T._package("unsloth_zoo.temporary_patches", tdir)),
+                      ("unsloth_zoo.temporary_patches.moe_grouped_fp16", mg), ("unsloth_zoo.temporary_patches.moe_nf4_grouped", nf),
+                      ("unsloth_zoo.temporary_patches.moe_utils", mu), ("unsloth", T._package("unsloth", uroot))):
+        monkeypatch.setitem(sys.modules, name, mod)
+    C = R.C
+    ex = T._experts(mu.forward_moe_backend)[0]
+    c = C.UnslothMoeCounter().install().patch_loaded([ex])
+    for i in range(R.STEPS):
+        c.mark_step(i)
+        args = T._stacks()
+        with torch.no_grad():
+            ex(*args)
+        ex(*args)
+        T._backward_as_the_library_would(mg, 2, 2)              # the two LoRA GEMMs' gx and dW
+        if arm != "U0" and i != drop_dx_step:
+            nf.nf4_dx(torch.ones(8, 40), args[1][0])             # the fused base's dX, inside the op
+    c.mark_step(R.STEPS)
+    e, table, census = R._good_rows()
+    E = 2 * R.N_LAYERS
+    row = dict(e, framework="unsloth", arm=arm, absmax={"loaded_nested": True}, loader_used="FastModel",
+               unsloth_env={k: v for k, v in os.environ.items() if k.startswith("UNSLOTH_")},
+               hook={"edges": [{}] * R.STEPS + [{"unsloth": c.snapshot()}], "structural": c.structural(1, R.STEPS)},
+               cell={"n_layers": R.N_LAYERS, "accum": 1, "moe_backend_selected": "grouped_mm", "env": {"unsloth_zoo": "2026.10.8"},
+                     "unsloth_backend_calls_per_step_min": {"unsloth_grouped_mm": E}, "unsloth_manual_grouped_mm_calls_per_step_max": 0},
+               profile={"summary": {"profiled_steps": 3, "device_ms_method": R.DEVICE_MS_METHOD, "device_ms": 900.0}, "top_cpu": [],
+                        "top_device": [{"name": "_grouped_gemm_kernel", "count": 9 * E * 3}, {"name": "_grouped_wgrad_kernel", "count": 2 * E * 3}]})
+    return R, row, table, census
+
+
+@pytest.mark.parametrize("arm", ["U0", "U1", "UA"])
+def test_an_unsloth_row_reads_and_each_piece_removed_voids(monkeypatch, tmp_path, arm):
+    import copy
+
+    R, row, table, census = _unsloth_row(monkeypatch, tmp_path, arm)
+    assert R.row_faults(row, table, census) == []
+    snap = row["hook"]["edges"][-1]["unsloth"]
+    assert snap["counts"]["nf4_fused_calls"] == (0 if arm == "U0" else 2 * R.STEPS)
+    for mutate, label in [
+        (lambda r: r["hook"].pop("structural"), "no structural count"),
+        (lambda r: r["hook"]["edges"][-1].pop("unsloth"), "no counter snapshot"),
+        (lambda r: r["unsloth_env"].update(UNSLOTH_MOE_FUSED_ROUTER="1"), "the router switched on"),
+        (lambda r: r["unsloth_env"].pop("UNSLOTH_ENABLE_LOGGING"), "a registered pin unset"),
+        (lambda r: r["unsloth_env"].update(UNSLOTH_ANYTHING="1"), "an ambient key"),
+        (lambda r: r.update(loader_used="FastLanguageModel"), "another loader"),
+        (lambda r: r["absmax"].update(loaded_nested=False), "fp32 absmax"),
+    ] + ([(lambda r: r["profile"]["top_device"][0].update(count=1), "F15 v2 short")] if arm == "U0" else []):
+        r = copy.deepcopy(row)
+        mutate(r)
+        assert R.row_faults(r, table, census), f"{arm}: {label} still reads clean"
+
+
+@pytest.mark.parametrize("arm", ["U1", "UA"])
+def test_a_fused_dx_that_never_launched_voids_the_row(monkeypatch, tmp_path, arm):
+    R, row, table, census = _unsloth_row(monkeypatch, tmp_path, arm, drop_dx_step=17)
+    assert any("launches" in w for w in R.row_faults(row, table, census))
