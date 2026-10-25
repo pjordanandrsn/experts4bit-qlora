@@ -57,8 +57,8 @@ case "$BOX" in H) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac   # H
 case "$BOX" in K) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac   # K: v0.41.0 as H (SC2d)
 case "$BOX" in L) GNF4_SHA=b4f93f1c62d1e3436ed45bec8ccd608c90433737;; esac   # L: v0.42.0, e4b CI's pin at registration (SC2e)
 case "$BOX" in M) GNF4_SHA=724ccc454f006c1a46836e434e997f31f293747f;; esac   # M: v0.45.0's commit, RECORDED only: box M installs the release WHEEL by sha256 (SC5)
-case "$BOX" in N|O) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac   # N, O: v0.50.0's commit, installed from git as L (SC2f Amendment 3, SC2h Amendment 1; was v0.45.0 724ccc45)
-case "$BOX" in P|Q) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac   # P, Q: v0.50.0's commit, installed from git as L (SC2i; boxes N and O move to it in SC2f Amendment 3)
+case "$BOX" in N|O) GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca;; esac   # N, O: v0.51.0's commit (e4b CI's pin), installed from git as L (SC2f Amendment 7, SC2h Amendment 5; was v0.50.0 41ef086e)
+case "$BOX" in P) GNF4_SHA=30adb1bfa76f95f9ce4a4c29734b8f36de907eca;; Q) GNF4_SHA=41ef086e6a3e2be5b158ff1bb38e0de67862a949;; esac   # P: v0.51.0 as N and O (SC2i Amendment 4); Q: v0.50.0, SC2j's registered pin, unchanged (SC2j stopped at two strikes)
 MID=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
 GPTQ_MID=Qwen/Qwen3-30B-A3B-GPTQ-Int4; GPTQ_REV=9b534e4318b7ebc3c961a839f13eb18b1833f441
 GGUF_REPO=unsloth/Qwen3-30B-A3B-GGUF; GGUF_REV=d5b1d57bd0b504ac62ae6c725904e96ef228dc74

@@ -188,3 +188,30 @@ at the launch commit. A staging checkout that is dirty, or whose `HEAD` is not t
 the stack under test (`36cdd2d4`) are unchanged.
 
 **Unchanged:** everything else.
+
+### Amendment 4 (registered before any SC2i run): SC2f Amendment 7's qualify-at-proof gate and release pair
+
+**Why.** SC2f Amendment 7 replaces the receipt bar with qualify-at-proof and moves the release pair to e4b 0.58.1 and
+grouped-nf4-gemm 0.51.0. SC2i reads no other lane's verdict, but the three lanes (SC2f, SC2h, SC2i) must sit on the same pair and the same gate.
+
+**The change.** SC2i takes SC2f Amendment 7, by reference, in full:
+- **(a) the gate.** Box P launches through `bench/sc2/sc2_qualify_drive.sh`. Before any install: the enforced
+  power read (575 W, as a float; rc 17) and the `card_clock.py` burn (floor 2700 MHz; rc 18). After a clean proof,
+  the proof's host records (rc 18). Admission is `bench/sc2/sc2_qualify.py admit --lane sc2i`: the same walk (52780,
+  then 145701, then 55337), the same exclusions (13828, 37367; 26157 until a create there succeeds; the launcher's
+  power exclusions at create), the same stability rule (3 consecutive reads, ≤ $1.05/h, ≥ 320 GB). Host continuity
+  puts the earlier lanes' PROVED host first.
+- **(b) attempts.** Every create consumes one of **3** proof attempts (`sc2i-prove-1` to `-3`), a qualify refusal
+  included. A host tried is never revisited unless its proof PROVED. Three creates and no PROVED: the lane parks. The
+  worst case per run is as SC2f Amendment 7 counts it (a proof $1.18, a reading $4.44), each under $15.
+- **(c) the deadline.** One 72 h deadline for the three lanes, counted from SC2f Amendment 7's merge or the G3 GPU
+  check's PASS, whichever is later. With no qualifying proof by then, SC2f, SC2h and SC2i park, with no further change
+  to the bar.
+- **(d) the release pair.** `E4B_SHA` = `605d21e67958fa94d5e73fc3a95ffcb5c8eae02d` (v0.58.1), and box P on
+  grouped-nf4-gemm v0.51.0 (`30adb1bf`) through `sc1_run.sh`. The kit hold's STACK gate, `verdict-stack` and
+  HOLD exception 3 are SC2f Amendment 7's. **The three lanes sit on the same pair. If one lane later moves alone, its
+  cross-lane read is VOID.**
+- **(e) order.** The G3 GPU check (e4b#2133) must PASS before the first SC2f proof creates, and so before any SC2i create.
+  The lane order, SC2f then SC2h then SC2i, is unchanged.
+
+**Unchanged:** everything else this lane registered; every constant, threshold and cost not named above.
