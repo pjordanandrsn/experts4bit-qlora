@@ -272,3 +272,39 @@ def test_the_box_refuses_a_bad_sha(tmp_path, bad):
     script = RUN.replace("W=/root/g3c", f"W={tmp_path}")
     out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env, cwd=tmp_path)
     assert out.returncode == 78 and (tmp_path / "TP_DONE.n").exists() and not (tmp_path / "G3C_SUCCESS.n").exists()
+
+
+# ---- the controller's verdict tail and the fetch, as bench/sc1's harness carries them (e4b#2041)
+def _tail(tmp_path, rc, marker):
+    """The driver's own block from the nonce check to its last line, against a fetched dir."""
+    start = DRIVE.index('[ "$(cat "$RUN_DIR/g3c/G3C_RUN_NONCE"')
+    block = DRIVE[start:]
+    d = tmp_path / "run" / "g3c"
+    d.mkdir(parents=True)
+    (d / "G3C_RUN_NONCE").write_text("n\n")
+    (d / "TP_DONE.n").write_text("")
+    (d / "G3C_EXIT_CODE.n").write_text(f"{rc}\n")
+    (d / "summary.txt").write_text("G3CHECK_VERDICT {}\n")
+    if marker:
+        (d / "G3C_SUCCESS.n").write_text("")
+    script = 'say(){ echo "$*"; }\nset -uo pipefail\nRUN_DIR="$1"; NONCE=n\n' + block
+    return subprocess.run(["bash", "-c", script, "drive", str(tmp_path / "run")], capture_output=True, text=True)
+
+
+@pytest.mark.parametrize("rc,marker,want", [(0, True, 0), (0, False, 24), (1, False, 1), (1, True, 1), (23, False, 23)])
+def test_pass_needs_rc_zero_and_the_success_marker(tmp_path, rc, marker, want):
+    out = _tail(tmp_path, rc, marker)
+    assert out.returncode == want, out.stdout + out.stderr
+    assert ("(PASS)" in out.stdout) == (want == 0)
+
+
+def test_the_fetch_carries_e4b_2041s_brotli_pin_and_one_retry():
+    assert '"huggingface_hub>=0.23" "brotli>=1.2.0"' in RUN
+    fetch = RUN[RUN.index('say "fetch $QWEN @ $QWEN_REV"'):RUN.index('line "FETCH $QWEN@$QWEN_REV')]
+    assert fetch.count('"$PY" -c "$SNAP"') == 2 and "sleep 20" in fetch and ">> logs/fetch.log" in fetch
+    assert fetch.count("alarm $(cap 2400)") == 2 and 'finish 11' in fetch
+
+
+def test_the_summary_carries_no_gpu_uuid():
+    line = next(ln for ln in RUN.splitlines() if ln.startswith("cat forensics.txt"))
+    assert "cut -d, -f1-3,5- forensics.txt" in line and "uuid" in RUN.split("nvidia-smi --query-gpu=", 1)[1].split(" ", 1)[0]

@@ -51,7 +51,7 @@ line(){ echo "$*" | tee -a summary.txt; }
 for f in g3check_run.sh g3check.py k8_bake.py calib.json card_clock.py staged.sha256; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged.sha256 > /dev/null) || { say "STAGED FILES DIFFER FROM bench/kv-pool-g/g3-gpu-check/staged.sha256"; finish 9; }
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,power.limit,enforced.power.limit --format=csv,noheader > forensics.txt 2>&1 || { say "DUD BOX (nvidia-smi)"; finish 10; }
-cat forensics.txt; line "CARD $(cat forensics.txt)"
+cat forensics.txt; line "CARD $(cut -d, -f1-3,5- forensics.txt)"   # the GPU UUID stays in forensics.txt (store-only)
 QWEN=Qwen/Qwen3-30B-A3B
 PY=python3
 pipx(){ local log=$1 secs=$2; shift 2
@@ -66,7 +66,7 @@ pipx logs/pip_torch.log "$(cap 1800)" "torch==2.8.0" --index-url https://downloa
 perl -e 'alarm 180; exec @ARGV' "$PY" $W/card_clock.py burn --floor 2700 --out $W/card_clock.json > logs/card_clock.log 2>&1; CC=$?
 line "CARD_CLOCK rc=$CC (recorded, not a gate) $(tail -1 logs/card_clock.log | cut -c1-200)"
 pipx logs/pip_e4b.log "$(cap 1800)" --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
-  "transformers==5.16.1" "bitsandbytes==0.50.1" accelerate sentencepiece safetensors "huggingface_hub>=0.23" || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
+  "transformers==5.16.1" "bitsandbytes==0.50.1" accelerate sentencepiece safetensors "huggingface_hub>=0.23" "brotli>=1.2.0" || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
 pipx logs/pip_gnf4.log "$(cap 900)" --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
 WANT_E4B=$E4B_SHA WANT_GNF4=$GNF4_SHA "$PY" - <<'PYT' 2>&1 | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "TRIPWIRE FAIL"; finish 9; }
 import os, json, inspect, importlib.metadata as md
@@ -87,7 +87,13 @@ print("G3C_TRIPWIRE ok: e4b", e.__version__, "torch", torch.__version__, torch.c
 PYT
 need_left $((FETCH_BAKE_S + NEED_SERVER)) "the fetch, bake and server"
 say "fetch $QWEN @ $QWEN_REV"
-perl -e "alarm $(cap 2400); exec @ARGV" "$PY" -c "from huggingface_hub import snapshot_download as s; print(s('$QWEN', revision='$QWEN_REV', allow_patterns=['*.safetensors','*.json','tokenizer*','*.model','*.txt','merges.txt','vocab.json'], max_workers=4))" > logs/fetch.log 2>&1 \
+# e4b#2041's fix, as bench/sc1/sc1_run.sh's fetch(): huggingface_hub on httpx decodes brotli with an API that needs
+# brotli >= 1.2.0 (pinned in the e4b install above); a fetch that still fails is retried once after 20 s (the snapshot
+# resumes), its alarm re-armed from the time left, before it is a DL FAIL
+SNAP="from huggingface_hub import snapshot_download as s; print(s('$QWEN', revision='$QWEN_REV', allow_patterns=['*.safetensors','*.json','tokenizer*','*.model','*.txt','merges.txt','vocab.json'], max_workers=4))"
+perl -e "alarm $(cap 2400); exec @ARGV" "$PY" -c "$SNAP" > logs/fetch.log 2>&1 \
+  || { say "fetch failed ($(tail -1 logs/fetch.log | cut -c1-160)) -- one retry in 20 s"; sleep 20
+       perl -e "alarm $(cap 2400); exec @ARGV" "$PY" -c "$SNAP" >> logs/fetch.log 2>&1; } \
   || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
 line "FETCH $QWEN@$QWEN_REV $(tail -1 logs/fetch.log)"
 say "bake the NF4 arena"

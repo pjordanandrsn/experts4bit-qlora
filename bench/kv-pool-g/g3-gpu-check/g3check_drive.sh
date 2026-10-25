@@ -50,5 +50,9 @@ say "fetched $(ls "$RUN_DIR/g3c" | wc -l | tr -d ' ') entries"
 [ -f "$RUN_DIR/g3c/TP_DONE.$NONCE" ] || { say "the check did not finish (no TP_DONE for this run)"; exit 23; }
 RC=$(cat "$RUN_DIR/g3c/G3C_EXIT_CODE.$NONCE" 2>/dev/null); case "$RC" in ''|*[!0-9]*) say "malformed exit code"; exit 24;; esac
 grep -a 'G3CHECK\|CARD\|SERVER' "$RUN_DIR/g3c/summary.txt" 2>/dev/null | tail -8
-[ -f "$RUN_DIR/g3c/G3C_SUCCESS.$NONCE" ] && [ "$RC" = 0 ] || { say "check exit rc=$RC without success marker"; exit "$RC"; }
+# PASS needs BOTH rc 0 and this run's success marker; rc 0 without the marker is a malformed record (24), never a PASS
+if [ ! -f "$RUN_DIR/g3c/G3C_SUCCESS.$NONCE" ] || [ "$RC" != 0 ]; then
+  say "check exit rc=$RC, success marker $([ -f "$RUN_DIR/g3c/G3C_SUCCESS.$NONCE" ] && echo present || echo absent)"
+  [ "$RC" = 0 ] && exit 24; exit "$RC"
+fi
 say "check complete rc=0 (PASS)"; exit 0
