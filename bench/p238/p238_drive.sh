@@ -9,25 +9,12 @@
 #   bash bench/p238/p238_drive.sh        (from a clean experts4bit-qlora checkout: the launch commit is its HEAD)
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p238_drive] $*"; }
-# The driver's OWN exit code is what the launcher reads (it writes "command exited {rc}" and excludes the machine on 13/14/17/18),
-# so the launcher's host codes (13 14 17 18) ALWAYS pass through, whatever the lane registers (a shared helper exiting 14 or 17 must
-# still exclude its host), and so does every code the PREREG registers. 23: no readable exit file was fetched. 24: the box said 0
-# but wrote no P238_SUCCESS marker for this nonce (never read as success). 26: any other code.
-HOST_CODES=" 13 14 17 18 "
-BOX_CODES=" 9 10 13 15 16 18 27 28 41 78 130 "
-finish(){   # finish OUT NONCE -> exits with the driver's code
-  local out=$1 nonce=$2 rc
-  [ -f "$out/P238_EXIT_CODE.$nonce" ] || { say "no exit file P238_EXIT_CODE.$nonce in the fetch"; exit 23; }
-  rc=$(tr -d '[:space:]' < "$out/P238_EXIT_CODE.$nonce")
-  case "$rc" in ''|*[!0-9]*) say "unreadable exit file: '$rc'"; exit 23;; esac
-  say "box rc=$rc"
-  if [ "$rc" = 0 ]; then
-    [ -f "$out/P238_SUCCESS.$nonce" ] && exit 0
-    say "box rc 0 without P238_SUCCESS.$nonce: not a success"; exit 24
-  fi
-  case "$HOST_CODES$BOX_CODES" in *" $rc "*) exit "$rc";; esac
-  say "box rc $rc is not a registered code"; exit 26
-}
+# The driver's OWN exit code is what the launcher reads (it excludes a machine on 13 14 17 18), so its last step is the shared
+# bench/common/drive_tail.sh: the host codes always pass through, and so do the codes P238's PREREG registers; 23 no readable exit
+# file, 24 the box said 0 without this nonce's P238_SUCCESS marker, 26 any other code.
+BOX_CODES="9 10 13 15 16 18 27 28 41 78 130"
+. "$(cd "$(dirname "$0")/../.." && pwd)/bench/common/drive_tail.sh" || { say "refusing: bench/common/drive_tail.sh is missing"; exit 78; }
+finish(){ drive_finish "$1" "$2" P238 "$BOX_CODES"; }
 if [ -n "${P238_DRIVE_TAIL_DIR:-}" ]; then finish "$P238_DRIVE_TAIL_DIR" "${P238_DRIVE_TAIL_NONCE:?}"; fi   # the tail, alone (tests)
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set"; exit 78; }
