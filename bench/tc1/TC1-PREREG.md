@@ -3865,7 +3865,7 @@ origins, and a fresh bytecode prefix.
 **reported, not binding** for this family, printed as "F15 v1 (reported, not binding)":
 1. torch 2.12, and the four pins as the arm recorded them;
 2. the registered tags; e4b's chunked LM loss with no run-time refusal; the arm's full `_profile.json` beside its receipt;
-3. **F15 v2 on each Unsloth arm** (`bench/tc1/f15v2.py`, sha256 `e6d19b3eabc33bf9af5817d01879d757e72fec34be8fe337d6a86bddc572ed68`; it reads the full profile). E = the arm's own expert-module forward
+3. **F15 v2 on each Unsloth arm** (`bench/tc1/f15v2.py`, sha256 `e32f6bcb8c09abb4b09f918cfc55f7b70ad6488400bd61e297440ceb5c4de3ff`; it reads the full profile). E = the arm's own expert-module forward
    count (recompute included). The bars are **exact** (`==`): the clean records sit exactly at them, and a double dispatch is a defect too.
    - Triton path: grouped GEMM launches (`_grouped_gemm_kernel`) == **9E** and dW launches (`_grouped_wgrad_kernel`) == **2E**. Both are
      derived from the release-proven unsloth_zoo 2026.10.8 source, as f15v2.py's docstring cites line by line.
@@ -3891,7 +3891,9 @@ origins, and a fresh bytecode prefix.
 user-annotation span included. That span overlaps the optimizer kernels it encloses (e4b#2129 deliverable 2, confirmed by independent
 review). This family's device time is the recorded `device_ms` minus the profile's user-annotation rows, by name
 (`f15v2.kernels_only_device_ms`), because the stored profile keeps no annotation flag. It fails closed: exactly one `Optimizer.step#` row
-with count == profiled_steps is required, else the draw is VOID. The recorded total and the removed annotation ms
+with count == profiled_steps is required, else the draw is VOID. It also refuses a profile marked `device_ms_method ==
+"kernels_only_at_source"` (amendment 81's), which it would otherwise correct twice; this box's profiles are legacy, since its kit pins
+this amendment's merge. The recorded total and the removed annotation ms
 are printed beside it. TC1 amendment 81 corrects the instrument at its source, separately.
 
 **The rule** (`score_pos80`, in this order; the first that applies is the reading):

@@ -1137,7 +1137,7 @@ POS80_PROVEN = tuple(POS80_PINS)                                   # all four ar
 #: the import each proof must show among its origins: the arms' entry module (grouped-nf4-gemm installs flat modules, no package of its name)
 POS80_OWN_IMPORT = {"experts4bit-qlora": "experts4bit_qlora", "grouped-nf4-gemm": "nf4_qlora", "unsloth": "unsloth", "unsloth_zoo": "unsloth_zoo"}
 POS80_HELPER_SHA256 = {"release_proof": "aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0",
-                       "card_clock": "1dae29569b776f7ce4595e07b1582011ed8ed1b7068b07ce7cb484aa8ed266ac", "f15v2": "e6d19b3eabc33bf9af5817d01879d757e72fec34be8fe337d6a86bddc572ed68"}
+                       "card_clock": "1dae29569b776f7ce4595e07b1582011ed8ed1b7068b07ce7cb484aa8ed266ac", "f15v2": "e32f6bcb8c09abb4b09f918cfc55f7b70ad6488400bd61e297440ceb5c4de3ff"}
 POS80_HARNESS_ENV = POS79_HARNESS_ENV
 POS80_PYCACHE_PREFIX = "/tmp/tc1-pycache-"
 POS80_HELDOUT_MAX = POS79_HELDOUT_MAX                              # amendment 69's P209

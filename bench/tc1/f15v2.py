@@ -36,7 +36,9 @@ Kernels-only device time. tc1_arm.summarize_profile sums every CUDA-typed event 
 sum excludes them (profiler_util.py:1010-1020, ``not evt.is_user_annotation``). The stored profile keeps no such flag, so this subtracts
 the rows whose NAME is a known annotation (``ANNOTATION_RE``) and records what it removed. It fails CLOSED: exactly one
 ``Optimizer.step#`` row with count == profiled_steps is required (it is in all 120 of TC1's stored profiles), and anything else raises,
-so a missing or truncated annotation is never read as kernels-only. TC1 amendment 81 fixes the instrument at the source.
+so a missing or truncated annotation is never read as kernels-only. TC1 amendment 81 fixes the instrument at the source and marks its
+profiles ``summary.device_ms_method == "kernels_only_at_source"``. This function REFUSES such a profile: subtracting the row again would
+correct it twice. A legacy profile carries no field, or ``"all_cuda"``.
 """
 from __future__ import annotations
 
@@ -121,6 +123,10 @@ def kernels_only_device_ms(profile):
     """(kernel ms per profiled step, annotation ms per profiled step, annotation row names): recorded device_ms minus the rows whose
     name is a known user annotation. Raises AnnotationError unless exactly one ``Optimizer.step#`` row is present with count ==
     profiled_steps. A missing row would leave the annotation span inside the figure, unnoticed."""
+    method = profile["summary"].get("device_ms_method", "all_cuda")
+    if method != "all_cuda":
+        raise AnnotationError(f"device_ms_method {method!r}: only a legacy all-CUDA device_ms (no field, or 'all_cuda') is corrected here; "
+                              "an at-source kernels-only figure would be corrected twice")
     ps = profile["summary"]["profiled_steps"]
     ann = [r for r in profile["top_device"] if ANNOTATION_RE.match(r["name"])]
     opt = [r for r in ann if r["name"].startswith("Optimizer.step#")]

@@ -341,6 +341,19 @@ def test_kernels_only_device_time_fails_closed_without_exactly_one_annotation_ro
         F2.kernels_only_device_ms(prof)
 
 
+@pytest.mark.parametrize("method", ["kernels_only_at_source", "something_else"])
+def test_kernels_only_device_time_refuses_a_profile_already_corrected_at_source(method):
+    """The maintainer's 02:51:56Z ruling: amendment 81's profiles carry device_ms_method == kernels_only_at_source; subtracting the
+    annotation row from one again would correct it twice, so this method refuses any value but the legacy one."""
+    prof = json.loads((P79 / "tc1" / "qwen3pos79_e4b_fused_attn4_m_fd_profile.json").read_text())
+    assert round(F2.kernels_only_device_ms(prof)[0], 1) == 1979.5                       # legacy: no field
+    prof["summary"]["device_ms_method"] = "all_cuda"
+    assert round(F2.kernels_only_device_ms(prof)[0], 1) == 1979.5
+    prof["summary"]["device_ms_method"] = method
+    with pytest.raises(F2.AnnotationError, match="corrected twice"):
+        F2.kernels_only_device_ms(prof)
+
+
 def test_a_draw_whose_profile_lacks_the_annotation_row_is_void(tmp_path):
     d = _run_dir(tmp_path)
     pp = d / "qwen3pos80_e4b_fused_attn4_m_fd_profile.json"
