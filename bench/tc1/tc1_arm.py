@@ -2152,9 +2152,11 @@ def load_unsloth(a):
         tp_info.update(tp_)
         if tparams and not pkw:
             raise NotImplementedError(f"--unsloth-target-parameters {','.join(tparams)}: {tp_['how']} (the registered expert targets cannot be dropped silently)")
+        okw, orec = unsloth_offload_kwargs(ldr.from_pretrained, a)                   # --unsloth-offload-layers: a NAMED parameter or a refusal
+        x["unsloth_offload_layers"] = orec
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            model, tokenizer_obj = ldr.from_pretrained(model_name=local, max_seq_length=a.seq, dtype=torch.bfloat16, load_in_4bit=li4, **kw)
+            model, tokenizer_obj = ldr.from_pretrained(model_name=local, max_seq_length=a.seq, dtype=torch.bfloat16, load_in_4bit=li4, **kw, **okw)
             model = ldr.get_peft_model(
                 model, r=a.r, lora_alpha=a.alpha, lora_dropout=0.0, bias="none", target_modules=list(x["unsloth_targets"]),
                 use_gradient_checkpointing=("unsloth" if a.grad_ckpt == "unsloth" else True), random_state=a.seed, **pkw)
@@ -2173,6 +2175,10 @@ def load_unsloth(a):
     print("\n".join(out.splitlines()[-40:]), flush=True)
     if not any(BANNER in l for l in x["banner_lines"]):
         x["banner_lines"].append(f"NO '{BANNER}' banner on stdout (the census below decides)")
+    if x.get("unsloth_offload_layers") is not None:                    # what the block swap chose; none on the model = it did not engage
+        x["unsloth_offload_layers"]["resolved"] = unsloth_offload_resolved(model)
+        if not x["unsloth_offload_layers"]["resolved"]:
+            raise NotImplementedError(f"--unsloth-offload-layers {a.unsloth_offload_layers}: the loaded model carries no block swap")
     dq["loaded_nested"] = loaded_expert_double_quant(model)            # P2-1: what the loaded expert Params4bit says (None = none found)
     x["unsloth_double_quant"] = dq
     x["moe_backend_selected"] = unsloth_backend_selected()             # P2-1: select_moe_backend() after load (lru_cached)
@@ -4087,6 +4093,150 @@ class MemCensus:
             return {"error": self.error, **self._base()}
 
 
+# ---- The TC1 harness extension that P237 and P238 share (ruled 2026-10-25): a generic OBSERVE-ONLY hook, and three registered options
+# that carry behaviour. Unset, none of this runs and a receipt keeps its exact key set.
+ARM_HOOK_ENV, ARM_HOOK_SHA_ENV = "TC1_ARM_HOOK", "TC1_ARM_HOOK_SHA256"
+ARM_HOOK_PHASES = ("post_import", "post_load", "step_edge", "record")
+
+
+def load_arm_hook(a):
+    """``TC1_ARM_HOOK=module:factory``, OBSERVE ONLY. The module must be a file whose sha256 equals ``TC1_ARM_HOOK_SHA256`` (the lane's
+    staged pin, which its runner sets). A missing or wrong sha, an import failure or a factory failure is a harness_error stub (exit 10),
+    never a fallback to running without the hook. Unset: None, and no phase runs.
+
+    Phases, each called only if the hook object defines it (a phase it does not define is absent from the receipt):
+    ``post_import(args)`` before the load; ``post_load(args, model)`` after the load and every harness setup (the casts, the matched
+    init, the counters), before the first forward; ``step_edge(i)`` before optimizer step i (i = 0..N-1, outside the step's clock) and
+    once after the last (i = N); ``record()``, after training, returning a JSON-able dict for the receipt's ``arm_hook.record``.
+    Anything a hook installs must return the wrapped output unchanged: the selftest's output-equality case pins that."""
+    spec = os.environ.get(ARM_HOOK_ENV)
+    if not spec:
+        return None
+    import importlib.util
+    want = (os.environ.get(ARM_HOOK_SHA_ENV) or "").strip().lower()
+    mod_name, _, fac_name = spec.partition(":")
+    if not mod_name or not fac_name or not re.fullmatch(r"[0-9a-f]{64}", want):
+        stub(a, "harness_error", f"{ARM_HOOK_ENV}={spec!r} needs the form module:factory, and {ARM_HOOK_SHA_ENV} its full sha256 "
+             f"(got {want[:16]!r})", {"phase": "preamble"}, code=10)
+    try:
+        found = importlib.util.find_spec(mod_name)
+    except (ImportError, ValueError) as e:
+        found = None
+        why = f"{type(e).__name__}: {str(e)[:200]}"
+    else:
+        why = "not found on sys.path"
+    origin = getattr(found, "origin", None)
+    if not origin or not os.path.isfile(origin):
+        stub(a, "harness_error", f"{ARM_HOOK_ENV}: module {mod_name!r} is not a file ({why})", {"phase": "preamble"}, code=10)
+    with open(origin, "rb") as fh:
+        got = hashlib.sha256(fh.read()).hexdigest()
+    if got != want:
+        stub(a, "harness_error", f"{ARM_HOOK_ENV}: {os.path.basename(origin)} is sha256 {got[:16]}, not the staged {want[:16]}: refused",
+             {"phase": "preamble"}, code=10)
+    try:
+        mod = importlib.import_module(mod_name)
+        if os.path.realpath(getattr(mod, "__file__", "") or "") != os.path.realpath(origin):
+            raise ImportError(f"imported {getattr(mod, '__file__', None)!r}, not the hashed {origin!r}")
+        hook = getattr(mod, fac_name)()
+    except Exception as e:
+        stub(a, "harness_error", f"{ARM_HOOK_ENV}={spec!r}: {type(e).__name__}: {str(e)[:300]}", {"phase": "preamble"}, code=10)
+    phases = [p for p in ARM_HOOK_PHASES if callable(getattr(hook, p, None))]
+    return {"obj": hook, "spec": spec, "file": os.path.basename(origin), "sha256": got, "phases": phases, "calls": {p: 0 for p in phases}}
+
+
+def arm_hook_call(h, phase, *args):
+    """Call one phase of a loaded hook, if it defines that phase; nothing otherwise. A raise propagates (the arm's row names the phase)."""
+    if h is None or phase not in h["phases"]:
+        return None
+    h["calls"][phase] += 1
+    return getattr(h["obj"], phase)(*args)
+
+
+def arm_hook_receipt(h, record):
+    return {"spec": h["spec"], "file": h["file"], "sha256": h["sha256"], "phases": list(h["phases"]), "calls": dict(h["calls"]),
+            "record": record}
+
+
+def apply_vram_cap(a, cuda=None):
+    """``--vram-cap-gib X``: ``set_per_process_memory_fraction(X GiB / the card's total)`` on device 0, BEFORE the load, then the getter
+    read back. Unsloth's planner reads ``get_per_process_memory_fraction`` through getattr and silently takes 1.0 without it, so a torch
+    without the getter refuses. Returns the receipt's ``vram_cap`` (given and resolved), or None when unset."""
+    cap = getattr(a, "vram_cap_gib", None)
+    if cap is None:
+        return None
+    cuda = cuda or torch.cuda
+    if not cuda.is_available():
+        stub(a, "harness_error", f"--vram-cap-gib {cap}: no CUDA device to cap", {"phase": "preamble"}, code=10)
+    total = int(cuda.get_device_properties(0).total_memory)
+    frac = float(cap) * 2 ** 30 / total
+    if not 0.0 < frac <= 1.0:
+        stub(a, "refused", f"--vram-cap-gib {cap}: {cap} GiB is not inside this card's {total / 2 ** 30:.2f} GiB", {"phase": "preamble"}, code=3)
+    getter = getattr(cuda, "get_per_process_memory_fraction", None)
+    if getter is None:
+        stub(a, "harness_error", "--vram-cap-gib: this torch has no get_per_process_memory_fraction, so Unsloth's planner would read 1.0 "
+             "(no cap)", {"phase": "preamble"}, code=10)
+    cuda.set_per_process_memory_fraction(frac, 0)
+    read = float(getter(0))
+    if abs(read - frac) > 1e-12:
+        stub(a, "harness_error", f"--vram-cap-gib {cap}: the getter reads {read!r} after setting {frac!r}", {"phase": "preamble"}, code=10)
+    return {"given_gib": float(cap), "resolved": {"fraction": frac, "total_bytes": total, "getter_reads": read}}
+
+
+def parse_offload_layers(v):
+    """``--unsloth-offload-layers``: ``auto`` or a positive integer (Unsloth's ``offload_layers``; 0 is off, so it is not an option)."""
+    if v is None:
+        return None
+    if str(v).strip().lower() == "auto":
+        return "auto"
+    if re.fullmatch(r"[1-9][0-9]*", str(v).strip()):
+        return int(v)
+    raise ValueError(f"--unsloth-offload-layers {v!r}: auto or a positive integer")
+
+
+def unsloth_offload_kwargs(from_pretrained_fn, a):
+    """``--unsloth-offload-layers N|auto``: the from_pretrained kwargs ``offload_layers`` and ``max_memory={0: "<cap>GiB"}`` from
+    ``--vram-cap-gib``, decided from the signature READ AT RUNTIME. ``offload_layers`` must be a NAMED parameter, else
+    NotImplementedError (a refusal row, never a silent resident run). ``max_memory`` goes in when named or when the signature takes
+    **kwargs (transformers reads it), and the record says which. Returns (kwargs, record); ({}, None) when unset. Pure: testable without
+    unsloth."""
+    n = parse_offload_layers(getattr(a, "unsloth_offload_layers", None))
+    if n is None:
+        return {}, None
+    cap = getattr(a, "vram_cap_gib", None)
+    if cap is None:
+        raise NotImplementedError(f"--unsloth-offload-layers {n}: needs --vram-cap-gib (max_memory comes from the cap)")
+    params = inspect.signature(from_pretrained_fn).parameters
+    if "offload_layers" not in params:
+        raise NotImplementedError(f"--unsloth-offload-layers {n}: {getattr(from_pretrained_fn, '__qualname__', from_pretrained_fn)} does not "
+                                  "name offload_layers (try --unsloth-loader FastModel)")
+    var_kw = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
+    if "max_memory" not in params and not var_kw:
+        raise NotImplementedError(f"--unsloth-offload-layers {n}: from_pretrained takes no max_memory, so the cap cannot reach the load")
+    kw = {"offload_layers": n, "max_memory": {0: f"{float(cap):g}GiB"}}
+    return kw, {"given": getattr(a, "unsloth_offload_layers", None), "passed": dict(kw, max_memory={"0": kw["max_memory"][0]}),
+                "max_memory_via": "named" if "max_memory" in params else "**kwargs", "resolved": None}
+
+
+def unsloth_offload_resolved(model):
+    """What Unsloth's block swap actually chose: the swapped layer indices off ``model._unsloth_block_swap`` (an ``auto`` resolves here),
+    or None when the model carries no block swap (then the offload did not engage)."""
+    bs = getattr(model, "_unsloth_block_swap", None)
+    if bs is None:
+        inner = getattr(model, "base_model", None)
+        bs = getattr(getattr(inner, "model", None), "_unsloth_block_swap", None) if inner is not None else None
+    if bs is None:
+        return None
+    idx = [int(i) for i in (getattr(bs, "indices", None) or [])]
+    return {"n_layers": len(idx), "indices": idx}
+
+
+def layer_major_engine():
+    """The package's layer-major step (P137 / P140; experts4bit_qlora/engines/layer_major.py). Looked up at call time, so a test can
+    stand a counting fake in its place."""
+    from experts4bit_qlora.engines.layer_major import layer_major_step
+    return layer_major_step
+
+
 def run_arm(a, load_fn, sampler=True):
     import importlib.metadata as md
     # #548: the window opens HERE, not at LOAD OK -- so the receipt accounts for the whole process, not a chosen slice.
@@ -4127,6 +4277,9 @@ def run_arm(a, load_fn, sampler=True):
         except Exception:
             env[pkg] = None
     env["gnf4_code"] = gnf4_code_identity()        # TC1 amendment 76: the installed gnf4 commit and the nf4_qlora.py bytes imported
+    arm_hook = load_arm_hook(a)                     # P237 / P238: the generic OBSERVE-ONLY hook (None unless TC1_ARM_HOOK is set)
+    arm_hook_call(arm_hook, "post_import", a)
+    vram_cap = apply_vram_cap(a)                    # --vram-cap-gib: the cap BEFORE the load (None unless set)
 
     idle_w = idle_power() if sampler else 0.0
     host_ram0 = host_ram_report()                   # TC3: the cgroup peak BEFORE this arm, so a container-lifetime number is never credited to it
@@ -4252,6 +4405,7 @@ def run_arm(a, load_fn, sampler=True):
         c1_ctl = c1_control(model, h_before)        # [F14] a real byte of a real tensor's COPY, the same hasher
         assert c1_ctl["detects"], f"C1 positive control did not fire -- the check cannot fail ({c1_ctl})"
 
+    arm_hook_call(arm_hook, "post_load", a, model)  # P237 / P238: after the load, the casts, the matched init and the counters; before eval0
     phase_mark("setup")                             # amendment 56: load to here is "setup"
     with PH("eval0"):                               # #548: also the first forward -- any JIT / autotune on the forward path lands here
         ev0, rows0 = eval_loss(model, ev, fwd_kwargs, a.autocast)
@@ -4291,6 +4445,30 @@ def run_arm(a, load_fn, sampler=True):
         with PH("mem_census"):                      # TC1 amendment 23: the static census at the end of load / setup (its own phase, only when on)
             mcen.setup_done(model, opt)
 
+    def _microbatch(i, j):
+        """Optimizer step i's micro-batch j, rows in the fixed order: (ids, forward kwargs, labels, real tokens). The stock loop and
+        --layer-major both build their micro-batches here, so the two consume the same rows."""
+        if M == 1:
+            ids = torch.tensor(train[(i * a.accum + j) % len(train)], dtype=torch.long).unsqueeze(0).to(DEV)
+            return ids, fwd_kwargs(ids), ids, int(ids.numel())
+        rows = [train[((i * a.accum + j) * M + k) % len(train)] for k in range(M)]
+        ids, mask, labels = collate(rows, pad_id)
+        return ids, {"attention_mask": mask}, labels, sum(len(r) for r in rows)
+
+    lm_step, lm_rec = None, None
+    if getattr(a, "layer_major", 0):                # --layer-major 1: its FIRST call per model runs the drift guard (M + 1 stock
+        with PH("layer_major_guard"):               # forwards), so that call runs here, on step 0's micro-batches, before the window;
+            lm_step = layer_major_engine()          # its gradients are discarded (no optimizer step), so no parameter moves
+            g0 = time.perf_counter()
+            mbs = [_microbatch(0, j) for j in range(a.accum)]
+            with autocast_ctx(a.autocast):
+                lm_step(model, [dict(kw, input_ids=ids, labels=labels) for ids, kw, labels, _ in mbs], [1.0 / a.accum] * a.accum)
+            opt.zero_grad(set_to_none=True)
+            cuda_sync()
+            lm_rec = {"given": int(a.layer_major), "engine": "experts4bit_qlora.engines.layer_major.layer_major_step",
+                      "weights": f"1/{a.accum} per micro-batch (the stock loop's loss / accum)",
+                      "guard": {"s": round(time.perf_counter() - g0, 3), "microbatches": a.accum, "where": "before the timed window"}}
+
     losses, step_ms, tokens_per_step, tokens_padded_per_step, lr_per_step, kcalls = [], [], [], [], [], []
     mb_padded_len, dyn = [], {}                                        # [F19] padded length per micro-batch; [F16] dynamo snapshots
     profile_summary = None                                              # P45
@@ -4310,6 +4488,7 @@ def run_arm(a, load_fn, sampler=True):
             t0 = time.perf_counter()
             prof, prof_wall = None, 0.0                                       # P45: profiled steps are inside the window and marked in the receipt
             for i in range(a.steps):
+                arm_hook_call(arm_hook, "step_edge", i)    # P237 / P238: before step i, outside its clock and the profiler
                 if a.profile_steps and i == a.profile_warm:
                     from torch.profiler import ProfilerActivity, profile as _tprofile
                     acts = [ProfilerActivity.CPU] + ([ProfilerActivity.CUDA] if torch.cuda.is_available() else [])
@@ -4320,15 +4499,18 @@ def run_arm(a, load_fn, sampler=True):
                 loss_sum, ntok, npad = 0.0, 0, 0
                 mb_ms, mb_len = [], []
                 lr_per_step.append(float(opt.param_groups[0]["lr"]))
-                for j in range(a.accum):                                    # T5/T13: accum micro-batches of M rows, rows in fixed order
+                if lm_step is not None:                                     # --layer-major 1: the step BODY only; the clock, the edges,
+                    mbs = [_microbatch(i, j) for j in range(a.accum)]        # the profile window and the optimizer step are the loop's
+                    with autocast_ctx(a.autocast):
+                        lm_losses = lm_step(model, [dict(kw, input_ids=ids, labels=labels) for ids, kw, labels, _ in mbs], [1.0 / a.accum] * a.accum)
+                    for (ids, _, _, nreal), mb_loss in zip(mbs, lm_losses):
+                        mb_len.append(int(ids.shape[1]))
+                        loss_sum += float(mb_loss)
+                        ntok += nreal
+                        npad += int(ids.numel()) - nreal
+                for j in range(a.accum if lm_step is None else 0):          # T5/T13: accum micro-batches of M rows, rows in fixed order
                     tm = time.perf_counter() if a.microbatch_timing else None
-                    if M == 1:
-                        ids = torch.tensor(train[(i * a.accum + j) % len(train)], dtype=torch.long).unsqueeze(0).to(DEV)
-                        kw, labels, nreal = fwd_kwargs(ids), ids, int(ids.numel())
-                    else:
-                        rows = [train[((i * a.accum + j) * M + k) % len(train)] for k in range(M)]
-                        ids, mask, labels = collate(rows, pad_id)
-                        kw, nreal = {"attention_mask": mask}, sum(len(r) for r in rows)
+                    ids, kw, labels, nreal = _microbatch(i, j)
                     mb_len.append(int(ids.shape[1]))
                     if mcen is not None:                                  # TC1 amendment 23: the phase marks and the snapshot checks
                         mcen.mark(f"s{i + 1}.mb{j + 1}.forward")
@@ -4397,6 +4579,7 @@ def run_arm(a, load_fn, sampler=True):
                     print(f"    eval@{steps_done} heldout {e:.5f} train_wall {train_wall:.1f}s", flush=True)
             cuda_sync()
             wall = time.perf_counter() - t0
+            arm_hook_call(arm_hook, "step_edge", steps_done)   # P237 / P238: the closing edge (i = N), after the last step and the window
     except Exception as e:
         counter.uninstall()
         hr = host_ram_report(host_ram0)             # TC3: the host-RAM high-water on the OOM / refused row too
@@ -4821,6 +5004,17 @@ def run_arm(a, load_fn, sampler=True):
     }
     if order_rec is not None:                     # HP1: only a --order-seed run carries the key; a default receipt keeps its exact key set
         cell["order"] = order_rec
+    if arm_hook is not None:                      # P237 / P238: only a run with TC1_ARM_HOOK carries the key, as `order` above
+        cell["arm_hook"] = arm_hook_receipt(arm_hook, arm_hook_call(arm_hook, "record"))
+    if vram_cap is not None:
+        cell["vram_cap"] = vram_cap
+    if x.get("unsloth_offload_layers") is not None:
+        cell["unsloth_offload_layers"] = x["unsloth_offload_layers"]
+    if lm_rec is not None:
+        cell["layer_major"] = lm_rec
+    if vram_cap is not None or x.get("unsloth_offload_layers") is not None or lm_rec is not None:
+        cell["step_contract"] = {"optimizer_steps": steps_done, "accum": int(a.accum), "micro_batch": M,      # equal across a lane's
+                                 "tokens_per_step_sha256": sha_bytes(json.dumps(tokens_per_step).encode())}  # arms: its reducer asserts it
     if hp1 is not None:                           # HP1: only an --hp1-export run carries the key, as `order` above
         cell["hp1"] = hp1
     write_json(receipt_path(a), cell)
@@ -6401,7 +6595,9 @@ def rescore_adapter(a, load_fn):
     return 0
 
 
-def main():
+def build_parser():
+    """tc1_arm's command line, every option as main() parsed it before the TC1 harness extension, plus its three registered options. A
+    function, so another lane's op level can import the arm's loaders and parse the same arguments (tests pin every action)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--prepare", action="store_true")
     ap.add_argument("--selftest", action="store_true", help="T8: CPU, tiny synthetic model, both branches, mocked kernels; + T10 detector dry-runs (#434)")
@@ -6543,6 +6739,20 @@ def main():
                     help="TC1b: a free-text provenance note recorded verbatim in the receipt (and in any stub) -- e.g. how an anchor arm differs from the lane it anchors to (the p38 Unsloth arm in venv-unsloth: cu130 torch 2.12.1 + grouped_mm, where tp4 ran the t28 venv with the loader-default backend)")
     ap.add_argument("--out", default="/root/tc1")
     ap.add_argument("--adapter-dir", default="/root/tc1/adapters")
+    ap.add_argument("--vram-cap-gib", type=float, default=None,
+                    help="TC1 harness extension (P237): set_per_process_memory_fraction(X GiB / the card's total) before the load, the getter "
+                         "read back and recorded (given and resolved); a torch without the getter refuses")
+    ap.add_argument("--unsloth-offload-layers", default=None,
+                    help="TC1 harness extension (P237): Unsloth's from_pretrained(offload_layers=N|auto, max_memory={0: cap}); needs "
+                         "--vram-cap-gib, refused on any other framework; the swapped layers are recorded")
+    ap.add_argument("--layer-major", type=int, choices=[0, 1], default=0,
+                    help="TC1 harness extension (P237): 1 = the step body is experts4bit_qlora's layer_major_step (e4b only); the clock, the "
+                         "edges and the profile window stay the loop's; the drift guard runs once before the window and is recorded")
+    return ap
+
+
+def main():
+    ap = build_parser()
     a = ap.parse_args()
     a.tag = a.tag or a.arm
     try:
@@ -6593,6 +6803,20 @@ def main():
         except ImportError as e:
             stub(a, "refused", f"--hp1-export needs hp1_lib.py beside tc1_arm.py or in ../hp1 (stage bench/hp1/hp1_lib.py with "
                  f"TC1_EXTRA_STAGE): {type(e).__name__}: {str(e)[:160]}", {"phase": "preamble"}, code=3)
+    # The TC1 harness extension's options: refused before anything loads -- and before the CUDA check, so CI can drive them.
+    try:
+        a.unsloth_offload_layers = parse_offload_layers(a.unsloth_offload_layers)
+    except ValueError as e:
+        stub(a, "refused", str(e), {"phase": "preamble"}, code=3)
+    if a.unsloth_offload_layers is not None and a.framework != "unsloth":
+        stub(a, "refused", f"--unsloth-offload-layers is an Unsloth option; this arm is {a.framework}", {"phase": "preamble"}, code=3)
+    if a.unsloth_offload_layers is not None and a.vram_cap_gib is None:
+        stub(a, "refused", "--unsloth-offload-layers needs --vram-cap-gib (max_memory comes from the cap)", {"phase": "preamble"}, code=3)
+    if a.layer_major and a.framework != "e4b":
+        stub(a, "refused", f"--layer-major 1 is an e4b option (experts4bit_qlora's layer_major_step); this arm is {a.framework}", {"phase": "preamble"}, code=3)
+    if a.layer_major and (a.microbatch_timing or getattr(a, "mem_census", 0)):
+        stub(a, "refused", "--layer-major 1 runs every micro-batch through a layer before the next, so a per-micro-batch timing or census has "
+             "no micro-batch boundary to mark (--microbatch-timing 0, --mem-census 0)", {"phase": "preamble"}, code=3)
     if not torch.cuda.is_available():
         stub(a, "harness_error", "torch.cuda.is_available() is False on a GPU lane", code=10)
     loader = {"e4b": load_e4b, "unsloth": load_unsloth, "hf": load_hf, "axolotl": load_axolotl}[a.framework]
