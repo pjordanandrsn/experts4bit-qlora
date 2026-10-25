@@ -45,6 +45,17 @@ library's fused path.
     table's nested fields agree, since it fails closed on an fp32 absmax. A reducer mutant: an e4b load without the compression
     VOIDs on both checks.
 - Every other grouped-nf4-gemm and e4b knob is at its default except `GNF4_TRAIN_GEMM`.
+- **Unsloth's frozen absmax is double-quantized too: its loader default, kept.** tc1_arm's Unsloth arms default to
+  `--unsloth-double-quant off` (TC1's P2-1 regime), which would hold fp32 absmax against e4b's nested one and fail the premise on
+  every load. So all three Unsloth arms pass `--unsloth-double-quant default` (tc1_arm passes nothing and keeps the loader's
+  default, `bench/tc1/tc1_arm.py:376-386`).
+  - **BINDING per Unsloth load, else VOID:** tc1_arm's `unsloth_double_quant.loaded_nested` (read off the loaded expert `Params4bit`,
+    `loaded_expert_double_quant`) is true, and the premise table's nested fields agree. A reducer mutant: an Unsloth load with fp32
+    absmax VOIDs on both checks.
+- **Unsloth's loader is named, not discovered:** `--unsloth-loader FastModel` (qwen3_5_moe is a vision model to Unsloth). tc1_arm's
+  FastLanguageModel-to-FastModel fallback is then unreachable, and `loader_used` must read `FastModel`. The vision tower stays
+  frozen. The UT4 targets name the language model's attention projections, and the trainable-count assertion (equal per projection
+  and per layer on both sides) fails if any adapter lands in the tower.
 
 ## What is trained: LoRA on the routed experts, rank 8, on both sides
 
@@ -122,25 +133,35 @@ A point that runs out of memory at rank 8 is reported OOM (TC1's verdict), never
   `_make_expert_params4bit` builds it) and by e4b's (`ExpertsNbit._quantize_stack` + `absmax_dq._compress_one`), are equal in
   packed bytes, the fp32 absmax, the nested state (quantized absmax, state2 absmax, offset, state2 code) and the NF4 code.
   **SAME_BYTES** at that scope only.
-- **On the box, BINDING on every load (all 40, and the op process):** each load hashes, per layer and projection, its packed
+- **On the box, BINDING on every load (the 40 step loads and the 4 op processes):** each load hashes, per layer and projection, its packed
   bytes, its nested absmax state and its code in one canonical element order (`p238_bytes.py`). The reducer requires the 40 loads'
-  tables equal, and equal to the op process's table. A mismatch on any load STOPS the box before the next load (rc 27), and its
+  tables equal, and equal to every op process's table. A mismatch on any load STOPS the box before the next load (rc 27), and its
   first differing layer is reported.
 
-## Level 1: op level (one layer's expert block, in one process)
+## Level 1: op level (one layer's expert block, on the model training loads)
 
-`bench/p238/p238_op.py`. Layer 0's real stacks (gate_up [256, 1024, 2048], down [256, 2048, 512]), quantized by each library's own
-loader path and held to the premise. One process imports both libraries.
+`bench/p238/p238_op.py`. The op call is each library's **layer-0 experts module of the model as training loads it**: the op process
+loads the model through tc1_arm's own load path (`load_e4b` / `load_unsloth`, imported from `bench/tc1/tc1_arm.py`, with the same
+flags as that framework's step-level arms, then the same matched init and enable steps), so every patch, wrapper, adapter and
+quantized byte is the one the step level trains. The premise table of every op process is held equal to the 40 step loads'.
 
-**PRIMARY: the expert block as training calls it,** rank-8 expert LoRA included, forward + backward (dX and the LoRA dA, dB):
+- **Two op processes per draw, one per framework** (a 35B model each; two in one process do not fit). Each runs all of its
+  framework's arms, switching the arm's knob between visits; both knobs are read per call (`nf4_route.py:125`; moe_nf4_grouped.py
+  `nf4_fused_mode`, 56-64; moe_utils.py:1185). Draw 1 runs op-e4b then op-unsloth, draw 2 op-unsloth then op-e4b. Within-framework
+  ratios come from inside one process; cross-framework ratios come from across processes, both draws.
+- A switch of `UNSLOTH_MOE_NF4_FUSED` is checked to take effect on the very next call (the counter's per-call mode read), and a
+  shape that enters zoo's `FAILED_SHAPES` in any arm VOIDs that process's rows at that shape (the cache persists across arms).
 
-| arm | the call |
-|---|---|
-| E_F, E_A | `nf4_qlora.fused_grouped_lora` as e4b's patched `ExpertsLoRA` training forward calls it (`fast.py` `fused_experts_train_forward`), at the arm's `GNF4_TRAIN_GEMM` |
-| U0, U1, UA | `moe_utils.forward_native_grouped_mm`'s expert GEMMs as the patched `Qwen3_5MoeExperts.forward` calls them (the base GEMM through `_nf4_fused_base_mm` or `_base_grouped_mm`, plus the separated LoRA through the generic grouped GEMM), at the arm's `UNSLOTH_MOE_NF4_FUSED` |
+**PRIMARY: the expert block as training calls it,** rank-8 expert LoRA included, forward + backward (dX and the LoRA dA, dB): the
+loaded layer-0 experts module's `forward(hidden_states, top_k_index, top_k_weights)` (e4b's `ExpertsLoRA` patched by
+`enable_fast_train`; Unsloth's patched `Qwen3_5MoeExperts.forward` with its PEFT-wrapped stacks), then `backward` of a fixed
+seeded upstream gradient, at the arm's knob.
 
-**SECONDARY, labelled the kernel-only comparison and never in the headline:** the frozen base GEMM alone, forward + dX, through the
-same entry points with no adapter.
+**SECONDARY, labelled the kernel-only comparison and never in the headline:** the frozen base GEMM alone, forward + dX, on the same
+loaded layer-0 bytes, through each library's base-GEMM entry point: grouped-nf4-gemm's fused grouped GEMM and its dgrad kernel as
+`fused_grouped_lora` calls them (E_F / E_A), `maybe_nf4_grouped_mm` (U1 / UA), and zoo's `_base_grouped_mm` recompute path (U0).
+The secondary rows are exempt from the same-counters rule below (they are not a training call, by label), and their entry points
+are cited by source line in the kit.
 
 - **Same counters as training:** each op call must fire the same counters the step-level record fires for that arm
   (dispatch decisions, NF4 launches, `DGRAD_STATS`). An op entry point that differs from the training call VOIDs that op row.
@@ -149,11 +170,12 @@ same entry points with no adapter.
 - **Capture mode: ONE across all arms.** If every arm can run inside a captured CUDA graph (static inputs kept alive for the graph's
   life), all are timed captured; if any cannot, ALL are timed eager, and the other mode is reported as secondary only. The mode
   is decided by a capture probe on every arm before any timing and recorded.
-- **Timing:** 10 untimed warm-up calls per arm, then **20 reps**. Each rep visits the five arms in a palindrome (E_F E_A U0 U1 UA UA
-  U1 U0 E_A E_F), odd reps reversed. A visit is 50 calls between two CUDA events; its time is the interval over 50. Wall per call
-  from `perf_counter` around the same visits.
+- **Timing:** 10 untimed warm-up calls per arm, then **20 reps**. Each rep visits the process's arms in a palindrome (op-e4b:
+  E_F E_A E_A E_F; op-unsloth: U0 U1 UA UA U1 U0), odd reps reversed. A visit is 50 calls between two CUDA events; its time is the
+  interval over 50. Wall per call from `perf_counter` around the same visits.
 - **Numerical parity:** one fp32 reference serves both libraries: bitsandbytes' `dequantize_4bit` of the premise-held bytes in
-  fp32, with the LoRA term in fp32. Each arm's forward output, dX and LoRA gradients are within **max|err| <= 2e-2 x max|ref|**
+  fp32, with the LoRA term in fp32 from the loaded (matched) adapters, computed in each op process from its own loaded bytes (equal
+  across processes by the premise). Each arm's forward output, dX and LoRA gradients are within **max|err| <= 2e-2 x max|ref|**
   (P236's bf16 bound). Bit identity between arms and against each arm's own second call is reported as information.
 - **Energy:** the NVML total-energy counter (`nvmlDeviceGetTotalEnergyConsumption`, mJ) delta over a window of **>= 10 s** of
   back-to-back calls per arm, J per call = delta / calls, at the primary table's uniform-routing cells. Cross-check:
@@ -291,12 +313,12 @@ attention-only training (except the stated e4b property), other ranks, other mod
 
 - **The shakedown first:** `p238-shake-1` (retry ids `p238-shake-r1`, `p238-shake-r2`). It runs the preflight (both frameworks load
   Qwen3.6 text-only at the pins and train it), the premise on every layer, the adapter-match assertions, every engagement counter on
-  a real record, one op cell and one load per arm at the 2k point. It is never read. It measures the per-load wall, from which the
-  reading's guard is fit. If either framework cannot train the model: STOP and report.
+  a real record, one op cell per framework (each in its own op process) and one load per arm at the 2k point. It is never read.
+  It measures the per-load wall, from which the reading's guard is fit. If either framework cannot train the model: STOP and report.
 - **Then the reading:** `p238-5090-1`, its one rerun `p238-5090-2`; retry ids `p238-5090-r1` to `r3` for a box that does not start.
-  - **The split rule:** the reading's fit is 40 x the shakedown's measured per-load wall, plus the op process, plus a 25 % headroom.
+  - **The split rule:** the reading's fit is 44 x the shakedown's measured per-load wall (40 step loads and 4 op processes) plus the op timing, plus a 25 % headroom.
     If that exceeds the 8 h guard, or its worst cost exceeds USD 15, the reading is SPLIT across two boxes **by draw, never by arm**
-    (`p238-5090-1a` draw 1 with the op process, `p238-5090-1b` draw 2), the card floor checked on each box. The split is decided
+    (`p238-5090-1a` draw 1 with its two op processes, `p238-5090-1b` draw 2 with its two), the card floor checked on each box. The split is decided
     from the shakedown's receipt and stated before the reading launches.
 - A box is started at its `STARTED` marker (after the refusals and the pre-install fit). Two strikes end the lane. The runner's exit
   codes follow P236's table (13, 15, 16, 18 host refusals before `STARTED`; 41 fit; 9, 10, 28, 78, 130 halts; 27 VOID).
@@ -307,7 +329,7 @@ attention-only training (except the stated e4b property), other ranks, other mod
   Qwen3.6 floors), at most **USD 1.05/h** (the program's 5090 policy rate on 2026-10-23), downloads at most USD 0.02/GB (about 72 GB of model plus
   about 10 GB of installs per box).
 - **Shakedown:** about 1.5 h; worst 2 h x USD 1.05 + 82 GB x USD 0.02 = **USD 3.74**.
-- **Reading:** estimated 40 loads x about 8 minutes + the op process (about 1 h) = about 6.3 h; worst at the 8 h guard
+- **Reading:** estimated 44 loads x about 8 minutes + the op timing (about 0.5 h) = about 6.4 h; worst at the 8 h guard
   8 x USD 1.05 + USD 1.64 = **USD 10.04** on one box, or about USD 6 per box when split. Fit from the shakedown, as above.
 - **Retries:** a box that does not start costs at most its boot slack, about USD 0.25.
 - **Lane worst:** USD 3.74 + 2 x USD 10.04 (a reading and its rerun) + 3 x USD 0.25 = **USD 24.57** over four runs; every run is under
