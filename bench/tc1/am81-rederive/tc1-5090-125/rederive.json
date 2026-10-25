@@ -1,0 +1,194 @@
+{
+ "receipt": "tc1-5090-125",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3ckptoff28_e4b_fused_attn4_m_g0.json": {
+   "recorded_ms": 5745.4,
+   "kernels_only_ms": 5664.5,
+   "annotation_ms": 80.9,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 80.868
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3ckptoff28_e4b_fused_attn4_m_g0_d2.json": {
+   "recorded_ms": 5755.9,
+   "kernels_only_ms": 5674.9,
+   "annotation_ms": 81.0,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 80.977
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3ckptoff28_e4b_fused_attn4_m_g1.json": {
+   "recorded_ms": 5814.0,
+   "kernels_only_ms": 5733.5,
+   "annotation_ms": 80.5,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 80.473
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3ckptoff28_e4b_fused_attn4_m_g1_d2.json": {
+   "recorded_ms": 5820.2,
+   "kernels_only_ms": 5738.1,
+   "annotation_ms": 82.1,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 82.053
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3ckptoff28_e4b_fused_attn4_shipped_g0.json": {
+   "recorded_ms": 4636.8,
+   "kernels_only_ms": 4558.9,
+   "annotation_ms": 77.9,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 77.881
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3ckptoff28_e4b_fused_attn4_shipped_g0_d2.json": {
+   "recorded_ms": 4647.9,
+   "kernels_only_ms": 4569.9,
+   "annotation_ms": 78.0,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 78.031
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3ckptoff28_e4b_fused_attn4_shipped_g1.json": {
+   "recorded_ms": 4708.1,
+   "kernels_only_ms": 4629.7,
+   "annotation_ms": 78.4,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 78.429
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3ckptoff28_e4b_fused_attn4_shipped_g1_d2.json": {
+   "recorded_ms": 4718.3,
+   "kernels_only_ms": 4639.5,
+   "annotation_ms": 78.8,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 78.758
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-| e4b/fused_attn4_shipped_g0 | VALID | 1.947 | 23.271 | 23.271 | 0.75431 | 0.794 |",
+  "-| e4b/fused_attn4_shipped_g1 | VALID | 1.916 | 23.054 | 23.054 | 0.75568 | 0.819 |",
+  "-| e4b/fused_attn4_m_g0 | VALID | 2.474 | 26.106 | 26.106 | 0.75744 | 0.774 |",
+  "-| e4b/fused_attn4_m_g1 | VALID | 2.457 | 25.918 | 25.918 | 0.75532 | 0.789 |",
+  "-| e4b/fused_attn4_m_g1_d2 | VALID | 2.458 | 25.928 | 25.928 | 0.75633 | 0.789 |",
+  "-| e4b/fused_attn4_m_g0_d2 | VALID | 2.470 | 26.102 | 26.102 | 0.7563 | 0.777 |",
+  "-| e4b/fused_attn4_shipped_g1_d2 | VALID | 1.919 | 23.054 | 23.054 | 0.75523 | 0.819 |",
+  "-| e4b/fused_attn4_shipped_g0_d2 | VALID | 1.945 | 23.271 | 23.271 | 0.7557 | 0.796 |",
+  "+| e4b/fused_attn4_shipped_g0 | VALID | 1.947 | 23.271 | 23.271 | 0.75431 | 0.780 |",
+  "+| e4b/fused_attn4_shipped_g1 | VALID | 1.916 | 23.054 | 23.054 | 0.75568 | 0.805 |",
+  "+| e4b/fused_attn4_m_g0 | VALID | 2.474 | 26.106 | 26.106 | 0.75744 | 0.763 |",
+  "+| e4b/fused_attn4_m_g1 | VALID | 2.457 | 25.918 | 25.918 | 0.75532 | 0.778 |",
+  "+| e4b/fused_attn4_m_g1_d2 | VALID | 2.458 | 25.928 | 25.928 | 0.75633 | 0.778 |",
+  "+| e4b/fused_attn4_m_g0_d2 | VALID | 2.470 | 26.102 | 26.102 | 0.7563 | 0.766 |",
+  "+| e4b/fused_attn4_shipped_g1_d2 | VALID | 1.919 | 23.054 | 23.054 | 0.75523 | 0.806 |",
+  "+| e4b/fused_attn4_shipped_g0_d2 | VALID | 1.945 | 23.271 | 23.271 | 0.7557 | 0.783 |",
+  "-| P174 | qwen3ckptoff28 | **HELD** | m: g1 / g0 0.994 [0.993, 0.995 over 4 cross-draw ratios] vs <= 1.01; s/step g0 2.474 / 2.470, g1 2.457 / 2.458; g0 device busy vs the timed step 0.775 (premise <= 0.9) |",
+  "-| P175 | qwen3ckptoff28 | **HELD** | shipped: g1 / g0 0.985 [0.984, 0.987 over 4 cross-draw ratios] vs <= 1.01; s/step g0 1.947 / 1.945, g1 1.916 / 1.919; g0 device busy vs the timed step 0.795 (premise <= 0.9) |",
+  "+| P174 | qwen3ckptoff28 | **HELD** | m: g1 / g0 0.994 [0.993, 0.995 over 4 cross-draw ratios] vs <= 1.01; s/step g0 2.474 / 2.470, g1 2.457 / 2.458; g0 device busy vs the timed step 0.764 (premise <= 0.9) |",
+  "+| P175 | qwen3ckptoff28 | **HELD** | shipped: g1 / g0 0.985 [0.984, 0.987 over 4 cross-draw ratios] vs <= 1.01; s/step g0 1.947 / 1.945, g1 1.916 / 1.919; g0 device busy vs the timed step 0.782 (premise <= 0.9) |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [
+  [
+   "| P174 | qwen3ckptoff28 | **HELD** | m: g1 / g0 0.994 [0.993, 0.995 over 4 cross-draw ratios] vs <= 1.01; s/step g0 2.474 / 2.470, g1 2.457 / 2.458; g0 device busy vs the timed step 0.764 (premise <= 0.9) |",
+   [
+    [
+     "0.994",
+     "<=",
+     "1.01",
+     0.0158
+    ]
+   ]
+  ]
+ ],
+ "unparsed": [],
+ "reworded": [],
+ "share": 0.0168,
+ "corrected_results_sha256": "7a765ee6c7162ea8fbcfac1921291042531bac627462e786c03155e570a0d090",
+ "path": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-125",
+ "reducer_sha256": "c94f9e3475e47ceb57e65d7718b46c19ef7686b38be47db030170b0ef5f20132"
+}

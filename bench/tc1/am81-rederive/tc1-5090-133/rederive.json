@@ -1,0 +1,204 @@
+{
+ "receipt": "tc1-5090-133",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3cbk_e4b_fused_attn4_m_k0.json": {
+   "recorded_ms": 27387.5,
+   "kernels_only_ms": 27307.4,
+   "annotation_ms": 80.1,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 80.11
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3cbk_e4b_fused_attn4_m_k0_d2.json": {
+   "recorded_ms": 27476.4,
+   "kernels_only_ms": 27397.4,
+   "annotation_ms": 79.0,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 78.999
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3cbk_e4b_fused_attn4_m_k1.json": {
+   "recorded_ms": 26677.5,
+   "kernels_only_ms": 26598.8,
+   "annotation_ms": 78.7,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 78.674
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3cbk_e4b_fused_attn4_m_k1_d2.json": {
+   "recorded_ms": 26704.3,
+   "kernels_only_ms": 26625.0,
+   "annotation_ms": 79.3,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 79.33
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3cbk_e4b_fused_attn4_shipped_k0.json": {
+   "recorded_ms": 21565.5,
+   "kernels_only_ms": 21493.0,
+   "annotation_ms": 72.5,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 72.461
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3cbk_e4b_fused_attn4_shipped_k0_d2.json": {
+   "recorded_ms": 21609.9,
+   "kernels_only_ms": 21538.7,
+   "annotation_ms": 71.2,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 71.155
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3cbk_e4b_fused_attn4_shipped_k1.json": {
+   "recorded_ms": 21110.5,
+   "kernels_only_ms": 21038.4,
+   "annotation_ms": 72.1,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 72.08
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3cbk_e4b_fused_attn4_shipped_k1_d2.json": {
+   "recorded_ms": 21119.3,
+   "kernels_only_ms": 21046.7,
+   "annotation_ms": 72.6,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 72.606
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3cbk_unsloth_ckpt_unsloth_m_kk.json": {
+   "recorded_ms": 30456.6,
+   "kernels_only_ms": 30375.6,
+   "annotation_ms": 81.0,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 80.993
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-| e4b/fused_attn4_shipped_k0 | VALID | 7.320 | 23.003 | 23.003 | 21.245 | 1.28851 | 0.94519 | 0 | 7188.5 |",
+  "-| e4b/fused_attn4_shipped_k1 | VALID | 7.146 | 22.664 | 22.664 | 21.245 | 1.28851 | 0.94514 | 31824 | 7036.8 |",
+  "-| e4b/fused_attn4_m_k0 | VALID | 9.230 | 26.561 | 26.561 | 22.504 | 1.28851 | 0.95412 | 0 | 9129.2 |",
+  "-| e4b/fused_attn4_m_k1 | VALID | 8.972 | 25.906 | 25.906 | 22.504 | 1.28851 | 0.95426 | 31764 | 8892.5 |",
+  "-| e4b/fused_attn4_m_k1_d2 | VALID | 8.970 | 25.911 | 25.911 | 22.504 | 1.28851 | 0.95383 | 31766 | 8901.4 |",
+  "-| e4b/fused_attn4_m_k0_d2 | VALID | 9.229 | 26.564 | 26.564 | 22.504 | 1.28851 | 0.95424 | 0 | 9158.8 |",
+  "-| e4b/fused_attn4_shipped_k1_d2 | VALID | 7.149 | 22.660 | 22.66 | 21.245 | 1.28851 | 0.94516 | 31828 | 7039.8 |",
+  "-| e4b/fused_attn4_shipped_k0_d2 | VALID | 7.313 | 23.014 | 23.014 | 21.245 | 1.28851 | 0.94514 | 0 | 7203.3 |",
+  "-| unsloth/ckpt_unsloth_m_kk | VALID | 11.542 | 24.864 | 24.864 | 21.852 | 1.28707 | 0.95449 | None | 10152.2 |",
+  "+| e4b/fused_attn4_shipped_k0 | VALID | 7.320 | 23.003 | 23.003 | 21.245 | 1.28851 | 0.94519 | 0 | 7164.3 |",
+  "+| e4b/fused_attn4_shipped_k1 | VALID | 7.146 | 22.664 | 22.664 | 21.245 | 1.28851 | 0.94514 | 31824 | 7012.8 |",
+  "+| e4b/fused_attn4_m_k0 | VALID | 9.230 | 26.561 | 26.561 | 22.504 | 1.28851 | 0.95412 | 0 | 9102.5 |",
+  "+| e4b/fused_attn4_m_k1 | VALID | 8.972 | 25.906 | 25.906 | 22.504 | 1.28851 | 0.95426 | 31764 | 8866.3 |",
+  "+| e4b/fused_attn4_m_k1_d2 | VALID | 8.970 | 25.911 | 25.911 | 22.504 | 1.28851 | 0.95383 | 31766 | 8875.0 |",
+  "+| e4b/fused_attn4_m_k0_d2 | VALID | 9.229 | 26.564 | 26.564 | 22.504 | 1.28851 | 0.95424 | 0 | 9132.5 |",
+  "+| e4b/fused_attn4_shipped_k1_d2 | VALID | 7.149 | 22.660 | 22.66 | 21.245 | 1.28851 | 0.94516 | 31828 | 7015.6 |",
+  "+| e4b/fused_attn4_shipped_k0_d2 | VALID | 7.313 | 23.014 | 23.014 | 21.245 | 1.28851 | 0.94514 | 0 | 7179.6 |",
+  "+| unsloth/ckpt_unsloth_m_kk | VALID | 11.542 | 24.864 | 24.864 | 21.852 | 1.28707 | 0.95449 | None | 10125.2 |",
+  "-| P190 | qwen3cbk | **HELD** | k1 / k0 0.972 [0.972, 0.972 over 4 cross-draw ratios] vs <= 1.01; s/step k1 8.972 / 8.970, k0 9.230 / 9.229; k0 device busy vs the timed step 0.991 (descriptive) |",
+  "-| P191 | qwen3cbk | **HELD** | k1 / k0 0.977 [0.976, 0.978 over 4 cross-draw ratios] vs <= 1.01; s/step k1 7.146 / 7.149, k0 7.320 / 7.313; k0 device busy vs the timed step 0.984 (descriptive) |",
+  "+| P190 | qwen3cbk | **HELD** | k1 / k0 0.972 [0.972, 0.972 over 4 cross-draw ratios] vs <= 1.01; s/step k1 8.972 / 8.970, k0 9.230 / 9.229; k0 device busy vs the timed step 0.988 (descriptive) |",
+  "+| P191 | qwen3cbk | **HELD** | k1 / k0 0.977 [0.976, 0.978 over 4 cross-draw ratios] vs <= 1.01; s/step k1 7.146 / 7.149, k0 7.320 / 7.313; k0 device busy vs the timed step 0.980 (descriptive) |",
+  "-| P194 | qwen3cbk | **HELD** | m: k1 / k0 0.973 (device ms per profiled step k0 9129.2 / 9158.8, k1 8892.5 / 8901.4); shipped: k1 / k0 0.978 (device ms per profiled step k0 7188.5 / 7203.3, k1 7036.8 / 7039.8) (each arm <= 1.01) |",
+  "+| P194 | qwen3cbk | **HELD** | m: k1 / k0 0.973 (device ms per profiled step k0 9102.5 / 9132.5, k1 8866.3 / 8875.0); shipped: k1 / k0 0.978 (device ms per profiled step k0 7164.3 / 7179.6, k1 7012.8 / 7015.6) (each arm <= 1.01) |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [],
+ "unparsed": [],
+ "reworded": [],
+ "share": 0.0034,
+ "corrected_results_sha256": "31d4871ee59c187c4b224e003006ef7a21c3f36fbdeb83e8d59c6984fcac3b0c",
+ "path": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-133",
+ "reducer_sha256": "ad72e5fa8513168b7d08fc8cb55a03553a8f02338ff0edc53481f679c4cc0f14"
+}

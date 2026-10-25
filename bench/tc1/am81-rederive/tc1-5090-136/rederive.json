@@ -1,0 +1,104 @@
+{
+ "receipt": "tc1-5090-136",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3pos68_e4b_fused_attn4_m_pd.json": {
+   "recorded_ms": 30086.0,
+   "kernels_only_ms": 29977.5,
+   "annotation_ms": 108.5,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 108.527
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3pos68_e4b_fused_attn4_m_pd_d2.json": {
+   "recorded_ms": 30171.0,
+   "kernels_only_ms": 30062.8,
+   "annotation_ms": 108.2,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 108.216
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3pos68_unsloth_ckpt_unsloth_m_pv.json": {
+   "recorded_ms": 34949.6,
+   "kernels_only_ms": 34842.2,
+   "annotation_ms": 107.4,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 107.368
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3pos68_unsloth_ckpt_unsloth_m_pv_d2.json": {
+   "recorded_ms": 34946.8,
+   "kernels_only_ms": 34837.1,
+   "annotation_ms": 109.7,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 109.744
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-| e4b/fused_attn4_m_pd | VALID | 10.108 | 10028.7 | 0.992 | 1075993 | 159754 | 25.898 | 0.95446 |",
+  "-| unsloth/ckpt_unsloth_m_pv | VALID | 14.891 | 11649.9 | 0.782 | 7659165 | 759464 | 24.864 | 0.95426 |",
+  "-| unsloth/ckpt_unsloth_m_pv_d2 | VALID | 14.880 | 11648.9 | 0.783 | 7659024 | 759406 | 24.864 | 0.95418 |",
+  "-| e4b/fused_attn4_m_pd_d2 | VALID | 10.114 | 10057.0 | 0.994 | 1083338 | 161055 | 25.919 | 0.95421 |",
+  "+| e4b/fused_attn4_m_pd | VALID | 10.108 | 9992.5 | 0.989 | 1075993 | 159754 | 25.898 | 0.95446 |",
+  "+| unsloth/ckpt_unsloth_m_pv | VALID | 14.891 | 11614.1 | 0.780 | 7659165 | 759464 | 24.864 | 0.95426 |",
+  "+| unsloth/ckpt_unsloth_m_pv_d2 | VALID | 14.880 | 11612.4 | 0.780 | 7659024 | 759406 | 24.864 | 0.95418 |",
+  "+| e4b/fused_attn4_m_pd_d2 | VALID | 10.114 | 10020.9 | 0.991 | 1083338 | 161055 | 25.919 | 0.95421 |",
+  "-| P200 | qwen3pos68 | **HELD** | device ms per profiled step Unsloth 11649.4 / e4b 10042.8 = 1.160 vs in [1.06, 1.24]; s/step Unsloth / e4b 1.472 on this host (descriptive) |",
+  "-| P201 | qwen3pos68 | **HELD** | busy_t e4b 0.993, Unsloth 0.783 (gap +0.211 vs >= 0.08) |",
+  "+| P200 | qwen3pos68 | **HELD** | device ms per profiled step Unsloth 11613.2 / e4b 10006.7 = 1.161 vs in [1.06, 1.24]; s/step Unsloth / e4b 1.472 on this host (descriptive) |",
+  "+| P201 | qwen3pos68 | **HELD** | busy_t e4b 0.990, Unsloth 0.780 (gap +0.210 vs >= 0.08) |",
+  "-| P203 | qwen3pos68 | **FALSIFIED** | Unsloth s/step 14.886 >= 14.0: busy_t 0.783 vs <= 0.75; device ms per profiled step 11649.4 vs 10152.2 (+14.7% vs |.| <= 8%) |",
+  "+| P203 | qwen3pos68 | **FALSIFIED** | Unsloth s/step 14.886 >= 14.0: busy_t 0.780 vs <= 0.75; device ms per profiled step 11613.2 vs 10152.2 (+14.4% vs |.| <= 8%) |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [],
+ "unparsed": [],
+ "reworded": [],
+ "share": 0.0036,
+ "corrected_results_sha256": "10e05ee15fae4a5fa80addf38bfa01dd28f2324edebcc9f0a89fa0c8166eabcb",
+ "path": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-136",
+ "reducer_sha256": "7cf1d79bb3c6df37a75df21c9e5d1a2c399e827dd31248f6f6d0de7f0da13ab4"
+}

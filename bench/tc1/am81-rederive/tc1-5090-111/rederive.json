@@ -1,0 +1,138 @@
+{
+ "receipt": "tc1-5090-111",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3ladder28_e4b_fused_attn4_m_c0.json": {
+   "recorded_ms": 31206.9,
+   "kernels_only_ms": 31121.1,
+   "annotation_ms": 85.8,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 85.758
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3ladder28_e4b_fused_attn4_m_c0_d2.json": {
+   "recorded_ms": 31229.5,
+   "kernels_only_ms": 31137.3,
+   "annotation_ms": 92.2,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 92.2
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3ladder28_e4b_fused_attn4_m_c1.json": {
+   "recorded_ms": 31209.6,
+   "kernels_only_ms": 31124.2,
+   "annotation_ms": 85.4,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 85.39
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3ladder28_e4b_fused_attn4_m_c1_d2.json": {
+   "recorded_ms": 31354.0,
+   "kernels_only_ms": 31267.1,
+   "annotation_ms": 86.9,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 86.856
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3ladder28_e4b_fused_attn4_m_c2.json": {
+   "recorded_ms": 31747.5,
+   "kernels_only_ms": 31662.9,
+   "annotation_ms": 84.6,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 84.574
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3ladder28_e4b_fused_attn4_m_c2_d2.json": {
+   "recorded_ms": 31936.4,
+   "kernels_only_ms": 31851.7,
+   "annotation_ms": 84.7,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 84.694
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-| fused_attn4_m_c0 | VALID | 10.507 | 28.18 | 10402.3 |",
+  "-| fused_attn4_m_c1 | VALID | 10.477 | 28.18 | 10403.2 |",
+  "-| fused_attn4_m_c2 | VALID | 10.584 | 28.50 | 10582.5 |",
+  "-| fused_attn4_m_c2_d2 | VALID | 10.632 | 28.53 | 10645.5 |",
+  "-| fused_attn4_m_c1_d2 | VALID | 10.446 | 28.18 | 10451.3 |",
+  "-| fused_attn4_m_c0_d2 | VALID | 10.492 | 28.18 | 10409.8 |",
+  "+| fused_attn4_m_c0 | VALID | 10.507 | 28.18 | 10373.7 |",
+  "+| fused_attn4_m_c1 | VALID | 10.477 | 28.18 | 10374.7 |",
+  "+| fused_attn4_m_c2 | VALID | 10.584 | 28.50 | 10554.3 |",
+  "+| fused_attn4_m_c2_d2 | VALID | 10.632 | 28.53 | 10617.2 |",
+  "+| fused_attn4_m_c1_d2 | VALID | 10.446 | 28.18 | 10422.4 |",
+  "+| fused_attn4_m_c0_d2 | VALID | 10.492 | 28.18 | 10379.1 |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [],
+ "unparsed": [],
+ "reworded": [],
+ "share": 0.003,
+ "corrected_results_sha256": "33bcd72c58ade4db256fb5d13037dbebe867e73a7dbdd4ccef91fc46717d9557",
+ "path": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-111",
+ "reducer_sha256": "e43826dc483cbe94f3dbf8e6973506ace3ddd9334c48260e7ed419e381fd7bc2"
+}

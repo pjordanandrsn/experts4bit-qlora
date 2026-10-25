@@ -10,7 +10,6 @@ import importlib.util
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -33,6 +32,31 @@ def _mod(name, path):
         sys.path.remove(str(path.parent))
 
 
+#: Q235's pins are read at its FROZEN commit, not in the live tree (bench/common rule 6; ruled for TC1 amendment 81, 2026-10-25): the
+#: merge of TC1 amendment 78 (e4b#2093), where q235.sha256 last re-pinned tc1_arm.py. Q235 is not closed, and its pin is never
+#: re-pinned by another lane; amendment 81 edits tc1_arm.py on main, so main's tree diverges from it. Q235's kit stages its closure
+#: from the tree it runs in (q235_stage.stage reads REPO / path), so a launch from a main past 81 REFUSES at its shasum check
+#: (test_staging_from_the_live_tree_refuses_once_the_arm_moved). Q235 stages from this commit, or re-pins in its own amendment.
+Q235_FROZEN = "576d99e9fef92c406642e995d9945fc5e4cf3292"
+
+
+def _frozen(rel):
+    r = subprocess.run(["git", "-C", str(ROOT), "show", f"{Q235_FROZEN}:{rel}"], capture_output=True)
+    if r.returncode != 0:
+        if os.environ.get("CI") == "true":
+            pytest.fail(f"Q235's frozen commit {Q235_FROZEN[:12]} is not readable: {r.stderr.decode()[:200]}")
+        pytest.skip(f"Q235's frozen commit {Q235_FROZEN[:12]} is not in this clone (shallow)")
+    return r.stdout
+
+
+def _frozen_tree(stage, dst):
+    """The closure as it stands at Q235_FROZEN, laid out under ``dst`` by its repository paths."""
+    for p in stage.CLOSURE:
+        (dst / p).parent.mkdir(parents=True, exist_ok=True)
+        (dst / p).write_bytes(_frozen(p))
+    return dst
+
+
 def test_the_committed_manifest_is_the_closure():
     stage = _mod("q235_stage", Q / "q235_stage.py")
     want = {}
@@ -40,18 +64,30 @@ def test_the_committed_manifest_is_the_closure():
         digest, name = line.split()
         want[name] = digest
     for p in stage.CLOSURE:
-        assert want[Path(p).name] == stage.sha(ROOT / p), f"{p} changed: rewrite q235.sha256 (q235_stage.py --write) after review"
+        assert want[Path(p).name] == hashlib.sha256(_frozen(p)).hexdigest(), \
+            f"{p} at Q235's frozen commit is not its pin: q235.sha256 changed without a re-pin"
     lock = json.loads((Q / "locked_inputs.json").read_text())["assets"]
     assert set(want) == {Path(p).name for p in stage.CLOSURE} | set(lock)
 
 
 def test_staging_refuses_an_asset_that_is_not_the_locked_bytes(tmp_path):
     stage = _mod("q235_stage", Q / "q235_stage.py")
+    stage.REPO = _frozen_tree(stage, tmp_path / "frozen")          # the closure at its frozen commit, so the ASSET check is what runs
     (tmp_path / "ds_alpaca.json").write_text("{}")
     with pytest.raises(ValueError, match="asset ds_alpaca.json"):
         stage.stage(tmp_path)
     with pytest.raises(ValueError, match="asset ds_alpaca.json"):
         stage.stage(tmp_path / "absent")
+
+
+def test_staging_from_the_live_tree_refuses_once_the_arm_moved(tmp_path):
+    """Q235's kit stages from the tree it runs in. On a main past TC1 amendment 81, tc1_arm.py is no longer Q235's pinned bytes, so
+    staging there REFUSES before any asset is read: a Q235 launch from main fails closed, never runs a different arm."""
+    stage = _mod("q235_stage", Q / "q235_stage.py")
+    pinned = [ln.split()[0] for ln in (Q / "q235.sha256").read_text().splitlines() if ln.endswith(" tc1_arm.py")]
+    assert pinned and stage.sha(ROOT / "bench" / "tc1" / "tc1_arm.py") != pinned[0], "main's tc1_arm.py is Q235's pin again"
+    with pytest.raises(ValueError, match="bench/tc1/tc1_arm.py differs from q235.sha256"):
+        stage.stage(tmp_path)
 
 
 def test_the_wheel_lock_is_complete_hashed_and_from_allowlisted_origins():
@@ -116,7 +152,10 @@ def box(tmp_path):
     w = tmp_path / "w"
     w.mkdir()
     for p in stage.CLOSURE:
-        shutil.copy(ROOT / p, w / Path(p).name)
+        (w / Path(p).name).write_bytes(_frozen(p))                    # the closure at Q235's frozen commit, with its committed mode
+        mode = subprocess.run(["git", "-C", str(ROOT), "ls-tree", Q235_FROZEN, p], capture_output=True, text=True).stdout.split()[:1]
+        if mode == ["100755"]:
+            os.chmod(w / Path(p).name, 0o755)
     lock = json.loads((Q / "locked_inputs.json").read_text())["assets"]
     lines = [ln for ln in (Q / "q235.sha256").read_text().splitlines() if ln.split()[1] not in lock]
     (w / "q235.sha256").write_text("\n".join(lines) + "\n")          # the closure without the 1 MB asset (not needed to the floors)

@@ -1,0 +1,202 @@
+{
+ "receipt": "tc1-5090-139",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3slauto_e4b_fused_attn4_m_l0.json": {
+   "recorded_ms": 5109.7,
+   "kernels_only_ms": 4954.4,
+   "annotation_ms": 155.3,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 155.336
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3slauto_e4b_fused_attn4_m_l0_d2.json": {
+   "recorded_ms": 5118.8,
+   "kernels_only_ms": 4950.8,
+   "annotation_ms": 168.0,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 167.99
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3slauto_e4b_fused_attn4_m_la.json": {
+   "recorded_ms": 5331.9,
+   "kernels_only_ms": 5172.8,
+   "annotation_ms": 159.1,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 159.109
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3slauto_e4b_fused_attn4_m_la_d2.json": {
+   "recorded_ms": 5333.1,
+   "kernels_only_ms": 5179.0,
+   "annotation_ms": 154.1,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 154.089
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3slauto_e4b_fused_attn4_shipped_l0.json": {
+   "recorded_ms": 3982.3,
+   "kernels_only_ms": 3830.4,
+   "annotation_ms": 151.9,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 151.873
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3slauto_e4b_fused_attn4_shipped_l0_d2.json": {
+   "recorded_ms": 3993.5,
+   "kernels_only_ms": 3826.7,
+   "annotation_ms": 166.8,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 166.848
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3slauto_e4b_fused_attn4_shipped_la.json": {
+   "recorded_ms": 3990.9,
+   "kernels_only_ms": 3840.9,
+   "annotation_ms": 150.0,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 149.995
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3slauto_e4b_fused_attn4_shipped_la_d2.json": {
+   "recorded_ms": 3997.9,
+   "kernels_only_ms": 3830.0,
+   "annotation_ms": 167.9,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 167.906
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-| e4b/fused_attn4_shipped_l0 | VALID | 2.991 | 1327.4 | 0.444 | 24.4 | 0 | 23.321 | 1.95917 / 0.75653 |",
+  "-| e4b/fused_attn4_shipped_la | VALID | 2.983 | 1330.3 | 0.446 | 24.4 | 0 | 23.321 | 1.95917 / 0.75692 |",
+  "-| e4b/fused_attn4_m_l0 | VALID | 3.463 | 1703.2 | 0.492 | 171.8 | 0 | 26.141 | 1.95917 / 0.75434 |",
+  "-| e4b/fused_attn4_m_la | VALID | 3.033 | 1777.3 | 0.586 | 21.0 | 49152 | 26.495 | 1.95917 / 0.75576 |",
+  "-| e4b/fused_attn4_m_la_d2 | VALID | 3.024 | 1777.7 | 0.588 | 21.1 | 49152 | 26.495 | 1.95917 / 0.75989 |",
+  "-| e4b/fused_attn4_m_l0_d2 | VALID | 3.718 | 1706.3 | 0.459 | 178.4 | 0 | 26.159 | 1.95917 / 0.75862 |",
+  "-| e4b/fused_attn4_shipped_la_d2 | VALID | 3.279 | 1332.6 | 0.406 | 28.9 | 0 | 23.321 | 1.95917 / 0.75686 |",
+  "-| e4b/fused_attn4_shipped_l0_d2 | VALID | 3.289 | 1331.2 | 0.405 | 30.2 | 0 | 23.321 | 1.95917 / 0.75438 |",
+  "+| e4b/fused_attn4_shipped_l0 | VALID | 2.991 | 1276.8 | 0.427 | 24.4 | 0 | 23.321 | 1.95917 / 0.75653 |",
+  "+| e4b/fused_attn4_shipped_la | VALID | 2.983 | 1280.3 | 0.429 | 24.4 | 0 | 23.321 | 1.95917 / 0.75692 |",
+  "+| e4b/fused_attn4_m_l0 | VALID | 3.463 | 1651.5 | 0.477 | 171.8 | 0 | 26.141 | 1.95917 / 0.75434 |",
+  "+| e4b/fused_attn4_m_la | VALID | 3.033 | 1724.3 | 0.569 | 21.0 | 49152 | 26.495 | 1.95917 / 0.75576 |",
+  "+| e4b/fused_attn4_m_la_d2 | VALID | 3.024 | 1726.3 | 0.571 | 21.1 | 49152 | 26.495 | 1.95917 / 0.75989 |",
+  "+| e4b/fused_attn4_m_l0_d2 | VALID | 3.718 | 1650.3 | 0.444 | 178.4 | 0 | 26.159 | 1.95917 / 0.75862 |",
+  "+| e4b/fused_attn4_shipped_la_d2 | VALID | 3.279 | 1276.7 | 0.389 | 28.9 | 0 | 23.321 | 1.95917 / 0.75686 |",
+  "+| e4b/fused_attn4_shipped_l0_d2 | VALID | 3.289 | 1275.6 | 0.388 | 30.2 | 0 | 23.321 | 1.95917 / 0.75438 |",
+  "-| P215 | qwen3slauto | **UNTESTED** | la / l0: two stable VALID draws a side are registered -- l0 UNSTABLE: draws 3.463 / 3.718 s/step differ by 7.1% > 5% (UNSTABLE: reported, not quoted); matched l0 busy_t 0.475: a host-bound box |",
+  "+| P215 | qwen3slauto | **UNTESTED** | la / l0: two stable VALID draws a side are registered -- l0 UNSTABLE: draws 3.463 / 3.718 s/step differ by 7.1% > 5% (UNSTABLE: reported, not quoted); matched l0 busy_t 0.460: a host-bound box |",
+  "-| P218 | qwen3slauto | **HELD** | device ms per profiled step la / l0: m: 1704.8 -> 1777.5 ms = 1.043 (<= 1.06); shipped: 1329.3 -> 1331.5 ms = 1.002 (in [0.98, 1.02]) |",
+  "+| P218 | qwen3slauto | **HELD** | device ms per profiled step la / l0: m: 1650.9 -> 1725.3 ms = 1.045 (<= 1.06); shipped: 1276.2 -> 1278.5 ms = 1.002 (in [0.98, 1.02]) |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [
+  [
+   "| P218 | qwen3slauto | **HELD** | device ms per profiled step la / l0: m: 1650.9 -> 1725.3 ms = 1.045 (<= 1.06); shipped: 1276.2 -> 1278.5 ms = 1.002 (in [0.98, 1.02]) |",
+   [
+    [
+     "1.002",
+     "in",
+     "[0.98, 1.02]",
+     0.0176
+    ],
+    [
+     "1.045",
+     "<=",
+     "1.06",
+     0.0142
+    ]
+   ]
+  ]
+ ],
+ "unparsed": [
+  "| P215 | qwen3slauto | **UNTESTED** | la / l0: two stable VALID draws a side are registered -- l0 UNSTABLE: draws 3.463 / 3.718 s/step differ by 7.1% > 5% (UNSTABLE: reported, not quoted); matched l0 busy_t 0.460: a host-bound box |"
+ ],
+ "reworded": [],
+ "share": 0.042,
+ "corrected_results_sha256": "beeb7e446b69264181030be3f87b4d0647a8789cbf878c58fe8e14a6a23f24f0",
+ "path": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-139",
+ "reducer_sha256": "1a88f0ea1236012257a7f04ebf17505b9ede2bb0cfe9815003956c35f50625da"
+}

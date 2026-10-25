@@ -245,11 +245,21 @@ def test_the_knob_line_names_every_e4b_and_gnf4_variable_the_arms_inherit(tmp_pa
     assert kn == ["E4B_CHUNKED_LM_LOSS", "E4B_SHA", "GNF4_SHA", "GNF4_X", "NF4_QLORA_COMPACT_DELTA"], kn
 
 
+#: TC1 amendment 79's registration merge (e4b#2121): the arm driver this amendment left byte-identical. Read there, not in the live
+#: tree, since TC1 amendment 81 edits tc1_arm.py on main (bench/common rule 6, as ruled for amendment 81 on 2026-10-25).
+POS79_FROZEN = "1245fd0e2e0e77e1885faf12ee0f9ef0d8e1b5f4"
+
+
 def test_the_arm_driver_is_not_changed_by_this_amendment():
     """bench/q235's kit pins tc1_arm.py by sha256 (q235.sha256): this amendment records its box facts in tc1_run.sh and leaves the arm
-    driver byte-identical."""
+    driver byte-identical, at its own merge."""
+    r = subprocess.run(["git", "-C", str(REPO), "show", f"{POS79_FROZEN}:bench/tc1/tc1_arm.py"], capture_output=True)
+    if r.returncode != 0:
+        if os.environ.get("CI") == "true":
+            pytest.fail(f"amendment 79's merge {POS79_FROZEN[:12]} is not readable: {r.stderr.decode()[:200]}")
+        pytest.skip(f"amendment 79's merge {POS79_FROZEN[:12]} is not in this clone (shallow)")
     want = [ln.split()[0] for ln in (REPO / "bench" / "q235" / "q235.sha256").read_text().splitlines() if ln.endswith(" tc1_arm.py")]
-    assert want == [hashlib.sha256((TC1 / "tc1_arm.py").read_bytes()).hexdigest()]
+    assert want == [hashlib.sha256(r.stdout).hexdigest()]
 
 
 def test_a_refused_or_unrunnable_proof_ends_the_box_before_any_arm(tmp_path):

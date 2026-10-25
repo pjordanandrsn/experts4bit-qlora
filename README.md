@@ -92,13 +92,13 @@ These are specific workloads, with public results and controls. The table is che
 
 | Workload and evidence | Result | Status |
 | :--- | :--- | :--- |
-| Qwen3-30B-A3B QLoRA · RTX 5090 · TC1's field recipe, both frameworks on one stack, e4b at every default (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio`) | Unsloth spends **1.92×** e4b's GPU time per step (medians of two draws); wall-clock **2.80×** on an AMD EPYC 7713. Comparable held-out loss. Peak **26.16 vs 24.27 GB** (Unsloth lower). | measured |
-| Packed 4,096-token Qwen3 training · RTX 5090 · e4b at its defaults (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`) | Unsloth spends **1.160×** e4b's GPU time per step (medians of two draws); the wall-clock ratio varies with the host (below). | measured |
+| Qwen3-30B-A3B QLoRA · RTX 5090 · TC1's field recipe, both frameworks on one stack, e4b at every default (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio.am81`) | Unsloth spends **1.95×** e4b's GPU time per step (medians of two draws); wall-clock **2.80×** on an AMD EPYC 7713. Comparable held-out loss. Peak **26.16 vs 24.27 GB** (Unsloth lower). | measured |
+| Packed 4,096-token Qwen3 training · RTX 5090 · e4b at its defaults (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio.am81`) | Unsloth spends **1.161×** e4b's GPU time per step (medians of two draws); the wall-clock ratio varies with the host (below). | measured |
 | Expert-offload training on a 12 GB card (`e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`) | Qwen3-30B-A3B, TC1's matched set (fp32 adapters) at micro-batch 1 × accum 8: **10.463 GB** peak allocated on an RTX A2000 12 GB, held-out 1.9533 → 0.8483 at N=20. An older, lighter reading gave 7.16 GB, and 8.47 GB for Gemma-4-26B-A4B (`e4b.offload.fits-30b-class`); it was not reproduced ([how to read these](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STORAGE-MODES.md#reading-the-headline-memory-numbers)). | measured |
 
 The speed rows profile both frameworks on one stack (torch 2.12.1). The GPU-time ratio is the host-independent figure; the
 wall-clock ratio grows on a slower host, because Unsloth runs 14× e4b's CPU ops per step at the field recipe. On packed rows
-the wall ratio read 1.472 (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`) and 1.773
+the wall ratio read 1.472 (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio.am81`) and 1.773
 (`e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`) on two hosts. The earlier field-recipe readings, 2.352 and 2.468, were wall
 ratios from before the reentrant checkpoint.
 The offload row uses a different training setup.

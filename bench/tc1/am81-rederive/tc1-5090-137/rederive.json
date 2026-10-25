@@ -1,0 +1,104 @@
+{
+ "receipt": "tc1-5090-137",
+ "reproduced": true,
+ "refused": null,
+ "cells": {
+  "qwen3pos69_e4b_fused_attn4_m_fd.json": {
+   "recorded_ms": 5076.8,
+   "kernels_only_ms": 4919.0,
+   "annotation_ms": 157.8,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 157.834
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3pos69_e4b_fused_attn4_m_fd_d2.json": {
+   "recorded_ms": 5086.8,
+   "kernels_only_ms": 4920.3,
+   "annotation_ms": 166.5,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 166.473
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3pos69_unsloth_ckpt_unsloth_m_fv.json": {
+   "recorded_ms": 9783.8,
+   "kernels_only_ms": 9605.8,
+   "annotation_ms": 178.0,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 177.973
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  },
+  "qwen3pos69_unsloth_ckpt_unsloth_m_fv_d2.json": {
+   "recorded_ms": 9770.9,
+   "kernels_only_ms": 9613.3,
+   "annotation_ms": 157.6,
+   "annotation_families": [
+    "optimizer"
+   ],
+   "annotation_rows": [
+    {
+     "name": "Optimizer.step#AdamW8bit.step",
+     "family": "optimizer",
+     "self_device_ms": 157.608
+    }
+   ],
+   "annotations": [
+    "Optimizer.step#AdamW8bit.step"
+   ]
+  }
+ },
+ "diff": [
+  "-| e4b/fused_attn4_m_fd | VALID | 3.430 | 1692.3 | 0.493 | 527263 | 83691 | 26.156 | 0.75689 |",
+  "-| unsloth/ckpt_unsloth_m_fv | VALID | 9.833 | 3261.3 | 0.332 | 7430405 | 611890 | 24.273 | 0.75825 |",
+  "-| unsloth/ckpt_unsloth_m_fv_d2 | VALID | 9.727 | 3257.0 | 0.335 | 7430785 | 611956 | 24.273 | 0.75697 |",
+  "-| e4b/fused_attn4_m_fd_d2 | VALID | 3.548 | 1695.6 | 0.478 | 527202 | 83690 | 26.165 | 0.75598 |",
+  "+| e4b/fused_attn4_m_fd | VALID | 3.430 | 1639.7 | 0.478 | 527263 | 83691 | 26.156 | 0.75689 |",
+  "+| unsloth/ckpt_unsloth_m_fv | VALID | 9.833 | 3201.9 | 0.326 | 7430405 | 611890 | 24.273 | 0.75825 |",
+  "+| unsloth/ckpt_unsloth_m_fv_d2 | VALID | 9.727 | 3204.4 | 0.329 | 7430785 | 611956 | 24.273 | 0.75697 |",
+  "+| e4b/fused_attn4_m_fd_d2 | VALID | 3.548 | 1640.1 | 0.462 | 527202 | 83690 | 26.165 | 0.75598 |",
+  "-| P205 | qwen3pos69 | **HELD** | device ms per profiled step Unsloth 3259.1 / e4b 1693.9 = 1.924 vs in [1.7, 2.7] |",
+  "+| P205 | qwen3pos69 | **HELD** | device ms per profiled step Unsloth 3203.2 / e4b 1639.9 = 1.953 vs in [1.7, 2.7] |",
+  "-| P208 | qwen3pos69 | **HELD** | s/step ratio 2.803 over device ratio 1.924 = 1.457 (busy_t e4b 0.486, Unsloth 0.333) vs >= 1.05 |",
+  "+| P208 | qwen3pos69 | **HELD** | s/step ratio 2.803 over device ratio 1.953 = 1.435 (busy_t e4b 0.470, Unsloth 0.328) vs >= 1.05 |"
+ ],
+ "flips": [],
+ "unpaired": [],
+ "near_bar": [],
+ "unparsed": [
+  "| P208 | qwen3pos69 | **HELD** | s/step ratio 2.803 over device ratio 1.953 = 1.435 (busy_t e4b 0.470, Unsloth 0.328) vs >= 1.05 |"
+ ],
+ "reworded": [],
+ "share": 0.0327,
+ "corrected_results_sha256": "98c80ed195a841ea6ea3ceac57b46c76c2a872bc2993199bd3fa062d258db8a2",
+ "path": "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-137",
+ "reducer_sha256": "9ca717fdf6204b1fbcbf89f4c5bfe39449bddcf713a25006cfad4f1e0b5767e3"
+}
