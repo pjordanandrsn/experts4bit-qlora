@@ -144,8 +144,8 @@ def scan_file(path):
 
 ALLOWED = {   # (path, rule) -> (count, why it stays)
     ("tests/fixtures/dq11-census-refused/receipt.json", "instance id in context"):
-        (1, "a Vast OFFER id inside Vast's own error text ('Instance type by id <offer>'); offer ids go to the "
-            "machine-id follow-up with the fixture's offer_ids"),
+        (1, "a Vast OFFER id inside Vast's own error text ('Instance type by id <offer>'): a test source, "
+            "kept as the census tests read it (the offer-id ruling, 2026-10-25)"),
     ("tests/test_host_facts.py", "instance id in context"):
         (2, "CPU clocks in kHz (max_khz) for a fixture directory named box, not an id"),
     ("tests/test_p159.py", "instance id in context"):
