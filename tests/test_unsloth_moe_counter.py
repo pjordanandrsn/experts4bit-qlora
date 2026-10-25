@@ -78,13 +78,33 @@ def _fake_zoo():
 
     nf = types.ModuleType(C.NF4)
     nf.NF4_FUSED_STATS = {"calls": 0, "fallbacks": 0, "launches": 0}
-    nf.MODE = {"mode": "1", "decline": None, "fail_launch": False}
+    nf.MODE = {"decline": None, "fail_launch": False, "ignore_auto_cap": False}
+    nf.AUTO_MAX_ROWS = 128
+
+    def nf4_fused_mode():                            # 56-64, as the library parses the environment
+        mode = os.environ.get("UNSLOTH_MOE_NF4_FUSED", "0").strip().lower()
+        if mode in ("1", "true", "on", "yes"):
+            return "1"
+        return mode if mode in ("auto", "force") else "0"
+
+    def nf4_auto_max_rows():                         # 72-76
+        try:
+            return int(os.environ.get("UNSLOTH_MOE_NF4_AUTO_MAX_ROWS", nf.AUTO_MAX_ROWS))
+        except ValueError:
+            return nf.AUTO_MAX_ROWS
+
+    def nf4_auto_fused(rows, num_experts):           # 79-81
+        return rows <= nf4_auto_max_rows() * num_experts
+
+    nf.nf4_fused_mode, nf.nf4_auto_max_rows, nf.nf4_auto_fused = nf4_fused_mode, nf4_auto_max_rows, nf4_auto_fused
 
     def maybe_nf4_grouped_mm(inputs, offsets, source, preprocess):
-        if nf.MODE["mode"] == "0":
-            return None
-        if nf.MODE["decline"] in ("shape", "failed_shapes", "auto_cap"):
-            return None                              # 523 / 534-537 / 538-542: no counter
+        if nf4_fused_mode() == "auto" and not nf4_auto_fused(inputs.shape[0], offsets.shape[0]) and not nf.MODE["ignore_auto_cap"]:
+            return None                              # 523: auto above its cap, by design
+        if nf4_fused_mode() == "0":
+            return None                              # the spec is None under mode 0 (458), no fallback counted (530)
+        if nf.MODE["decline"] in ("shape", "failed_shapes"):
+            return None                              # 534-537 / 538-542: no counter
         if nf.MODE["decline"] == "spec_none":
             nf.NF4_FUSED_STATS["fallbacks"] += 1     # 531
             return None
@@ -111,7 +131,7 @@ def _fake_zoo():
             gm = lambda a, b: a @ b                                      # noqa: E731 -- uncounted here, as in the library
         else:
             gm = lambda a, b: mg.generic_grouped_mm(a, b.unsqueeze(0), None)   # noqa: E731 -- 602
-        base = maybe(x, None, w, None)
+        base = maybe(x, OFFS, w, None)
         if base is None:
             base = gm(x, w)                                              # the dequant path's base GEMM
         return base + gm(gm(x, lora[0]), lora[1])
@@ -121,6 +141,8 @@ def _fake_zoo():
 
 @pytest.fixture
 def zoo(monkeypatch):
+    monkeypatch.setenv("UNSLOTH_MOE_NF4_FUSED", "1")
+    monkeypatch.delenv("UNSLOTH_MOE_NF4_AUTO_MAX_ROWS", raising=False)
     pkg, tp, mg, nf, fwd = _fake_zoo()
     for name, mod in (("unsloth_zoo", pkg), ("unsloth_zoo.temporary_patches", tp), (C.FP16, mg), (C.NF4, nf)):
         monkeypatch.setitem(sys.modules, name, mod)
@@ -128,6 +150,8 @@ def zoo(monkeypatch):
 
 
 X, W, LORA = torch.ones(4, 2), torch.ones(2, 3), (torch.ones(2, 1), torch.ones(1, 3))
+OFFS = torch.tensor([1, 2, 3, 4], dtype=torch.int32)            # 4 experts: auto admits up to 128 x 4 = 512 rows
+X_BIG = torch.ones(600, 2)                                       # 600 rows > 512: auto declines, by design
 
 
 def test_targets_are_the_release_module_paths():
@@ -138,9 +162,9 @@ def test_targets_are_the_release_module_paths():
     assert C.SELF_CHECK == (C.FP16, "_self_check_generic")
 
 
-def test_unfused_arm_counts_generic_and_keeps_the_self_check_apart(zoo):
+def test_unfused_arm_counts_generic_and_keeps_the_self_check_apart(zoo, monkeypatch):
     mg, nf, fwd = zoo
-    nf.MODE["mode"] = "0"
+    monkeypatch.setenv("UNSLOTH_MOE_NF4_FUSED", "0")
     c = C.UnslothMoeCounter().install()
     for _ in range(3):
         fwd(X, W, LORA)
@@ -171,7 +195,7 @@ def test_fused_arm_binds_on_launches_and_the_fused_path_bypasses_the_generic_cou
     assert s["counts"]["generic_gemm"] != 9
 
 
-@pytest.mark.parametrize("decline", ["shape", "failed_shapes", "auto_cap"])
+@pytest.mark.parametrize("decline", ["shape", "failed_shapes"])
 def test_each_silent_decline_voids_the_fused_arm(zoo, decline):
     mg, nf, fwd = zoo
     nf.MODE["decline"] = decline
@@ -196,10 +220,10 @@ def test_a_failed_launch_that_decodes_eagerly_voids_the_fused_arm(zoo):
     assert not C.check_fused(s, 6)[0]
 
 
-def test_a_local_alias_bound_before_install_is_missed_and_the_library_cross_check_catches_it(zoo):
+def test_a_local_alias_bound_before_install_is_missed_and_the_library_cross_check_catches_it(zoo, monkeypatch):
     mg, nf, fwd = zoo
     alias = mg.generic_grouped_mm                                 # bound BEFORE install: bypasses the wrapper
-    nf.MODE["mode"] = "0"
+    monkeypatch.setenv("UNSLOTH_MOE_NF4_FUSED", "0")
     c = C.UnslothMoeCounter().install()
     alias(X, W.unsqueeze(0), None)
     s = c.snapshot()
@@ -258,9 +282,9 @@ def test_no_library_at_all_reads_unread_never_pass(monkeypatch):
     assert not C.check_library(s)[0] and not C.check_fused(s, 6)[0] and not C.check_unfused(s)[0]
 
 
-def test_a_failed_self_check_leaves_the_generic_counts_at_zero_so_a_lane_bar_fails_closed(zoo):
+def test_a_failed_self_check_leaves_the_generic_counts_at_zero_so_a_lane_bar_fails_closed(zoo, monkeypatch):
     mg, nf, fwd = zoo
-    nf.MODE["mode"] = "0"
+    monkeypatch.setenv("UNSLOTH_MOE_NF4_FUSED", "0")
 
     def failing_self_check(device):
         raise RuntimeError("generic grouped GEMM self-check bfloat16 forward: 1.0")
@@ -274,3 +298,95 @@ def test_a_failed_self_check_leaves_the_generic_counts_at_zero_so_a_lane_bar_fai
     assert C.check_library(s) == (True, "")                       # consistent: nothing reached the generic path
     ok, why = C.check_equal("generic_gemm", s["counts"]["generic_gemm"], 9, "the lane's expected 3E")
     assert not ok                                                 # the lane's bar fails CLOSED, never passes on zero
+
+
+def _run(fwd, nf, x, n=3):
+    for _ in range(n):
+        fwd(x, W, LORA)
+
+
+def test_auto_at_an_eligible_shape_fuses_every_call(zoo, monkeypatch):
+    mg, nf, fwd = zoo
+    monkeypatch.setenv("UNSLOTH_MOE_NF4_FUSED", "auto")
+    c = C.UnslothMoeCounter().install()
+    _run(fwd, nf, X)
+    s = c.snapshot()
+    assert (s["counts"]["nf4_auto_eligible"], s["counts"]["nf4_auto_ineligible"]) == (3, 0)
+    assert C.fused_calls_expected(s, "auto") == 3 == s["counts"]["nf4_fused_calls"]
+    assert C.check_auto(s) == (True, "")
+
+
+def test_auto_at_an_ineligible_shape_declines_by_design_and_reads_like_the_unfused_route(zoo, monkeypatch):
+    mg, nf, fwd = zoo
+    monkeypatch.setenv("UNSLOTH_MOE_NF4_FUSED", "auto")
+    c = C.UnslothMoeCounter().install()
+    _run(fwd, nf, X_BIG)
+    s = c.snapshot()
+    assert (s["counts"]["nf4_auto_eligible"], s["counts"]["nf4_auto_ineligible"]) == (0, 3)
+    assert C.fused_calls_expected(s, "auto") == 0
+    assert C.check_auto(s) == (True, "")
+    assert C.check_fused(s, 0) == (True, "")                      # 0 launches expected above the cap
+    assert s["counts"]["generic_gemm"] == 9                       # the dequant route, as the =0 arm
+
+
+def test_auto_mutant_a_forced_decline_at_an_eligible_shape_voids(zoo, monkeypatch):
+    mg, nf, fwd = zoo
+    monkeypatch.setenv("UNSLOTH_MOE_NF4_FUSED", "auto")
+    nf.MODE["decline"] = "shape"
+    c = C.UnslothMoeCounter().install()
+    _run(fwd, nf, X)
+    s = c.snapshot()
+    ok, why = C.check_auto(s)
+    assert not ok and "0 fused calls != 3" in why
+    assert not C.check_fused(s, 2 * C.fused_calls_expected(s, "auto"))[0]
+
+
+def test_auto_mutant_b_a_launch_at_an_ineligible_shape_voids(zoo, monkeypatch):
+    mg, nf, fwd = zoo
+    monkeypatch.setenv("UNSLOTH_MOE_NF4_FUSED", "auto")
+    nf.MODE["ignore_auto_cap"] = True
+    c = C.UnslothMoeCounter().install()
+    _run(fwd, nf, X_BIG)
+    s = c.snapshot()
+    ok, why = C.check_auto(s)
+    assert not ok and "3 fused calls != 0" in why
+    assert not C.check_fused(s, 0)[0]
+
+
+def test_auto_mutant_c_an_ambient_auto_max_rows_voids_by_the_env_check(zoo, monkeypatch):
+    mg, nf, fwd = zoo
+    pins = {"UNSLOTH_MOE_NF4_FUSED": "auto", "UNSLOTH_MOE_NF4_AUTO_MAX_ROWS": "128", "UNSLOTH_MOE_NF4_AUTOTUNE": "0"}
+    for k, v in pins.items():
+        monkeypatch.setenv(k, v)
+    assert C.check_env(dict(os.environ), pins) == (True, "")
+    monkeypatch.setenv("UNSLOTH_MOE_NF4_AUTO_MAX_ROWS", "4096")   # ambient: moves auto's cap
+    ok, why = C.check_env(dict(os.environ), pins)
+    assert not ok and "UNSLOTH_MOE_NF4_AUTO_MAX_ROWS='4096' (registered '128')" in why
+    monkeypatch.setenv("UNSLOTH_MOE_NF4_AUTO_MAX_ROWS", "128")
+    monkeypatch.setenv("UNSLOTH_MOE_SELECTIVE_DEQUANT", "1")      # an unregistered MoE knob
+    ok, why = C.check_env(dict(os.environ), pins)
+    assert not ok and "unregistered UNSLOTH_MOE_SELECTIVE_DEQUANT='1'" in why
+    monkeypatch.delenv("UNSLOTH_MOE_NF4_AUTOTUNE")                # a registered pin missing
+    assert not C.check_env(dict(os.environ), pins)[0]
+
+
+def test_the_auto_count_uses_the_librarys_own_predicate_never_a_retyped_formula(zoo, monkeypatch):
+    mg, nf, fwd = zoo
+    monkeypatch.setenv("UNSLOTH_MOE_NF4_FUSED", "auto")
+    nf.AUTO_MAX_ROWS = 1000                                       # the library's constant moves: 600 rows become eligible
+    c = C.UnslothMoeCounter().install()
+    _run(fwd, nf, X_BIG)
+    s = c.snapshot()
+    assert s["counts"]["nf4_auto_eligible"] == 3 and C.check_auto(s) == (True, "")
+
+
+def test_an_unreadable_auto_predicate_reads_unread_and_voids(zoo, monkeypatch):
+    mg, nf, fwd = zoo
+    monkeypatch.setenv("UNSLOTH_MOE_NF4_FUSED", "auto")
+    del nf.nf4_auto_fused                                         # the module attribute the counter reads at call time
+    c = C.UnslothMoeCounter().install()
+    _run(fwd, nf, X)
+    s = c.snapshot()
+    assert s["counts"]["nf4_mode_unread"] == 3
+    assert C.fused_calls_expected(s, "auto") is None
+    assert not C.check_auto(s)[0]

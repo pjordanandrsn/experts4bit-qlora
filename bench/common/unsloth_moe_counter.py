@@ -20,11 +20,20 @@ What it counts, in the release-proven unsloth_zoo 2026.10.8 (wheel sha256 db8c28
   the call decodes eagerly, uncounted) is the compile-safe counter; ``calls`` (546) and ``fallbacks`` (531) count only in eager mode.
 
 What binds, and what doesn't:
-- A fused arm binds on ``NF4_FUSED_STATS.launches`` == the expected number of fused base GEMMs, exact (forward + dX per projection,
-  from the arm's own expert-forward count; the lane computes the number). That single equality catches all four silent paths:
-  a shape mismatch (moe_nf4_grouped.py:534-537) and a ``FAILED_SHAPES`` entry (538-542), which return None with no counter; ``auto``
-  above its row cap (523), the same; and the failed-launch decrement (275), whose eager decode is uncounted.
+- A fused arm binds on ``NF4_FUSED_STATS.launches`` == the expected number of fused base GEMMs, exact (forward + dX per projection;
+  the lane computes the number). That equality catches the silent paths: a shape mismatch (moe_nf4_grouped.py:534-537) and a
+  ``FAILED_SHAPES`` entry (538-542), which return None with no counter, and the failed-launch decrement (275), whose eager decode is
+  uncounted.
+- ``auto`` declining above its row cap (523) is that arm's DESIGN, not a fault. So the expected count of an auto arm admits only the
+  calls the LIBRARY's own predicate admits: on every ``maybe_nf4_grouped_mm`` call under mode ``auto``, the wrapper evaluates the
+  library's ``nf4_auto_fused(inputs.shape[0], offsets.shape[0])`` (rows <= ``nf4_auto_max_rows()`` x E, lines 69-81) on that call's
+  own shapes and counts ``nf4_auto_eligible`` / ``nf4_auto_ineligible``. :func:`fused_calls_expected` is the eligible count for auto
+  and every call for ``1``; the lane's own count from its routed rows must agree (:func:`check_equal`). At a fixed op-level shape
+  every call has the same rows, so auto is all-or-none (rows = tokens x 8 for top-8: fused at <= 4,096 tokens, 0 launches above).
 - A ``UNSLOTH_MOE_NF4_FUSED=0`` arm binds on ``launches == 0`` and ``calls == 0``.
+- Every Unsloth MoE knob an arm depends on is set explicitly to its registered value, and :func:`check_env` refuses any other value
+  or any unregistered ``UNSLOTH_MOE_*`` key in the arm's environment (an ambient ``UNSLOTH_MOE_NF4_AUTO_MAX_ROWS`` moves auto's cap;
+  ``UNSLOTH_MOE_NF4_AUTOTUNE=1`` retunes tiles per shape, line 316).
 - The wrapper counts are binding only BESIDE a counterpart that runs per call even when Python doesn't: the profiler's kernel counts
   (F15 v2) or ``NF4_FUSED_STATS.launches``. The two are required equal (:func:`check_equal`). Why: a Python wrapper runs only when
   Python runs. Under ``torch.compile`` (dynamo, torch 2.14) the dict increments are replayed on every call, so the wrapper DOES count
@@ -53,7 +62,10 @@ TARGETS = {
 }
 SELF_CHECK = (FP16, "_self_check_generic")
 LIBRARY_STATS = {"generic": (FP16, "GENERIC_CALLS"), "nf4": (NF4, "NF4_FUSED_STATS")}
-COUNTS = ("generic_gemm", "generic_wgrad", "selfcheck_gemm", "selfcheck_wgrad", "nf4_maybe_calls", "nf4_fused_calls", "nf4_declined")
+COUNTS = ("generic_gemm", "generic_wgrad", "selfcheck_gemm", "selfcheck_wgrad", "nf4_maybe_calls", "nf4_fused_calls", "nf4_declined",
+          "nf4_auto_eligible", "nf4_auto_ineligible", "nf4_mode_unread")
+#: the library's own predicate functions, read at call time from the NF4 module (never re-typed here)
+NF4_MODE_FN, NF4_AUTO_FN = "nf4_fused_mode", "nf4_auto_fused"
 
 
 class UnslothMoeCounter:
@@ -101,6 +113,8 @@ class UnslothMoeCounter:
         counts, local = self.counts, self._local
 
         def wrapper(*args, **kwargs):
+            if key == "nf4_maybe":
+                self._auto_eligibility(args, kwargs)
             out = fn(*args, **kwargs)
             if key == "nf4_maybe":
                 counts["nf4_maybe_calls"] += 1
@@ -114,6 +128,22 @@ class UnslothMoeCounter:
         wrapper.__wrapped__ = fn
         wrapper.__name__ = getattr(fn, "__name__", "wrapper")
         return wrapper
+
+    def _auto_eligibility(self, args, kwargs):
+        """Under mode auto, the library's own predicate on this call's shapes. An unreadable mode or predicate is counted as
+        ``nf4_mode_unread``, which every check fails on."""
+        try:
+            m = importlib.import_module(NF4)
+            mode = getattr(m, NF4_MODE_FN)()
+            if mode != "auto":
+                return
+            inputs = kwargs.get("inputs", args[0] if args else None)
+            offsets = kwargs.get("offsets", args[1] if len(args) > 1 else None)
+            ok = getattr(m, NF4_AUTO_FN)(inputs.shape[0], offsets.shape[0])
+        except Exception:  # noqa: BLE001 -- recorded, never fatal to the arm
+            self.counts["nf4_mode_unread"] += 1
+            return
+        self.counts["nf4_auto_eligible" if ok else "nf4_auto_ineligible"] += 1
 
     def _wrap_selfcheck(self, fn):
         local = self._local
@@ -200,3 +230,41 @@ def check_unfused(snap):
     if snap["counts"]["nf4_fused_calls"]:
         bad.append(f"wrapper nf4_fused_calls {snap['counts']['nf4_fused_calls']}")
     return (not bad), ("an unfused arm took the fused path: " + ", ".join(bad)) if bad else ""
+
+
+def fused_calls_expected(snap, mode):
+    """The fused calls a ``mode`` arm must make: every ``maybe_nf4_grouped_mm`` call under ``1``, the calls the library's own auto
+    predicate admitted under ``auto``, none under ``0``. None when it cannot be read (an unread mode or predicate)."""
+    c = snap["counts"]
+    if c["nf4_mode_unread"]:
+        return None
+    if mode == "1":
+        return c["nf4_maybe_calls"]
+    if mode == "auto":
+        return c["nf4_auto_eligible"]
+    if mode == "0":
+        return 0
+    return None
+
+
+def check_auto(snap):
+    """(ok, why) for an auto arm, independent of the lane's launch arithmetic: every admitted call fused and every refused call
+    declined. A forced decline at an eligible shape, or a fused call at an ineligible one, VOIDs."""
+    c = snap["counts"]
+    if c["nf4_mode_unread"]:
+        return False, f"the NF4 mode or the auto predicate was unreadable on {c['nf4_mode_unread']} calls"
+    if c["nf4_auto_eligible"] + c["nf4_auto_ineligible"] != c["nf4_maybe_calls"]:
+        return False, (f"auto eligibility read on {c['nf4_auto_eligible'] + c['nf4_auto_ineligible']} of {c['nf4_maybe_calls']} calls "
+                       "(was the mode auto on every call?)")
+    if c["nf4_fused_calls"] != c["nf4_auto_eligible"]:
+        return False, f"auto: {c['nf4_fused_calls']} fused calls != {c['nf4_auto_eligible']} the library's predicate admitted"
+    return True, ""
+
+
+def check_env(environ, registered):
+    """(ok, why): every ``UNSLOTH_MOE_*`` key in the arm's environment is registered, at its registered value, and every registered
+    key is present. ``registered`` maps key -> value (the lane's explicit pins: the mode, AUTO_MAX_ROWS, AUTOTUNE, ...)."""
+    seen = {k: v for k, v in environ.items() if k.startswith("UNSLOTH_MOE_")}
+    bad = [f"{k}={seen.get(k)!r} (registered {v!r})" for k, v in registered.items() if seen.get(k) != v]
+    bad += [f"unregistered {k}={v!r}" for k, v in seen.items() if k not in registered]
+    return (not bad), ("arm environment: " + "; ".join(bad)) if bad else ""

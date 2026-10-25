@@ -229,6 +229,9 @@ unsloth_zoo 2026.10.8. Any lane that times Unsloth's MoE training imports it, so
 - **Fused arm** (`UNSLOTH_MOE_NF4_FUSED` 1 or auto): it binds on `NF4_FUSED_STATS.launches` == the fused base GEMMs the lane
   expects, exact (`check_fused`).
 - **Unfused arm:** it binds on zero launches and zero calls (`check_unfused`).
+- **Auto arm:** declining above the row cap is its design. Its expected count is the calls the library's own `nf4_auto_fused`
+  predicate admits, evaluated per call (`fused_calls_expected`, `check_auto`).
+- **The arm's environment:** `check_env` refuses any `UNSLOTH_MOE_*` value other than the arm's registered pins.
 - **The library cross-check** (`check_library`) catches a caller that bypassed the wrapper.
 - **A wrapper count binds only beside a compile-safe counterpart** (`check_equal`): a captured or traced block runs the wrapper
   once, at capture.
