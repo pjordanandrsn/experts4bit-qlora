@@ -335,6 +335,11 @@ _KNOWN_UNCLAIMED = {
     # Appeared in transformers 5.20.1 (2026-10-16) as a plain alias of the
     # qwen2_moe converter. Same rule, same status: UNVERIFIED.
     "beam",
+    # Appeared in transformers 5.21.0 (2026-10-26), both mapped to the
+    # qwen2_moe converter. Same rule, same status: UNVERIFIED. The NAME of
+    # qwen3_omni_moe_text is no evidence either: the text tower of a
+    # multimodal composite, not checked against e4b's qwen3_moe layout.
+    "flint", "qwen3_omni_moe_text",
 }
 
 
