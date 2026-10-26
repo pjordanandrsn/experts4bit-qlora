@@ -513,3 +513,43 @@ Today's estimate, at LOAD_S 1500 s:
   file at 10 MiB. The driver lists what it leaves on the box, and a test runs the list over a stub box tree.
 
 Amendments, dated, go below this line before any data is read.
+
+### Amendment 1 (2026-10-26, before any data): the host floors as the market and a container see them
+
+**Why.** The shakedown's pin screen was cut from the registered floors and read the RTX 4090 market at $0 (2026-10-26 07:51Z;
+20 offer searches, 10 at a 16 GB RAM floor and 10 at 128; 111 offers, all verified, direct SSH, disk >= 240 GB). Three findings:
+- A fast CPU class AND listed RAM >= 128 GiB: **0 offers.** The six fast-class offers are Ryzen 7000/9000 desktops listing 30-62 GiB.
+  The five listing >= 128 GiB are all EPYC Zen 2/3.
+- Vast's `cpu_ram` is the offer's SHARE of the host. A container's `/proc/meminfo` MemTotal is the whole host's, so the registered
+  rc 16 line (MemTotal only) would pass a 64 GiB slice of a 1 TB host. The e4b arm's 113.5 GB peak would then meet the slice's cgroup
+  limit, not the floor.
+- Vast writes `Core™ i9-14900K` where lscpu writes `Intel(R) Core(TM) i9-14900K`. The registered regexes never see Vast's form, so a
+  screen using them refuses every Intel desktop.
+
+**The CPU class is unchanged** (ruled): EPYC Zen 2-4 and Xeon stay refused. B=1 offload steps are host-bound, and host-bound gaps
+vary with CPU generation, so widening the class would change what the speed ratio measures.
+
+**The change** (each pre-data):
+1. **rc 16 reads the RAM the process can use:** min(MemTotal, every cgroup memory limit on the process's path, leaf to the visible
+   root), in whole GiB. It covers cgroup v2 `memory.max` (`max` is no limit) and v1 `memory.limit_in_bytes` (2^60 or more is no
+   limit). `p237_host.py ram_gib` reads it, and the runner refuses 16 below 128 GiB, as registered. An unread or unparseable value is
+   never "no limit": the box stops with 9. The HOST line and the refusal record both values. A test runs the runner's own lines: a
+   1 TB host held to 64 GiB by its cgroup refuses 16, and the registered MemTotal-only line, put back as a mutant, passes it.
+2. **The pin screen maps Vast's names onto the registered class:** `p237_host.vast_cpu_class` spells ™ and ® as lscpu does, then
+   calls the registered `cpu_class`. The runner's lscpu reading and `CPU_CLASSES` are unchanged, and a test pins their patterns.
+   The test table holds 59 real Vast names, from the census and from the host registry's offer records, including the Zen 4 F/X
+   parts, `Core™ Ultra 7 270K Plus` and a mobile Ryzen.
+3. **The screen requires a listed `cpu_ram` >= 128 GiB** (`SCREEN_MIN_LISTED_RAM_GIB`, bound by a test to the runner's
+   `MIN_RAM_GIB`), the offer's share, so the screen agrees with fix 1 before a create.
+4. **The shake's launch wall is 18,000 s (5.0 h):** the fit of 16,500 s that rc 41 reads, plus 1,500 s of launch slack
+   (`LAUNCH_SLACK_S`, `wall_s`; P238's precedent of the same day). pod-launch boots, waits for SSH and stages before rc 41 reads
+   its time left. Worst USD 4.10 at 5.0 h x 0.60 + 1.10, beside the registered USD 3.85 at the bare fit. It is under the 6 h
+   global cap, with no override.
+
+**The market, bounded.** The shakedown's pin loop screens on its cadence for a host that passes both floors, and creates nothing
+otherwise. If none passes by 2026-10-28T07:51Z (48 h after the census), the lane stops and reports a new census: the fast-class RAM
+shares seen and the EPYC listings. The maintainer then rules again, on that evidence. A ruling to widen the class would also need the
+private receipt store's evidence on the Zen 3/4 host gap at B=1 offload.
+
+**Unchanged:** every other registered line, the reading's fit and its cost, and the exit table. Code 16 still means host RAM under
+128 GiB, now the usable RAM.

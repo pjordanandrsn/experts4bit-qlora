@@ -107,10 +107,12 @@ printf '{"name": "%s", "cap": [%s, %s], "sm_count": %s, "vram_mib": %s, "total_b
   "$GPU_NAME" "${CC%%.*}" "${CC##*.}" "$SMS" "$VRAM_MIB" "$TOTAL_BYTES" "$CARD_GIB" "$DRIVER" "$CPU_NAME" "$CPU_CLASS" "${PCIE_GEN:-}" "${PCIE_WIDTH:-}" > $W/box.json
 FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB"; echo "BOX_REFUSED disk=${FREE_GB:-?}GB (host floor $MIN_DISK_GB GB)" | tee -a summary.txt > REFUSAL; finish 13; }
-RAM_GIB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
-[ "${RAM_GIB:-0}" -ge "$MIN_RAM_GIB" ] || { say "REFUSED: ${RAM_GIB:-?} GiB host RAM < ${MIN_RAM_GIB} GiB"; echo "refused: ram ${RAM_GIB:-?} GiB" > REFUSAL; finish 16; }
+# host RAM is what this process can use (amendment 1): min(MemTotal, every cgroup memory limit on its path), since a container's MemTotal
+# is the whole host's; an unread value stops the box (9), never a refusal
+read -r RAM_GIB RAM_FROM < <(python3 $W/p237_host.py ram_gib) && [ -n "${RAM_FROM:-}" ] || { say "RAM UNREAD"; finish 9; }
+[ "${RAM_GIB:-0}" -ge "$MIN_RAM_GIB" ] || { say "REFUSED: ${RAM_GIB:-?} GiB usable host RAM ($RAM_FROM) < ${MIN_RAM_GIB} GiB"; echo "refused: ram ${RAM_GIB:-?} GiB ($RAM_FROM)" > REFUSAL; finish 16; }
 [ "$ccr" = 0 ] || { say "REFUSED: CPU '$CPU_NAME' is not a registered fast class"; echo "BOX_REFUSED host floor: cpu class ($CPU_NAME)" | tee -a summary.txt > REFUSAL; finish 18; }
-echo "HOST cpu_class=$CPU_CLASS ram=${RAM_GIB}GiB disk=${FREE_GB}GB card_gib=$CARD_GIB" | tee -a summary.txt
+echo "HOST cpu_class=$CPU_CLASS ram=${RAM_GIB}GiB($RAM_FROM) disk=${FREE_GB}GB card_gib=$CARD_GIB" | tee -a summary.txt
 # the loaded card clock by TC1 amendment 83's clock rule, with the 4090's own floor: a 20 s bf16 burn, busy SM median >= 2500 MHz, no
 # hardware or thermal slowdown on any sample, Reliability on fewer than 95 % of busy samples; SwPowerCap is recorded, never refusing
 perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $CLOCK_FLOOR --seconds 20 --mode clock --out $W/card_clock_burn.json > logs/card_clock_burn.log 2>&1; crc=$?
