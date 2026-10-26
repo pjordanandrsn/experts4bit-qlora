@@ -51,7 +51,7 @@ ENV_BOX_GREP = "^(" + "|".join(p + "_" for p in ENV_PREFIXES) + ")|" + "|".join(
 DEVICE_MS_METHOD = "kernels_only_at_source"         # amendment 81's marker (f15v2.py's docstring names it; the kit test pins it)
 FUSED_KERNEL = "_gemm_nf4_grouped"                   # grouped-nf4-gemm's fused grouped forward kernel
 PROFILED = (20, 23)                                  # --profile-warm 20 --profile-steps 3: loop steps 20..22, edges 20 and 23
-ENERGY_EDGES = (10, 59)                              # steps 11..59 (49 steps); the held-out eval after step 60 falls before edge 60
+ENERGY_SPANS = ((10, PROFILED[0]), (PROFILED[1], 59))  # steps 11-20 and 24-59 (46): the profile window and the closing eval left out
 MIN_ENERGY_S, MIN_POWER_SAMPLES = 10.0, 40
 GAP_FLOOR_S, GAP_FRAC = 0.2, 0.2                     # non-step wall inside one window edge pair: > max(0.2 s, 0.2 x the step) is an eval
 E_F_PROFILED_FORWARDS = 2 * 2 * N_LAYERS * 3         # 2 passes (HF non-reentrant recompute) x 2 projections x 40 x 3 = 480
@@ -388,48 +388,66 @@ def op_faults(o):
 
 def energy(row):
     """The step energy (PREREG: NVML's total-energy counter, read by the hook at every step edge): J per step and J per token over
-    edges 10..59, i.e. steps 11..59, from those two edges. The window holds no eval: the runner passes --eval-every 60, so the only
-    eval is the held-out after the last step, which runs after edge 59 and before the closing edge 60. Edges are taken by their own
-    index (``i``), every edge of the window must be there, and each edge pair's wall may exceed tc1_arm's step time (which excludes
-    evals) by at most max(0.2 s, 0.2 x the step): a pair holding more (an eval, or any non-step work) reads UNREAD, so it can never
-    move the number. UNREAD, never 0, also when an edge or its counter is missing, or the window is under 10 s. The cross-check:
-    the mean of power.draw.instant (0.25 s samples) over the same wall-clock span, read with >= 40 samples."""
-    a, b = ENERGY_EDGES
-    out = {"method": "nvml_total_energy", "window_edges": [a, b], "j_per_step": None, "j_per_token": None, "status": "UNREAD"}
+    two spans that leave out the profile window, edges 10..20 and 23..59 (steps 11-20 and 24-59, 46 steps):
+    J = (E20 - E10) + (E59 - E23). tc1_arm starts the profiler after edge 20 and stops it (and writes the profile) before edge
+    23, outside step_ms, and loop steps 20-22 (steps 21-23) run under CUPTI tracing, so the excluded pairs 20..23 carry profiling the two frameworks pay
+    differently. The span is taken from the row's own profile_warm / profile_steps, which must equal PROFILED, so a flag change can
+    never fold the profiler back in. No eval sits in a span: the runner passes --eval-every 60, so the only eval is the held-out
+    after the last step, after edge 59. Edges are taken by their own index (``i``), every edge of a span must be there, and each
+    included edge pair's wall may exceed tc1_arm's step time (which excludes evals) by at most max(0.2 s, 0.2 x the step): a pair
+    holding more reads UNREAD, so non-step work can never move the number. UNREAD, never 0, also when an edge or its counter is
+    missing, or the spans hold under 10 s. The cross-check: the mean of power.draw.instant (0.25 s samples) over the same two spans,
+    read with >= 40 samples."""
+    out = {"method": "nvml_total_energy", "spans": [list(s) for s in ENERGY_SPANS], "j_per_step": None, "j_per_token": None,
+           "status": "UNREAD"}
+    warm, nprof = row.get("profile_warm"), row.get("profile_steps")
+    if not (isinstance(warm, int) and isinstance(nprof, int)) or (warm, warm + nprof) != PROFILED:
+        out["why"] = f"the row's profile window ({warm}, {nprof}) is not the registered edges {PROFILED}"
+        return out
     by_i = {}
     for e in ((row.get("hook") or {}).get("edges")) or []:
         if isinstance(e, dict) and isinstance(e.get("i"), int):
             by_i[e["i"]] = e
-    missing = [i for i in range(a, b + 1) if i not in by_i]
+    missing = [i for a, b in ENERGY_SPANS for i in range(a, b + 1) if i not in by_i]
     if missing:
-        out["why"] = f"edge(s) {missing[:5]} missing from the window {a}..{b}"
+        out["why"] = f"edge(s) {missing[:5]} missing from the spans {ENERGY_SPANS}"
         return out
-    ea, eb, ta, tb = by_i[a].get("energy_mj"), by_i[b].get("energy_mj"), by_i[a].get("t"), by_i[b].get("t")
-    if None in (ea, eb, ta, tb) or eb < ea:
-        out["why"] = f"energy {ea}->{eb} mJ, t {ta}->{tb}"
-        return out
-    secs, steps = tb - ta, b - a
-    toks = sum((row.get("tokens_per_step") or [])[a:b])
+    step_ms, tps = row.get("step_ms") or [], row.get("tokens_per_step") or []
+    mj = secs = toks = steps = 0
+    spans = []
+    for a, b in ENERGY_SPANS:
+        ea, eb, ta, tb = by_i[a].get("energy_mj"), by_i[b].get("energy_mj"), by_i[a].get("t"), by_i[b].get("t")
+        if None in (ea, eb, ta, tb) or eb < ea:
+            out["why"] = f"span {a}..{b}: energy {ea}->{eb} mJ, t {ta}->{tb}"
+            return out
+        for i in range(a, b):
+            t0, t1 = by_i[i].get("t"), by_i[i + 1].get("t")
+            ms = step_ms[i] if i < len(step_ms) else None
+            if None in (t0, t1, ms):
+                out["why"] = f"edges {i}..{i + 1}: no wall or no step time"
+                return out
+            gap = (t1 - t0) - ms / 1e3
+            if gap > max(GAP_FLOOR_S, GAP_FRAC * ms / 1e3):
+                out["why"] = f"edges {i}..{i + 1} hold {gap:.2f} s of non-step wall (an eval in a span)"
+                return out
+        mj, secs, toks, steps = mj + eb - ea, secs + tb - ta, toks + sum(tps[a:b]), steps + b - a
+        spans.append((ta, tb))
     if secs < MIN_ENERGY_S or not toks:
-        out["why"] = f"window {secs:.1f} s (needs >= {MIN_ENERGY_S}) or {toks} tokens"
+        out["why"] = f"spans {secs:.1f} s (needs >= {MIN_ENERGY_S}) or {toks} tokens"
         return out
-    step_ms = row.get("step_ms") or []
-    for i in range(a, b):
-        t0, t1 = by_i[i].get("t"), by_i[i + 1].get("t")
-        ms = step_ms[i] if i < len(step_ms) else None
-        if None in (t0, t1, ms):
-            out["why"] = f"edges {i}..{i + 1}: no wall or no step time"
-            return out
-        gap = (t1 - t0) - ms / 1e3
-        if gap > max(GAP_FLOOR_S, GAP_FRAC * ms / 1e3):
-            out["why"] = f"edges {i}..{i + 1} hold {gap:.2f} s of non-step wall (an eval in the window)"
-            return out
-    joules = (eb - ea) / 1e3
-    out.update(status="READ", seconds=round(secs, 3), joules=round(joules, 3), j_per_step=round(joules / steps, 4),
+    joules = mj / 1e3
+    out.update(status="READ", steps=steps, seconds=round(secs, 3), joules=round(joules, 3), j_per_step=round(joules / steps, 4),
                j_per_token=round(joules / toks, 6))
-    samples = [w for t, w in (row.get("power_samples") or []) if ta <= t <= tb]
+    samples = [(t, w) for t, w in (row.get("power_samples") or []) if any(ta <= t <= tb for ta, tb in spans)]
     if len(samples) >= MIN_POWER_SAMPLES:
-        out["sampled_j_per_step"] = round(sum(samples) / len(samples) * secs / steps, 4)
+        sampled = 0.0
+        for ta, tb in spans:
+            ws = [w for t, w in samples if ta <= t <= tb]
+            if not ws:
+                break
+            sampled += sum(ws) / len(ws) * (tb - ta)
+        else:
+            out["sampled_j_per_step"] = round(sampled / steps, 4)
     out["sampled_n"] = len(samples)
     return out
 
@@ -543,6 +561,7 @@ def normalize_load(work, sched, box, proof_ok, env_box=None):
            "loader_used": cell.get("loader_used"), "unsloth_env": env.get("unsloth_env"),
            "hook": {"facts": facts, "edges": rec.get("edges"), "structural": rec.get("structural")},
            "tokens_per_step": cell.get("tokens_per_step"), "step_ms": cell.get("step_ms"),
+           "profile_warm": cell.get("profile_warm"), "profile_steps": cell.get("profile_steps"),
            "micro_batches_per_step": rec.get("micro_batches"), "profile": prof, "cell": cell,
            "step0_loss": cell.get("loss_first"), "heldout_loss": cell.get("eval_loss_final"), "peak_vram_gb": cell.get("peak_vram_gb"),
            "power_samples": power_samples(os.path.join(work, "loads", f"power_{idx}.txt"))}
@@ -596,7 +615,8 @@ def _good_rows():
             "card": {"name": "NVIDIA GeForce RTX 5090", "cap": [12, 0], "sm_count": 170},
             "clock": {"busy_median_mhz": 2800, "hard_reason_any": False, "swpowercap_clear_frac": 1.0, "busy_samples": 200},
             "premise_table": table, "adapters": census, "point": "2k", "tokens_per_step": [2048] * STEPS,
-            "step_ms": [1000.0] * STEPS, "micro_batches_per_step": 1,
+            "step_ms": [1000.0] * STEPS, "micro_batches_per_step": 1, "profile_warm": PROFILED[0],
+            "profile_steps": PROFILED[1] - PROFILED[0],
             "profile": {"summary": {"device_ms_method": DEVICE_MS_METHOD, "device_ms": 900.0, "profiled_steps": 3},
                         "top_device": [{"name": FUSED_KERNEL, "count": E_F_PROFILED_FORWARDS}], "top_cpu": []},
             "step0_loss": 2.0, "heldout_loss": 1.5}

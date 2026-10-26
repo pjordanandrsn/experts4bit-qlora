@@ -64,6 +64,14 @@ while :; do
 done
 OUT="$RUN_DIR/p238"
 mkdir -p "$OUT" && [ -z "$(find "$OUT" -mindepth 1 -maxdepth 1 -print -quit)" ] || { say "fetch failed: $OUT is not an empty directory"; exit 22; }
-rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "root@$HOST:$W/" "$OUT/" || { say "fetch failed"; exit 22; }
+# the evidence only (TC1's TC1_RSYNC_EXCLUDES, tc1_drive.sh): no venv (GBs), no adapters (tc1_arm --adapter-dir saves
+# safetensors; the store's tensor check refuses them), no 40 MB alpaca source, no compile caches; and nothing over 10 MiB (the
+# store rule). The reducer reads none of these (the tokens files reach J/token only through the receipt's tokens_per_step).
+P238_RSYNC_EXCLUDES=(--exclude 'venv*' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json' --exclude 'unsloth_compiled_cache'
+  --exclude '__pycache__' --exclude '.cache' --exclude 'hf-cache' --exclude '*.safetensors' --exclude '*.pt' --exclude '*.pth'
+  --exclude '*.bin' --max-size=10m)
+big=$($SSH "cd $W && find . \( -name 'venv*' -o -name adapters -o -name unsloth_compiled_cache -o -name __pycache__ -o -name .cache \) -prune -o -type f -size +10M -print" 2>/dev/null | head -20 | tr '\n' ' ')
+[ -z "$big" ] || say "left on the box (over 10 MiB): $big"
+rsync -az --no-links -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "${P238_RSYNC_EXCLUDES[@]}" "root@$HOST:$W/" "$OUT/" || { say "fetch failed"; exit 22; }
 say "fetched $(find "$OUT" -type f | wc -l | tr -d ' ') files into $OUT"
 finish "$OUT" "$NONCE"

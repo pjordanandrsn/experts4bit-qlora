@@ -505,7 +505,7 @@ def _work_dir(tmp_path):
     _write(w / "schedule.txt", "1 op 1 - e4b -\n3 step 1 2k E_F 0\n")
     cell = {"status": "ok", "env": {**{k: v for k, v in R.PINS.items()}, "torch": "2.12.1+cu130", "unsloth_env": {}},
             "absmax_dq_modules": R.N_LAYERS, "tokens_per_step": e["tokens_per_step"], "step_ms": e["step_ms"],
-            "loss_first": 2.0, "eval_loss_final": 1.5, "peak_vram_gb": 28.0, "loader_used": None,
+            "loss_first": 2.0, "eval_loss_final": 1.5, "peak_vram_gb": 28.0, "loader_used": None, "profile_warm": 20, "profile_steps": 3,
             "arm_hook": {"record": {"facts": {**e["hook"]["facts"], "premise_table": table, "adapters": census,
                                               "absmax_compressed": R.N_LAYERS, "fast_train_absmax_dq": e["absmax"]["fast_train"]},
                                     "edges": e["hook"]["edges"], "micro_batches": 1}}}
@@ -659,14 +659,46 @@ def _energy_row(R):
         mj += 300_000                                                      # 300 J per step
     e["hook"] = {"edges": edges}
     e["step_ms"] = [step_s * 1e3] * R.STEPS
+    e["profile_warm"], e["profile_steps"] = 20, 3                         # the runner's --profile-warm 20 --profile-steps 3
     return e
 
 
-def test_the_energy_reads_the_two_window_edges():
+def _jump(e, at, secs=6.0, mj=2_400_000):
+    """An eval- or profiler-sized jump inside edge pair (at - 1) -> at: every edge from ``at`` on is later and further along."""
+    for edge in e["hook"]["edges"]:
+        if edge["i"] >= at:
+            edge["t"] += secs
+            edge["energy_mj"] += mj
+    return e
+
+
+def test_the_energy_reads_two_spans_around_the_profile_window():
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
     out = R.energy(_energy_row(R))
-    assert out["status"] == "READ" and out["j_per_step"] == 300.0 and out["window_edges"] == [10, 59], out
-    assert out["j_per_token"] == round(300.0 / 2048, 6)
+    assert out["status"] == "READ" and out["j_per_step"] == 300.0 and out["steps"] == 46, out
+    assert out["spans"] == [[10, 20], [23, 59]] and out["j_per_token"] == round(300.0 / 2048, 6)
+
+
+@pytest.mark.parametrize("at", [21, 22, 23])
+def test_a_profiler_sized_jump_in_the_profile_window_moves_nothing(at, monkeypatch):
+    """tc1_arm starts the profiler between edges 20 and 21 and stops it (plus summarize_profile) between 22 and 23, outside
+    step_ms: several seconds and kJ there leave the energy READ and unchanged. The mutant that sums 10..59 straight fails here."""
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    clean = R.energy(_energy_row(R))["j_per_step"]
+    out = R.energy(_jump(_energy_row(R), at))
+    assert out["status"] == "READ" and out["j_per_step"] == clean, (at, out)
+    monkeypatch.setattr(R, "ENERGY_SPANS", ((10, 59),))                  # mutant: one straight window over the profiler
+    bad = R.energy(_jump(_energy_row(R), at))
+    assert not (bad["status"] == "READ" and bad["j_per_step"] == clean), (at, bad)
+
+
+@pytest.mark.parametrize("warm,steps", [(10, 3), (20, 5), (None, 3), (20, None)])
+def test_a_row_whose_profile_flags_differ_reads_unread(warm, steps):
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    e = _energy_row(R)
+    e["profile_warm"], e["profile_steps"] = warm, steps
+    out = R.energy(e)
+    assert out["status"] == "UNREAD" and "profile window" in out["why"], out
 
 
 def test_an_eval_sized_jump_never_moves_the_energy():
@@ -674,19 +706,16 @@ def test_an_eval_sized_jump_never_moves_the_energy():
     never a moved number; the registered held-out eval between edges 59 and 60 lies outside the window and moves nothing."""
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
     clean = R.energy(_energy_row(R))["j_per_step"]
-    for at, want in ((20, "UNREAD"), (60, "READ"), (40, "UNREAD")):
-        e = _energy_row(R)
-        for edge in e["hook"]["edges"][at:]:
-            edge["t"] += 6.0                                               # a 48-row eval pass: seconds of wall
-            edge["energy_mj"] += 2_400_000                                 # and its joules
-        out = R.energy(e)
+    for at, want in ((20, "UNREAD"), (60, "READ"), (40, "UNREAD"), (11, "UNREAD"), (59, "UNREAD")):
+        out = R.energy(_jump(_energy_row(R), at))                          # a 48-row eval pass: seconds of wall and its joules
         assert out["status"] == want, (at, out)
         assert out["j_per_step"] in (None, clean), (at, out)              # never a different number
         if want == "UNREAD":
             assert "non-step wall" in out["why"]
 
 
-@pytest.mark.parametrize("hit", ["pop_10", "pop_59", "pop_30", "none_10", "none_59", "t_59", "short_window", "no_step_ms"])
+@pytest.mark.parametrize("hit", ["pop_10", "pop_59", "pop_30", "pop_20", "pop_23", "none_10", "none_20", "none_23", "none_59",
+                                 "t_59", "short_window", "no_step_ms"])
 def test_a_removed_edge_or_counter_reads_unread_never_zero(hit):
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
     e = _energy_row(R)
@@ -699,13 +728,72 @@ def test_a_removed_edge_or_counter_reads_unread_never_zero(hit):
     elif hit == "no_step_ms":
         e["step_ms"] = e["step_ms"][:30]
     elif kind == "pop":
-        edges.pop(int(n))                                                  # edges by their own index: a gap, not a shift
+        edges[:] = [x for x in edges if x["i"] != int(n)]                  # edges by their own index: a gap, not a shift
     elif kind == "none":
         edges[int(n)]["energy_mj"] = None
     else:
         edges[int(n)]["t"] = None
     out = R.energy(e)
     assert out["status"] == "UNREAD" and out["j_per_step"] is None and out["j_per_token"] is None, (hit, out)
+
+
+def _load_s_lines(run=None):
+    run = run or (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
+    lines = run.splitlines()
+    i = next(n for n, line in enumerate(lines) if line.startswith("LOAD_S=${P238_LOAD_S_REGISTERED"))
+    return "\n".join(lines[i:i + 3]) + "\n"
+
+
+@pytest.mark.parametrize("val,want", [("0", 78), ("299", 78), ("300", 0), ("900", 0), (None, 0), ("", 0), ("abc", 78),
+                                      ("9e2", 78), ("-5", 78), ("0300", 78), ("0900", 78), ("300 ", 78)])
+def test_the_registered_load_wall_is_whole_seconds_over_the_floor(val, want):
+    """The guard fit's per-load wall: whole decimal seconds, no leading 0 (bash arithmetic reads 0300 as octal), at least 300 s,
+    else 78; unset or empty takes the 900 s default. The runner's own lines, run as written; the mutant floor -ge 0 fails here."""
+    import subprocess
+    pre = 'say(){ echo "$*"; }\nfinish(){ exit "$1"; }\nset -u\n'
+    env = {k: v for k, v in os.environ.items() if k != "P238_LOAD_S_REGISTERED"}
+    if val is not None:
+        env["P238_LOAD_S_REGISTERED"] = val
+    r = subprocess.run(["bash", "-c", pre + _load_s_lines() + 'echo "LOAD_S=$LOAD_S"\n'], env=env, capture_output=True, text=True)
+    assert r.returncode == want, (val, r.stdout, r.stderr)
+    if val == "299":                                                   # "0" falls to the no-leading-0 rule first; 299 only to the floor
+        mutant = _load_s_lines().replace('-ge 300 ]', '-ge 0 ]')
+        assert mutant != _load_s_lines()
+        m = subprocess.run(["bash", "-c", pre + mutant], env=env, capture_output=True, text=True)
+        assert m.returncode == 0                                       # the floor is what refuses 299
+
+
+def test_the_fetch_brings_the_evidence_and_no_tensors_venv_or_bulk(tmp_path):
+    """E3: the driver's fetch, its own exclude array, run by real rsync over a stub box tree holding everything the runner leaves
+    in /root/p238. Fetched: every file the reducer reads, and the logs. Not fetched: the venv, adapters (tc1_arm --adapter-dir
+    safetensors), the 40 MB alpaca source, compile caches, any tensor file, anything over 10 MiB."""
+    import re
+    import shutil
+    import subprocess
+    if not shutil.which("rsync"):
+        pytest.fail("rsync is required: the driver's fetch is rsync")
+    drive = (ROOT / "bench" / "p238" / "p238_drive.sh").read_text(encoding="utf-8")
+    arr = re.search(r"^P238_RSYNC_EXCLUDES=\(.*?\)$", drive, re.M | re.S).group(0)
+    assert re.search(r'^rsync -az --no-links .*"\$\{P238_RSYNC_EXCLUDES\[@\]\}" "root@\$HOST:\$W/" "\$OUT/"', drive, re.M)
+    box, out = tmp_path / "box", tmp_path / "out"
+    keep = ["schedule.txt", "box.json", "env_box.txt", "env_image.txt", "release_proof.json", "summary.txt", "forensics.txt",
+            "staged-p238.sha256", "logs/load_3.log", "loads/3/qwen3_5_e4b_p238_3_E_F_2k.json",
+            "loads/3/qwen3_5_e4b_p238_3_E_F_2k_profile.json", "loads/gpuclk_3.txt", "loads/power_3.txt", "ops/op_1_e4b.json",
+            "data/tokens_packed.json", "data/ds_alpaca.json", "P238_EXIT_CODE.n1", "P238_SUCCESS.n1"]
+    drop = ["venv-unsloth/bin/python", "venv-unsloth/lib/python3.12/site-packages/torch/lib/libtorch_cuda.so",
+            "loads/3/adapters/adapter_model.safetensors", "loads/3/adapters/adapter_config.json", "data/alpaca_data_cleaned.json",
+            "unsloth_compiled_cache/UnslothSFTTrainer.py", "__pycache__/x.cpython-312.pyc", ".cache/pip/x", "stray/w.pt",
+            "stray/w.bin", "stray/w.pth", "stray/big.json"]
+    for f in keep + drop:
+        p = box / f
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x" * (11 * 1024 * 1024 if f == "stray/big.json" else 64))
+    r = subprocess.run(["bash", "-c", arr + '\nrsync -a --no-links "${P238_RSYNC_EXCLUDES[@]}" "$1/" "$2/"', "_", str(box), str(out)],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    got = sorted(str(p.relative_to(out)).replace(os.sep, "/") for p in out.rglob("*") if p.is_file())
+    assert got == sorted(keep), (sorted(set(got) - set(keep)), sorted(set(keep) - set(got)))
+    assert not any(p.stat().st_size > 10 * 1024 * 1024 for p in out.rglob("*") if p.is_file())
 
 
 def test_the_runner_passes_eval_every_steps():
@@ -715,7 +803,8 @@ def test_the_runner_passes_eval_every_steps():
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
     run = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
     assert re.search(r"--steps \$STEPS .*--eval-every \$STEPS ", run)
-    assert re.search(r"^STEPS=60\b", run, re.M) and R.STEPS == 60 and R.ENERGY_EDGES == (10, 59)
+    assert re.search(r"^STEPS=60\b", run, re.M) and R.STEPS == 60 and R.ENERGY_SPANS == ((10, 20), (23, 59))
+    assert re.search(r"--profile-steps 3 --profile-warm 20\b", run) and R.PROFILED == (20, 23)
 
 
 STAGED = ["bench/p238/p238_run.sh", "bench/p238/p238_op.py", "bench/p238/p238_hook.py", "bench/p238/p238_bytes.py",

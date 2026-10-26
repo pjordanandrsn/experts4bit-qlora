@@ -231,13 +231,17 @@ sets it (above), bf16 autocast, the same packed batches in the same order for ev
   in the profile). ONE method; there is no fallback. **The reading launches only after amendment 81 merges.** The shakedown may run
   before it, since it is not read;
 - **peak VRAM:** `max_memory_allocated` over the process (each load is fresh), with Unsloth's frozen vision tower reported beside it;
-- **energy:** the NVML energy-counter delta over steps 11..59 (edges 10 to 59; one window, >= 10 s at every point), J per step and J
-  per token, computed by the reducer. The hook reads the counter at every step edge (observation only). The window holds no eval:
-  the runner passes `--eval-every 60`, so the only eval is the registered held-out after step 60, which runs after edge 59 (and
-  before the closing edge 60). A missing edge or counter reads UNREAD, never 0, and so does an edge pair in the window whose wall
-  exceeds tc1_arm's step time (which excludes evals) by more than max(0.2 s, 0.2 x the step): non-step work in the window can make
-  the energy UNREAD, never move it;
-  cross-check as at op level;
+- **energy:** the NVML energy-counter delta over two spans that leave out the profile window, edges 10 to 20 and 23 to 59, i.e.
+  J = (E20 - E10) + (E59 - E23) over 46 steps (steps 11-20 and 24-59; >= 10 s at every point), J per step and J per token (tokens
+  of the same 46 steps), computed by the reducer. The hook reads the counter at every step edge (observation only). Left out:
+  tc1_arm starts the profiler after edge 20 and stops it (and writes the profile) before edge 23, outside the step clock, and steps
+  21-23 run under CUPTI tracing, a cost the two frameworks pay differently; the excluded pairs come from the row's own
+  `profile_warm` / `profile_steps`, which must equal 20 / 3, else UNREAD. No eval sits in a span: the runner passes
+  `--eval-every 60`, so the only eval is the registered held-out after step 60, which runs after edge 59 (and before the closing
+  edge 60). A missing edge or counter reads UNREAD, never 0, and so does an included edge pair whose wall exceeds tc1_arm's step
+  time (which excludes evals) by more than max(0.2 s, 0.2 x the step): non-step work in a span can make the energy UNREAD, never
+  move it;
+  cross-check as at op level, over the same two spans;
 - **loss:** step-0 loss, every step's training loss, held-out loss after step 60 (`--eval-n 48`).
 
 ## Engagement (every arm, every load; each fails closed)
