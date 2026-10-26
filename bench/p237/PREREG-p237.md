@@ -1,6 +1,7 @@
 # P237: e4b's CPU expert offload with layer-major against Unsloth's offload_layers, same RTX 4090, two VRAM budgets
 
-DRAFT (not yet registered). Requested for the project and registered before any box. Every rule below is fixed before data.
+**Status: registered 2026-10-26, before any data**, on e4b#2149: one review outside the lane, then the maintainer's pass.
+Requested for the project and registered before any box. Every rule below is fixed before data.
 
 ## The question
 
