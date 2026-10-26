@@ -194,6 +194,25 @@ def test_swap_state_flags_disagreeing_blocks(unsloth_env):
         h.uninstall()
 
 
+def test_blocks_outside_the_swap_stay_distinct(unsloth_env):
+    """A block the swap does not list (built during the load, then dropped) is named by its identity, never merged with another."""
+    cls, _ = unsloth_env
+    stray = [cls([(2,)], nbytes=8), cls([(2,)], nbytes=16)]
+    h = p237_arm.make()
+    h.post_import(_args())
+    try:
+        for b in stray:
+            b.evict()
+            b.prefetch("s")
+        h.post_load(_args(), FakeModel(_swap(cls)))
+        h.step_edge(0)
+        rec = h.record()
+    finally:
+        h.uninstall()
+    load = rec["fetch"]["pre"]["load"]
+    assert sorted(load.values()) == [[1, 8], [1, 16]] and all(k.startswith("unmapped:") for k in load), load
+
+
 def test_no_block_swap_is_recorded_as_none(unsloth_env):
     h = p237_arm.make()
     h.post_import(_args())
