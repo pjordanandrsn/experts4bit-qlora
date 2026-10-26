@@ -518,13 +518,18 @@ after these readings would fit the rule to the market.
 
 **The simplification (a replacement, not a guard on top).**
 - **The host rule.** The shakedown pins only a **recorded-good host**: an RTX 5090 machine whose latest receipt with a loaded clock
-  record (a run's per-second clock log, or a pre-install burn, each with >= 10 busy samples, summarized by `card_clock.py`) shows a
-  busy SM median >= 2,700 MHz at a recorded power limit >= 575 W. A host with no clock or power record is a fallback only when no
-  recorded-good host is listed. A host whose record shows a power limit under 575 W, or a busy median under the floor, is never
-  pinned. This replaces the screen's rank-first ordering (recorded >= 575 W hosts first, then measured-fast CPU families) and its
-  separate power pre-screen. Every other screen filter (price, disk, RAM, driver, single-thread loop, pin walk) is unchanged.
-  When this amendment was written, the private receipt store recorded 19 such machines (and 16 more with a busy median above the
-  floor but a power limit under 575 W, which the rule excludes); none of the 19 was listed at the create filters.
+  record (a run's per-second clock log, or a pre-install burn, each with >= 10 busy samples) PASSES
+  `card_clock.passes(summary, 2700, mode="clock")`, amendment 83's rule itself, for **every** such record in that receipt. A host
+  whose latest such receipt fails, including a burn summary written before amendment 83 (its Reliability clause reads UNREAD), is
+  never pinned, and neither is a host with no loaded clock record: **there is no fallback**. When no recorded-good host is listed,
+  the screen keeps sweeping at its cadence and launches nothing; after 24 hours with none listed, the lane reports and nothing
+  launches until the maintainer rules. The power limit is recorded, never a gate: the clock is what amendment 83 binds (16 recorded
+  hosts held a busy median >= 2,700 MHz under a cap below 575 W). This replaces the screen's rank-first ordering (recorded >= 575 W
+  hosts first, then measured-fast CPU families) and its separate power pre-screen. Every other screen filter (price, disk, RAM,
+  driver, single-thread loop, pin walk) is unchanged.
+  When this amendment was written, the private receipt store held a loaded clock record for 47 RTX 5090 machines; 24 were
+  recorded-good under this rule (31 if only the single latest record counted, which this rule does not do), and 1 of the 24 was
+  listed at the create filters.
 - **The retry rule.** The fixed retry list becomes one rule: retry ids `p238-shake-r3` to `p238-shake-r5`, each launched only after
   the previous shakedown box ended rc 18 (a host floor) before STARTED. The summed cost of every P238 shakedown box that ended that
   way, the three above included, is capped at USD 0.25. At either limit (r5 spent, or the cap reached) the lane stops and reports,
