@@ -534,6 +534,12 @@ after these readings would fit the rule to the market.
   the previous shakedown box ended rc 18 (a host floor) before STARTED. The summed cost of every P238 shakedown box that ended that
   way, the three above included, is capped at USD 0.25. At either limit (r5 spent, or the cap reached) the lane stops and reports,
   and nothing launches until the maintainer rules. A box that STARTED is read under the existing stop rule, unchanged.
+- **How the cap is enforced, and its stated worst.** The cap is a launch rule: a shakedown launches only while the refused spend
+  plus an allowance of USD 0.05 (twice the largest refused box on record, USD 0.025) stays within USD 0.25, and every such box's
+  cost is its ledger row (a box with no row stops the lane). The allowance is a margin, not a bound: one refused box can cost more.
+  Its worst is set by the launcher's own start limits (the instance running within 600 s, SSH within 180 s), then the runner's
+  probes and its 120 s burn alarm: about a quarter hour, about USD 0.26 to 0.30 at the USD 1.05/h price cap. So the refused spend
+  can end at most one such box above the cap. The three boxes on record each refused in about two minutes.
 - **The runner and driver** accept `p238-shake-r1` to `p238-shake-r5` as shakedown ids (`p238_run.sh`, `p238_drive.sh`);
   `staged-p238.sha256` moves for `p238_run.sh`.
 
