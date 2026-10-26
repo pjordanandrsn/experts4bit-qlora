@@ -145,7 +145,7 @@ def cgroup_limits(root="/sys/fs/cgroup", self_cgroup="/proc/self/cgroup"):
         rel = [p for p in parts[2].split("/") if p]
         for k in range(len(rel), -1, -1):            # the leaf, then each ancestor, then the hierarchy's own root
             f = os.path.join(base, *rel[:k], fname)
-            try:                                     # never exists(): it answers False for ANY stat error, and absence here permits
+            try:                                     # no existence test: it answers False for ANY stat error, and absence here permits
                 with open(f, encoding="utf-8") as fh:
                     text = fh.read()
             except FileNotFoundError:                # absent (a hierarchy's root has none); any other OSError raises: never "no limit"
