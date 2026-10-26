@@ -514,6 +514,7 @@ def _work_dir(tmp_path):
     _write(base.with_name(base.name + "_profile.json"), e["profile"])
     _write(w / "loads" / "gpuclk_3.txt", "".join(f"{1700000000 + i} 2800, 14001, 61, 0x0000000000000000\n" for i in range(200)))
     _write(w / "box.json", e["card"])
+    _write(w / "env_box.txt", "".join(f"{k}={v}\n" for k, v in sorted(e["env_box"].items())))
     _write(w / "release_proof.json", "".join(f'{{"dist": "{d}", "record_equal": true}}\n' for d in R.RELEASES))
     op = {"p238_op": 1, "dry": False, "capture": "eager", "framework": "e4b", "arms": ["E_F", "E_A"],
           "facts": {"premise_table": table, "adapters": census},
@@ -533,7 +534,7 @@ def test_reduce_work_reads_a_box_directory_end_to_end(tmp_path):
 
 
 @pytest.mark.parametrize("remove", ["loads/3/qwen3_5_e4b_p238_3_E_F_2k.json", "loads/3/qwen3_5_e4b_p238_3_E_F_2k_profile.json",
-                                    "loads/gpuclk_3.txt", "box.json", "release_proof.json", "ops/op_1_e4b.json"])
+                                    "loads/gpuclk_3.txt", "box.json", "release_proof.json", "ops/op_1_e4b.json", "env_box.txt"])
 def test_reduce_work_voids_when_any_file_is_missing(tmp_path, remove):
     R, w = _work_dir(tmp_path)
     (w / remove).unlink()
@@ -547,13 +548,174 @@ def test_the_runner_exits_only_registered_codes_and_host_codes_only_for_host_fau
     import re
     text = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
     sites = [(m.group(1), text[text.rfind("\n", 0, m.start()) + 1:text.find("\n", m.end())]) for m in re.finditer(r"finish (\d+)", text)]
-    registered = {"0", "9", "10", "13", "15", "16", "18", "27", "28", "41", "78", "130"}
+    drive = (ROOT / "bench" / "p238" / "p238_drive.sh").read_text(encoding="utf-8")
+    box_codes = set(re.search(r'^BOX_CODES="([0-9 ]+)"$', drive, re.M).group(1).split())
+    assert {c for c, _ in sites} - {"0"} == box_codes, (sorted({c for c, _ in sites}), sorted(box_codes))   # both directions
+    registered = {"0", "9", "10", "13", "15", "16", "18", "27", "41", "78", "130"}
     assert sites and all(code in registered for code, _ in sites), sorted({c for c, _ in sites} - registered)
     host = [(c, line) for c, line in sites if c in ("13", "14", "17", "18")]
     assert all(c in ("13", "18") for c, _ in host)
     assert [line for c, line in host if c == "13"] and all("disk" in line and "REFUSED" in line for c, line in host if c == "13")
     assert len([1 for c, _ in host if c == "13"]) == 1
     assert all("REFUSED" in line for c, line in host if c == "18")
+
+
+def test_an_env_box_with_an_extra_key_voids_and_an_image_key_is_information(tmp_path):
+    """E2: env_box.txt's key set must EQUAL the registered one (an ambient E4B_TRAIN_DETERMINISTIC VOIDs the box); a PYTORCH_* key
+    from the image lands in env_image.txt as information and never VOIDs."""
+    R, w = _work_dir(tmp_path)
+    _write(w / "env_image.txt", "PYTORCH_VERSION=2.12.1\nNV_CUDA_LIB_VERSION=13.0.1\n")
+    out = R.reduce_work(str(w))
+    assert out["verdict"] == "READ" and out["image_env"]["PYTORCH_VERSION"] == "2.12.1", out
+    body = (w / "env_box.txt").read_text(encoding="utf-8")
+    for extra in ("E4B_TRAIN_DETERMINISTIC=1\n", "PYTORCH_VERSION=2.12.1\n", "not an env line\n"):
+        (w / "env_box.txt").write_text(body + extra, encoding="utf-8")
+        out = R.reduce_work(str(w))
+        assert out["verdict"] == "VOID" and any("unregistered" in y for r in out["rows"] for y in r["why"]), (extra, out["rows"])
+
+
+def _ambient_block(run=None):
+    """The runner's marked block, from the line after its opening marker to its closing marker."""
+    run = run or (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
+    return run.split("# ---- ambient knobs", 1)[1].split("\n", 1)[1].split("# ---- end ambient knobs", 1)[0]
+
+
+@pytest.mark.parametrize("key,val,want", [
+    ("E4B_TRAIN_DETERMINISTIC", "1", 78), ("GNF4_TRAIN_GEMM", "fused", 78), ("NF4_QLORA_ANYTHING", "1", 78),
+    ("UNSLOTH_MOE_NF4_FUSED", "1", 78), ("E4B_ABSMAX_DQ", "1", 78),
+    ("E4B_SHA", "a" * 40, 0), ("UNSLOTH_MOE_NF4_AUTOTUNE", "0", 0), ("PYTORCH_VERSION", "2.12.1", 0), (None, None, 0),
+])
+def test_the_runners_ambient_block_refuses_every_unregistered_key(key, val, want):
+    """E2 at the box: the runner's own marked block, run as written: any UNSLOTH_* / E4B_* / GNF4_* / NF4_QLORA_* key outside the
+    registered set refuses 78 before STARTED; E4B_SHA (the driver's) and image keys pass."""
+    import re
+    import subprocess
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    env = {k: v for k, v in os.environ.items() if not re.match(R.ENV_REFUSE_GREP, k)}
+    if key:
+        env[key] = val
+    script = 'say(){ echo "$*"; }\nfinish(){ exit "$1"; }\n' + _ambient_block() + "exit 0\n"
+    r = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+    assert r.returncode == want, (key, r.stdout, r.stderr)
+    if want:
+        assert key in r.stdout
+
+
+def _env_disagreements(run, R):
+    """Where the runner's ambient refusal, its env_box.txt grep, its exports and the reducer's registered set disagree."""
+    import re
+    bad = []
+    block = _ambient_block(run)
+    refuse = re.search(r"env \| grep -oE '([^']+)' \| sort -u", block)
+    if not refuse or refuse.group(1) != R.ENV_REFUSE_GREP:
+        bad.append(("refusal grep", refuse and refuse.group(1)))
+    allowed = set()
+    for labels in re.findall(r"^\s*(?:case \"\$k\" in )?([A-Z0-9_|]+)\) ;;", block, re.M):
+        allowed |= set(labels.split("|"))
+    if allowed != set(R.ENV_BOX) - set(R.ENV_EXACT):
+        bad.append(("refusal allowlist", sorted(allowed ^ (set(R.ENV_BOX) - set(R.ENV_EXACT)))))
+    dump = re.search(r"^env \| grep -E '([^']+)' \| sort > \$W/env_box\.txt$", run, re.M)
+    if not dump or dump.group(1) != R.ENV_BOX_GREP:
+        bad.append(("env_box grep", dump and dump.group(1)))
+    exported = {}
+    for line in re.findall(r"^export (.+)$", run, re.M):
+        for kv in line.split():
+            k, _, v = kv.partition("=")
+            if re.match(R.ENV_BOX_GREP, k + "="):
+                exported[k] = v
+    if exported != {k: v for k, v in R.ENV_BOX.items() if v is not None}:
+        bad.append(("exports", exported))
+    if not all(re.match(R.ENV_BOX_GREP, k + "=") for k in R.ENV_BOX):
+        bad.append(("a registered key the dump would not record", sorted(R.ENV_BOX)))
+    return bad
+
+
+def test_one_env_list_binds_the_refusal_the_dump_and_the_reducer(monkeypatch):
+    """The maintainer's binding: the runner's box-side refusal, the env_box.txt grep and the reducer's registered set come from ONE
+    list (the reducer's ENV_PREFIXES / ENV_EXACT / ENV_BOX). A mutant that widens or narrows any one of them fails here."""
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    run = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
+    assert _env_disagreements(run, R) == []
+    mutants = [
+        ("    E4B_SHA) ;;", "    E4B_SHA|E4B_TRAIN_DETERMINISTIC) ;;"),                      # a wider box allowlist
+        ("grep -oE '^(UNSLOTH|E4B|GNF4|NF4_QLORA)_", "grep -oE '^(UNSLOTH|E4B|GNF4)_"),          # a narrower refusal
+        ("|^PYTORCH_CUDA_ALLOC_CONF=' | sort > $W/env_box.txt", "|^PYTORCH_' | sort > $W/env_box.txt"),   # a wider dump
+        ("UNSLOTH_ENABLE_LOGGING=1\n", "UNSLOTH_ENABLE_LOGGING=1 UNSLOTH_MOE_NF4_FUSED=1\n"),     # an extra export
+    ]
+    for old, new in mutants:
+        assert run.count(old) == 1, old
+        assert _env_disagreements(run.replace(old, new), R), f"mutant survives: {new}"
+    monkeypatch.setattr(R, "ENV_BOX", {**R.ENV_BOX, "E4B_TRAIN_DETERMINISTIC": "1"})        # a wider reducer set
+    assert _env_disagreements(run, R)
+
+
+def _energy_row(R):
+    e, _, _ = R._good_rows()
+    step_s = 1.0
+    edges, t, mj = [], 1.7e9, 0
+    for i in range(R.STEPS + 1):
+        edges.append({"i": i, "t": t, "energy_mj": mj})
+        t += step_s + 0.01                                                 # the step and a little between steps
+        mj += 300_000                                                      # 300 J per step
+    e["hook"] = {"edges": edges}
+    e["step_ms"] = [step_s * 1e3] * R.STEPS
+    return e
+
+
+def test_the_energy_reads_the_two_window_edges():
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    out = R.energy(_energy_row(R))
+    assert out["status"] == "READ" and out["j_per_step"] == 300.0 and out["window_edges"] == [10, 59], out
+    assert out["j_per_token"] == round(300.0 / 2048, 6)
+
+
+def test_an_eval_sized_jump_never_moves_the_energy():
+    """The E1 tests: an eval between edges 19 and 20 (tc1_arm's old default, --eval-every 20) makes the energy UNREAD,
+    never a moved number; the registered held-out eval between edges 59 and 60 lies outside the window and moves nothing."""
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    clean = R.energy(_energy_row(R))["j_per_step"]
+    for at, want in ((20, "UNREAD"), (60, "READ"), (40, "UNREAD")):
+        e = _energy_row(R)
+        for edge in e["hook"]["edges"][at:]:
+            edge["t"] += 6.0                                               # a 48-row eval pass: seconds of wall
+            edge["energy_mj"] += 2_400_000                                 # and its joules
+        out = R.energy(e)
+        assert out["status"] == want, (at, out)
+        assert out["j_per_step"] in (None, clean), (at, out)              # never a different number
+        if want == "UNREAD":
+            assert "non-step wall" in out["why"]
+
+
+@pytest.mark.parametrize("hit", ["pop_10", "pop_59", "pop_30", "none_10", "none_59", "t_59", "short_window", "no_step_ms"])
+def test_a_removed_edge_or_counter_reads_unread_never_zero(hit):
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    e = _energy_row(R)
+    edges = e["hook"]["edges"]
+    kind, _, n = hit.rpartition("_")
+    if hit == "short_window":
+        for edge in edges:
+            edge["t"] = 1.7e9 + edge["i"] * 0.1
+        e["step_ms"] = [100.0] * R.STEPS
+    elif hit == "no_step_ms":
+        e["step_ms"] = e["step_ms"][:30]
+    elif kind == "pop":
+        edges.pop(int(n))                                                  # edges by their own index: a gap, not a shift
+    elif kind == "none":
+        edges[int(n)]["energy_mj"] = None
+    else:
+        edges[int(n)]["t"] = None
+    out = R.energy(e)
+    assert out["status"] == "UNREAD" and out["j_per_step"] is None and out["j_per_token"] is None, (hit, out)
+
+
+def test_the_runner_passes_eval_every_steps():
+    """E1(a): tc1_arm's default --eval-every is 20; the runner's TC1_FLAGS must pass --eval-every $STEPS (one eval, after the
+    last step), and STEPS is 60, the reducer's."""
+    import re
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    run = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
+    assert re.search(r"--steps \$STEPS .*--eval-every \$STEPS ", run)
+    assert re.search(r"^STEPS=60\b", run, re.M) and R.STEPS == 60 and R.ENERGY_EDGES == (10, 59)
 
 
 STAGED = ["bench/p238/p238_run.sh", "bench/p238/p238_op.py", "bench/p238/p238_hook.py", "bench/p238/p238_bytes.py",

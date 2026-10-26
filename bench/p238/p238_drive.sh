@@ -12,7 +12,7 @@ say(){ echo "[$(date -u +%FT%TZ)] [p238_drive] $*"; }
 # The driver's OWN exit code is what the launcher reads (it excludes a machine on 13 14 17 18), so its last step is the shared
 # bench/common/drive_tail.sh: the host codes always pass through, and so do the codes P238's PREREG registers; 23 no readable exit
 # file, 24 the box said 0 without this nonce's P238_SUCCESS marker, 26 any other code.
-BOX_CODES="9 10 13 15 16 18 27 28 41 78 130"
+BOX_CODES="9 10 13 15 16 18 27 41 78 130"
 . "$(cd "$(dirname "$0")/../.." && pwd)/bench/common/drive_tail.sh" || { say "refusing: bench/common/drive_tail.sh is missing"; exit 78; }
 finish(){ drive_finish "$1" "$2" P238 "$BOX_CODES"; }
 if [ -n "${P238_DRIVE_TAIL_DIR:-}" ]; then finish "$P238_DRIVE_TAIL_DIR" "${P238_DRIVE_TAIL_NONCE:?}"; fi   # the tail, alone (tests)

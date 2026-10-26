@@ -231,8 +231,12 @@ sets it (above), bf16 autocast, the same packed batches in the same order for ev
   in the profile). ONE method; there is no fallback. **The reading launches only after amendment 81 merges.** The shakedown may run
   before it, since it is not read;
 - **peak VRAM:** `max_memory_allocated` over the process (each load is fresh), with Unsloth's frozen vision tower reported beside it;
-- **energy:** the NVML energy-counter delta over steps 11..60 (one window, >= 10 s at every point), J per step and J per token. The
-  hook reads the counter at every step edge (observation only), and the window is edges 10 to 60;
+- **energy:** the NVML energy-counter delta over steps 11..59 (edges 10 to 59; one window, >= 10 s at every point), J per step and J
+  per token, computed by the reducer. The hook reads the counter at every step edge (observation only). The window holds no eval:
+  the runner passes `--eval-every 60`, so the only eval is the registered held-out after step 60, which runs after edge 59 (and
+  before the closing edge 60). A missing edge or counter reads UNREAD, never 0, and so does an edge pair in the window whose wall
+  exceeds tc1_arm's step time (which excludes evals) by more than max(0.2 s, 0.2 x the step): non-step work in the window can make
+  the energy UNREAD, never move it;
   cross-check as at op level;
 - **loss:** step-0 loss, every step's training loss, held-out loss after step 60 (`--eval-n 48`).
 
@@ -349,7 +353,16 @@ attention-only training (except the stated e4b property), other ranks, other mod
     (`p238-5090-1a` draw 1 with its two op processes, `p238-5090-1b` draw 2 with its two; the rerun likewise `p238-5090-2a` / `2b`), the card floor checked on each box. The split is decided
     from the shakedown's receipt and stated before the reading launches.
 - A box is started at its `STARTED` marker (after the refusals and the pre-install fit). Two strikes end the lane. The runner's exit
-  codes follow P236's table (13, 15, 16, 18 host refusals before `STARTED`; 41 fit; 9, 10, 28, 78, 130 halts; 27 VOID). The
+  codes follow P236's table (13, 15, 16, 18 host refusals before `STARTED`; 41 fit; 9, 10, 78, 130 halts; 27 VOID). 78 includes an
+  ambient knob: any `UNSLOTH_*`, `E4B_*`, `GNF4_*` or `NF4_QLORA_*` key already set on the box, other than the five Unsloth pins the
+  runner itself sets and `E4B_SHA` (the launch commit the driver hands in), is refused before `STARTED` (both frameworks alike).
+  The reducer also reads the box's `env_box.txt` (those prefixes and `PYTORCH_CUDA_ALLOC_CONF`, written before the first process):
+  its key set must EQUAL the five Unsloth pins, `PYTORCH_CUDA_ALLOC_CONF` and `E4B_SHA` (the per-arm `GNF4_TRAIN_GEMM`,
+  `E4B_ABSMAX_DQ` and `UNSLOTH_MOE_NF4_FUSED` are set only on each arm's own command line); anything else, or no file, VOIDs.
+  The refusal, the dump and the reducer's set come from one list (the reducer's `ENV_PREFIXES` / `ENV_EXACT` / `ENV_BOX`, bound
+  to the runner's text by the kit test). Any other `PYTORCH_*` key is information: the runner records the image's version env
+  (`PYTORCH_`, `TORCH_`, `CUDA_`, `NV_`, `NVIDIA_`) in `env_image.txt`, and it never VOIDs a row (it reaches both frameworks on
+  the box alike, and the image is pinned). The
   DRIVER passes each registered box code through unchanged, and ALWAYS the launcher's host codes 13, 14, 17 and 18 (it reads
   only the driver's own code and excludes a machine on those). The driver's own codes are 23 (no readable exit file fetched),
   24 (the box said 0 without this run's `P238_SUCCESS` marker: never a success) and 26 (any other code).

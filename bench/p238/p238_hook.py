@@ -6,7 +6,9 @@ OBSERVE ONLY. Every wrapper it installs returns the wrapped function's own outpu
 nothing here sets a knob, a dispatch or a route. The phases tc1_arm calls:
 - ``post_import(args)``: Unsloth arms install ``UnslothMoeCounter`` (bench/common/unsloth_moe_counter.py); e4b arms wrap
   ``nf4_route.train_gemm_route`` (read by grouped-nf4-gemm at call time, nf4_qlora.py:247-248) to log (n_groups, route) per call;
-- ``post_load(args, model)``: after the load and the framework's patching, before the first forward. Unsloth arms call
+- ``post_load(args, model)``: after the load and the framework's patching, before the first forward. Its device-to-host copies (the
+  premise table, the A sha in the adapter census) run before eval0 and before tc1_arm's peak reset, so no timed step and no
+  ``peak_vram_gb`` sees them. Unsloth arms call
   ``patch_loaded`` with the loaded ``*MoeExperts`` modules (the zoo's compile-cache copy of moe_utils can appear during the load).
   Every arm records the premise table (``p238_bytes``), the adapter census per (layer, projection), the absmax facts, and puts a
   forward PRE-hook (it returns None, so the call is unchanged) on each called experts module, counting forwards and those under grad;

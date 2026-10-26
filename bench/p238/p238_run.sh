@@ -10,7 +10,7 @@
 # Exit codes (the PREREG's table; every one is a code the driver passes through):
 #   0 a READ; 27 VOID; 13 disk, 15 card / cc / SMs / VRAM, 16 host RAM, 18 CUDA unusable / driver / single-thread / card clock
 #   (host refusals, before STARTED); 41 the guard fit (before STARTED); 9 staging / install / pins / release proof, 10 torch does not
-#   import, 28 the image's torch, 78 run id or frozen knobs, 130 a signal. This runner NEVER exits 13/14/17/18 except for the genuine
+#   import, 78 run id, frozen knobs or an ambient knob, 130 a signal. This runner NEVER exits 13/14/17/18 except for the genuine
 #   host fault its line names: the launcher excludes the machine on those.
 set -uo pipefail
 W=/root/p238; mkdir -p $W/logs $W/loads $W/ops $W/data; cd $W || exit 78
@@ -36,15 +36,20 @@ MODEL=Qwen/Qwen3.6-35B-A3B; REVISION=995ad96eacd98c81ed38be0c5b274b04031597b0
 CLOCK_FLOOR=2700; MIN_MOPS=15; GPU_CLASS=5090; MIN_RAM_GB=64; MIN_DISK_GB=200; MIN_DRIVER=580
 STEPS=60; SEQ=2048; EVAL_N=48
 LOAD_S=${P238_LOAD_S_REGISTERED:-900}   # the per-load wall the guard fit uses: the shakedown's measured wall, registered before the reading
+case "$LOAD_S" in ''|*[!0-9]*) say "refusing: P238_LOAD_S_REGISTERED '$LOAD_S' is not whole seconds"; finish 78;; esac
+[ "$LOAD_S" -ge 300 ] || { say "refusing: P238_LOAD_S_REGISTERED $LOAD_S s is under the 300 s floor (a guard fit that passes trivially)"; finish 78; }
 INSTALL_S=2700; FETCH_S=2400; OP_TIMING_S=1800; RESERVE=900
 [ -z "${P238_MIN_DISK_GB:-}${P238_MIN_RAM_GB:-}${P238_STEPS:-}${P238_GPU_CLASS:-}" ] || { say 'reading knobs are frozen'; finish 78; }
-# every knob the arms depend on is SET here, explicitly; every other UNSLOTH_* key is refused (check_env reads the env dump)
-for k in $(env | grep -oE '^UNSLOTH_[A-Z0-9_]+' | sort -u); do
+# ---- ambient knobs (both frameworks alike): every knob an arm depends on is SET by this runner, explicitly; any other UNSLOTH_*,
+# E4B_*, GNF4_* or NF4_QLORA_* key already in the box's environment is refused before STARTED (an e4b knob such as
+# E4B_TRAIN_DETERMINISTIC can move e4b's step time without moving its route, as an ambient Unsloth knob can move Unsloth's)
+for k in $(env | grep -oE '^(UNSLOTH|E4B|GNF4|NF4_QLORA)_[A-Za-z0-9_]+' | sort -u); do
   case "$k" in UNSLOTH_MOE_NF4_AUTO_MAX_ROWS|UNSLOTH_MOE_NF4_AUTOTUNE|UNSLOTH_MOE_GROUPED_TRITON|UNSLOTH_MOE_FUSED_ROUTER|UNSLOTH_ENABLE_LOGGING) ;;
+    E4B_SHA) ;;                     # the launch commit the driver hands in (p238_drive.sh), required above
     *) say "refusing: an ambient $k in the box's environment"; finish 78;; esac
 done
+# ---- end ambient knobs
 export UNSLOTH_MOE_NF4_AUTO_MAX_ROWS=128 UNSLOTH_MOE_NF4_AUTOTUNE=0 UNSLOTH_MOE_GROUPED_TRITON=auto UNSLOTH_MOE_FUSED_ROUTER=0 UNSLOTH_ENABLE_LOGGING=1
-unset UNSLOTH_MOE_NF4_FUSED GNF4_TRAIN_GEMM E4B_ABSMAX_DQ          # set per arm, never inherited
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True HF_HUB_DISABLE_TELEMETRY=1
 : > summary.txt; echo "$P238_RUN_ID" > RUN_ID
 echo "KNOBS e4b=$E4B_VERSION gnf4=$GNF4_VERSION unsloth=$UNSLOTH_VERSION zoo=$ZOO_VERSION peft=$PEFT_VERSION bnb=$BNB_VERSION torch=$TORCH_WANT draws=$P238_DRAWS load_s=$LOAD_S" | tee -a summary.txt
@@ -81,6 +86,9 @@ case "$DRIVER_MAJOR" in ''|*[!0-9]*) DRIVER_MAJOR=0;; esac
 [ "$DRIVER_MAJOR" -ge "$MIN_DRIVER" ] || { say "REFUSED: driver ${DRIVER:-unknown} < $MIN_DRIVER (the cu130 wheels need it)"; echo "refused: driver ${DRIVER:-unknown}" > REFUSAL; finish 18; }
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,compute_cap,power.limit,clocks.max.sm --format=csv,noheader | tee forensics.txt
 lscpu | grep -E "Model name|^Vendor ID|^CPU\(s\)" | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
+# the image's own env, information only (never a fault; the reducer copies it as image_env): the version prefixes, never the whole
+# env, which on a rented box carries the instance's key
+env | grep -E '^(PYTORCH_|TORCH_|CUDA_|NV_|NVIDIA_)' | sort > $W/env_image.txt || true
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "REFUSED: card is '$GPU_NAME', the lane registers the RTX $GPU_CLASS class"; echo "refused: class $GPU_NAME" > REFUSAL; finish 15;; esac
 SMS=${CUDA_PROBE##*sms=}; case "$CUDA_PROBE" in *" cc=12.0 sms="*) ;; *) SMS=0;; esac
@@ -184,7 +192,8 @@ perl -e "alarm $AL; exec @ARGV" $PY -c "from huggingface_hub import snapshot_dow
   || { tail -3 logs/snapshot.log; say "SNAPSHOT FAIL"; finish 9; }
 export HF_HUB_OFFLINE=1
 TC1_FLAGS="--fam qwen3_5 --model $MODEL --revision $REVISION --r 8 --alpha 16 --lora-init matched:3407 --adapter-dtype fp32 --seq $SEQ
-           --grad-ckpt unsloth --optim adamw_8bit --steps $STEPS --accum 1 --eval-n $EVAL_N --profile-steps 3 --profile-warm 20 --template alpaca"
+           --grad-ckpt unsloth --optim adamw_8bit --steps $STEPS --accum 1 --eval-n $EVAL_N --eval-every $STEPS --profile-steps 3 --profile-warm 20
+           --template alpaca"
 for kind in packed field; do
   if [ $kind = packed ]; then PK="--pack 1 --pack-src $W/data/alpaca_data_cleaned.json --pack-min-rows $(( STEPS * 4 ))"; else PK=""; fi
   $PY $W/tc1_arm.py --prepare $TC1_FLAGS --data $W/data/ds_alpaca.json --data-sha $DS_ALPACA_SHA --tokens $W/data/tokens_$kind.json $PK \
@@ -198,7 +207,7 @@ PYTHONPYCACHEPREFIX=$(mktemp -d /tmp/p238-pycache.XXXXXX); export PYTHONPYCACHEP
    "peft==$PEFT_VERSION" "bitsandbytes==$BNB_VERSION" "transformers==$TF_VERSION") > $W/release_proof.json 2> logs/release_proof.err
 rp=$?; { echo -n "RELEASE_PROOF rc=$rp "; head -c 300 logs/release_proof.err; echo; } | tee -a summary.txt
 [ "$rp" = 0 ] || { say "RELEASE PROOF FAILED"; finish 9; }
-env | grep -E '^(UNSLOTH_|E4B_|GNF4_|NF4_QLORA_|PYTORCH_)' | sort > $W/env_box.txt
+env | grep -E '^(UNSLOTH_|E4B_|GNF4_|NF4_QLORA_)|^PYTORCH_CUDA_ALLOC_CONF=' | sort > $W/env_box.txt
 # the hook's pin: the sha256 the staged pin file names for p238_hook.py (tc1_arm.py's load_arm_hook refuses any other bytes, exit 10)
 HOOK_SHA=$(awk '$2 == "p238_hook.py" || $2 == "*p238_hook.py" {print $1}' $W/staged-p238.sha256)
 [ ${#HOOK_SHA} -eq 64 ] || { say "STAGE: staged-p238.sha256 names no p238_hook.py"; finish 9; }

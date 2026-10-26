@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import statistics
 import sys
 
@@ -38,9 +39,21 @@ DENSE_AUTO_MAX_GROUPS = 16                           # gnf4 0.51.0 nf4_route: au
 UNSLOTH_PINS = {"UNSLOTH_MOE_NF4_AUTO_MAX_ROWS": "128", "UNSLOTH_MOE_NF4_AUTOTUNE": "0", "UNSLOTH_MOE_GROUPED_TRITON": "auto",
                 "UNSLOTH_MOE_FUSED_ROUTER": "0", "UNSLOTH_ENABLE_LOGGING": "1"}
 NF4_MODE = {"U0": "0", "U1": "1", "UA": "auto"}
+# The box's environment: ONE list for three places, bound by the kit test (a mutant widening any one fails it): the runner's
+# ambient refusal (any key under these prefixes but the registered ones refuses, 78, before STARTED), its env_box.txt grep (these
+# prefixes plus the exact names), and check_env_box's registered set. Any other PYTORCH_* key is information (env_image.txt, never
+# a fault): it reaches both frameworks on the box alike, and the image is pinned.
+ENV_PREFIXES = ("UNSLOTH", "E4B", "GNF4", "NF4_QLORA")
+ENV_EXACT = {"PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"}
+ENV_BOX = {**UNSLOTH_PINS, **ENV_EXACT, "E4B_SHA": None}      # None: any 40-hex commit (the driver's clean HEAD)
+ENV_REFUSE_GREP = "^(" + "|".join(ENV_PREFIXES) + ")_[A-Za-z0-9_]+"
+ENV_BOX_GREP = "^(" + "|".join(p + "_" for p in ENV_PREFIXES) + ")|" + "|".join(f"^{k}=" for k in ENV_EXACT)
 DEVICE_MS_METHOD = "kernels_only_at_source"         # amendment 81's marker (f15v2.py's docstring names it; the kit test pins it)
 FUSED_KERNEL = "_gemm_nf4_grouped"                   # grouped-nf4-gemm's fused grouped forward kernel
 PROFILED = (20, 23)                                  # --profile-warm 20 --profile-steps 3: loop steps 20..22, edges 20 and 23
+ENERGY_EDGES = (10, 59)                              # steps 11..59 (49 steps); the held-out eval after step 60 falls before edge 60
+MIN_ENERGY_S, MIN_POWER_SAMPLES = 10.0, 40
+GAP_FLOOR_S, GAP_FRAC = 0.2, 0.2                     # non-step wall inside one window edge pair: > max(0.2 s, 0.2 x the step) is an eval
 E_F_PROFILED_FORWARDS = 2 * 2 * N_LAYERS * 3         # 2 passes (HF non-reentrant recompute) x 2 projections x 40 x 3 = 480
 OP_ROWS, OP_ROUTINGS, OP_REPS, OP_TOL = (32, 64, 128, 256, 512), ("uniform", "skew"), 20, 2e-2
 OP_ARMS = {"e4b": ("E_F", "E_A"), "unsloth": ("U0", "U1", "UA")}
@@ -68,6 +81,21 @@ def check_pins(row):
         why.append(f"torch {v.get('torch')!r} is not {TORCH_PREFIX}")
     if not v.get("release_proof_ok"):
         why.append("the release proof is missing or refused")
+    return why
+
+
+def check_env_box(row):
+    """The box's env_box.txt: its key set must EQUAL ENV_BOX (the five Unsloth pins, PYTORCH_CUDA_ALLOC_CONF, E4B_SHA), at the
+    registered values. The per-arm GNF4_TRAIN_GEMM, E4B_ABSMAX_DQ and UNSLOTH_MOE_NF4_FUSED are set only on each arm's own command
+    line, after the dump. No file, an unregistered key or a missing one VOIDs."""
+    env = row.get("env_box")
+    if env is None:
+        return ["no env_box.txt"]
+    why = [f"env_box: an unregistered {k}" for k in sorted(set(env) - set(ENV_BOX))]
+    why += [f"env_box: {k} missing" for k in sorted(set(ENV_BOX) - set(env))]
+    why += [f"env_box: {k}={env[k]!r} != {v!r}" for k, v in ENV_BOX.items() if v is not None and k in env and env[k] != v]
+    if "E4B_SHA" in env and not re.fullmatch(r"[0-9a-f]{40}", env["E4B_SHA"] or ""):
+        why.append(f"env_box: E4B_SHA {env['E4B_SHA']!r} is not a commit")
     return why
 
 
@@ -277,7 +305,8 @@ def row_faults(row, ref_table, ref_census):
     why = check_present(row)
     if why:
         return why
-    why += check_pins(row) + check_card(row) + check_premise(row, ref_table) + check_absmax(row) + check_census(row, ref_census)
+    why += check_pins(row) + check_env_box(row) + check_card(row) + check_premise(row, ref_table) + check_absmax(row)
+    why += check_census(row, ref_census)
     why += (check_e4b_engagement(row) if row.get("framework") == "e4b" else check_unsloth_engagement(row))
     why += check_steps(row)
     return why
@@ -357,6 +386,54 @@ def op_faults(o):
     return why
 
 
+def energy(row):
+    """The step energy (PREREG: NVML's total-energy counter, read by the hook at every step edge): J per step and J per token over
+    edges 10..59, i.e. steps 11..59, from those two edges. The window holds no eval: the runner passes --eval-every 60, so the only
+    eval is the held-out after the last step, which runs after edge 59 and before the closing edge 60. Edges are taken by their own
+    index (``i``), every edge of the window must be there, and each edge pair's wall may exceed tc1_arm's step time (which excludes
+    evals) by at most max(0.2 s, 0.2 x the step): a pair holding more (an eval, or any non-step work) reads UNREAD, so it can never
+    move the number. UNREAD, never 0, also when an edge or its counter is missing, or the window is under 10 s. The cross-check:
+    the mean of power.draw.instant (0.25 s samples) over the same wall-clock span, read with >= 40 samples."""
+    a, b = ENERGY_EDGES
+    out = {"method": "nvml_total_energy", "window_edges": [a, b], "j_per_step": None, "j_per_token": None, "status": "UNREAD"}
+    by_i = {}
+    for e in ((row.get("hook") or {}).get("edges")) or []:
+        if isinstance(e, dict) and isinstance(e.get("i"), int):
+            by_i[e["i"]] = e
+    missing = [i for i in range(a, b + 1) if i not in by_i]
+    if missing:
+        out["why"] = f"edge(s) {missing[:5]} missing from the window {a}..{b}"
+        return out
+    ea, eb, ta, tb = by_i[a].get("energy_mj"), by_i[b].get("energy_mj"), by_i[a].get("t"), by_i[b].get("t")
+    if None in (ea, eb, ta, tb) or eb < ea:
+        out["why"] = f"energy {ea}->{eb} mJ, t {ta}->{tb}"
+        return out
+    secs, steps = tb - ta, b - a
+    toks = sum((row.get("tokens_per_step") or [])[a:b])
+    if secs < MIN_ENERGY_S or not toks:
+        out["why"] = f"window {secs:.1f} s (needs >= {MIN_ENERGY_S}) or {toks} tokens"
+        return out
+    step_ms = row.get("step_ms") or []
+    for i in range(a, b):
+        t0, t1 = by_i[i].get("t"), by_i[i + 1].get("t")
+        ms = step_ms[i] if i < len(step_ms) else None
+        if None in (t0, t1, ms):
+            out["why"] = f"edges {i}..{i + 1}: no wall or no step time"
+            return out
+        gap = (t1 - t0) - ms / 1e3
+        if gap > max(GAP_FLOOR_S, GAP_FRAC * ms / 1e3):
+            out["why"] = f"edges {i}..{i + 1} hold {gap:.2f} s of non-step wall (an eval in the window)"
+            return out
+    joules = (eb - ea) / 1e3
+    out.update(status="READ", seconds=round(secs, 3), joules=round(joules, 3), j_per_step=round(joules / steps, 4),
+               j_per_token=round(joules / toks, 6))
+    samples = [w for t, w in (row.get("power_samples") or []) if ta <= t <= tb]
+    if len(samples) >= MIN_POWER_SAMPLES:
+        out["sampled_j_per_step"] = round(sum(samples) / len(samples) * secs / steps, 4)
+    out["sampled_n"] = len(samples)
+    return out
+
+
 def reduce(rows, op_rows):
     """The verdict per row, the reference tables, and the pair flags. The reference premise table and census are the first OP
     row's (an op process loads exactly as a step load does); every other table must equal them."""
@@ -369,7 +446,7 @@ def reduce(rows, op_rows):
     for r in rows:
         why = row_faults(r, ref_table, ref_census)
         out["rows"].append({k: r.get(k) for k in ("index", "draw", "point", "arm")} | {"verdict": "VOID" if why else "READ", "why": why,
-                                                                                       "s_per_step": s_per_step(r)})
+                                                                                       "s_per_step": s_per_step(r), "energy": energy(r)})
     return out
 
 
@@ -415,7 +492,40 @@ def clock_facts(path):
             "swpowercap_clear_frac": sm.get("busy_soft_clean_fraction"), "busy_samples": sm.get("busy_samples")}
 
 
-def normalize_load(work, sched, box, proof_ok):
+def power_samples(path):
+    """nvidia-smi's ``timestamp, power.draw.instant`` lines (csv, noheader, nounits) -> [(epoch seconds, watts)]."""
+    import datetime
+    out = []
+    try:
+        lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+    except OSError:
+        return out
+    for line in lines:
+        try:
+            ts, w = (x.strip() for x in line.split(","))
+            t = datetime.datetime.strptime(ts, "%Y/%m/%d %H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc).timestamp()
+            out.append((t, float(w)))
+        except ValueError:
+            continue
+    return out
+
+
+def env_file(path):
+    """``env``'s KEY=VALUE lines -> {key: value}; None when the file is missing. A line with no ``=`` keeps its text as a key, so it
+    reads as an unregistered key (VOID), never as nothing."""
+    try:
+        lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+    except OSError:
+        return None
+    out = {}
+    for line in lines:
+        if line.strip():
+            k, sep, v = line.partition("=")
+            out[k if sep else line] = v if sep else None
+    return out
+
+
+def normalize_load(work, sched, box, proof_ok, env_box=None):
     """One step load (a schedule row) from its tc1_arm receipt, its full profile, its clock log and the hook's record."""
     idx, arm, point = sched["index"], sched["arm"], sched["point"]
     fw = ARMS[arm]
@@ -428,13 +538,14 @@ def normalize_load(work, sched, box, proof_ok):
     row = {"index": idx, "draw": sched["draw"], "point": point, "arm": arm, "framework": fw, "position": sched["position"],
            "status": cell.get("status"), "dry": False,
            "versions": {**{k: env.get(k) for k in PINS}, "torch": env.get("torch"), "release_proof_ok": proof_ok},
-           "card": box, "clock": clock_facts(os.path.join(work, "loads", f"gpuclk_{idx}.txt")),
+           "card": box, "env_box": env_box, "clock": clock_facts(os.path.join(work, "loads", f"gpuclk_{idx}.txt")),
            "premise_table": _int_keys(facts.get("premise_table")), "adapters": facts.get("adapters"),
            "loader_used": cell.get("loader_used"), "unsloth_env": env.get("unsloth_env"),
            "hook": {"facts": facts, "edges": rec.get("edges"), "structural": rec.get("structural")},
            "tokens_per_step": cell.get("tokens_per_step"), "step_ms": cell.get("step_ms"),
            "micro_batches_per_step": rec.get("micro_batches"), "profile": prof, "cell": cell,
-           "step0_loss": cell.get("loss_first"), "heldout_loss": cell.get("eval_loss_final"), "peak_vram_gb": cell.get("peak_vram_gb")}
+           "step0_loss": cell.get("loss_first"), "heldout_loss": cell.get("eval_loss_final"), "peak_vram_gb": cell.get("peak_vram_gb"),
+           "power_samples": power_samples(os.path.join(work, "loads", f"power_{idx}.txt"))}
     if fw == "e4b":
         row["absmax"] = {"tc1_modules": cell.get("absmax_dq_modules"), "compressed_now": facts.get("absmax_compressed"),
                          "fast_train": facts.get("fast_train_absmax_dq")}
@@ -464,9 +575,11 @@ def reduce_work(work):
     sched = [r for r in p238_schedule.schedule() if want is None or r["index"] in want]
     box = _json(os.path.join(work, "box.json")) or {}
     proof = release_proof_ok(os.path.join(work, "release_proof.json"))
-    rows = [normalize_load(work, r, box, proof) for r in sched if r["kind"] == "step"]
+    env_box = env_file(os.path.join(work, "env_box.txt"))
+    rows = [normalize_load(work, r, box, proof, env_box) for r in sched if r["kind"] == "step"]
     ops = [normalize_op(work, r) for r in sched if r["kind"] == "op"]
     out = reduce(rows, ops)
+    out["image_env"] = env_file(os.path.join(work, "env_image.txt"))      # information only: never a fault
     bad = [r for r in out["rows"] + out["op_rows"] if r["verdict"] != "READ"]
     out["verdict"] = "READ" if (out["rows"] or out["op_rows"]) and not bad else "VOID"
     out["n_rows"], out["n_op_rows"], out["n_void"] = len(out["rows"]), len(out["op_rows"]), len(bad)
@@ -479,6 +592,7 @@ def _good_rows():
                  for p in ("gate_up", "down")} for L in range(N_LAYERS)}
     census = {f"{L}:{p}": {"trainable": 1, "A_sha": f"a{L}{p}"} for L in range(N_LAYERS) for p in ("gate_up_proj", "down_proj")}
     base = {"status": "ok", "dry": False, "versions": {**PINS, "torch": "2.12.1+cu130", "release_proof_ok": True},
+            "env_box": {k: "0" * 40 if v is None else v for k, v in ENV_BOX.items()},
             "card": {"name": "NVIDIA GeForce RTX 5090", "cap": [12, 0], "sm_count": 170},
             "clock": {"busy_median_mhz": 2800, "hard_reason_any": False, "swpowercap_clear_frac": 1.0, "busy_samples": 200},
             "premise_table": table, "adapters": census, "point": "2k", "tokens_per_step": [2048] * STEPS,
@@ -504,7 +618,7 @@ def selftest():
     removals = [
         ("versions", "the pins"), ("card", "the card"), ("clock", "the clock"), ("premise_table", "the premise"),
         ("absmax", "the absmax"), ("adapters", "the census"), ("hook", "the engagement"), ("profile", "the device marker"),
-        ("tokens_per_step", "the steps"),
+        ("tokens_per_step", "the steps"), ("env_box", "the box env"),
     ]
     for key, what in removals:                       # RULE 7: every piece of evidence removed -> a fault
         r = copy.deepcopy(e)
@@ -521,6 +635,10 @@ def selftest():
         (lambda r: r["adapters"]["7:down_proj"].update(A_sha="x"), "one differing A"),
         (lambda r: r["tokens_per_step"].__setitem__(5, 2047), "a short step"),
         (lambda r: r["clock"].update(busy_median_mhz=2400), "a capped card"),
+        (lambda r: r["env_box"].update(E4B_TRAIN_DETERMINISTIC="1"), "an ambient e4b knob in env_box"),
+        (lambda r: r["env_box"].pop("PYTORCH_CUDA_ALLOC_CONF"), "env_box without the allocator conf"),
+        (lambda r: r["env_box"].update(UNSLOTH_MOE_NF4_AUTOTUNE="1"), "env_box with another Unsloth pin value"),
+        (lambda r: r["env_box"].update(E4B_SHA="main"), "env_box with a branch, not a commit"),
         (lambda r: r.update(dry=True), "a dry record"),
         (lambda r: r["versions"].update(peft="0.22.0"), "another PEFT"),
         (lambda r: r["profile"]["top_device"][0].update(count=E_F_PROFILED_FORWARDS - 1), "one profiled fused forward short"),
