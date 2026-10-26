@@ -131,7 +131,7 @@ TC1's reviewed harness is extended, and nothing in it is replaced.
   - `release_proof.py`: provenance.
 - **Shared with P238:** `bench/common/unsloth_moe_counter.py`, one module counting Unsloth's generic grouped calls and
   `NF4_FUSED_STATS`, with mutants for both paths, the fused path's bypass of the generic counter included. It lands as
-  its OWN small PR (ruled on the bus, 2026-10-25), written by one lane and reviewed by another before the maintainer's pass. P237
+  its OWN small PR (ruled 2026-10-25), written by one lane and reviewed by another before the maintainer's pass. P237
   and P238 both import it from main. P237 imports it unchanged and adds only its own arm wiring; its sm_89 per-call
   dispatch bar (below) comes from the module's per-call record (ruled 2026-10-25).
 - **Order, as it landed:** amendment 80, the shared counter (e4b#2132, `42b6f2b9`), amendment 81 (e4b#2144, `1f43d364`),
