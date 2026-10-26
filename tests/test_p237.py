@@ -411,7 +411,10 @@ def fit_disagreements(prereg, run, h):
         bad.append(("runner constants", m and m.groups()))
     for name, n in (("Reading", h.n_proc("read")), ("Shakedown", h.n_proc("shake"))):
         g = h.fit_s(n, 1500)
-        line = next((ln for ln in prereg.splitlines() if ln.startswith(f"- **{name}:**")), "")
+        lines = prereg.splitlines()
+        at = next((i for i, ln in enumerate(lines) if ln.startswith(f"- **{name}:**")), None)
+        block = [] if at is None else [lines[at]] + [ln for ln in __import__("itertools").takewhile(lambda x: x.startswith("  "), lines[at + 1:])]
+        line = " ".join(ln.strip() for ln in block)                               # the bullet, its continuation lines joined
         stated = f"a guard of {g} s ({g / 3600:.{1 if name == 'Reading' else 2}f} h), worst USD {h.worst_usd(g):.2f}"
         if stated not in line:
             bad.append((name, stated, line[:120]))
