@@ -368,8 +368,10 @@ attention-only training (except the stated e4b property), other ranks, other mod
   - **The split rule:** a box's fit is its process count x the shakedown's measured per-load wall, plus installs, the snapshot
     fetch, the op timing and the reserve, x 1.25 (the runner's guard fit). The reading runs in the fewest K of 1, 2, 4 or 8
     boxes whose largest box fits the box cap (K = 1 whenever one box fits), decided from the shakedown's receipt
-    (`p238_schedule.py --plan <its measured wall>`: K, or `NO_FIT`, and then the reading does not launch) and stated before the
-    reading launches. The K boxes are whole (draw, point) blocks, **by draw and point group, never by arm**
+    (`p238_schedule.py --plan <its measured wall>`) and stated before the reading launches. **The lane ceiling is K <= 2**, the
+    lane cost approved for this registration: if only K = 4 or 8 fits, the plan reads `NEEDS_APPROVAL` and no reading launches (the measured
+    wall goes to a new approval; at the lane bound K = 4 is about USD 128 and K = 8 about USD 247); if no K fits, it
+    reads `NO_FIT` and no reading launches. The K boxes are whole (draw, point) blocks, **by draw and point group, never by arm**
     (`p238_schedule.blocks`): K = 2 is draw 1 and draw 2; K = 4 cuts each draw's points, in that draw's run order, into two
     groups of two; K = 8 runs each (draw, point) alone. Every box holds all 5 arms of its points, so every ratio is within one
     box; a draw's two op processes ride in its first box. Box i of K runs as `p238-5090-<R>-<K>-<i>` (R = 1 the reading, 2 the
@@ -418,12 +420,13 @@ attention-only training (except the stated e4b property), other ranks, other mod
   most **USD 15**. That is the per-box rule; a split READING is K boxes and may exceed USD 15 in total.
 - **Reading, as a function of K** (estimated 44 loads x about 8 minutes + the op timing, about 6.4 h of work): its worst is the
   sum of its K boxes' worsts, at most K x USD 15. At 480 s a load, K = 1: one box of 10.0 h, **USD 12.18**. At 900 s, K = 2: two
-  boxes of 9.6 h, USD 11.70 each, **USD 23.40**. At 1,500 s, K = 4: the largest box 9.0 h; at 3,000 s, K = 8. Fit from the
-  shakedown, as above.
+  boxes of 9.6 h, USD 11.70 each, **USD 23.40**. At 1,500 s only K = 4 fits (the largest box 9.0 h), at 3,000 s only K = 8:
+  both read `NEEDS_APPROVAL` (the lane ceiling is K <= 2). Fit from the shakedown, as above.
 - **Retries:** a box that does not start costs at most its boot slack, about USD 0.25.
 - **Lane worst:** the shakedown + 2 readings (a reading and its rerun) + 3 retries = USD 6.78 + 2 x (the reading's worst) +
   USD 0.75: **USD 31.89** at K = 1 (480 s), **USD 54.33** at K = 2 (900 s), at most USD 6.78 + 2 x K x USD 15 + USD 0.75 in
-  general. Expected at K = 1: about USD 20.
+  general: USD 67.53 at the K <= 2 ceiling (USD 127.53 at K = 4 and USD 247.53 at K = 8, neither registered without a new
+  approval). Expected at K = 1: about USD 20.
 - **The daily rail** (USD 100/day across the program) is the one a split can bind: the K boxes run one after another on one
   machine and can span two calendar days, and they share each day with every other lane's boxes. Every P238 box is disclosed
   at create and at teardown, as every rental is.

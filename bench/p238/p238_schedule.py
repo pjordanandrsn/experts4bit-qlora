@@ -56,6 +56,7 @@ def needs_override(n_proc, load_s):
 
 
 SPLITS = (1, 2, 4, 8)                                # K boxes: whole; by draw; each draw in 2 point groups; each (draw, point) alone
+APPROVED_K_MAX = 2                                      # the lane cost approved for this registration: K = 4 or 8 needs a new approval
 
 
 def blocks(k):
@@ -88,9 +89,8 @@ def box_rows(spec):
     return [r for r in schedule() if r["index"] in want]
 
 
-def plan(load_s, usd_per_h=USD_PER_H_MAX):
-    """The reading's box count, from the shakedown's measured per-load wall, decided before the reading launches: the fewest K
-    whose largest box fits the box cap (K = 1 whenever the cap allows), else None (no registered split fits: no reading launches)."""
+def fewest_k(load_s, usd_per_h=USD_PER_H_MAX):
+    """The fewest K whose largest box fits the box cap (K = 1 whenever the cap allows), else None."""
     cap = box_cap_s(usd_per_h)
     for k in SPLITS:
         if max(fit_s(len(b), load_s) for b in blocks(k)) <= cap:
@@ -98,9 +98,19 @@ def plan(load_s, usd_per_h=USD_PER_H_MAX):
     return None
 
 
+def plan(load_s, usd_per_h=USD_PER_H_MAX):
+    """The reading's box count, from the shakedown's measured per-load wall, decided before the reading launches: the fewest K
+    that fits (fewest_k) when it is at most APPROVED_K_MAX; "NEEDS_APPROVAL" when only K = 4 or 8 fits (no reading launches: a new
+    approval with the measured wall); None when no registered split fits (no reading launches)."""
+    k = fewest_k(load_s, usd_per_h)
+    if k is None:
+        return None
+    return k if k <= APPROVED_K_MAX else "NEEDS_APPROVAL"
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    if "--plan" in argv:                                 # --plan LOAD_S [USD_PER_H] -> K, or NO_FIT
+    if "--plan" in argv:                                 # --plan LOAD_S [USD_PER_H] -> K, NEEDS_APPROVAL or NO_FIT
         rest = argv[argv.index("--plan") + 1:]
         k = plan(int(rest[0]), float(rest[1]) if len(rest) > 1 else USD_PER_H_MAX)
         print("NO_FIT" if k is None else k)

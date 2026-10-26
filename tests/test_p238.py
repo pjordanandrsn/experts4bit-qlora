@@ -1027,14 +1027,18 @@ def test_the_plan_picks_the_fewest_k_under_the_box_cap():
     m = re.search(r"^INSTALL_S=(\d+); FETCH_S=(\d+); OP_TIMING_S=(\d+); RESERVE=(\d+)$", run, re.M)
     assert tuple(map(int, m.groups())) == (S.INSTALL_S, S.FETCH_S, S.OP_TIMING_S, S.RESERVE_S)
     assert "FIT_NEED=$((FIT * 125 / 100))" in run and S.HEADROOM_PCT == 125
-    for load_s, k in ((200, 1), (480, 1), (600, 1), (700, 2), (900, 2), (1500, 4), (3000, 8), (5000, None)):
-        assert S.plan(load_s) == k, (load_s, S.plan(load_s))
+    for load_s, k, want in ((200, 1, 1), (480, 1, 1), (600, 1, 1), (700, 2, 2), (900, 2, 2), (1500, 4, "NEEDS_APPROVAL"),
+                            (3000, 8, "NEEDS_APPROVAL"), (5000, None, None)):
+        assert S.fewest_k(load_s) == k and S.plan(load_s) == want, (load_s, S.fewest_k(load_s), S.plan(load_s))
         fits = [max(S.fit_s(len(b), load_s) for b in S.blocks(x)) <= S.box_cap_s() for x in S.SPLITS]
         assert k == next((x for x, f in zip(S.SPLITS, fits) if f), None)            # the fewest K that fits
+    assert S.APPROVED_K_MAX == 2                                                       # the lane ceiling approved for this registration
     out = subprocess.run([_sys.executable, str(ROOT / "bench" / "p238" / "p238_schedule.py"), "--plan", "900"], capture_output=True, text=True)
     assert out.stdout.strip() == "2"
     out = subprocess.run([_sys.executable, str(ROOT / "bench" / "p238" / "p238_schedule.py"), "--plan", "5000"], capture_output=True, text=True)
     assert out.stdout.strip() == "NO_FIT"
+    out = subprocess.run([_sys.executable, str(ROOT / "bench" / "p238" / "p238_schedule.py"), "--plan", "1500"], capture_output=True, text=True)
+    assert out.stdout.strip() == "NEEDS_APPROVAL"
 
 
 @pytest.mark.parametrize("k", [2, 4, 8])
