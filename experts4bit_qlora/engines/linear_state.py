@@ -183,6 +183,17 @@ class _OneLayerCache:
     def has_previous_state(self, layer_idx=None, state_idx=0):
         return bool(self._lal.has_previous_state[0])
 
+    # transformers >= 5.21 reads the states through these getters (None = no previous state), as its own Cache does;
+    # earlier releases read ``self.layers[layer_idx]`` directly.
+    def get_conv_state(self, layer_idx, state_idx=0):
+        return self._lal.conv_states[0] if self._lal.has_previous_state[0] else None
+
+    def get_recurrent_state(self, layer_idx, state_idx=0):
+        return self._lal.recurrent_states[0] if self._lal.has_previous_state[0] else None
+
+    def is_recording_past(self, layer_idx):
+        return getattr(self._lal, "record_past", False)
+
     def update_conv_state(self, conv_states, layer_idx, state_idx=0, **kw):
         return self._lal.update_conv_state(conv_states, 0, **kw)
 
