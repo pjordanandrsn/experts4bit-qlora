@@ -1,6 +1,6 @@
 # P237: e4b's CPU expert offload with layer-major against Unsloth's offload_layers, same RTX 4090, two VRAM budgets
 
-DRAFT (not yet registered). Owner-requested; registered before any box. Every rule below is fixed before data.
+DRAFT (not yet registered). Requested for the project and registered before any box. Every rule below is fixed before data.
 
 ## The question
 
@@ -459,7 +459,7 @@ registered.
 7. A $0 CPU check of the new code, then a short GPU shakedown (registered, never a reading).
 8. The driver dry run, the $0 validate, and the maintainer's Approved.
 9. The box, the maintainer's re-derivation, and the results PR. **A reading box over 6 h launches only once the per-run
-   wall-clock override is in the rental policy** (the owner approved it 2026-10-26; it is in force since). The
+   wall-clock override is in the rental policy** (a rental-policy decision of 2026-10-26, in force since). The
    shakedown fits 6 h and may run before it.
 
 ## Runs and budget
@@ -476,7 +476,7 @@ calls:
     (`P237_LOAD_S_REGISTERED`).
 - **cap** = min(the per-run wall-clock override's 18 h, the guard whose worst cost is the USD 15 run cap).
   - The rental policy's GLOBAL cap, `teardown.max_wallclock_h`, stays at 6 h, and the launcher enforces it.
-  - The owner approved (2026-10-26) a PER-RUN override up to 18 h, allowed only when the run's worst at its guard is
+  - A rental-policy decision (2026-10-26) added a PER-RUN override up to 18 h, allowed only when the run's worst at its guard is
     at most USD 15. Both values are constants here, pinned by a test, and they move only with that policy.
   - The cap is 18 h, since the USD bound is about 23 h.
 - **worst** = guard × 0.60 + 1.10 USD (the box rate, plus downloads of at most 100 GB at ≤ $0.011/GB).

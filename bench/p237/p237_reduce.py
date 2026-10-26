@@ -432,11 +432,11 @@ def compare(u, e):
     """One U*/E comparison at one budget: quality (COMPARABLE at 0.05 nats; 0.01 reported), the wall ratio (the verdict) and the device
     ratio, each the median over the cross-draw ratios, quoted only when both arms are VALID, COMPARABLE and stable."""
     out = {"u": u["arm"], "e": "E"}
-    hu, he = _mean(u["draws"], "heldout_loss"), _mean(e["draws"], "heldout_loss")
-    if hu is None or he is None:
+    held_u, held_e = _mean(u["draws"], "heldout_loss"), _mean(e["draws"], "heldout_loss")
+    if held_u is None or held_e is None:
         return dict(out, quality="UNREAD")
-    d = abs(hu - he)
-    out.update(heldout_u=round(hu, 5), heldout_e=round(he, 5), delta=round(d, 5), within_same_stack=d <= SAME_STACK,
+    d = abs(held_u - held_e)
+    out.update(heldout_u=round(held_u, 5), heldout_e=round(held_e, 5), delta=round(d, 5), within_same_stack=d <= SAME_STACK,
                quality="COMPARABLE" if d <= COMPARABLE else "QUALITY_FAIL")
     if out["quality"] != "COMPARABLE" or u["unstable"] or e["unstable"]:
         return dict(out, ratio=None, why="not COMPARABLE or UNSTABLE: no ratio quoted")

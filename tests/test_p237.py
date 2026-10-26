@@ -436,7 +436,7 @@ def fit_disagreements(prereg, run, h):
 def test_the_registered_fit_is_the_runners_and_the_prereg_states_it():
     import p237_host as h
     assert h.POLICY_MAX_WALLCLOCK_H == 6                                         # the rental policy's global teardown.max_wallclock_h
-    assert h.RUN_OVERRIDE_MAX_H == 18                                            # the owner's per-run override (2026-10-26)
+    assert h.RUN_OVERRIDE_MAX_H == 18                                            # the rental policy's per-run override (2026-10-26)
     assert h.cap_s() == 18 * 3600 and h.PROBES_MAX == {"read": 4, "shake": 1}
     assert h.n_proc("read") == 24 and h.n_proc("shake") == 4
     assert h.fit_s(24, 1500) == 54000 and h.fit_s(4, 1500) == 16500 and h.worst_usd(16500) == 3.85 and h.worst_usd(54000) == 10.1

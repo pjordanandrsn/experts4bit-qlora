@@ -23,13 +23,13 @@ HOST_FLOOR = 18
 # The guard fit (the maintainer's ruling before data; the runner's 41 check and the PREREG's guard and cost lines are this, and
 # tests/test_p237.py ties the three): guard = (INSTALL + FETCH + N_PROC x LOAD_S + RESERVE) x 1.25, against a cap of
 # min(the run-worst USD 15 at the box rate, the per-run wall-clock override's 18 h). The rental policy's GLOBAL cap keeps
-# teardown.max_wallclock_h at 6 (the launcher refuses any longer launch); the owner approved (2026-10-26) a PER-RUN
+# teardown.max_wallclock_h at 6 (the launcher refuses any longer launch); a rental-policy decision (2026-10-26) added a PER-RUN
 # override up to 18 h, allowed only when the run's worst at its guard is <= USD 15. Both are registered here as constants, pinned by
-# the test, and move only with that policy (the owner's call). A box longer than 6 h launches only once the override is in the policy.
+# the test, and move only with that policy. A box longer than 6 h launches only once the override is in the policy.
 INSTALL_S, FETCH_S, RESERVE_S, FIT_MARGIN_PCT = 2700, 3600, 900, 125
 USD_PER_H, DOWNLOAD_USD, RUN_CAP_USD = 0.60, 1.10, 15.0
 POLICY_MAX_WALLCLOCK_H = 6                             # the global cap: every launch without the per-run override
-RUN_OVERRIDE_MAX_H = 18                                # the per-run override's ceiling (owner, 2026-10-26)
+RUN_OVERRIDE_MAX_H = 18                                # the per-run override's ceiling (rental policy, 2026-10-26)
 PROBES_MAX = {"read": 4, "shake": 1}                   # the shakedown runs ONE probe (N_auto - 1): it tests the probe path, never tunes
 
 
