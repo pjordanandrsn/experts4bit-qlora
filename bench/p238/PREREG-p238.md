@@ -360,10 +360,11 @@ attention-only training (except the stated e4b property), other ranks, other mod
   a real record, one op cell per framework (each in its own op process) and one load per arm at the 2k point. It is never read.
   It measures the per-load wall, from which the reading's guard is fit. If either framework cannot train the model: STOP and report.
 - **Then the reading:** `p238-5090-1`, its one rerun `p238-5090-2`; retry ids `p238-5090-r1` to `r3` for a box that does not start.
-  - **The box cap** is min(the rental policy's per-run wallclock maximum, 18 h, which the launcher refuses above; the hours the
-    USD 15 run-worst buys at the box's rate after its downloads, 12.7 h at USD 1.05/h): one registered constant
-    (`p238_schedule.py`, pinned by the kit test). A box whose guard exceeds the policy's 6 h default runs under the per-run
-    override, which the policy allows only when the box's worst is at most USD 15.
+  - **The box cap** is min(the rental policy's per-run override ceiling, 18 h, which the launcher refuses above; the hours the
+    USD 15 run-worst buys at the box's rate after its downloads, 12.7 h at USD 1.05/h). `p238_schedule.py` holds the policy's
+    global cap (`POLICY_MAX_WALLCLOCK_H`, 6 h) and the override ceiling (`RUN_OVERRIDE_MAX_H`, 18 h), both pinned by the kit test.
+    A box whose guard exceeds the 6 h global cap runs only under the per-run override, which the policy allows only when the
+    box's worst is at most USD 15.
   - **The split rule:** a box's fit is its process count x the shakedown's measured per-load wall, plus installs, the snapshot
     fetch, the op timing and the reserve, x 1.25 (the runner's guard fit). The reading runs in the fewest K of 1, 2, 4 or 8
     boxes whose largest box fits the box cap (K = 1 whenever one box fits), decided from the shakedown's receipt
@@ -432,6 +433,10 @@ attention-only training (except the stated e4b property), other ranks, other mod
 - **One exact launch commit per box:** this registration's merge (or a later amendment's), through pod-launch with `--validate`
   passing there, the host pinned, rent-watch armed; then the maintainer's Approved naming that commit and the kit's hash.
 - **The reading launches only after** amendment 81 (device time at source) and the tc1_arm hook PR have merged.
+- **A box over 6 h launches only once the per-run override is in the rental policy,** with `wallclock_override: true` in its
+  launch manifest (the launcher's `--wallclock-override`; the policy then checks its guard against the 18 h ceiling and its
+  estimate against USD 15). Until then only a box whose guard fits the 6 h global cap runs (the shakedown does: 4.9 h, with no
+  override).
 - **STOP-4:** the driver refuses a dirty tree, an `E4B_SHA` override, an unregistered run id or a staged file that differs from
   `staged-p238.sha256`; its fetch passes `rsync --no-links`.
 

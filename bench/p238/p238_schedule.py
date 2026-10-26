@@ -16,9 +16,10 @@ POINTS = ("2k", "4k", "8k", "field")
 ARMS = ("E_F", "E_A", "U0", "U1", "UA")
 FRAMEWORK = {"E_F": "e4b", "E_A": "e4b", "U0": "unsloth", "U1": "unsloth", "UA": "unsloth"}
 OPS = {1: ("e4b", "unsloth"), 2: ("unsloth", "e4b")}
-# The box cap (PREREG "The split rule"): min(the rental policy's per-run wallclock maximum, which the launcher refuses above, and
-# the hours the USD 15 run-worst buys at the box's rate after the downloads). ONE registered constant, pinned by the kit test.
-POLICY_MAX_WALLCLOCK_H = 18                          # the policy's per-run override maximum (a run without one keeps the 6 h default)
+# The box cap (PREREG "The split rule"): min(the rental policy's per-run override ceiling, which the launcher refuses above, and
+# the hours the USD 15 run-worst buys at the box's rate after the downloads). The constants are pinned by the kit test.
+POLICY_MAX_WALLCLOCK_H = 6                           # the policy's global wallclock cap: a run without an override
+RUN_OVERRIDE_MAX_H = 18                              # the per-run override's ceiling (allowed only when the run's worst <= USD 15)
 RUN_WORST_USD, USD_PER_H_MAX, DOWNLOAD_USD = 15.0, 1.05, 1.64
 INSTALL_S, FETCH_S, OP_TIMING_S, RESERVE_S, HEADROOM_PCT = 2700, 2400, 1800, 900, 125   # the runner's guard fit (the kit test binds them)
 
@@ -46,7 +47,12 @@ def fit_s(n_proc, load_s):
 
 
 def box_cap_s(usd_per_h=USD_PER_H_MAX):
-    return int(min(POLICY_MAX_WALLCLOCK_H, (RUN_WORST_USD - DOWNLOAD_USD) / usd_per_h) * 3600)
+    return int(min(RUN_OVERRIDE_MAX_H, (RUN_WORST_USD - DOWNLOAD_USD) / usd_per_h) * 3600)
+
+
+def needs_override(n_proc, load_s):
+    """True when a box's guard fit exceeds the policy's global cap: that box runs only under the per-run override."""
+    return fit_s(n_proc, load_s) > POLICY_MAX_WALLCLOCK_H * 3600
 
 
 SPLITS = (1, 2, 4, 8)                                # K boxes: whole; by draw; each draw in 2 point groups; each (draw, point) alone

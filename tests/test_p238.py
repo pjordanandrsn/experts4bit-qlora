@@ -1020,7 +1020,8 @@ def test_the_plan_picks_the_fewest_k_under_the_box_cap():
     import subprocess
     import sys as _sys
     S = _load("p238_schedule", "bench/p238/p238_schedule.py")
-    assert (S.POLICY_MAX_WALLCLOCK_H, S.RUN_WORST_USD, S.USD_PER_H_MAX, S.DOWNLOAD_USD) == (18, 15.0, 1.05, 1.64)
+    assert (S.POLICY_MAX_WALLCLOCK_H, S.RUN_OVERRIDE_MAX_H, S.RUN_WORST_USD, S.USD_PER_H_MAX, S.DOWNLOAD_USD) == (6, 18, 15.0, 1.05, 1.64)
+    assert not S.needs_override(7, 900) and S.needs_override(44, 480)            # the shakedown fits 6 h; a one-box reading does not
     assert S.box_cap_s() == int(min(18, (15.0 - 1.64) / 1.05) * 3600)
     run = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
     m = re.search(r"^INSTALL_S=(\d+); FETCH_S=(\d+); OP_TIMING_S=(\d+); RESERVE=(\d+)$", run, re.M)
