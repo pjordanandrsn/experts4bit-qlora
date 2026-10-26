@@ -763,6 +763,25 @@ def test_the_registered_load_wall_is_whole_seconds_over_the_floor(val, want):
         assert m.returncode == 0                                       # the floor is what refuses 299
 
 
+def _box_and_driver_codes(drive, tail):
+    import re
+    box = set(re.search(r'^BOX_CODES="([0-9 ]+)"$', drive, re.M).group(1).split())
+    own = set(re.findall(r"\bexit (\d+)\b", drive)) | set(re.findall(r"\bexit (\d+)\b", tail))
+    return box, own - {"0"}
+
+
+def test_no_box_code_is_also_one_of_the_drivers_own_exits():
+    """A box code equal to a code the driver (or drive_tail) exits by itself is ambiguous at the launcher, as 23/24/26 would be:
+    the two sets meet only at 78, a config refusal on both sides. The mutant that registers the driver's 21 as a box code fails."""
+    drive = (ROOT / "bench" / "p238" / "p238_drive.sh").read_text(encoding="utf-8")
+    tail = (ROOT / "bench" / "common" / "drive_tail.sh").read_text(encoding="utf-8")
+    box, own = _box_and_driver_codes(drive, tail)
+    assert {"20", "21", "22", "23", "24", "26", "78"} <= own
+    assert box & own == {"78"}, sorted(box & own)
+    mbox, mown = _box_and_driver_codes(drive.replace('BOX_CODES="9 ', 'BOX_CODES="9 21 '), tail)
+    assert mbox & mown != {"78"}
+
+
 def test_the_fetch_brings_the_evidence_and_no_tensors_venv_or_bulk(tmp_path):
     """E3: the driver's fetch, its own exclude array, run by real rsync over a stub box tree holding everything the runner leaves
     in /root/p238. Fetched: every file the reducer reads, and the logs. Not fetched: the venv, adapters (tc1_arm --adapter-dir
