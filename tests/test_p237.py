@@ -388,6 +388,24 @@ def test_one_env_list_binds_the_refusal_the_dump_and_the_reducer(monkeypatch):
     assert _env_disagreements(run, red)
 
 
+# -- the writer and the reader of each process's exit -------------------------------------------------------------------------------
+@pytest.mark.parametrize("idx,kind,arm,off,rc", [("3", "draw", "E", "", "5"), ("5.2", "probe", "UT", "22", "0"), ("12", "draw", "UA", "auto", "137")])
+def test_the_runners_proc_line_is_what_the_reducer_reads(idx, kind, arm, off, rc):
+    """The OOM outcome needs tc1_arm's exit 5 from the runner's OWN PROC line: render that echo line with bash and parse it with
+    p237_reduce.proc_rcs, so a change on either side fails here."""
+    red = importlib.import_module("p237_reduce")
+    line = next(ln for ln in _run_text().splitlines() if ln.lstrip().startswith('echo "PROC $idx $kind $budget $arm draw=$draw steps='))
+    echo = line.strip().split(" | tee", 1)[0]
+    script = (f'idx={idx}; kind={kind}; budget=12g; arm={arm}; draw=1; s=60; off={off}; rc={rc}; c0=10; c1=10; '
+              f'RECEIPT=/root/p237/loads/{idx}/x.json\n{echo}\n')
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True).stdout
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "summary.txt"
+        p.write_text("KNOBS x\n" + out + "PROC 9 draw 12g UT draw=1 skipped: N_t unread\n", encoding="utf-8")
+        assert red.proc_rcs(str(p)) == {idx: int(rc)}, (out, red.proc_rcs(str(p)))
+
+
 # -- the guard fit's registered wall ------------------------------------------------------------------------------------------------
 def _load_s_block():
     run = _run_text()

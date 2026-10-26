@@ -59,6 +59,7 @@ ENV_EXACT = {"PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"}
 ENV_BOX = {**RUNNER_UNSLOTH, "GNF4_TRAIN_GEMM": "auto", **ENV_EXACT, "E4B_SHA": None}   # None: any 40-hex commit (the driver's HEAD)
 ENV_REFUSE_GREP = "^(" + "|".join(ENV_PREFIXES) + ")_[A-Za-z0-9_]+"
 ENV_BOX_GREP = "^(" + "|".join(p + "_" for p in ENV_PREFIXES) + ")|" + "|".join(f"^{k}=" for k in ENV_EXACT)
+OOM_EXIT = 5                                         # tc1_arm's exit for its OOM stub (the train loop and the guard)
 UNREAD = "UNREAD"                                    # a measure whose input is missing: never 0, never a guess
 WHOLE_LAYER = {"sync", "cold_miss", "prefetch"}      # offload.py's whole-layer staging tags; routed / speculative stage rows
 DENSE_AUTO_MAX_GROUPS = 16                           # gnf4 0.51.0 nf4_route: auto is dense at 1..16 present groups, fused above
@@ -102,8 +103,9 @@ def check_env_box(row):
     return why
 
 
-def check_card(row):
-    c, k = row.get("card") or {}, row.get("clock") or {}
+def check_card_identity(row):
+    """The registered card: the RTX 4090 class, sm_89, at least 128 SMs (box.json, from the pre-install probe)."""
+    c = row.get("card") or {}
     why = []
     if CARD not in str(c.get("name") or ""):
         why.append(f"card {c.get('name')!r}")
@@ -111,13 +113,32 @@ def check_card(row):
         why.append(f"cc {c.get('cap')}")
     if (c.get("sm_count") or 0) < MIN_SMS:
         why.append(f"SMs {c.get('sm_count')}")
-    try:                                             # the PREREG's per-draw rule is card_clock's run-log mode: the busy median at
+    return why
+
+
+def check_card(row):
+    k = row.get("clock") or {}
+    why = check_card_identity(row)
+    try:                                            # the PREREG's per-draw rule is card_clock's run-log mode: the busy median at
         ok, w = card_clock.passes(k, CLOCK_FLOOR_MHZ, SWPC_CLEAR, burn=False)   # the floor, every refusing bit clear on >= 95 %
     except (KeyError, TypeError) as e:
         ok, w = False, f"unreadable clock summary ({type(e).__name__}: {e})"
     if not ok:
         why.append(f"clock: {w}")
     return why
+
+
+def oom_faults(row):
+    """A draw that is tc1_arm's OOM stub (status "oom", exit 5 on the runner's own PROC line, a non-empty phase: the train loop's or
+    the layer-major guard's) is an OOM outcome when it ran on the registered stack: the pins and release proof, env_box.txt and the
+    card's identity. The loaded-clock rule is not applied to it: an OOM a few steps in leaves fewer busy samples than the rule
+    needs, so the clock would VOID every genuine OOM; the card's identity is what makes it this card's reading."""
+    why = ["a dry run"] if row.get("dry") else []
+    if row.get("rc") != OOM_EXIT:
+        why.append(f"exit {row.get('rc')!r}, not tc1_arm's OOM exit {OOM_EXIT}")
+    if not (isinstance(row.get("phase"), str) and row["phase"]):
+        why.append("an OOM stub with no phase")
+    return why + check_pins(row) + check_env_box(row) + check_card_identity(row)
 
 
 def max_reserved(row):
@@ -426,11 +447,13 @@ def compare(u, e):
     return out
 
 
-def reduce_budget(rows, budget, n_auto, n_t):
+def reduce_budget(rows, budget, n_auto, n_t, ref_trainable=None):
     """One budget's verdict from its draws (primers and probes excluded)."""
     draws = [r for r in rows if r.get("budget") == budget and r.get("kind") == "draw"]
     out = {"budget": budget, "n_auto": n_auto, "n_t": n_t, "arms": {}}
     contracts = set()
+    ref = ref_trainable if isinstance(ref_trainable, int) else next(
+        (r.get("trainable_params") for r in draws if r.get("arm") == "E" and isinstance(r.get("trainable_params"), int)), None)
     for arm in ("E", "UA", "UT"):
         ds = sorted((r for r in draws if r.get("arm") == arm), key=lambda r: r.get("draw"))
         if arm != "E" and n_auto == 0:
@@ -438,7 +461,7 @@ def reduce_budget(rows, budget, n_auto, n_t):
             continue
         statuses = sorted(str(r.get("status")) for r in ds)
         if len(ds) == 2 and statuses == ["oom", "oom"]:  # a REPRODUCED OOM is a reading: "does not fit at this budget" (ruled before
-            faults = [check_pins(r) + check_env_box(r) for r in ds]   # data); the stack must still be the registered one
+            faults = [oom_faults(r) for r in ds]                      # data); the stack must still be the registered one
             out["arms"][arm] = {"state": "VOID" if any(faults) else "OOM", "faults": faults, "draws": ds, "unstable": [],
                                 "words": "does not fit at this budget"}
             continue
@@ -451,6 +474,12 @@ def reduce_budget(rows, budget, n_auto, n_t):
             continue
         n_want = n_auto if arm == "UA" else n_t
         faults = [draw_faults(r, n_want=n_want) for r in ds]
+        if arm != "E":                                   # T6 here, not only in the runner's EXPECT: every Unsloth draw trains exactly
+            for f, r in zip(faults, ds):                 # E's trainable count (the matched adapters), whatever E's own draws did
+                if not isinstance(ref, int):
+                    f.append("no single E trainable count to check the adapters against (none recorded, or E's rows disagree)")
+                elif r.get("trainable_params") != ref:
+                    f.append(f"trainable {r.get('trainable_params')!r} != E's {ref}")
         valid = len(ds) == 2 and not any(faults)
         for r in ds:
             contracts.add(json.dumps(r.get("step_contract"), sort_keys=True))
@@ -532,7 +561,22 @@ def read_env(path):
     return env
 
 
-def normalize_proc(work, idx, kind, budget, arm, draw, box, proof_ok, off=None, env_box=None):
+PROC_RE = re.compile(r"PROC (\S+) (\w+) (\w+) (\w+) draw=(\d+) steps=(\d+)(?: n=\S+)? rc=(\d+)(?: .*)?")
+
+
+def proc_rcs(path):
+    """The runner's summary.txt ``PROC <idx> <kind> <budget> <arm> draw=<d> steps=<s> [n=<N>] rc=<rc> ...`` lines -> {idx: rc}: the
+    process's exit, which tc1_arm's OOM stub carries only as its exit code."""
+    out = {}
+    text = _text(path)
+    for line in (text or "").splitlines():
+        m = PROC_RE.fullmatch(line.strip())
+        if m:
+            out[m.group(1)] = int(m.group(7))
+    return out
+
+
+def normalize_proc(work, idx, kind, budget, arm, draw, box, proof_ok, off=None, env_box=None, rc=None):
     fw = FRAMEWORK[arm]
     base = os.path.join(work, "loads", str(idx), f"qwen3_{fw}_{tag_of(idx, kind, budget, arm, draw, off)}")
     cell = _json(base + ".json") or {}
@@ -540,7 +584,7 @@ def normalize_proc(work, idx, kind, budget, arm, draw, box, proof_ok, off=None, 
     env = cell.get("env") or {}
     rx, tx = parse_dmon(_text(os.path.join(work, "loads", f"dmon_{idx}.txt")))
     return {"index": idx, "kind": kind, "budget": budget, "arm": arm, "draw": draw, "framework": fw, "offload_given": off,
-            "status": cell.get("status"), "reason": cell.get("reason"), "dry": False, "cell": cell,
+            "status": cell.get("status"), "reason": cell.get("reason"), "phase": cell.get("phase"), "rc": rc, "dry": False, "cell": cell,
             "versions": {**{k: env.get(k) for k in PINS}, "torch": env.get("torch"), "release_proof_ok": proof_ok},
             "card": box, "clock": clock_facts(os.path.join(work, "loads", f"gpuclk_{idx}.txt")),
             "vram_cap": cell.get("vram_cap"), "step_mem": cell.get("step_mem"), "step_contract": cell.get("step_contract"),
@@ -568,6 +612,7 @@ def reduce_work(work, mode="read"):
     box = _json(os.path.join(work, "box.json")) or {}
     proof = release_proof_ok(os.path.join(work, "release_proof.json"))
     env_box = read_env(os.path.join(work, "env_box.txt"))
+    rcs = proc_rcs(os.path.join(work, "summary.txt"))
     sched = p237_schedule.schedule(shake=mode == "shake")
     steps_of = {"primer": 10, "draw": SHAKE_STEPS if mode == "shake" else STEPS}
     rows, n_auto, n_t, probes = [], {}, {}, {}
@@ -579,7 +624,7 @@ def reduce_work(work, mode="read"):
             for k in range(1, 5):
                 if na is None or na - k < 1:
                     break
-                r = normalize_proc(work, f"{idx}.{k}", "probe", budget, "UT", 0, box, proof, off=na - k, env_box=env_box)
+                r = normalize_proc(work, f"{idx}.{k}", "probe", budget, "UT", 0, box, proof, off=na - k, env_box=env_box, rc=rcs.get(f"{idx}.{k}"))
                 o = p237_host.probe_outcome(r["cell"], CAP_12G_GIB if budget == "12g" else box.get("card_gib"))
                 outs.append({"n": na - k, "outcome": o})
                 if o.split()[0] in ("oom", "fault"):
@@ -590,11 +635,13 @@ def reduce_work(work, mode="read"):
         off = None if arm == "E" else ("auto" if arm == "UA" else n_t.get(budget))
         if arm == "UT" and off is None:
             continue
-        r = normalize_proc(work, idx, kind, budget, arm, draw, box, proof, off=off, env_box=env_box)
+        r = normalize_proc(work, idx, kind, budget, arm, draw, box, proof, off=off, env_box=env_box, rc=rcs.get(str(idx)))
         rows.append(r)
         if arm == "UA" and kind == "draw" and draw == 1:
             n_auto[budget] = p237_host.n_auto(r["cell"], _log(work, idx))
-    out = {"mode": mode, "n_auto": n_auto, "n_t": n_t, "probes": probes, "budgets": [], "image_env": read_env(os.path.join(work, "env_image.txt")),
+    e_counts = {r.get("trainable_params") for r in rows if r["arm"] == "E" and isinstance(r.get("trainable_params"), int)}
+    ref_trainable = next(iter(e_counts)) if len(e_counts) == 1 else None     # E's rows must agree among themselves, else no reference
+    out = {"mode": mode, "e_trainable": sorted(e_counts), "n_auto": n_auto, "n_t": n_t, "probes": probes, "budgets": [], "image_env": read_env(os.path.join(work, "env_image.txt")),
            "primers": [{"index": r["index"], "budget": r["budget"], "arm": r["arm"], "cold_cache": True, **measures(r)}
                        for r in rows if r["kind"] == "primer"]}
     steps = steps_of["draw"]
@@ -606,7 +653,7 @@ def reduce_work(work, mode="read"):
                                             for r in rows if r["budget"] == budget]}
             b["verdict"] = "VOID" if any(x["faults"] for x in b["rows"]) else "READ"
         else:
-            b = reduce_budget(rows, budget, n_auto.get(budget), n_t.get(budget))
+            b = reduce_budget(rows, budget, n_auto.get(budget), n_t.get(budget), ref_trainable=ref_trainable)
         out["budgets"].append(b)
     out["verdict"] = "READ" if out["budgets"] and all(b["verdict"] == "READ" for b in out["budgets"]) else "VOID"
     return out
@@ -623,7 +670,7 @@ def _good_e(steps=STEPS):
             "card": {"name": "NVIDIA GeForce RTX 4090", "cap": [8, 9], "sm_count": 128, "pcie_gen_max": "4", "pcie_width_max": "16",
                      "cpu_class": "ryzen-7000-9000-desktop"},
             "env_box": {**{k: v for k, v in ENV_BOX.items() if v is not None}, "E4B_SHA": "a" * 40},
-            "load_s": 300.0, "prologue_s": 420.0, "peak_vram_gb": 11.5, "smi_peak_used_mib": 12100.0, "dmon_rx": 9000.0, "dmon_tx": 200.0,
+            "load_s": 300.0, "prologue_s": 420.0, "peak_vram_gb": 11.5, "trainable_params": 26_738_688, "smi_peak_used_mib": 12100.0, "dmon_rx": 9000.0, "dmon_tx": 200.0,
             "host_ram": {"rss_hwm_gb": 110.0, "ru_maxrss_gb": 110.0, "cgroup_peak_gb": 115.0},
             "clock": {"busy_samples": 400, "sm_median": 2600, "busy_clean_fraction": 1.0, "busy_soft_clean_fraction": 1.0,
                       "hard_reasons_any_sample": [], "reasons_seen": []},
@@ -846,9 +893,10 @@ def selftest():
         cases += 6
         # OOM on a draw (ruled before data): both draws OOM = a READ outcome "does not fit", out of every ratio, never VOID; one draw
         # OOM VOIDs the pair; a hook fault (harness_error, exit 10) or any other status stays VOID; the other budget is unchanged
-        oom = lambda r: {k: r[k] for k in ("arm", "draw", "index", "kind", "budget", "framework", "versions", "env_box")} | {"status": "oom"}   # noqa: E731
+        oom = lambda r: ({k: r[k] for k in ("arm", "draw", "index", "kind", "budget", "framework", "versions", "env_box", "card")}   # noqa: E731
+                         | {"status": "oom", "rc": OOM_EXIT, "phase": "train"})
         rows_oom = [oom(r) if r["arm"] == "E" else r for r in rows]
-        b = reduce_budget(rows_oom, "12g", 24, 20)
+        b = reduce_budget(rows_oom, "12g", 24, 20, ref_trainable=26_738_688)          # the count from E's primer (reduce_work)
         assert b["verdict"] == "READ" and b["arms"]["E"]["state"] == "OOM" and b["comparisons"] == [], b
         assert b["arms"]["UA"]["state"] == "VALID" and b["arms"]["E"]["words"] == "does not fit at this budget"
         assert reduce_budget([dict(copy.deepcopy(r), budget="full", vram_cap=None) for r in rows if r["arm"] == "E"], "full", 0, None)["verdict"] == "READ"
@@ -864,6 +912,25 @@ def selftest():
         bu = reduce_budget(ua_oom, "12g", None, None)
         assert bu["verdict"] == "READ" and bu["arms"]["UA"]["state"] == "OOM" and bu["arms"]["UT"]["state"] == "NOT_RUN", bu
         cases += 7
+        guard = [dict(oom(r), phase="layer_major_guard") if r["arm"] == "E" else r for r in rows]   # the drift guard's OOM, before edge 0
+        assert reduce_budget(guard, "12g", 24, 20, ref_trainable=26_738_688)["arms"]["E"]["state"] == "OOM"
+        cases += 1
+        for label, change in [("exit 137, not 5", {"rc": 137}), ("no rc", {"rc": None}), ("an empty phase", {"phase": ""}),
+                              ("no phase", {"phase": None}), ("another card", {"card": {"name": "NVIDIA GeForce RTX 5090", "cap": [12, 0],
+                                                                                       "sm_count": 170}}),
+                              ("no release proof", {"versions": {**PINS, "torch": "2.12.1+cu130", "release_proof_ok": False}}),
+                              ("a dry stub", {"dry": True})]:
+            bad = [dict(oom(r), **change) if r["arm"] == "E" else r for r in rows]
+            assert reduce_budget(bad, "12g", 24, 20, ref_trainable=26_738_688)["arms"]["E"]["state"] == "VOID", label
+            cases += 1
+        # T6 in the reducer: every Unsloth draw trains E's count, taken from any E row (an OOM stub's or the primer's included)
+        mism = copy.deepcopy(rows)
+        mism[3]["trainable_params"] = 26_738_689
+        assert reduce_budget(mism, "12g", 24, 20)["arms"]["UA"]["state"] == "VOID"
+        nocount = [oom(r) if r["arm"] == "E" else r for r in rows]                          # E's stubs carry no count here
+        assert reduce_budget(nocount, "12g", 24, 20)["arms"]["UA"]["state"] == "VOID"
+        assert reduce_budget(nocount, "12g", 24, 20, ref_trainable=26_738_688)["arms"]["UA"]["state"] == "VALID"
+        cases += 3
     finally:
         C.check_env, C.check_library, C.check_dispatch, C.check_unfused = real
     # the host decisions the runner and this reducer share
