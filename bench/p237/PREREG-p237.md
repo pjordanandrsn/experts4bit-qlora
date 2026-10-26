@@ -141,9 +141,15 @@ A draw whose engagement check fails is **VOID**.
 
 **E: the offload.** It is checked with `E4B_OFFLOAD_STATS=1`, which counts only real host-to-device stagings (`stage()`
 returns early if a layer is already staged).
-- Layer-major stages each layer's experts once per optimizer step: **exactly 2n − 1 = 95** on Qwen3 (n = 48) on every
-  timed step, and 96 on step 0. P137 measured exactly these values on a 4090.
-- Any other steady count VOIDs the draw.
+- Layer-major stages each layer's experts once in the forward and once in the backward, and there is one resident slot.
+  So a step stages **2n = 96** on Qwen3 (n = 48), less one when layer 0 is already resident at the step's start (the
+  previous step's backward ended on it): **95** in the steady state. P137 measured exactly these on a 4090 (96 cold,
+  95 after).
+- The bar is per step and exact: step i's train-mode stagings == 2n − r_i, where r_i = 1 when the hook's edge-i snapshot
+  shows layer 0's handle resident, else 0. The step after an eval (loop indices 20 and 40) starts cold, because an
+  eval's stock forward evicts after each layer, so it reads 96, as does any step after the guard if the guard leaves
+  no layer resident. Eval stagings are counted apart, by `model.training`, and never enter a step.
+- Any other count, any step with no stagings, or any policy other than bulk VOIDs the draw.
 
 **E: the layer-major path.** The record proves `layer_major_step` ran on every optimizer step, not the stock loop.
 - The count of `layer_major_step` calls must equal the step count.
@@ -151,9 +157,17 @@ returns early if a layer is already staged).
 
 **UA and UT: the block swap.** All of these must hold:
 - `model._unsloth_block_swap` exists, and its `indices` hold exactly the arm's N layers.
-- Between steps, every frozen parameter of those layers has `numel() == 0`. A forward that skipped the swap hook could
-  not compute on a 0-element tensor.
-- The wrapped `_Block.prefetch` counts at least one real fetch per swapped layer per forward.
+- At every edge, the swap's own residency agrees with the tensors: every frozen parameter of each block it reports
+  evicted has `numel() == 0` (a forward that skipped the swap hook could not compute on a 0-element tensor), and no
+  resident block holds a 0-element parameter. At most `depth` blocks are resident at an edge (the recorded
+  `prefetch_depth`, 2 by default). The backward's last hook re-arms the first `depth` blocks for the next forward
+  (unsloth_zoo 2026.10.8 `block_swap.py`, `_bwd` at i = 0 calls `_arm(forward=True)`), so "every swapped layer empty
+  between steps" would be false on a healthy run. That was the draft's wording before the source was read; it is
+  corrected here, before data.
+- Per optimizer step (train mode, per interval), every swapped block has **at least M evictions and at least M − 1 real
+  fetches** through the wrapped `_Block.evict` / `_Block.prefetch`, counted only on a residency change (both return at
+  once otherwise). Each training micro-batch needs the block resident for its forward, and its backward releases it.
+  The first fetch of a step may land in the previous interval (the re-arm above).
 - The full-card UA at N = 0 has no swap, and records that.
 
 **UA and UT: the expert GEMMs** (the TC1-79 lesson: no torch-level counter that a backend can bypass).
