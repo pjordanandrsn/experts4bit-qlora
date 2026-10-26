@@ -296,12 +296,22 @@ def test_e4b_without_layer_major_leaves_the_step_unwrapped(e4b_env, monkeypatch)
 
 # -- the contract -----------------------------------------------------------------------------------------------------------------
 def test_the_source_launches_no_device_work_and_sets_nothing():
-    src = HOOK.read_text(encoding="utf-8")
-    code = "\n".join(ln.split("#", 1)[0] for ln in src.splitlines())
-    for bad in (".cuda(", ".to(", "synchronize", "copy_(", "torch.empty", "Event(", "import torch", "os.environ[", "putenv",
-                "setenv", "set_per_process_memory_fraction", "elapsed_time", ".item("):
-        assert bad not in code, bad
-    assert "os.environ.get(" in code                      # it reads the environment, for the record
+    """Read off the parsed code (docstrings and comments can name these words): no attribute or name that launches device work or
+    writes the environment, no torch import, and no assignment into os.environ."""
+    import ast
+    tree = ast.parse(HOOK.read_text(encoding="utf-8"))
+    bad = {"cuda", "to", "synchronize", "copy_", "empty", "zeros", "Event", "record_stream", "elapsed_time", "item", "putenv",
+           "setenv", "set_per_process_memory_fraction", "pop", "update"}
+    used = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)} | {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    assert not bad & used, sorted(bad & used)
+    imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
+    imported |= {(n.module or "").split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+    assert "torch" not in imported, imported
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.Assign, ast.AugAssign, ast.Delete)):
+            for t in getattr(n, "targets", None) or [n.target]:
+                assert "environ" not in ast.unparse(t), ast.unparse(n)
+    assert "environ" in {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}   # it reads the environment, for the record
 
 
 def test_make_takes_no_arguments_and_defines_the_four_phases():
