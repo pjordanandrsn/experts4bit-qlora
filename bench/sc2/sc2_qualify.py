@@ -40,10 +40,14 @@ approves compute; the launcher (``tools/pod-launch.sh``) creates, and applies it
   judge-run --sampler sampler.csv [--out FILE]                                       exit 0 PASS, 18 REFUSE, 25 UNREAD
       The controller-side sampler over the whole timed run (``nvidia-smi --query-gpu=timestamp,clocks.sm,
       clocks_event_reasons.active,power.draw --format=csv -lms 1000``, started on the box before the lane's driver and
-      fetched after it), judged by ``bench/common/card_clock.py``'s rule: no HARD reason bit on ANY sample, and
-      SwPowerCap clear on at least 95 % of the BUSY samples (SM above card_clock's 1000 MHz), so idle install and
-      download time cannot dilute it; the busy SM median is recorded, not ruled. Fewer than 10 busy samples means the
-      sampler never saw the load: probe_error (rc 25). A sampler that READ and failed is below_floor, a host fault
+      fetched after it), judged by ``bench/common/card_clock.py``'s own ``passes(..., mode="clock")`` (TC1 amendment 83,
+      SC2f Amendment 9) at a floor of 0 MHz (``SERVING_JUDGE_FLOOR_MHZ``): a hardware or thermal slowdown on ANY sample
+      (idle ones included) refuses, Reliability refuses only on >= 95 % of the BUSY samples (SM above card_clock's
+      1000 MHz, so idle install and download time cannot dilute it), and SwPowerCap is recorded, never refusing. The
+      clock is NOT ruled here: a serving run's busy SM median sits under the 5090 floor (2,415 MHz over the store's 51
+      serving snapshots), so the pre-install burn at 2700 is the only clock screen; the median and the SwPowerCap and
+      Reliability shares are recorded. Fewer than 10 busy samples means the sampler never saw the load: probe_error
+      (rc 25). A sampler that READ and failed is below_floor, a host fault
       (rc 18). A missing or unreadable file (no header, fewer than 10 readable rows, or more than 5 % of rows
       unreadable) is probe_error, a HARNESS fault (rc 25): it voids the run and never excludes the machine.
   --self-test
@@ -54,7 +58,6 @@ strike, and excludes the machine from its next draws.
 import argparse
 import json
 import re
-import statistics
 import sys
 from pathlib import Path
 
@@ -72,7 +75,10 @@ LISTED_W = 575.0
 SAMPLER_MIN_ROWS = 10
 SAMPLER_MIN_BUSY = 10                             # card_clock.passes' min_busy
 SAMPLER_MAX_BAD = 0.05
-SOFT_MIN_CLEAN = 0.95
+#: SC2f Amendment 9: the run judge passes card_clock's clock rule a floor of 0 MHz, so the clock never binds here (a serving run's
+#: busy SM median sits under the 5090's 2700 floor on healthy cards: 2,415 MHz over the store's 51 serving snapshots) while the
+#: bit clauses and min_busy still do. The card's clock is screened once, by the pre-install burn at 2700 in clock mode.
+SERVING_JUDGE_FLOOR_MHZ = 0
 EXIT_ADMIT, EXIT_NONE, EXIT_PARK, EXIT_POWER, EXIT_FLOOR, EXIT_UNREAD = 0, 1, 2, 17, 18, 25
 
 
@@ -288,23 +294,15 @@ def judge_run(text) -> dict:
     if len(masks) < SAMPLER_MIN_ROWS or (rows and bad / rows > SAMPLER_MAX_BAD):
         return dict(rec, verdict="UNREAD", refusal="probe_error",
                     why=[f"{len(masks)} readable rows of {rows} (need >= {SAMPLER_MIN_ROWS}, <= {SAMPLER_MAX_BAD:.0%} unreadable)"])
-    hard = 0
-    for _, m in masks:
-        hard |= m & cc.HARD_BITS                  # over ANY sample, idle ones included
-    busy = [(c, m) for c, m in masks if c > cc.BUSY_MHZ]   # card_clock's busy samples: the SwPowerCap share is theirs
-    rec.update(busy_samples=len(busy), hard_reasons_any_sample=cc.decode(hard), sm_max=max(c for c, _ in masks),
-               busy_sm_median=statistics.median(c for c, _ in busy) if busy else None)   # reported, not ruled
-    if len(busy) < SAMPLER_MIN_BUSY:
+    summ = cc.summarize([(c, 0, 0, m) for c, m in masks])   # card_clock's own summary: its busy samples, counts and any-sample bits
+    rec.update(busy_samples=summ["busy_samples"], sm_max=summ["sm_max"], busy_sm_median=summ["sm_median"],   # reported, not ruled
+               any_sample_bits_seen=summ["any_sample_bits_seen"], busy_reliability_samples=summ["busy_reliability_samples"],
+               busy_reliability_fraction=summ["busy_reliability_fraction"], busy_swpowercap_fraction=summ["busy_swpowercap_fraction"])
+    if summ["busy_samples"] < SAMPLER_MIN_BUSY:
         return dict(rec, verdict="UNREAD", refusal="probe_error",
-                    why=[f"{len(busy)} busy samples (SM > {cc.BUSY_MHZ} MHz) < {SAMPLER_MIN_BUSY}: the sampler never saw the load"])
-    soft_clean = sum(1 for _, m in busy if not m & cc.SOFT_BITS) / len(busy)
-    rec["busy_soft_clean_fraction"] = round(soft_clean, 4)
-    why = []
-    if hard:
-        why.append(f"a hard slowdown or cap reason on a sample: {cc.decode(hard)}")
-    if soft_clean < SOFT_MIN_CLEAN:
-        why.append(f"SwPowerCap clear on {soft_clean:.1%} of busy samples < {SOFT_MIN_CLEAN:.0%}")
-    return dict(rec, verdict="PASS" if not why else "REFUSE", refusal=None if not why else "below_floor", why=why)
+                    why=[f"{summ['busy_samples']} busy samples (SM > {cc.BUSY_MHZ} MHz) < {SAMPLER_MIN_BUSY}: the sampler never saw the load"])
+    ok, why = cc.passes(summ, SERVING_JUDGE_FLOOR_MHZ, min_busy=SAMPLER_MIN_BUSY, mode="clock")   # TC1 am83's rule, never copied
+    return dict(rec, verdict="PASS" if ok else "REFUSE", refusal=None if ok else "below_floor", why=[why] if why else [])
 
 
 def self_test() -> int:
@@ -387,16 +385,25 @@ def self_test() -> int:
         ("run: a clean sampler passes", judge_run(hdr + row() * 30)["verdict"] == "PASS"),
         ("run: one HwSlowdown sample refuses", judge_run(hdr + row() * 29 + row("0x0000000000000008"))["verdict"]
          == "REFUSE"),
-        ("run: one Reliability sample refuses", judge_run(hdr + row() * 29 + row("0x0000000000000400"))["verdict"]
-         == "REFUSE"),
-        ("run: SwPowerCap on 5 % passes", judge_run(hdr + row() * 95 + row("0x0000000000000004") * 5)["verdict"] == "PASS"),
-        ("run: SwPowerCap on 6 % refuses", judge_run(hdr + row() * 94 + row("0x0000000000000004") * 6)["verdict"]
-         == "REFUSE"),
+        # SC2f Amendment 9: TC1 amendment 83's clock rule at a 0 MHz floor -- Reliability refuses only when persistent, SwPowerCap
+        # is recorded, the clock is never ruled here
+        ("run: one Reliability sample passes (recorded)", judge_run(hdr + row() * 29 + row("0x0000000000000400"))["verdict"]
+         == "PASS"),
+        ("run: Reliability on 95 % of busy samples refuses (persistent)",
+         judge_run(hdr + row() + row("0x0000000000000400") * 19)["verdict"] == "REFUSE"),
+        ("run: Reliability on 94 of 100 busy samples passes",
+         judge_run(hdr + row() * 6 + row("0x0000000000000400") * 94)["verdict"] == "PASS"),
+        ("run: SwPowerCap on every busy sample passes (recorded, never refusing)",
+         judge_run(hdr + row("0x0000000000000004") * 30)["verdict"] == "PASS"),
+        ("run: a serving-shaped run at a 2,400 MHz busy median with clean bits passes (the clock is not ruled here)",
+         judge_run(hdr + row(mhz=2400) * 30)["verdict"] == "PASS" and SERVING_JUDGE_FLOOR_MHZ == 0),
         ("run: GpuIdle is no refusal", judge_run(hdr + row("0x0000000000000001", 210) * 30 + row() * 10)["verdict"]
          == "PASS"),
-        ("run: half idle plus SwPowerCap on 10 % of busy samples refuses (idle never dilutes)",
-         judge_run(hdr + row("0x0000000000000001", 210) * 100 + row() * 90 + row("0x0000000000000004") * 10)["verdict"]
+        ("run: half idle plus Reliability on 95 % of busy samples refuses (idle never dilutes)",
+         judge_run(hdr + row("0x0000000000000001", 210) * 100 + row() * 5 + row("0x0000000000000400") * 95)["verdict"]
          == "REFUSE"),
+        ("run: the record carries am83's shares", judge_run(hdr + row() * 20 + row("0x0000000000000004") * 10)
+         .get("busy_swpowercap_fraction") == round(10 / 30, 4)),
         ("run: a hard bit on an IDLE sample still refuses", judge_run(hdr + row("0x0000000000000008", 210) + row() * 30)
          ["verdict"] == "REFUSE"),
         ("run: fewer than 10 busy samples is UNREAD", judge_run(hdr + row(mhz=210) * 40 + row() * 9)["verdict"] == "UNREAD"),

@@ -41,7 +41,7 @@ def test_the_admission_constants_are_the_texts():
     assert "**Every create consumes one of 3 proof attempts** (`sc2f-prove-11`, `-12`, `-13`), whatever its exit" in AM7_FLAT
     assert Q.FIRST_ID == {"sc2f": 11, "sc2h": 1, "sc2i": 1}
     assert "`vast_provider.hourly(offer)` at 320 GB disk" in AM7_FLAT and "`gpu_max_power` as `listed_power_w`" in AM7_FLAT
-    assert Q.ENFORCED_W == 575.0 and "--floor 2700" in AM7 and Q.SOFT_MIN_CLEAN == 0.95
+    assert Q.ENFORCED_W == 575.0 and "--floor 2700" in AM7 and Q.SERVING_JUDGE_FLOOR_MHZ == 0   # SC2f Amendment 9 supersedes the 95 % bar
 
 
 def _receipt(store, day, run_id, machine, instance="1", status="OK", result="pass"):

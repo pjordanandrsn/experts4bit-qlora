@@ -696,3 +696,60 @@ SC2h (Amendment 5) and SC2i (Amendment 4) take this with Amendment 7, by referen
 - a mutant that drops any one of the three clauses fails at least one of these tests.
 
 **Unchanged:** everything else Amendment 7 registered.
+
+### Amendment 9 (registered before any SC2f run): the card floor follows TC1 amendment 83, and the run judge rules bits only
+
+**Why.** TC1 amendment 83 (e4b#2152) re-registered `bench/common/card_clock.py`. Amendment 80's 95 % SwPowerCap bar was
+never tested on a healthy card, and the first healthy one failed it: a stock 575 W RTX 5090 at 2,827 MHz held SwPowerCap
+on 98.6 % of its burn's busy samples. Amendment 83's store-wide scan found the bar would have refused 28 % of healthy
+5090 training logs. Its clock rule is now `card_clock.py`'s default for the burn:
+- the clock floor binds;
+- a hardware or thermal slowdown on ANY sample refuses;
+- Reliability refuses only on >= 95 % of busy samples;
+- SwPowerCap is recorded, never refusing.
+
+Amendment 7 used amendment 80's rule in two places: the pre-install burn, and the in-run judge
+(`bench/sc2/sc2_qualify.py judge-run`), which re-implemented amendment 80's bits itself.
+
+**The serving evidence** (counts only). The private receipt store holds no per-second serving log with reason bits; the SC1 sampler
+logs none, and no SC2f proof has run (attempts 0 of 3). The only serving rows with reason bits are phase-boundary
+snapshots (`gpu_phases.csv`) from 14 serving runs, of which 51 rows are busy (SM above 1000 MHz):
+- busy SM median 2,415 MHz (p10 2,040, max 3,127). 32 of 51 sit under 2,700 MHz (median power 68 W: light load at
+  partial clocks); 19 sit at or above it (median 2,977 MHz, 101 W);
+- Reliability on 4 of 51 (1 of the 19 at or above 2,700); SwPowerCap on 3 of 51;
+- a hardware or thermal slowdown (0x2E8) on 0 of 51.
+
+**The change** (the qualify path only; every staged entry and the kit hold are unchanged, so the HOLD is untouched):
+- **(a) the burn.** `card_clock.py burn --floor 2700 --mode clock`, which is amendment 83's clock rule, named
+  explicitly. Its own refusal field still decides: `below_floor` is rc 18, `probe_error` is rc 25. The wrapper stages
+  `card_clock.py` from the launch checkout, which pins its bytes; at amendment 83 that is `14494c6d…`.
+- **(b) the in-run judge** (pre-data) takes amendment 83's bit rule with **no clock floor**:
+  `card_clock.passes(summary, SERVING_JUDGE_FLOOR_MHZ, mode="clock")` with `SERVING_JUDGE_FLOOR_MHZ = 0`. The summary is
+  `card_clock.summarize()` over the sampler's rows, so the rule is amendment 83's own code, never a copy.
+  - A slowdown bit on any sample refuses, idle ones included.
+  - Reliability refuses on >= 95 % of the busy samples. Idle samples never dilute it.
+  - SwPowerCap is recorded.
+  - The busy SM median is recorded, never ruled. A serving run's busy median sits under the 5090 floor on healthy
+    cards (2,415 MHz above), so a floor here would VOID healthy serving runs. The burn at 2,700 is the only clock screen.
+  - Amendment 80's any-sample Reliability refusal would have refused healthy serving boxes (4 of 51 rows), and its
+    SwPowerCap bar is amendment 83's to supersede.
+  - Fewer than 10 busy samples is still `probe_error` (rc 25). The exit codes are unchanged.
+- **(c) the staged set and the kit hold.** Neither names `card_clock.py`, `sc2_qualify.py` or `sc2_qualify_drive.sh`:
+  the qualify path runs from the launch checkout, outside the staged kit. So nothing is re-pinned there, and the launch
+  checkout, re-cut at this amendment's merge, carries the bytes.
+
+**The evidence's limits.** 51 phase-boundary snapshot rows from 14 runs, not per-second. The per-second sampler the kit
+already fetches is the first per-second serving record. It is recorded as information, and any bar change after it is
+a new amendment.
+
+SC2h (Amendment 5) and SC2i (Amendment 4) take this with Amendment 7, by reference.
+
+**Evidence.** `bench/sc2/sc2_qualify.py --self-test` and `tests/test_sc2f_am9.py`, each clause alone:
+- a serving-shaped run at a 2,400 MHz busy median with clean bits PASSES, and a mutant floor of 2,700 VOIDs it;
+- one Reliability sample passes; Reliability on 95 % of busy samples refuses; on 94 of 100 it passes;
+- SwPowerCap on every busy sample passes;
+- a slowdown bit on one idle sample refuses;
+- half idle plus persistent Reliability on the busy samples still refuses;
+- the burn line names `--mode clock`, and the launch template's two guard strings are unchanged.
+
+**Unchanged:** everything else Amendments 7 and 8 registered.
