@@ -72,6 +72,11 @@ def test_each_lanes_worst_by_its_own_formula():
     i_proof, i_read_raw = _c(c + 0.10), 4.5 * c + 0.73
     assert (i_proof, _c(i_read_raw), _c(2 * i_proof + 2 * i_read_raw)) == (1.35, 6.36, 15.41)
     assert max(f_proof, f_read, h_proof, h_read, i_proof, _c(i_read_raw)) <= 15          # the per-run bar
+    # with SC2h Am. 5 / SC2i Am. 4's 3 proof attempts and the burn (~$0.03 on each run), each in its own rounding convention
+    burn_proof = _c(c + 0.10 + 0.03)
+    assert _c(3 * burn_proof + 2 * _c(4.0 * c + 0.73 + 0.03)) == 15.66
+    assert _c(3 * burn_proof + 2 * (4.5 * c + 0.73 + 0.03)) == 16.91
+    assert "the two lane totals would be $15.66 and $16.91" in AM11
     for txt in ("a proof $1.18 -> **$1.38**", "the reading $4.44 -> **$5.14**", "$12.42 -> **$14.42**",
                 "a proof $1.15 -> **$1.35**", "$4.93 -> **$5.73**", "$12.16 -> **$14.16**", "$5.46 -> **$6.36**",
                 "$13.21 -> **$15.41**", "SC2i's lane total is above $15, by $0.41", "the largest is SC2i's reading, at $6.36"):

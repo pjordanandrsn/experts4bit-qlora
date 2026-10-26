@@ -896,7 +896,7 @@ as committed in that file (49 machines, 25 pass):
 
 **Every run stays at or under $15**: the largest is SC2i's reading, at $6.36. The $15 bar is per run, and a lane total is
 stated, not capped. SC2i's lane total is above $15, by $0.41. Counted with the 3 proof attempts that SC2h Amendment 5 and
-SC2i Amendment 4 register, plus the burn (about $0.03 each), the two lane totals would be $15.66 and $16.92. No guard is
+SC2i Amendment 4 register, plus the burn (about $0.03 each), the two lane totals would be $15.66 and $16.91 (SC2i's reading unrounded, as its own formula sums it). No guard is
 trimmed.
 
 SC2h (Amendment 6) and SC2i (Amendment 5) record their own restated worsts and take this ceiling by reference.
