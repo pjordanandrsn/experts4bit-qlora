@@ -1,0 +1,447 @@
+{
+ "am10_replay_admit_reads": {
+  "131173": 6,
+  "152587": 6,
+  "153193": 1,
+  "154850": 19,
+  "35052": 10,
+  "35963": 13,
+  "55337": 2,
+  "6619": 4
+ },
+ "burns": [
+  {
+   "machine": "137401",
+   "pass_floor": false,
+   "power_w": "400",
+   "run": "2026-10-25/g3-gpu-check-1",
+   "sm_median": 1972.0
+  },
+  {
+   "machine": "151350",
+   "pass_floor": false,
+   "power_w": "470",
+   "run": "2026-10-25/g3-gpu-check-4",
+   "sm_median": 2482.0
+  },
+  {
+   "machine": "150147",
+   "pass_floor": false,
+   "power_w": "430",
+   "run": "2026-10-26/p238-shake-1",
+   "sm_median": 2493.5
+  },
+  {
+   "machine": "38531",
+   "pass_floor": true,
+   "power_w": "575",
+   "run": "2026-10-26/p238-shake-r1",
+   "sm_median": 2827.0
+  },
+  {
+   "machine": "32658",
+   "pass_floor": false,
+   "power_w": "500",
+   "run": "2026-10-26/p238-shake-r2",
+   "sm_median": 2647.0
+  }
+ ],
+ "listed_vs_enforced": {
+  "agree": 22,
+  "differ": {
+   "145701": {
+    "enforced": [
+     560.0,
+     575.0
+    ],
+    "listed": [
+     575.0
+    ]
+   },
+   "150147": {
+    "enforced": [
+     430.0,
+     450.0
+    ],
+    "listed": [
+     430.0
+    ]
+   },
+   "150692": {
+    "enforced": [
+     475.0
+    ],
+    "listed": [
+     400.0
+    ]
+   },
+   "36204": {
+    "enforced": [
+     500.0
+    ],
+    "listed": [
+     600.0
+    ]
+   },
+   "45511": {
+    "enforced": [
+     400.0
+    ],
+    "listed": [
+     450.0
+    ]
+   },
+   "46990": {
+    "enforced": [
+     525.0
+    ],
+    "listed": [
+     500.0
+    ]
+   },
+   "48741": {
+    "enforced": [
+     520.0
+    ],
+    "listed": [
+     600.0
+    ]
+   },
+   "55678": {
+    "enforced": [
+     575.0
+    ],
+    "listed": [
+     575.0,
+     600.0
+    ]
+   }
+  },
+  "machines": 30
+ },
+ "market": {
+  "admit_points_by_machine": {
+   "12918": {
+    "admit_points": 5,
+    "listed_w": "500",
+    "qualifying_reads": 29
+   },
+   "131173": {
+    "admit_points": 7,
+    "listed_w": "600",
+    "qualifying_reads": 63
+   },
+   "139781": {
+    "admit_points": 1,
+    "listed_w": "500",
+    "qualifying_reads": 3
+   },
+   "140180": {
+    "admit_points": 11,
+    "listed_w": "500",
+    "qualifying_reads": 33
+   },
+   "142281": {
+    "admit_points": 6,
+    "listed_w": "500",
+    "qualifying_reads": 25
+   },
+   "143948": {
+    "admit_points": 7,
+    "listed_w": "440",
+    "qualifying_reads": 23
+   },
+   "148555": {
+    "admit_points": 1,
+    "listed_w": "400",
+    "qualifying_reads": 6
+   },
+   "150147": {
+    "admit_points": 13,
+    "listed_w": "430",
+    "qualifying_reads": 45
+   },
+   "151350": {
+    "admit_points": 2,
+    "listed_w": "470",
+    "qualifying_reads": 9
+   },
+   "151831": {
+    "admit_points": 3,
+    "listed_w": "600",
+    "qualifying_reads": 7
+   },
+   "152587": {
+    "admit_points": 6,
+    "listed_w": "600",
+    "qualifying_reads": 108
+   },
+   "153193": {
+    "admit_points": 1,
+    "listed_w": "575",
+    "qualifying_reads": 5
+   },
+   "153506": {
+    "admit_points": 9,
+    "listed_w": "500",
+    "qualifying_reads": 85
+   },
+   "154408": {
+    "admit_points": 1,
+    "listed_w": "600",
+    "qualifying_reads": 7
+   },
+   "154850": {
+    "admit_points": 20,
+    "listed_w": "600",
+    "qualifying_reads": 87
+   },
+   "154905": {
+    "admit_points": 1,
+    "listed_w": "470",
+    "qualifying_reads": 17
+   },
+   "19317": {
+    "admit_points": 79,
+    "listed_w": "450",
+    "qualifying_reads": 120
+   },
+   "35052": {
+    "admit_points": 10,
+    "listed_w": "600",
+    "qualifying_reads": 22
+   },
+   "35963": {
+    "admit_points": 14,
+    "listed_w": "600",
+    "qualifying_reads": 34
+   },
+   "36213": {
+    "admit_points": 3,
+    "listed_w": "450",
+    "qualifying_reads": 39
+   },
+   "45511": {
+    "admit_points": 3,
+    "listed_w": "450",
+    "qualifying_reads": 7
+   },
+   "45708": {
+    "admit_points": 1,
+    "listed_w": "400",
+    "qualifying_reads": 22
+   },
+   "46427": {
+    "admit_points": 1,
+    "listed_w": "400",
+    "qualifying_reads": 8
+   },
+   "46990": {
+    "admit_points": 17,
+    "listed_w": "500",
+    "qualifying_reads": 42
+   },
+   "55337": {
+    "admit_points": 2,
+    "listed_w": "575",
+    "qualifying_reads": 8
+   },
+   "6619": {
+    "admit_points": 4,
+    "listed_w": "575",
+    "qualifying_reads": 8
+   },
+   "9011": {
+    "admit_points": 1,
+    "listed_w": "550",
+    "qualifying_reads": 10
+   }
+  },
+  "by_listed_w": {
+   "400": {
+    "admit_points": 3,
+    "machines": 31,
+    "qualified": 5,
+    "with_admit_point": 3
+   },
+   "430": {
+    "admit_points": 13,
+    "machines": 1,
+    "qualified": 1,
+    "with_admit_point": 1
+   },
+   "440": {
+    "admit_points": 7,
+    "machines": 1,
+    "qualified": 1,
+    "with_admit_point": 1
+   },
+   "450": {
+    "admit_points": 85,
+    "machines": 7,
+    "qualified": 4,
+    "with_admit_point": 3
+   },
+   "470": {
+    "admit_points": 3,
+    "machines": 2,
+    "qualified": 2,
+    "with_admit_point": 2
+   },
+   "475": {
+    "admit_points": 0,
+    "machines": 35,
+    "qualified": 0,
+    "with_admit_point": 0
+   },
+   "480": {
+    "admit_points": 0,
+    "machines": 1,
+    "qualified": 0,
+    "with_admit_point": 0
+   },
+   "500": {
+    "admit_points": 49,
+    "machines": 13,
+    "qualified": 10,
+    "with_admit_point": 6
+   },
+   "525": {
+    "admit_points": 0,
+    "machines": 1,
+    "qualified": 1,
+    "with_admit_point": 0
+   },
+   "550": {
+    "admit_points": 1,
+    "machines": 2,
+    "qualified": 1,
+    "with_admit_point": 1
+   },
+   "575": {
+    "admit_points": 7,
+    "machines": 14,
+    "qualified": 10,
+    "with_admit_point": 3
+   },
+   "575/600": {
+    "admit_points": 0,
+    "machines": 2,
+    "qualified": 1,
+    "with_admit_point": 0
+   },
+   "600": {
+    "admit_points": 61,
+    "machines": 17,
+    "qualified": 13,
+    "with_admit_point": 7
+   }
+  },
+  "reads": 228
+ },
+ "recorded_clocks": {
+  "machines": 48,
+  "pass": 24
+ },
+ "training_by_enforced_w": {
+  "400": {
+   "machines": 5,
+   "machines_every_run_at_floor": 1,
+   "run_median_max": 2973.5,
+   "run_median_median": 2585.25,
+   "run_median_min": 1488.5,
+   "runs": 8,
+   "runs_at_floor": 3
+  },
+  "435": {
+   "machines": 1,
+   "machines_every_run_at_floor": 0,
+   "run_median_max": 2332.0,
+   "run_median_median": 2332.0,
+   "run_median_min": 2324.5,
+   "runs": 3,
+   "runs_at_floor": 0
+  },
+  "450": {
+   "machines": 1,
+   "machines_every_run_at_floor": 0,
+   "run_median_max": 2662.0,
+   "run_median_median": 2662.0,
+   "run_median_min": 2662.0,
+   "runs": 1,
+   "runs_at_floor": 0
+  },
+  "470": {
+   "machines": 2,
+   "machines_every_run_at_floor": 1,
+   "run_median_max": 2801.0,
+   "run_median_median": 2445.0,
+   "run_median_min": 2422.0,
+   "runs": 7,
+   "runs_at_floor": 2
+  },
+  "475": {
+   "machines": 6,
+   "machines_every_run_at_floor": 6,
+   "run_median_max": 2827.0,
+   "run_median_median": 2772.75,
+   "run_median_min": 2724.0,
+   "runs": 6,
+   "runs_at_floor": 6
+  },
+  "480": {
+   "machines": 1,
+   "machines_every_run_at_floor": 0,
+   "run_median_max": 2550.0,
+   "run_median_median": 2550.0,
+   "run_median_min": 2550.0,
+   "runs": 1,
+   "runs_at_floor": 0
+  },
+  "500": {
+   "machines": 5,
+   "machines_every_run_at_floor": 3,
+   "run_median_max": 2902.0,
+   "run_median_median": 2857.0,
+   "run_median_min": 2512.0,
+   "runs": 7,
+   "runs_at_floor": 5
+  },
+  "530": {
+   "machines": 1,
+   "machines_every_run_at_floor": 1,
+   "run_median_max": 2786.0,
+   "run_median_median": 2786.0,
+   "run_median_min": 2786.0,
+   "runs": 1,
+   "runs_at_floor": 1
+  },
+  "560": {
+   "machines": 1,
+   "machines_every_run_at_floor": 0,
+   "run_median_max": 2430.0,
+   "run_median_median": 2430.0,
+   "run_median_min": 2430.0,
+   "runs": 1,
+   "runs_at_floor": 0
+  },
+  "575": {
+   "machines": 14,
+   "machines_every_run_at_floor": 9,
+   "run_median_max": 2988.5,
+   "run_median_median": 2865.0,
+   "run_median_min": 2377.0,
+   "runs": 41,
+   "runs_at_floor": 33
+  },
+  "600": {
+   "machines": 8,
+   "machines_every_run_at_floor": 4,
+   "run_median_max": 3022.0,
+   "run_median_median": 2940.0,
+   "run_median_min": 2576.0,
+   "runs": 19,
+   "runs_at_floor": 13
+  }
+ }
+}

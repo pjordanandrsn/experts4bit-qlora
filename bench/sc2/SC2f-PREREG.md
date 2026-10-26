@@ -753,3 +753,119 @@ SC2h (Amendment 5) and SC2i (Amendment 4) take this with Amendment 7, by referen
 - the burn line names `--mode clock`, and the launch template's two guard strings are unchanged.
 
 **Unchanged:** everything else Amendments 7 and 8 registered.
+
+### Amendment 10 (registered before any SC2f run): the power class is {575, 600} W, and a recorded clock fail is never admitted
+
+**Why.** Amendment 7 admits only machines listing 575 W and qualifies only a card enforcing 575.0 W. Over the screen's
+first 228 reads (2026-10-25T14:14:14Z to 2026-10-26T09:09:24Z, `bench/sc2/sc2f-am10/screen_reads.json`), 575 W listings
+reached an admit point 7 times (3 machines) and no proof ran (attempts 0 of 3). 600 W listings reached one 61 times
+(7 machines). This is pre-data: no SC2f proof, and no read of any arm, exists.
+
+**The evidence** (`bench/sc2/sc2f-am10/census.json`, written by `power_census.py` from those reads and the private receipt
+store at `49683ed6`; counts only):
+- **The market, by listed power** (machines seen / with a qualifying offer / reaching an admit point; admit points): 575 W
+  14 / 10 / 3, 7 points; 600 W 17 / 13 / 7, 61 points; 500 W 13 / 10 / 6, 49 points; 450 W 7 / 4 / 3, 85 points
+  (nearly all one machine).
+- **Burns** (the gate's own load, `card_clock.py burn`, bf16 matmul n=8192 for 20 s; 5 in the store): 575 W 2,827 MHz
+  (pass); 500 W 2,647; 470 W 2,482; 430 W 2,493.5; 400 W 1,972 (each under the floor). No 600 W burn exists.
+- **Training clocks, by enforced power** (per run, the median of its per-second clock logs' busy medians): at 600 W, 13
+  of 19 runs, and 4 of 8 machines on every run, held >= 2,700 MHz (median 2,940); at 575 W, 33 of 41 runs and 9 of 14
+  machines (median 2,865); at 500 W, 5 of 7 runs and 3 of 5 machines (median 2,857).
+- **Listed vs enforced**: of 30 machines in both the reads and the store, 22 agree. Among the 8 that do not, two list
+  600 W and enforced 500 W and 520 W. So a listing is an upper bound, and the enforced read on the card stays the gate.
+
+The burn decides per card. The weaker 600 W share is why the recorded-clock rule below exists: it spends no attempt on a
+machine whose own record already failed the floor.
+
+**The change** (the floor, 2,700 MHz, and the clock mode do not change):
+- **(a) admission.** `sc2_qualify.py admit`'s listed-power class is {575, 600} W (`POWER_W`): a machine is in it when every
+  listed power on its offers in the last 3 reads is 575 or 600 W. Any other listed power is never admitted, as before.
+- **(b) the recorded clock** (P238 amendment 2's rule, used the same way). Outside host continuity and NAMED, a machine
+  whose latest receipt with a loaded clock record (a run's `gpuclk_*.txt`, or a pre-install burn's `card_clock_burn.json`
+  or `card_clock.json`, each with >= 10 busy samples) has any such record that fails `card_clock.passes(summary, 2700,
+  mode="clock")` is never admitted. A record that does not parse fails; a burn summary written before TC1 amendment 83
+  fails (its Reliability clause reads UNREAD). "Latest" orders runs by `started_at`, then day, then run id. In a run with
+  a clock record, a `receipt.json` that exists but does not parse, or a `started_at` that is missing or does not parse (no
+  defined "latest"), makes the census UNREAD; neither is ever skipped (at registration: 0 such runs, every one of the
+  store's 1,061 receipts carries a parseable `started_at`). Amendment 7's clean-runs order does NOT already exclude such a machine:
+  clean runs count host outcomes, never clocks. So the rule is added here, in `recorded_clocks()` and `walk_order()`. A
+  store error other than a missing file makes the census UNREAD, and only continuity and NAMED are then walked (fail
+  closed). At registration, 48 RTX 5090 machines carry a loaded clock record, and 24 pass.
+- **(c) the order.** Host continuity first, then 52780, then 145701 (both unchanged, whatever their records). Then the
+  {575, 600} W class: recorded-pass machines first, then unrecorded ones, each by prior clean runs descending, then
+  machine id. Then listed-power-unknown machines, last, in the same order, with the same recorded-clock rule.
+- **(d) the qualify read** (rc 17): PASS only at an enforced limit of 575.0 or 600.0 W, compared as floats. Every create
+  still counts, so a 600 W listing that enforces less refuses at the power read, before the burn, and uses an attempt.
+- **(e) after a clean proof** (rc 18 / 25): `forensics.txt` and `host_facts.json` must each read 575.0 or 600.0 W **and**
+  equal the enforced limit the qualify step read on the card. `judge-proof` takes the qualify step's `power.json` as
+  `--qualify-power`, always passed by `sc2_qualify_drive.sh`. A record read at another limit, or at one other than the
+  qualify reading, is a host fault (18). That record, or the qualify `power.json`, missing or unreadable is probe_error (25).
+- **(f) the run sampler is read by position** (a harness fix, after sc2f-prove-11, below). The sampler runs
+  `nvidia-smi --query-gpu=timestamp,clocks.sm,clocks_event_reasons.active,power.draw --format=csv,noheader,nounits -lms 1000`
+  (`SAMPLER_QUERY`), and `judge-run` reads each row by position in that order, as `card_clock.py`'s burn and TC1's sampler
+  already read theirs. No header name is looked up. Each row must have exactly 4 columns; the timestamp must parse; the SM
+  column must be an integer MHz in [100, 4000]; the reasons column must be 0x-hex; the power column must be watts (a unit
+  suffix is accepted). A row that fails counts as unreadable, under the 5 % limit kept for a torn last line. A header line is
+  skipped only as the FIRST line, and only when it fails those checks. A non-numeric row anywhere after it is UNREAD
+  outright. So a renamed header cannot void a healthy run, and a reordered or short query fails loud (rc 25), never a guess.
+  The rule applied to the rows (amendment 83's bits at a 0 MHz floor) is unchanged.
+- **(g) the fetch** (a harness fix): the wrapper's fetch of the qualify records excludes `venv/`, `.cache/`, `pip-cache/` and
+  `__pycache__/`, so the burn's throwaway torch venv never lands in a run directory.
+- **(h) the wrapper's text** now matches Amendment 7's attempt rule. A harness fault (rc 25) voids the run. The launcher records
+  no host fault, but the create still uses one of the lane's attempts, and the host is not revisited. The old text said rc 25
+  "never excludes the machine", which the admission never did.
+
+**sc2f-prove-11** (2026-10-26, machine 55337, listed and enforced 575 W, attempt 1 of 3, $0.319, teardown verified): **VOID,
+rc 25, as registered.** The power read passed (575.0 W), and the burn passed (busy median 2,715 MHz). The proof's driver exited
+0 with its success marker, and the post-proof records passed. The run judge read UNREAD because driver 610.43.02 printed the
+sampler's header as `clocks.current.sm [MHz]`, and Amendment 9's judge looked up the column by the name `clocks.sm`. Its unit
+fixture carried a hand-written header. Read with the column found, the fetched sampler's 476 rows show a busy median of
+2,880 MHz, no slowdown bit on any sample, and Reliability and SwPowerCap on 0 busy samples. **This is information only, not a
+verdict**: re-reading void data with a fix written after seeing it would turn a VOID into a PASS after the fact. The attempt
+stands as used, and 55337 is not revisited (Amendment 7's text). The next attempt gives the reading.
+
+**The header audit** (every header-name read in the SC2 qualify and judge path, against the real nvidia-smi output in the
+store). The store keeps real nvidia-smi CSV headers from 9 runs across drivers 535.154.05, 580.126.18, 595.71.05, 595.91.07,
+610.43.02, 615.71.09 and 615.78.08. Every run that queried `clocks.sm` got the header `clocks.current.sm [MHz]`: 535.154.05,
+610.43.02 (this run) and 615.71.09. The five power probes (580, 595 and 615 drivers) queried `power.limit`,
+`enforced.power.limit`, `power.max_limit` and `clocks.max.sm`, and those names came back unchanged, with a unit suffix.
+So a name-keyed read of `clocks.sm` breaks on every driver on record, and the power names are not moved today. No reader
+below depends on any of them.
+- the run sampler: read by name until (f), and by position from (f);
+- the enforced power read (`power`): `--format=csv,noheader`, read by position, no header;
+- the proof's `forensics.txt` power line: `sc1_run.sh` queries `--format=csv,noheader` and prepends its own label
+  `power.limit,clocks.max.sm`, so the label is fixed text, not an nvidia-smi header;
+- `host_facts.json`: the launcher's host probe queries `--format=csv,noheader,nounits` by position, and the judge reads its
+  own JSON key;
+- the burn (`card_clock.py`): `--format=csv,noheader,nounits` by position, and the wrapper reads its JSON `refusal` field.
+- **Not changed:** 500 W listings are not admitted, and no machine is named as an exception, so one rule holds with no
+  special cases. If the 72 h deadline nears its end with no ADMIT, the question returns with the new reads.
+
+**Spend and deadline.** Unchanged: 3 attempts, proof worst $1.18 per attempt, lane worst $12.42, and the deadline
+2026-10-28T14:12:34Z, after which the lanes park with no further change to the bar.
+
+SC2h (Amendment 5) and SC2i (Amendment 4) take this with Amendment 7, by reference.
+
+**Evidence.** `bench/sc2/sc2_qualify.py --self-test` and `tests/test_sc2f_am10.py`, each clause alone:
+- 575 W, 600 W, and a machine listing both, pass; 500, 599.9 and 600.1 W listings never admit, and a machine with one 500 W
+  offer beside a 600 W one is out;
+- 575 and 600 W machines interleave by clean runs;
+- recorded-pass before unrecorded, whatever the clean runs;
+- a recorded fail is never admitted, in the class and in the listed-unknown tier alike;
+- NAMED is walked whatever its record; an UNREAD census walks continuity and NAMED only;
+- the census itself on a planted store: the latest receipt decides, every record in it must pass, a legacy burn fails, a
+  sub-10-busy record is no record, and a non-5090 receipt is ignored;
+- the enforced read at 600 W passes, and at 500, 599.9 and 600.1 W refuses;
+- the post-proof records at 600 W against a 600 W qualify reading pass, and against a 575 W reading refuse; a missing
+  qualify `power.json` is UNREAD; the wrapper passes it.
+- The PREREG numbers are tested against `census.json`, and the market half of `census.json` is re-derived from
+  `screen_reads.json` in the test.
+- the run sampler: sc2f-prove-11's REAL `sampler.csv` (by sha) parses by position, with 476 rows and 0 unreadable, and the judge
+  as it ran (e4b `40dc1f43`) reads it UNREAD (the bug, reproduced). A renamed header still parses; two swapped columns
+  (SM/reasons, SM/power, timestamp/SM) are UNREAD, as are a 3-column query, a header after the first line, and an SM reading
+  outside [100, 4000]. A torn last line is tolerated within 5 %;
+- the fetch through a real `rsync`: card_clock.json and sampler.csv come back, and a planted venv, pip cache and bytecode stay
+  behind;
+- the wrapper runs `SAMPLER_QUERY` exactly, and its text no longer says rc 25 never excludes the machine.
+
+**Unchanged:** everything else Amendments 7, 8 and 9 registered.
