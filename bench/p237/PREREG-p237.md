@@ -533,8 +533,11 @@ vary with CPU generation, so widening the class would change what the speed rati
 1. **rc 16 reads the RAM the process can use:** min(MemTotal, every cgroup memory limit on the process's path, leaf to the visible
    root), in whole GiB. It covers cgroup v2 `memory.max` (`max` is no limit) and v1 `memory.limit_in_bytes` (2^60 or more is no
    limit). `p237_host.py ram_gib` reads it, and the runner refuses 16 below 128 GiB, as registered. An unread or unparseable value is
-   never "no limit": the box stops with 9. The HOST line and the refusal record both values. A test runs the runner's own lines: a
-   1 TB host held to 64 GiB by its cgroup refuses 16, and the registered MemTotal-only line, put back as a mutant, passes it.
+   never "no limit": the box stops with 9. Only a missing file counts as absent; an unreadable one (any other OS error) is
+   unread, never a pass. Under a cgroup namespace, a limit above the namespace's root is not visible to the box; the screen's
+   listed-RAM floor (fix 3) is the check on that side. The HOST line and the refusal record both values. A test runs the
+   runner's own lines: a 1 TB host held to 64 GiB by its cgroup refuses 16, an unreadable leaf stops 9, and the registered
+   MemTotal-only line, put back as a mutant, passes the slice.
 2. **The pin screen maps Vast's names onto the registered class:** `p237_host.vast_cpu_class` spells ™ and ® as lscpu does, then
    calls the registered `cpu_class`. The runner's lscpu reading and `CPU_CLASSES` are unchanged, and a test pins their patterns.
    The test table holds 59 real Vast names, from the census and from the host registry's offer records, including the Zen 4 F/X

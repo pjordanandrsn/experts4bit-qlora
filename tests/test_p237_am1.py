@@ -138,6 +138,44 @@ def test_an_unread_value_is_never_no_limit(tmp_path, capsys, box):
     assert capsys.readouterr().out == ""
 
 
+def test_an_unreadable_limit_raises_never_none(tmp_path, monkeypatch):
+    """Review fix: an unreadable limit file is never "absent". Only FileNotFoundError skips; a PermissionError on the leaf raises, so
+    ram_gib exits 1 (the runner stops 9) instead of reading MemTotal alone. Root-safe: open is patched, not the mode bits."""
+    args = _box(tmp_path, mem_kb=TB_KB, v2=str(64 * GIB), path="/kubepods/podA")
+    leaf = str(Path(args[2]) / "kubepods" / "podA" / "memory.max")
+    real_open = open
+
+    def guarded(f, *a, **k):
+        if str(f) == leaf:
+            raise PermissionError(13, "Permission denied", f)
+        return real_open(f, *a, **k)
+    monkeypatch.setattr("builtins.open", guarded)
+    with pytest.raises(PermissionError):
+        host.cgroup_limits(args[2], args[1])
+    assert host.main(["ram_gib", *args]) == 1
+
+
+@pytest.mark.skipif(sys.platform == "win32" or not hasattr(__import__("os"), "geteuid") or __import__("os").geteuid() == 0,
+                    reason="mode bits do not bind for root (the patched-open test above covers it)")
+def test_a_mode_000_leaf_stops_the_runner_9(tmp_path):
+    """cerin's probe: the leaf directory chmod 000 under a 1 TB host held to 64 GiB. exists() read it as absent (1008 GiB, cgroup=none,
+    a PASS); now the read raises and the runner stops 9."""
+    import os
+    args = _box(tmp_path, mem_kb=TB_KB, v2=str(64 * GIB), path="/kubepods/podA")
+    leaf = Path(args[2]) / "kubepods" / "podA"
+    os.chmod(leaf, 0)
+    try:
+        assert _runner_rc(tmp_path, args, _ram_block(RUN)) == 9
+    finally:
+        os.chmod(leaf, 0o755)
+
+
+def test_no_existence_test_in_the_limit_reader():
+    import inspect
+    src = inspect.getsource(host.cgroup_limits)
+    assert "exists(" not in src and "except FileNotFoundError:" in src
+
+
 def _ram_block(run):
     start = run.index("read -r RAM_GIB RAM_FROM")
     return run[start:run.index("finish 16; }", start) + len("finish 16; }")]
@@ -186,7 +224,8 @@ def test_the_shake_wall_is_the_fit_plus_the_launch_slack():
 
 
 def test_the_amendment_states_the_ruled_numbers():
-    for s in ("min(MemTotal, every cgroup memory limit", "1 TB host held to 64 GiB", "`p237_host.vast_cpu_class`", "listed `cpu_ram` >= 128 GiB",
+    for s in ("min(MemTotal, every cgroup memory limit", "1 TB host held to 64 GiB", "Only a missing file counts as absent",
+              "a limit above the namespace's root is not visible", "`p237_host.vast_cpu_class`", "listed `cpu_ram` >= 128 GiB",
               "18,000 s (5.0 h)", "Worst USD 4.10", "USD 3.85", "no override", "111 offers", "0 offers",
               "2026-10-28T07:51Z", "The CPU class is unchanged"):
         assert s in AM1, s

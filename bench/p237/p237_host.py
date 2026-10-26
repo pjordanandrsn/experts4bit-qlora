@@ -123,8 +123,9 @@ def _limit(text):
 
 def cgroup_limits(root="/sys/fs/cgroup", self_cgroup="/proc/self/cgroup"):
     """Every memory limit on this process's cgroup path, leaf to the visible root: [(file, bytes or None)]. cgroup v2 (the "0::"
-    line) reads ``memory.max``; v1 (the line naming the memory controller) reads ``memory.limit_in_bytes`` under ``memory/``. A
-    missing file is skipped (the root of a hierarchy has none); an unreadable or unparseable one raises."""
+    line) reads ``memory.max``; v1 (the line naming the memory controller) reads ``memory.limit_in_bytes`` under ``memory/``. Only a
+    FileNotFoundError skips a file (the root of a hierarchy has none); any other OSError (an unreadable directory or file) and an
+    unparseable value raise. Under a cgroup namespace, a limit above the namespace's root is not visible here."""
     import os
     try:
         lines = open(self_cgroup, encoding="utf-8").read().splitlines()
@@ -144,8 +145,12 @@ def cgroup_limits(root="/sys/fs/cgroup", self_cgroup="/proc/self/cgroup"):
         rel = [p for p in parts[2].split("/") if p]
         for k in range(len(rel), -1, -1):            # the leaf, then each ancestor, then the hierarchy's own root
             f = os.path.join(base, *rel[:k], fname)
-            if os.path.exists(f):
-                found.append((f, _limit(open(f, encoding="utf-8").read())))
+            try:                                     # never exists(): it answers False for ANY stat error, and absence here permits
+                with open(f, encoding="utf-8") as fh:
+                    text = fh.read()
+            except FileNotFoundError:                # absent (a hierarchy's root has none); any other OSError raises: never "no limit"
+                continue
+            found.append((f, _limit(text)))
     return found
 
 
