@@ -122,7 +122,7 @@ tail -1 logs/egress_probe.log | tee -a summary.txt
 if [ "$erc" = 4 ]; then echo "BOX_REFUSED egress: $(tail -1 logs/egress_probe.log | cut -c1-200)" | tee -a summary.txt > REFUSAL; finish 14
 elif [ "$erc" != 0 ]; then say "EGRESS PROBE ERROR rc=$erc (not a host refusal)"; finish 9; fi
 # the guard fit (p237_host.py fit: one function for the runner, the reducer and the PREREG's lines): (installs + the snapshot fetch +
-# every process this box runs x the registered per-process wall + reserve) x 1.25, against the cap min(policy max_wallclock_h, the
+# every process this box runs x the registered per-process wall + reserve) x 1.25, against the cap min(the per-run wall-clock override's 18 h, the
 # USD 15 run-worst); a fit over the cap is never trimmed: the lane stops and reports
 read -r N_PROC FIT_NEED CAP_S PMAX < <(python3 $W/p237_host.py fit "$P237_MODE" "$LOAD_S") && [ -n "${PMAX:-}" ] || { say "FIT UNREAD"; finish 9; }
 LEFT=$((P237_DEADLINE_EPOCH - $(date +%s)))

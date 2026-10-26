@@ -22,12 +22,14 @@ import sys
 HOST_FLOOR = 18
 # The guard fit (the maintainer's ruling before data; the runner's 41 check and the PREREG's guard and cost lines are this, and
 # tests/test_p237.py ties the three): guard = (INSTALL + FETCH + N_PROC x LOAD_S + RESERVE) x 1.25, against a cap of
-# min(the run-worst USD 15 at the box rate, the rental policy's teardown.max_wallclock_h). The policy value is adertha's GLOBAL
-# compute policy (adertha/compute/policy.json, "teardown": {"max_wallclock_h": 6}; rent.py's check_wallclock refuses any launch above
-# it); it is registered here as a constant, pinned by the test, and moves only with that policy (the owner's call).
+# min(the run-worst USD 15 at the box rate, the per-run wall-clock override's 18 h). adertha's GLOBAL compute policy keeps
+# teardown.max_wallclock_h at 6 (adertha/compute/policy.json; rent.py's check_wallclock); the owner approved (2026-10-26) a PER-RUN
+# override up to 18 h, allowed only when the run's worst at its guard is <= USD 15. Both are registered here as constants, pinned by
+# the test, and move only with that policy (the owner's call). A box longer than 6 h launches only once the override is in the policy.
 INSTALL_S, FETCH_S, RESERVE_S, FIT_MARGIN_PCT = 2700, 3600, 900, 125
 USD_PER_H, DOWNLOAD_USD, RUN_CAP_USD = 0.60, 1.10, 15.0
-POLICY_MAX_WALLCLOCK_H = 6
+POLICY_MAX_WALLCLOCK_H = 6                             # the global cap: every launch without the per-run override
+RUN_OVERRIDE_MAX_H = 18                                # the per-run override's ceiling (owner, 2026-10-26)
 PROBES_MAX = {"read": 4, "shake": 1}                   # the shakedown runs ONE probe (N_auto - 1): it tests the probe path, never tunes
 
 
@@ -46,8 +48,9 @@ def fit_s(nproc, load_s):
 
 
 def cap_s():
-    """The longest guard a box may hold: the policy's wall clock, or the run-worst USD bound at the box rate, whichever is less."""
-    return int(min(POLICY_MAX_WALLCLOCK_H * 3600, (RUN_CAP_USD - DOWNLOAD_USD) / USD_PER_H * 3600))
+    """The longest guard a box may hold: the per-run override's ceiling, or the run-worst USD bound at the box rate, whichever is
+    less (the override is allowed only when the worst is <= USD 15, so the USD bound binds with it)."""
+    return int(min(RUN_OVERRIDE_MAX_H * 3600, (RUN_CAP_USD - DOWNLOAD_USD) / USD_PER_H * 3600))
 
 
 def worst_usd(guard_s):

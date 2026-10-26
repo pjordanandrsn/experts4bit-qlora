@@ -455,34 +455,36 @@ registered.
    pass.
 7. A $0 CPU check of the new code, then a short GPU shakedown (registered, never a reading).
 8. The driver dry run, the $0 validate, and the maintainer's Approved.
-9. The box, the maintainer's re-derivation, and the results PR. **The reading box is on HOLD** until its fitted guard
-   is under the cap in force (see Runs and budget). The owner's decision on the policy's wall clock is pending, and the
-   shakedown may run before it.
+9. The box, the maintainer's re-derivation, and the results PR. **A reading box over 6 h launches only once the per-run
+   wall-clock override is in the rental policy** (the owner approved it 2026-10-26; the adertha change is in review). The
+   shakedown fits 6 h and may run before it.
 
 ## Runs and budget
 
 **The guard is FITTED, never chosen** (ruled before data). It is `p237_host.fit_s`, the function the runner's 41 check
 calls:
 
-`FIT: install 2700 s, fetch 3600 s, reserve 900 s, margin 125 %; processes 24 (reading), 4 (shakedown); price 0.60 USD/h, downloads 1.10 USD; run cap 15 USD; policy max_wallclock_h 6 h`
+`FIT: install 2700 s, fetch 3600 s, reserve 900 s, margin 125 %; processes 24 (reading), 4 (shakedown); price 0.60 USD/h, downloads 1.10 USD; run cap 15 USD; per-run override 18 h; global max_wallclock_h 6 h`
 
 - **guard** = (install + fetch + processes × LOAD_S + reserve) × 1.25.
   - The reading's processes are its 16 primers and draws plus 4 probes per budget. The shakedown's are its 3 draws
     plus ONE probe.
   - LOAD_S is the shakedown's measured per-process wall, registered by amendment before the reading
     (`P237_LOAD_S_REGISTERED`).
-- **cap** = min(the rental policy's `teardown.max_wallclock_h`, the guard whose worst cost is the USD 15 run cap).
-  - The policy value is adertha's GLOBAL compute policy (`adertha/compute/policy.json`), which `rent.py` enforces at
-    launch. It is 6 h today. A test pins it, and it moves only with that policy, which is the owner's decision.
-  - Today the cap is 6 h, since the USD bound is about 23 h.
+- **cap** = min(the per-run wall-clock override's 18 h, the guard whose worst cost is the USD 15 run cap).
+  - adertha's GLOBAL compute policy (`adertha/compute/policy.json`) keeps `teardown.max_wallclock_h` at 6 h, and
+    `rent.py` enforces it at launch.
+  - The owner approved (2026-10-26) a PER-RUN override up to 18 h, allowed only when the run's worst at its guard is
+    at most USD 15. Both values are constants here, pinned by a test, and they move only with that policy.
+  - The cap is 18 h, since the USD bound is about 23 h.
 - **worst** = guard × 0.60 + 1.10 USD (the box rate, plus downloads of at most 100 GB at ≤ $0.011/GB).
 - A fit over the cap is never trimmed. The lane stops and reports. Fewer steps, probes or primers would be a new
   registration before data.
 
 Today's estimate, at LOAD_S 1500 s:
-- **Reading:** a guard of 54000 s (15.0 h), worst USD 10.10. That is **over today's 6 h policy cap, so the reading is on
-  HOLD** until the owner rules on the cap. The decision packet covers this lane and P238. Under a 6 h cap the reading
-  fits only if the shakedown measures LOAD_S ≤ 420 s.
+- **Reading:** a guard of 54000 s (15.0 h), worst USD 10.10. It fits the 18 h cap and the USD 15 run worst, so the
+  reading is one host and one session, as registered. Being over 6 h, it launches only under the per-run override
+  (Sequencing, step 9).
 - **Shakedown:** a guard of 16500 s (4.58 h), worst USD 3.85. It fits the cap, and the maintainer approved it at this
   cost. It is one box, registered and never a reading (`p237_schedule.py --shake`):
   - E and UA at 12 GiB, 24 steps each, so the profiled window (loop indices 21..23) is inside the run and every
@@ -491,9 +493,10 @@ Today's estimate, at LOAD_S 1500 s:
   - UA at the full card, the N_auto = 0 path.
   - Its measured per-process wall becomes `P237_LOAD_S_REGISTERED` by amendment. The runner takes it only as whole
     seconds of at least 300, else 78.
-- **Lane worst:** the shakedown's worst, plus the reading's worst at the fitted guard under the cap in force, plus one
-  retry id for a box that did not start (≤ USD 0.50). At today's cap that is at most 3.85 + 4.70 + 0.50 = **USD 9.05**,
-  inside the USD 15 lane cap.
+- **Per box** the worst is at most USD 15, the run cap. **The lane** is the shakedown's worst plus the reading's worst
+  at its fitted guard, plus one retry id for a box that did not start (≤ USD 0.50). At today's estimate that is
+  3.85 + 10.10 + 0.50 = **USD 14.45**. A retry of the reading itself would be a second reading box (another ≤ USD 15),
+  so the lane total is reported against the rental rails: USD 15 per box and USD 100 per day.
 - **The fetch carries receipts and logs only** (the store's rules). `p237_drive.sh`'s exclude list follows TC1's (the
   venv, the caches, the adapters, `tp4_alpaca`'s downloaded source text), adds every tensor extension, and caps any one
   file at 10 MiB. The driver lists what it leaves on the box, and a test runs the list over a stub box tree.
