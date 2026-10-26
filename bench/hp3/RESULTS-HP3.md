@@ -16,7 +16,7 @@ NOT_READ, host-limited, with a host refusal note. It is no strike."
 - **The instrument gate passed.** G1' reads PASS for the e4b-Unsloth pair: the two bases have the same digest, and every
   zero-adapter row agrees within 1e-05. That makes the pair readable. It is not a parity reading.
 - **The seed plan read n = 0.** It reads wall time and the deadline only, never a loss. Seed 3410 took 4,814 s of wall, and three
-  seeds need 12,688 s against the 9,072 s left above the reserve.
+  seeds need 12,688 s, the 900 s reserve included, against the 9,972 s left.
 - **No figure from seed 3410 is read here**, and no evaluator pass ran. There is no parity number, no ordering and no reduced-power
   read.
 

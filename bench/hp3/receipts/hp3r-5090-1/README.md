@@ -11,8 +11,8 @@ side on torch 2.8.0+cu128 and transformers 5.18.0, the Unsloth side on Unsloth 2
   have the same digest, every zero-adapter row agrees within 1e-05 (the largest difference is 0.0), and the row means are equal.
   The calibration arms (one step per framework, seed 3407) ran first. G1' is the instrument gate only: it is not a reading.
 - **The seed plan** (`tc1/hp3/seed_plan.json`, Amendment 1 part 7): it reads wall time and the deadline only. Seed 3410 took
-  4,814 s of wall for the two frameworks, which left 9,972 s. Three seeds need 2 x 4,814 + 360 x 2 x 3 + 900 = 12,688 s, more
-  than the 9,072 s left above the 900 s reserve, so n = 0: the box stopped after seed 3410, with no evaluator pass.
+  4,814 s of wall for the two frameworks, which left 9,972 s. Three seeds need 2 x 4,814 + 360 x 2 x 3 + 900 = 12,688 s (the
+  900 s reserve included), more than the 9,972 s left, so n = 0: the box stopped after seed 3410, with no evaluator pass.
 - **Nothing is read from seed 3410.** Its files stay in the private receipt store, listed by sha256 in `STORE-ONLY.sha256`.
 
 **Re-derivation.** The maintainer re-derived the reading from the private receipt store with `hp3_reduce.py` at `8be4af31`
