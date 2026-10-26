@@ -3,13 +3,14 @@
 recorder, bench/p60/record_eids.py, stays byte-identical).
 
 The recorder hooks each block's ``experts`` call and reads its ``top_k_index`` argument, so it needs no knowledge of
-the router's name (``gate`` or ``router``) or of its return shape. That shape differs by family:
+the router's name (``gate`` or ``router``) or of its return shape. That shape differs by family and by release:
 - Qwen3-MoE and OLMoE return ``(logits, weights, index)``;
-- Granite-MoE returns ``(index, weights, logits)``;
+- Granite-MoE returned ``(index, weights, logits)`` through transformers 5.20, and ``(logits, weights, index)`` from 5.21;
 - gpt-oss returns ``(logits, scores, index)``.
 
 For each family, a tiny random model decodes a few steps at batch 5. The recorded ids must equal, call for call, the
-indices the family's own router returned. The test also pins the shape and the prefill-call accounting.
+indices the family's own router returned, which the test finds in the router's output as its one integer tensor, so a
+reordered return cannot hand it the wrong one. The test also pins the shape and the prefill-call accounting.
 """
 import importlib.util
 import os
@@ -32,31 +33,31 @@ def _qwen3():
     from transformers.models.qwen3_moe.modeling_qwen3_moe import Qwen3MoeConfig, Qwen3MoeForCausalLM
     cfg = Qwen3MoeConfig(intermediate_size=128, moe_intermediate_size=32, num_experts=16, num_experts_per_tok=4,
                          head_dim=16, **COMMON)
-    return Qwen3MoeForCausalLM, cfg, 4, "gate", 2
+    return Qwen3MoeForCausalLM, cfg, 4, "gate"
 
 
 def _olmoe():
     from transformers.models.olmoe.modeling_olmoe import OlmoeConfig, OlmoeForCausalLM
     cfg = OlmoeConfig(intermediate_size=32, num_experts=16, num_experts_per_tok=4, **COMMON)
-    return OlmoeForCausalLM, cfg, 4, "gate", 2
+    return OlmoeForCausalLM, cfg, 4, "gate"
 
 
 def _granite():
     from transformers.models.granitemoe.modeling_granitemoe import GraniteMoeConfig, GraniteMoeForCausalLM
     cfg = GraniteMoeConfig(intermediate_size=32, num_local_experts=8, num_experts_per_tok=2, **COMMON)
-    return GraniteMoeForCausalLM, cfg, 2, "router", 0
+    return GraniteMoeForCausalLM, cfg, 2, "router"
 
 
 def _gpt_oss():
     from transformers.models.gpt_oss.modeling_gpt_oss import GptOssConfig, GptOssForCausalLM
     cfg = GptOssConfig(intermediate_size=32, num_local_experts=8, num_experts_per_tok=2, head_dim=16,
                        sliding_window=64, **COMMON)
-    return GptOssForCausalLM, cfg, 2, "router", 2
+    return GptOssForCausalLM, cfg, 2, "router"
 
 
 @pytest.mark.parametrize("build", [_qwen3, _olmoe, _granite, _gpt_oss], ids=["qwen3_moe", "olmoe", "granitemoe", "gpt_oss"])
 def test_recorded_ids_are_the_routers_own(build):
-    cls, cfg, k, router_attr, idx_pos = build()
+    cls, cfg, k, router_attr = build()
     cfg._attn_implementation = "eager"
     torch.manual_seed(0)
     model = cls(cfg).eval()
@@ -69,7 +70,8 @@ def test_recorded_ids_are_the_routers_own(build):
 
     def router_hook(li):
         def hook(_m, _i, out):
-            ids = out[idx_pos].reshape(-1, k)
+            [ids] = [t for t in out if torch.is_tensor(t) and not t.is_floating_point()]   # the index, by dtype
+            ids = ids.reshape(-1, k)
             if ids.shape[0] == B:
                 seen[li].append(ids.to(torch.int16))
         return hook
