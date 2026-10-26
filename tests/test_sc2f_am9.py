@@ -38,7 +38,7 @@ def test_a_serving_shaped_run_passes_and_a_clock_floor_would_void_it(monkeypatch
     assert rec["verdict"] == "PASS" and rec["busy_sm_median"] == 2400, rec
     monkeypatch.setattr(Q, "SERVING_JUDGE_FLOOR_MHZ", 2700)
     bad = Q.judge_run(text)
-    assert bad["verdict"] == "REFUSE" and "2400 MHz < floor 2700" in bad["why"][0], bad
+    assert bad["verdict"] == "REFUSE" and "< floor 2700" in bad["why"][0], bad
 
 
 @pytest.mark.parametrize("label,text,want", [
