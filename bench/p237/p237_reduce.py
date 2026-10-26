@@ -32,6 +32,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "common"))
 sys.path.insert(0, os.path.join(HERE, "..", "tc1"))
+import card_clock  # noqa: E402  -- the per-run clock rule (passes, burn=False), read, never re-typed
 import f15v2  # noqa: E402  -- TC1 amendment 80's merged F15 v2 counting, read, never re-typed
 import p237_host  # noqa: E402
 import unsloth_moe_counter as C  # noqa: E402
@@ -84,14 +85,12 @@ def check_card(row):
         why.append(f"cc {c.get('cap')}")
     if (c.get("sm_count") or 0) < MIN_SMS:
         why.append(f"SMs {c.get('sm_count')}")
-    if (k.get("busy_samples") or 0) < 10:
-        why.append(f"{k.get('busy_samples') or 0} busy clock samples < 10 (the card was not read under load)")
-    if k.get("busy_median_mhz") is None or k["busy_median_mhz"] < CLOCK_FLOOR_MHZ:
-        why.append(f"busy SM median {k.get('busy_median_mhz')} < {CLOCK_FLOOR_MHZ} MHz")
-    if k.get("hard_reason_any") is not False:
-        why.append(f"a hard clock reason set (or unread): {k.get('hard_reason_any')}")
-    if k.get("swpowercap_clear_frac") is None or k["swpowercap_clear_frac"] < SWPC_CLEAR:
-        why.append(f"SwPowerCap clear on {k.get('swpowercap_clear_frac')} of busy samples < {SWPC_CLEAR}")
+    try:                                             # the PREREG's per-draw rule is card_clock's run-log mode: the busy median at
+        ok, w = card_clock.passes(k, CLOCK_FLOOR_MHZ, SWPC_CLEAR, burn=False)   # the floor, every refusing bit clear on >= 95 %
+    except (KeyError, TypeError) as e:
+        ok, w = False, f"unreadable clock summary ({type(e).__name__}: {e})"
+    if not ok:
+        why.append(f"clock: {w}")
     return why
 
 
@@ -383,13 +382,11 @@ def release_proof_ok(path):
 
 
 def clock_facts(path):
-    import card_clock
+    """A process's gpuclk log through card_clock.py's own summary (the burn's parser and busy threshold)."""
     try:
-        sm = card_clock.summarize_log(path)
+        return card_clock.summarize_log(path)
     except OSError:
         return {}
-    return {"busy_median_mhz": sm.get("sm_median"), "hard_reason_any": bool(sm.get("hard_reasons_any_sample")),
-            "swpowercap_clear_frac": sm.get("busy_soft_clean_fraction"), "busy_samples": sm.get("busy_samples")}
 
 
 def tag_of(idx, kind, budget, arm, draw, off=None):
@@ -477,7 +474,8 @@ def _good_e(steps=STEPS):
     return {"status": "ok", "dry": False, "framework": "e4b", "arm": "E", "budget": "12g", "kind": "draw", "draw": 1,
             "versions": {**PINS, "torch": "2.12.1+cu130", "release_proof_ok": True},
             "card": {"name": "NVIDIA GeForce RTX 4090", "cap": [8, 9], "sm_count": 128},
-            "clock": {"busy_median_mhz": 2600, "hard_reason_any": False, "swpowercap_clear_frac": 1.0, "busy_samples": 400},
+            "clock": {"busy_samples": 400, "sm_median": 2600, "busy_clean_fraction": 1.0, "busy_soft_clean_fraction": 1.0,
+                      "hard_reasons_any_sample": [], "reasons_seen": []},
             "vram_cap": {"given_gib": 12.0, "resolved": {"fraction": 12 * 2 ** 30 / 25_757_220_864, "total_bytes": 25_757_220_864,
                                                         "getter_reads": 12 * 2 ** 30 / 25_757_220_864}},
             "step_mem": [{"step": i + 1, "max_reserved": 11 * 2 ** 30} for i in range(steps)],
@@ -543,7 +541,10 @@ def selftest():
             (lambda r: r.update(status="oom"), "an OOM row"),
             (lambda r: r.update(dry=True), "a dry row"),
             (lambda r: r["versions"].update(unsloth="2026.10.9"), "another Unsloth"),
-            (lambda r: r["clock"].update(busy_median_mhz=2400), "a capped card"),
+            (lambda r: r["clock"].update(sm_median=2400), "a capped card"),
+            (lambda r: r["clock"].update(busy_clean_fraction=0.94), "refusing bits on 6 % of busy samples"),
+            (lambda r: r["clock"].update(busy_samples=9), "a card not read under load"),
+            (lambda r: r["clock"].pop("busy_clean_fraction"), "an unreadable clock summary"),
             (lambda r: r["card"].update(name="NVIDIA GeForce RTX 5090"), "another card"),
             (lambda r: r["step_mem"][7].update(max_reserved=13 * 2 ** 30), "a reserved peak over the cap"),
             (lambda r: r["vram_cap"]["resolved"].update(getter_reads=1.0), "a cap not read back"),

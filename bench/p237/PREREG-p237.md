@@ -34,8 +34,13 @@ Each arm runs at both budgets: **12 GiB** (artificial) and the **full card**.
 1. After UA's first draw records N_auto, run 8-step probes at N = N_auto − 1, N_auto − 2, down to N_auto − 4.
 2. Stop at the first OOM.
 3. N_t is the smallest N that completes all 8 steps with `max_memory_reserved` at most the cap minus 512 MiB.
-4. If the first probe OOMs, N_t = N_auto: the record reports "tuned equals auto", and UT's draws still run.
-5. Probes are recorded and never timed or read.
+4. If no probe passes step 3 (the first one OOMs, or every probe runs over the margin), N_t = N_auto: the record reports
+   "tuned equals auto", and UT's draws still run.
+5. A probe that faults (any status but ok or OOM, or no per-step reserved record) stops the probes, and UT does not run at
+   that budget: a fault is not an outcome the rule ranks.
+6. Probes are recorded and never timed or read. Each probe's reserved peak is the maximum of its per-step
+   `max_memory_reserved` (`TC1_STEP_MEM=1`, `step_mem[].max_reserved`). The reducer re-derives N_t from the probe receipts
+   (`p237_host.tune`, the runner's own function), and a UT draw run at any other N is VOID.
 
 **Where auto needs no offload.** At the full card, `auto` may choose N_auto = 0, because the 4-bit model fits. E still
 offloads every layer, by policy. tc1_arm then writes UA's row as `refused` (3): the offload did not engage
@@ -86,7 +91,9 @@ TC1's reviewed harness is extended, and nothing in it is replaced.
       - At the 12 GiB budget it needs the cap.
       - At the full card the option runs WITHOUT `--vram-cap-gib`, which tc1_arm refuses (`max_memory` comes from the
         cap). So at the full card UA passes `--vram-cap-gib` set to the card's own total (fraction 1.0, read back), and
-        `max_memory` is that total.
+        `max_memory` is that total. The cap passed is the exact double of total / 2^30, so the fraction reads back
+        as exactly 1.0. `max_memory` is that cap printed to 6 significant digits (`tc1_arm.py`'s `{cap:g}GiB`), within
+        0.0001 GiB of the total.
       - `refused` (3) when the offload did not engage as given: no swap object, an empty swap, or an explicit N resolving to
         another count.
     - `--layer-major 1` (E): the step body is `layer_major_step`. Its drift guard runs once before the window, on step 0's
@@ -107,8 +114,17 @@ TC1's reviewed harness is extended, and nothing in it is replaced.
     passes' agreement, and the under-grad split as information), the block-swap engagement checks and the
     transfer-byte counters. A missing or faulted structure fails closed.
   - It configures nothing: the cap, the offload and layer-major come only from the registered options above.
-- **Runner and reducer:** this lane's own, `bench/p237/p237_run.sh` and `p237_reduce.py`, derived from
-  `bench/tc1/tc1_run.sh` and `tc1_reduce.py` by named edits. Each changed line is one of the named edits.
+- **Runner and reducer:** this lane's own, in the P235 form, which is a compact lane runner made by named edits of a parent
+  lane's runner. Copying TC1's 3,674-line runner and 13,099-line reducer is not that form.
+  - `bench/p237/p237_run.sh` is P236's runner (`bench/p236/p236_run.sh`) by named edits for the shape: the nonce, the
+    refusals, the guard fit, STARTED and finish.
+  - Its environment is amendment 80's recipe from `bench/tc1/tc1_run.sh` (the `qwen3pos80` family): `venv-unsloth`, e4b
+    and grouped-nf4-gemm from PyPI, the release proof and the card clock.
+  - Its arms are amendment 80's two (`fused_attn4_m_fd`, `ckpt_unsloth_m_fv`), flag for flag, plus the extension's
+    options. A test parses every argv the runner builds with `tc1_arm.py`'s own `build_parser()`.
+  - `p237_reduce.py` is this lane's own. It imports the shared counter's checks and F15 v2's `counts()`, never
+    re-typed. `p237_host.py` holds the runner's decisions (CPU class, the full-card cap, N_auto, the probe outcomes, N_t)
+    as functions the tests and the reducer call.
 - **Shared helpers:** imported from amendment 80, never copied.
   - `bench/common/card_clock.py`: the loaded clock probe.
   - `bench/tc1/f15v2.py`: Unsloth's expert-GEMM engagement.
@@ -149,7 +165,8 @@ returns early if a layer is already staged).
   shows layer 0's handle resident, else 0. The step after an eval (loop indices 20 and 40) starts cold, because an
   eval's stock forward evicts after each layer, so it reads 96, as does any step after the guard if the guard leaves
   no layer resident. Eval stagings are counted apart, by `model.training`, and never enter a step.
-- Any other count, any step with no stagings, or any policy other than bulk VOIDs the draw.
+- Any other count, or any step with no stagings, VOIDs the draw. So does any staging tagged other than a whole-layer
+  tag: `offload.py` tags whole-layer copies `sync`, `cold_miss` or `prefetch`; `routed` and `speculative` stage rows.
 
 **E: the layer-major path.** The record proves `layer_major_step` ran on every optimizer step, not the stock loop.
 - The count of `layer_major_step` calls must equal the step count.
@@ -321,6 +338,30 @@ shakedown. Each check also has a mutant that removes the engaged path and must V
   - what the attempt costs.
   A code outside the table refuses the launch at review time.
 
+  **The table** (`p237_run.sh`'s codes, passed through by `p237_drive.sh` via `drive_finish`; a test holds the driver's list
+  equal to the runner's codes):
+
+  | code | where | fault | the launcher | the walk | what it costs |
+  |---|---|---|---|---|---|
+  | 0 | a READ, or a finished shakedown | none | - | done | the box |
+  | 13 | disk under 200 GB (`BOX_REFUSED disk=`) | host | excludes the machine | next host | the boot, before STARTED |
+  | 14 | download MEASURED under 40 MB/s (`BOX_REFUSED egress:`) | host | excludes the machine | next host | the boot |
+  | 18 | CUDA unusable, driver under 580, CPU class, card clock (`BOX_REFUSED host floor:`) | host | excludes the machine | next host | the boot |
+  | 15 | card class, cc, SMs or VRAM | host fact the screen should have refused | does not exclude | stop: the pin screen is wrong | the boot |
+  | 16 | host RAM under 128 GiB | as 15 | does not exclude | stop | the boot |
+  | 41 | the guard fit | harness (the deadline) | does not exclude | stop: the fit needs the maintainer | the boot |
+  | 9 | staging, install, pins, release proof, a probe that measured nothing, snapshot, prepare | harness | does not exclude | stop | up to the box's wall |
+  | 10 | torch does not import | image | does not exclude | stop | the boot |
+  | 21 | the dataset (amendment 82); also the DRIVER's own start failure, as in TC1's driver (the driver log names which) | harness | does not exclude | stop | up to the install |
+  | 27 | the reducer ruled VOID, or wrote nothing | the reading | does not exclude | stop; a retry id only by ruling | the box |
+  | 78 | run id, mode, frozen knobs, an ambient `UNSLOTH_*` | harness | does not exclude | stop | the boot |
+  | 130 | a signal | - | does not exclude | stop | up to the box's wall |
+  | 20, 22 | the driver's staging or fetch | harness | does not exclude | stop | the boot, or the box |
+  | 23, 24, 26 | `drive_finish`: no exit file, 0 without this nonce's success marker, an unregistered code | harness | does not exclude | stop | the box |
+
+  "Next host" spends the retry id the launch walks on (the run ids are `p237-4090-1`, `-r1`, `-r2`; the shakedown's
+  `p237-shake-1`, `-r1`, `-r2`). "Stop" ends the walk for the maintainer. The runner never writes 17.
+
 ## Design
 
 - **One host.** Every arm and both budgets run on one box, in one session.
@@ -330,8 +371,10 @@ shakedown. Each check also has a mutant that removes the engaged path and must V
   figures, because a user's first run is cold. Only the warm draws enter the verdict.
 - **Order, a palindrome per budget:** primers, then `E UA UT UT UA E` at 12 GiB, then the same at the full card. UT's
   probes run after UA's first draw, before the first UT draw.
-- **Cache state, every run:** Unsloth's Mega-cache lines, and e4b's Triton and inductor cache hit or miss, are recorded
-  beside each row (primers, probes and draws).
+- **Cache state, every run:** recorded beside each row (primers, probes and draws).
+  - Unsloth's Mega-cache lines, from the process log.
+  - The cache files before and after each process: Triton's (`/root/.triton/cache`), inductor's
+    (`/tmp/torchinductor_root`) and Unsloth's compiled cache. No new file means a warm hit.
 - **Draws:** two per arm per budget. Step 0 and the drift guard are excluded from the timing window and recorded.
 
 ## The verdict rule (mechanical, per budget)
@@ -385,7 +428,13 @@ shakedown. Each check also has a mutant that removes the engaged path and must V
 
 - **Box:** one RTX 4090 at ≤ $0.60/h, guard 6.0 h, download ≤ 100 GB at ≤ $0.011/GB. The worst case is
   6.0 × 0.60 + 100 × 0.011 = **$4.70**.
-- **Shakedown:** one short box, at most **$1.50**.
+- **Shakedown:** one short box, at most **$1.50**, registered and never a reading (`p237_schedule.py --shake`).
+  - E and UA at 12 GiB, 24 steps each, so the profiled window (loop indices 20..22) is inside the run and every
+    engagement check runs on a real record.
+  - UT's probes at 12 GiB.
+  - UA at the full card, the N_auto = 0 path.
+  - Its measured per-process wall becomes `P237_LOAD_S_REGISTERED`, the guard fit's per-process term for the reading,
+    registered by amendment before the reading box.
 - **Lane worst:** one reading box and one shakedown, plus one retry id for a box that did not start, at most **$8**,
   inside the $15 lane cap.
 
