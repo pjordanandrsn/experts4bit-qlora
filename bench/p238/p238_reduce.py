@@ -60,6 +60,8 @@ OP_ARMS = {"e4b": ("E_F", "E_A"), "unsloth": ("U0", "U1", "UA")}
 WITHIN_STEP0, WITHIN_HELD = 1e-3, 0.01
 ACROSS_STEP0, ACROSS_HELD = 0.01, 0.05               # TC1-PREREG.md:63 (step 0) and TC1's COMPARABLE (held-out)
 STABLE = {"e4b": 0.05, "unsloth": 0.10}
+OOM_EXIT = 5                                         # tc1_arm's exit for its OOM stub (classify_load_exception, the train loop)
+READ_PAIRS = (("E_F", "U1"), ("E_A", "UA"), ("U1", "U0"), ("E_F", "U0"), ("E_A", "E_F"))   # the headline two first (PREREG)
 
 
 # -- row checks ----------------------------------------------------------------------------------------------------------------------
@@ -456,9 +458,70 @@ def energy(row):
     return out
 
 
+def is_oom_row(row):
+    return bool(row) and row.get("status") == "oom"
+
+
+def oom_faults(row):
+    """A step row that is tc1_arm's OOM stub (status "oom", exit 5, with its phase) is an OOM outcome, a READ result (the PREREG:
+    "An OOM is a result"), when it ran on the registered box: the release proof, env_box.txt and the card. A row that is a
+    harness_error, a hook fault (exit 10) or anything else not "ok" stays VOID (check_present)."""
+    why = ["a dry run"] if row.get("dry") else []
+    if row.get("rc") != OOM_EXIT:
+        why.append(f"exit {row.get('rc')!r}, not tc1_arm's OOM exit {OOM_EXIT}")
+    if not (isinstance(row.get("phase"), str) and row["phase"]):
+        why.append("an OOM stub with no phase")
+    if not (row.get("versions") or {}).get("release_proof_ok"):
+        why.append("the release proof is missing or refused")
+    return why + check_env_box(row) + check_card(row)
+
+
+def _mean(xs):
+    xs = [x for x in xs if isinstance(x, (int, float))]
+    return sum(xs) / len(xs) if xs else None
+
+
+def readings(out_rows, raw):
+    """The PREREG's readings per step point and pair (the headline E_F/U1 and E_A/UA first): a ratio of the two arms' mean wall
+    s/step and mean device time over the draws (a/b, < 1 means a is faster) when both arms READ; BOTH_OOM when every draw of both
+    arms OOMs (that point leaves the step read); OOM_DIFFERENCE when one arm's draws all OOM and the other's all READ (the READ
+    memory difference, with the fitting arm's peak VRAM); VOID when any draw is VOID. An OOM row is never in a speed ratio."""
+    by = {}
+    for o in out_rows:
+        by.setdefault((o["point"], o["arm"]), []).append(o)
+    res = {}
+    for point in POINT_TOKENS:
+        for a, b in READ_PAIRS:
+            ga, gb = by.get((point, a), []), by.get((point, b), [])
+            va, vb = {o["verdict"] for o in ga}, {o["verdict"] for o in gb}
+            r = {"point": point, "a": a, "b": b, "headline": (a, b) in READ_PAIRS[:2]}
+            if not ga or not gb:
+                r["status"] = "NOT_RUN"
+            elif "VOID" in va | vb:
+                r["status"] = "VOID"
+            elif va == vb == {"OOM"}:
+                r["status"] = "BOTH_OOM"
+            elif {frozenset(va), frozenset(vb)} == {frozenset({"OOM"}), frozenset({"READ"})}:
+                fits = b if va == {"OOM"} else a
+                r.update(status="OOM_DIFFERENCE", oom=a if fits == b else b, fits=fits,
+                         fits_peak_vram_gb=_mean(raw[o["index"]].get("peak_vram_gb") for o in by[(point, fits)]))
+            elif va == vb == {"READ"}:
+                dev = lambda g: _mean(((raw[o["index"]].get("profile") or {}).get("summary") or {}).get("device_ms") for o in g)  # noqa: E731
+                wa, wb, da, db = _mean(o["s_per_step"] for o in ga), _mean(o["s_per_step"] for o in gb), dev(ga), dev(gb)
+                r.update(status="RATIO", wall_ratio=round(wa / wb, 4) if wa and wb else None,
+                         device_ratio=round(da / db, 4) if da and db else None)
+            else:
+                r["status"] = "VOID"
+            res[f"{point}:{a}/{b}"] = r
+    return res
+
+
 def reduce(rows, op_rows):
-    """The verdict per row, the reference tables, and the pair flags. The reference premise table and census are the first OP
-    row's (an op process loads exactly as a step load does); every other table must equal them."""
+    """The verdict per row, the reference tables, the readings, and the box verdict. The reference premise table and census are
+    the first OP row's (an op process loads exactly as a step load does); every other table must equal them. A step row is READ,
+    OOM (tc1_arm's OOM stub on the registered box) or VOID; an OOM must REPRODUCE: every draw of that (point, arm) OOMs, else
+    every draw of it is VOID (an unstable memory reading). Op rows have no OOM outcome. The box is READ when every op row READs
+    and every step row is READ or a reproduced OOM (each fault is reported on its row; a VOID row is never dropped)."""
     ref = (op_rows or [{}])[0]
     ref_table, ref_census = ref.get("premise_table"), ref.get("adapters")
     out = {"rows": [], "op_rows": []}
@@ -466,9 +529,27 @@ def reduce(rows, op_rows):
         why = op_faults(o.get("record")) + check_premise(o, ref_table) + check_census(o, ref_census)
         out["op_rows"].append({"framework": o.get("framework"), "draw": o.get("draw"), "verdict": "VOID" if why else "READ", "why": why})
     for r in rows:
-        why = row_faults(r, ref_table, ref_census)
-        out["rows"].append({k: r.get(k) for k in ("index", "draw", "point", "arm")} | {"verdict": "VOID" if why else "READ", "why": why,
-                                                                                       "s_per_step": s_per_step(r), "energy": energy(r)})
+        if is_oom_row(r):
+            why = oom_faults(r)
+            entry = {"verdict": "VOID" if why else "OOM", "why": why, "phase": r.get("phase"), "s_per_step": None, "energy": None}
+        else:
+            why = row_faults(r, ref_table, ref_census)
+            entry = {"verdict": "VOID" if why else "READ", "why": why, "s_per_step": s_per_step(r), "energy": energy(r)}
+        out["rows"].append({k: r.get(k) for k in ("index", "draw", "point", "arm")} | entry)
+    groups = {}
+    for o in out["rows"]:
+        groups.setdefault((o["point"], o["arm"]), []).append(o)
+    for (point, arm), g in groups.items():
+        if any(o["verdict"] == "OOM" for o in g) and not (len(g) >= 2 and all(o["verdict"] == "OOM" for o in g)):
+            for o in g:
+                if o["verdict"] != "VOID":
+                    o["verdict"] = "VOID"
+                    o["why"] = o["why"] + [f"{arm} at {point}: an OOM that did not reproduce over its {len(g)} draw(s)"]
+    out["readings"] = readings(out["rows"], {r.get("index"): r for r in rows})
+    bad = [o for o in out["op_rows"] if o["verdict"] != "READ"] + [o for o in out["rows"] if o["verdict"] not in ("READ", "OOM")]
+    out["verdict"] = "READ" if (out["rows"] or out["op_rows"]) and not bad else "VOID"
+    out["n_rows"], out["n_op_rows"], out["n_void"] = len(out["rows"]), len(out["op_rows"]), len(bad)
+    out["n_oom"] = sum(o["verdict"] == "OOM" for o in out["rows"])
     return out
 
 
@@ -547,7 +628,22 @@ def env_file(path):
     return out
 
 
-def normalize_load(work, sched, box, proof_ok, env_box=None):
+def proc_rcs(path):
+    """The runner's summary.txt ``PROC <idx> step <arm> <point> draw=<d> pos=<p> rc=<rc>`` lines -> {idx: rc} (the process's exit,
+    which tc1_arm's OOM stub carries only as its exit code)."""
+    out = {}
+    try:
+        lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+    except OSError:
+        return out
+    for line in lines:
+        m = re.fullmatch(r"PROC (\d+) step \S+ \S+ draw=\S+ pos=\S+ rc=(\d+)", line.strip())
+        if m:
+            out[int(m.group(1))] = int(m.group(2))
+    return out
+
+
+def normalize_load(work, sched, box, proof_ok, env_box=None, rc=None):
     """One step load (a schedule row) from its tc1_arm receipt, its full profile, its clock log and the hook's record."""
     idx, arm, point = sched["index"], sched["arm"], sched["point"]
     fw = ARMS[arm]
@@ -558,7 +654,7 @@ def normalize_load(work, sched, box, proof_ok, env_box=None):
     facts = rec.get("facts") or {}
     env = cell.get("env") or {}
     row = {"index": idx, "draw": sched["draw"], "point": point, "arm": arm, "framework": fw, "position": sched["position"],
-           "status": cell.get("status"), "dry": False,
+           "status": cell.get("status"), "dry": False, "phase": cell.get("phase"), "rc": rc,
            "versions": {**{k: env.get(k) for k in PINS}, "torch": env.get("torch"), "release_proof_ok": proof_ok},
            "card": box, "env_box": env_box, "clock": clock_facts(os.path.join(work, "loads", f"gpuclk_{idx}.txt")),
            "premise_table": _int_keys(facts.get("premise_table")), "adapters": facts.get("adapters"),
@@ -587,8 +683,8 @@ def normalize_op(work, sched):
 
 
 def reduce_work(work):
-    """The box: the schedule it ran, every row and op row, and its verdict. READ only when every row and every op row READs
-    (each fault is reported on its row; a VOID row is never dropped to rescue the rest)."""
+    """The box: the schedule it ran, every row and op row, the readings and the verdict (reduce's: READ only when every op row
+    READs and every step row READs or is a reproduced OOM; each fault is reported on its row, a VOID row never dropped)."""
     sys.path.insert(0, HERE)
     import p238_schedule
     sched_txt = os.path.join(work, "schedule.txt")
@@ -599,13 +695,11 @@ def reduce_work(work):
     box = _json(os.path.join(work, "box.json")) or {}
     proof = release_proof_ok(os.path.join(work, "release_proof.json"))
     env_box = env_file(os.path.join(work, "env_box.txt"))
-    rows = [normalize_load(work, r, box, proof, env_box) for r in sched if r["kind"] == "step"]
+    rcs = proc_rcs(os.path.join(work, "summary.txt"))
+    rows = [normalize_load(work, r, box, proof, env_box, rcs.get(r["index"])) for r in sched if r["kind"] == "step"]
     ops = [normalize_op(work, r) for r in sched if r["kind"] == "op"]
     out = reduce(rows, ops)
     out["image_env"] = env_file(os.path.join(work, "env_image.txt"))      # information only: never a fault
-    bad = [r for r in out["rows"] + out["op_rows"] if r["verdict"] != "READ"]
-    out["verdict"] = "READ" if (out["rows"] or out["op_rows"]) and not bad else "VOID"
-    out["n_rows"], out["n_op_rows"], out["n_void"] = len(out["rows"]), len(out["op_rows"]), len(bad)
     return out
 
 

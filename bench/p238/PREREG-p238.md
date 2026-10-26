@@ -319,7 +319,13 @@ Unsloth Mega-cache line; the E_A route counts; op-level bit identity; the energy
 - Also: U1 against U0 (Unsloth's own fused gain), E_F against U0, E_A against E_F (expected near 1, stated in advance).
 - The op tables (primary, then the labelled secondary) per rows-per-expert and routing.
 - **An OOM is a result.** If 8k OOMs on both sides, the step read covers 2k, 4k and field. If it OOMs on one side only, that is a
-  READ memory difference, reported as such.
+  READ memory difference, reported as such. The reducer reads a step row that is tc1_arm's OOM stub (status `oom`, exit 5, with
+  its phase) on the registered box (release proof, `env_box.txt`, card) as **OOM**, a READ outcome kept out of every speed
+  ratio. An OOM must reproduce: both draws of that (point, arm) OOM, else both draws are VOID (an unstable memory reading). A
+  harness error, a hook fault (exit 10) or any other status stays VOID, and an op process has no OOM outcome. The box is READ when
+  every op row READs and every step row READs or is a reproduced OOM. Per point and pair, the reducer reports RATIO (both arms
+  READ), BOTH_OOM (the point leaves that pair's step read), OOM_DIFFERENCE (one arm's draws all OOM, the other's all READ, with
+  the fitting arm's peak VRAM) or VOID.
 
 ## Predictions
 

@@ -833,6 +833,114 @@ def test_a_counter_that_goes_backwards_in_a_span_reads_unread(reset_at, span_end
     assert out["status"] == "UNREAD" and out["j_per_step"] is None, (reset_at, out)
 
 
+SPEED = {"E_F": 1.0, "E_A": 1.02, "U0": 1.3, "U1": 1.2, "UA": 1.21}
+
+
+def _grid(R, monkeypatch, oom=(), **status):
+    """Every step row of a two-draw box (4 points x 5 arms x 2 draws) from the self-test's clean row, each arm at its own speed.
+    ``oom``: (point, arm, draw) rows that are tc1_arm's OOM stub (status oom, exit 5, phase train, a partial step list).
+    ``status``: {"<point>:<arm>:<draw>": (status, rc)} for other stubs. row_faults is narrowed to check_present, so these tests
+    read the OOM rule and the readings alone (the row checks have their own tests)."""
+    import copy
+    monkeypatch.setattr(R, "row_faults", lambda r, t, c: R.check_present(r))
+    e, _, _ = R._good_rows()
+    rows, idx = [], 0
+    for draw in (1, 2):
+        for point in R.POINT_TOKENS:
+            for arm in R.ARMS:
+                idx += 1
+                r = copy.deepcopy(e)
+                r.update(index=idx, draw=draw, point=point, arm=arm, framework=R.ARMS[arm], step_ms=[1000.0 * SPEED[arm]] * R.STEPS,
+                         rc=0, phase=None, peak_vram_gb=20.0 + idx / 100)
+                r["profile"]["summary"]["device_ms"] = 900.0 * SPEED[arm]
+                if (point, arm, draw) in oom:
+                    r.update(status="oom", rc=R.OOM_EXIT, phase="train", step_ms=[1000.0] * 3)
+                if f"{point}:{arm}:{draw}" in status:
+                    st, rc = status[f"{point}:{arm}:{draw}"]
+                    r.update(status=st, rc=rc, phase="train")
+                rows.append(r)
+    return rows
+
+
+def test_a_reproduced_oom_is_a_read_outcome_kept_out_of_every_ratio(monkeypatch):
+    """The PREREG: "An OOM is a result". Both draws of U1 OOM at 8k: the box READs, the 8k pairs with U1 read OOM_DIFFERENCE
+    (E_F fits, with its peak VRAM), and every other point's ratios are exactly the no-OOM box's. The mutant that is the old
+    reducer (status != ok -> VOID, no OOM outcome) VOIDs the whole box and fails here."""
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    base = R.reduce(_grid(R, monkeypatch), [])
+    assert base["verdict"] == "READ" and base["n_oom"] == 0
+    assert base["readings"]["2k:E_F/U1"]["status"] == "RATIO" and base["readings"]["2k:E_F/U1"]["wall_ratio"] == round(1.0 / 1.2, 4)
+    oom = {("8k", "U1", 1), ("8k", "U1", 2)}
+    out = R.reduce(_grid(R, monkeypatch, oom), [])
+    assert out["verdict"] == "READ" and out["n_oom"] == 2 and out["n_void"] == 0, [o for o in out["rows"] if o["verdict"] != "READ"]
+    rd = out["readings"]
+    assert rd["8k:E_F/U1"]["status"] == "OOM_DIFFERENCE" and (rd["8k:E_F/U1"]["oom"], rd["8k:E_F/U1"]["fits"]) == ("U1", "E_F")
+    assert rd["8k:E_F/U1"]["fits_peak_vram_gb"] and rd["8k:U1/U0"]["status"] == "OOM_DIFFERENCE" and rd["8k:U1/U0"]["fits"] == "U0"
+    assert rd["8k:E_A/UA"] == base["readings"]["8k:E_A/UA"]                    # the pairs without U1 at 8k are untouched
+    assert {k: v for k, v in rd.items() if not k.startswith("8k:")} == {k: v for k, v in base["readings"].items() if not k.startswith("8k:")}
+    assert all(o["s_per_step"] is None for o in out["rows"] if o["verdict"] == "OOM")
+    monkeypatch.setattr(R, "is_oom_row", lambda r: False)                      # mutant: today's code, an OOM row is just not ok
+    assert R.reduce(_grid(R, monkeypatch, oom), [])["verdict"] == "VOID"
+
+
+def test_both_sides_oom_at_a_point_leaves_it_out_of_that_pairs_step_read(monkeypatch):
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    oom = {(p, a, d) for p in ("8k",) for a in ("E_F", "U1") for d in (1, 2)}
+    out = R.reduce(_grid(R, monkeypatch, oom), [])
+    assert out["verdict"] == "READ" and out["readings"]["8k:E_F/U1"]["status"] == "BOTH_OOM"
+    assert out["readings"]["8k:E_A/E_F"]["status"] == "OOM_DIFFERENCE" and out["readings"]["8k:E_A/E_F"]["fits"] == "E_A"
+
+
+def test_an_oom_in_one_draw_only_voids_both_draws(monkeypatch):
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    out = R.reduce(_grid(R, monkeypatch, {("8k", "U1", 1)}), [])
+    pair = [o for o in out["rows"] if (o["point"], o["arm"]) == ("8k", "U1")]
+    assert [o["verdict"] for o in pair] == ["VOID", "VOID"] and all("did not reproduce" in o["why"][-1] for o in pair)
+    assert out["verdict"] == "VOID" and out["readings"]["8k:E_F/U1"]["status"] == "VOID"
+
+
+@pytest.mark.parametrize("st,rc,phase,fault", [
+    ("harness_error", 10, "train", "status 'harness_error'"),     # a hook fault (tc1_arm's arm_hook_call stub, exit 10)
+    ("oom", 10, "train", "not tc1_arm's OOM exit 5"),             # an oom status with another exit
+    ("oom", None, "train", "not tc1_arm's OOM exit 5"),           # no PROC line for it
+    ("oom", 5, None, "no phase"),
+    ("refused", 3, "train", "status 'refused'"),
+])
+def test_anything_else_not_ok_stays_void(monkeypatch, st, rc, phase, fault):
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    rows = _grid(R, monkeypatch)
+    for r in rows:
+        if (r["point"], r["arm"]) == ("8k", "U1"):
+            r.update(status=st, rc=rc, phase=phase)
+    out = R.reduce(rows, [])
+    pair = [o for o in out["rows"] if (o["point"], o["arm"]) == ("8k", "U1")]
+    assert out["verdict"] == "VOID" and all(o["verdict"] == "VOID" and any(fault in w for w in o["why"]) for o in pair), pair
+
+
+def test_an_oom_on_an_unregistered_box_is_void(monkeypatch):
+    """An OOM is a result only on the registered box: an extra env_box key, another card or a refused release proof VOIDs it."""
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    oom = {("8k", "U1", 1), ("8k", "U1", 2)}
+    for spoil in (lambda r: r["env_box"].update(E4B_TRAIN_DETERMINISTIC="1"), lambda r: r["card"].update(sm_count=128),
+                  lambda r: r["versions"].update(release_proof_ok=False)):
+        rows = _grid(R, monkeypatch, oom)
+        for r in rows:
+            if r["status"] == "oom":
+                spoil(r)
+        out = R.reduce(rows, [])
+        assert out["verdict"] == "VOID" and out["n_oom"] == 0
+
+
+def test_the_runners_proc_lines_carry_each_loads_exit(tmp_path):
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    run = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
+    assert 'echo "PROC $idx step $who $point draw=$draw pos=$pos rc=$rc"' in run
+    (tmp_path / "summary.txt").write_text("PROC 3 step U1 8k draw=1 pos=2 rc=5\nPROC 1 op e4b draw=1 rc=0\nPROC 4 step E_F 2k draw=1 "
+                                          "pos=0 rc=0\nPROC 5 step E_F 2k draw=1 pos=0 rc=x\n", encoding="utf-8")
+    assert R.proc_rcs(str(tmp_path / "summary.txt")) == {3: 5, 4: 0}
+    assert R.proc_rcs(str(tmp_path / "missing.txt")) == {}
+
+
 def test_the_runner_passes_eval_every_steps():
     """E1(a): tc1_arm's default --eval-every is 20; the runner's TC1_FLAGS must pass --eval-every $STEPS (one eval, after the
     last step), and STEPS is 60, the reducer's."""
