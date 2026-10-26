@@ -468,3 +468,33 @@ and profile, `verdict_p238.json`, `summary.txt`, `versions.txt`, `logs/`, with `
 `p238_hook.py` (the observe-only `TC1_ARM_HOOK` module), `p238_run.sh` (the box), `p238_drive.sh` (the driver), `p238_reduce.py`
 (the rule, with its self-test), `staged-p238.sha256`; `tests/test_p238.py` (the pins, the schedule, the reducer's cases, a dry run of
 the driver for every registered id, and the hook's output-equality mutants).
+
+## Amendment 1 (2026-10-26): the card floor re-pinned at TC1 amendment 83
+
+This supersedes the validity bullet "the card floor on every load" above, whose text is unchanged. Nothing else changes: the arms,
+points, schedule, readings, predictions, budget and run ids stand. No P238 load has run, so no reading moves.
+
+- **The pin.** `bench/common/card_clock.py` is re-pinned at TC1 amendment 83's merge (sha256
+  `14494c6d045f5840457fb26477c83435f17ecfdf35438a0cfcbd703d6547eba8`). `staged-p238.sha256` moves for it, `p238_reduce.py` and
+  `p238_run.sh`; every staged file is again pinned at its bytes in the tree.
+- **The burn before any install** runs in the `clock` mode, named in its call line (`--mode clock`): the busy SM median >= 2700 MHz;
+  no slowdown bit on any sample (HwSlowdown 0x8, SwThermalSlowdown 0x20, HwThermalSlowdown 0x40, HwPowerBrakeSlowdown 0x80,
+  BoardLimit 0x200); Reliability 0x400 on fewer than 95 % of busy samples; SwPowerCap 0x4 recorded and never refusing. rc 18
+  otherwise, as before.
+- **Each load's own clock log** is judged by `card_clock.passes(summary, 2700, mode="clock")` itself. `p238_reduce.check_card` holds
+  no copy of the rule. The row's `clock` carries card_clock's summary fields under their own names (`busy_samples`, `sm_median`,
+  `busy_reliability_samples`, `any_sample_bits_seen`, and `busy_swpowercap_fraction`, recorded only). A summary without the
+  Reliability count reads that clause UNREAD and the load is VOID: fail closed. `passes()` takes `mode` keyword-only with no
+  default, so a caller that names no rule fails loudly.
+- **Why.** The first two shakedowns refused at this floor before any install. p238-shake-1's card burned at a busy median of
+  2,493.5 MHz and refuses under both rules. p238-shake-r1's card, a stock 575 W card at 2,827 MHz, was refused by amendment 80's
+  burn bars on SwPowerCap (98.6 % of busy samples) and Reliability on a sample. TC1 amendment 83's scan of 737 training clock logs
+  found SwPowerCap on more than 5 % of busy samples in 117 of 422 healthy-clock RTX 5090 logs, and Reliability at most 81 % on a
+  healthy clock against 100 % on every sub-floor log.
+- **Tests.** `tests/test_p238.py` judges real clock logs from the TC1 record through `clock_facts` and `check_card` (the healthy
+  boundary card and a clean card pass; the power-capped card refuses on its clock alone; amendment 79's capped card on its clock
+  and persistent Reliability), and checks that the verdict is `card_clock.passes()` in the named mode. The reducer's self-test adds
+  the clock clauses (persistent Reliability, a slowdown bit, a summary without the Reliability count, too few busy samples) and the
+  two cases that must stay clean (SwPowerCap on every busy sample, Reliability at 94.5 %).
+- **The shakedown.** p238-shake-r2 re-burns under this rule on the re-cut kit; shake-r1's stored burn summary predates amendment 83
+  and is not re-read as a pass.

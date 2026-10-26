@@ -34,7 +34,7 @@ ARMS = {"E_F": "e4b", "E_A": "e4b", "U0": "unsloth", "U1": "unsloth", "UA": "uns
 PINS = {"experts4bit-qlora": "0.58.1", "grouped-nf4-gemm": "0.51.0", "unsloth": "2026.10.8", "unsloth_zoo": "2026.10.8",
         "peft": "0.21.2", "bitsandbytes": "0.50.2"}
 TORCH_PREFIX = "2.12.1"
-CLOCK_FLOOR_MHZ, SWPC_CLEAR = 2700, 0.95
+CLOCK_FLOOR_MHZ, CARD_MODE = 2700, "clock"           # TC1 amendment 83's training rule, named: card_clock.passes() has no default
 DENSE_AUTO_MAX_GROUPS = 16                           # gnf4 0.51.0 nf4_route: auto on sm_120 is dense at 1..16 present groups
 UNSLOTH_PINS = {"UNSLOTH_MOE_NF4_AUTO_MAX_ROWS": "128", "UNSLOTH_MOE_NF4_AUTOTUNE": "0", "UNSLOTH_MOE_GROUPED_TRITON": "auto",
                 "UNSLOTH_MOE_FUSED_ROUTER": "0", "UNSLOTH_ENABLE_LOGGING": "1"}
@@ -116,18 +116,15 @@ def check_card_identity(row):
 
 
 def check_card(row):
-    """The card's identity, and the card under load at the registered bars (its own clock log): >= 10 busy samples, a busy SM
-    median >= 2,700 MHz, no hard clock reason, SwPowerCap clear on >= 95 % of busy samples."""
+    """The card's identity, and the card under load (its own clock log, summarized by card_clock.py) judged by card_clock.passes()
+    itself in TC1 amendment 83's ``clock`` mode: >= 10 busy samples, a busy SM median >= 2,700 MHz, no slowdown bit on any sample,
+    Reliability on < 95 % of busy samples. SwPowerCap is recorded and never refuses. No copy of the rule lives here."""
+    import card_clock
     why = check_card_identity(row)
     k = row.get("clock") or {}
-    if (k.get("busy_samples") or 0) < 10:
-        why.append(f"{k.get('busy_samples') or 0} busy clock samples < 10 (the card was not read under load)")
-    if k.get("busy_median_mhz") is None or k["busy_median_mhz"] < CLOCK_FLOOR_MHZ:
-        why.append(f"busy SM median {k.get('busy_median_mhz')} < {CLOCK_FLOOR_MHZ} MHz")
-    if k.get("hard_reason_any") is not False:
-        why.append(f"a hard clock reason set (or unread): {k.get('hard_reason_any')}")
-    if k.get("swpowercap_clear_frac") is None or k["swpowercap_clear_frac"] < SWPC_CLEAR:
-        why.append(f"SwPowerCap clear on {k.get('swpowercap_clear_frac')} of busy samples < {SWPC_CLEAR}")
+    ok, w = card_clock.passes(k, CLOCK_FLOOR_MHZ, mode=CARD_MODE)
+    if not ok:
+        why.append(f"the card clock: {w}")
     return why
 
 
@@ -619,14 +616,17 @@ def release_proof_ok(path):
 
 
 def clock_facts(path):
-    """A load's gpuclk log through card_clock.py's own summary (the same parser and busy threshold as the burn)."""
+    """A load's gpuclk log through card_clock.py's own summary (the same parser and busy threshold as the burn): the fields
+    card_clock.passes() reads in ``clock`` mode, under card_clock's own names, plus SwPowerCap's share (recorded only)."""
     import card_clock
     try:
         sm = card_clock.summarize_log(path)
     except OSError:
         return {}
-    return {"busy_median_mhz": sm.get("sm_median"), "hard_reason_any": bool(sm.get("hard_reasons_any_sample")),
-            "swpowercap_clear_frac": sm.get("busy_soft_clean_fraction"), "busy_samples": sm.get("busy_samples")}
+    return {k: sm.get(k) for k in CLOCK_KEYS}
+
+
+CLOCK_KEYS = ("busy_samples", "sm_median", "busy_reliability_samples", "any_sample_bits_seen", "busy_swpowercap_fraction")
 
 
 def power_samples(path):
@@ -834,7 +834,8 @@ def _good_rows():
     base = {"status": "ok", "dry": False, "versions": {**PINS, "torch": "2.12.1+cu130", "release_proof_ok": True},
             "env_box": {k: "0" * 40 if v is None else v for k, v in ENV_BOX.items()},
             "card": {"name": "NVIDIA GeForce RTX 5090", "cap": [12, 0], "sm_count": 170},
-            "clock": {"busy_median_mhz": 2800, "hard_reason_any": False, "swpowercap_clear_frac": 1.0, "busy_samples": 200},
+            "clock": {"busy_samples": 200, "sm_median": 2800, "busy_reliability_samples": 0, "any_sample_bits_seen": [],
+                      "busy_swpowercap_fraction": 0.0},
             "premise_table": table, "adapters": census, "point": "2k", "tokens_per_step": [2048] * STEPS,
             "step_ms": [1000.0] * STEPS, "micro_batches_per_step": 1, "profile_warm": PROFILED[0],
             "profile_steps": PROFILED[1] - PROFILED[0],
@@ -875,7 +876,11 @@ def selftest():
         (lambda r: r["premise_table"][3]["down"].update(packed="x"), "one differing premise field"),
         (lambda r: r["adapters"]["7:down_proj"].update(A_sha="x"), "one differing A"),
         (lambda r: r["tokens_per_step"].__setitem__(5, 2047), "a short step"),
-        (lambda r: r["clock"].update(busy_median_mhz=2400), "a capped card"),
+        (lambda r: r["clock"].update(sm_median=2400), "a capped card"),
+        (lambda r: r["clock"].update(busy_reliability_samples=190), "Reliability on 95 % of busy samples"),
+        (lambda r: r["clock"].update(any_sample_bits_seen=["HwSlowdown"]), "a slowdown bit on a sample"),
+        (lambda r: r["clock"].pop("busy_reliability_samples"), "a clock summary without amendment 83's Reliability count"),
+        (lambda r: r["clock"].update(busy_samples=9), "a card not read under load"),
         (lambda r: r["env_box"].update(E4B_TRAIN_DETERMINISTIC="1"), "an ambient e4b knob in env_box"),
         (lambda r: r["env_box"].pop("PYTORCH_CUDA_ALLOC_CONF"), "env_box without the allocator conf"),
         (lambda r: r["env_box"].update(UNSLOTH_MOE_NF4_AUTOTUNE="1"), "env_box with another Unsloth pin value"),
@@ -890,6 +895,14 @@ def selftest():
         r = copy.deepcopy(e)
         mutate(r)
         assert row_faults(r, table, census), f"{label} still reads clean"
+        cases += 1
+    for mutate, label in [                           # amendment 83: these never refuse a card on their own
+        (lambda r: r["clock"].update(busy_swpowercap_fraction=1.0), "SwPowerCap on every busy sample (recorded only)"),
+        (lambda r: r["clock"].update(busy_reliability_samples=189), "Reliability on 94.5 % of busy samples"),
+    ]:
+        r = copy.deepcopy(e)
+        mutate(r)
+        assert row_faults(r, table, census) == [], f"{label}: {row_faults(r, table, census)}"
         cases += 1
     # E_A: the route log must agree with route_for per n_groups
     a = copy.deepcopy(e)
