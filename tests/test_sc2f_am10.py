@@ -120,6 +120,53 @@ def test_a_store_error_makes_the_census_unread(tmp_path):
     assert Q.recorded_clocks(tmp_path / "absent") == {}           # a missing store is an empty census, not an error
 
 
+def _mutant(tmp_path, old, new):
+    """sc2_qualify.py with one census line restored to a skip, to show the test below is not vacuous."""
+    src = (SC2 / "sc2_qualify.py").read_text()
+    assert src.count(old) == 1
+    path = tmp_path / "sc2_qualify_mutant.py"
+    path.write_text(src.replace(old, new))
+    (tmp_path / "common").mkdir(exist_ok=True)
+    m = _load("sc2_qualify_mutant", path)
+    m._card_clock = Q._card_clock
+    return m
+
+
+def _hidden_fail(tmp_path, receipt_text=None, started="2026-10-05T00:00:00Z"):
+    s = tmp_path / "store"
+    _run(s, "2026-10-01", "a-1", "100", "2026-10-01T00:00:00Z", logs=[(2900, 30)])
+    d = _run(s, "2026-10-05", "a-2", "100", started, logs=[(2600, 30)])
+    if receipt_text is not None:
+        (d / "receipt.json").write_text(receipt_text)
+    return s, d
+
+
+def test_an_unparseable_receipt_with_a_clock_record_makes_the_census_unread(tmp_path):
+    s, d = _hidden_fail(tmp_path, receipt_text="{truncated")
+    assert Q.recorded_clocks(s) is None                          # never the older passing record
+    m = _mutant(tmp_path, "            except ValueError:\n                return None\n            if not isinstance(rj, dict):",
+                "            except ValueError:\n                continue\n            if not isinstance(rj, dict):")
+    assert m.recorded_clocks(s)["100"] == {"run": "2026-10-01/a-1", "ok": True, "why": ""}   # the skip would admit it
+    (d / "receipt.json").write_text("[1, 2]")
+    assert Q.recorded_clocks(s) is None                          # parses, but not an object
+    (d / "receipt.json").unlink()
+    assert Q.recorded_clocks(s)["100"]["run"] == "2026-10-01/a-1"  # no receipt: the run names no machine
+
+
+@pytest.mark.parametrize("started", [None, "", "yesterday", "2026-10-05 00:00:00", "2026-13-05T00:00:00Z"])
+def test_a_missing_or_unparseable_started_at_makes_the_census_unread(tmp_path, started):
+    s, _ = _hidden_fail(tmp_path, started=started)
+    assert Q.recorded_clocks(s) is None
+    m = _mutant(tmp_path, "            if started is None:\n                return None\n",
+                "            if started is None:\n                started = _utc('1970-01-01T00:00:00Z')\n")
+    assert m.recorded_clocks(s)["100"]["ok"]                      # sorting it last would hide the fail
+
+
+def test_started_at_parses_whole_and_fractional_seconds():
+    assert Q._utc("2026-10-05T01:02:03Z") is not None and Q._utc("2026-10-05T01:02:03.456Z") is not None
+    assert Q._utc("2026-10-05T01:02:03") is None and Q._utc("2026-10-05T25:02:03Z") is None
+
+
 def _reads(*offers, n=3):
     return [[{"machine_id": m, "offer_id": f"o{m}{w}", "usd_h": 0.9, "disk_gb": 400, "listed_power_w": w} for m, w in offers]] * n
 

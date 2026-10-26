@@ -195,17 +195,6 @@ def walk_order(reads: list, clean_runs=None, prefer=(), *, clocks) -> list:
     return list(dict.fromkeys([*prefer, *NAMED, *tiers]))
 
 
-def _json_dict(path: Path) -> dict:
-    """A JSON object from ``path``; ``{}`` when it is missing, unparseable or not an object. Any other OSError propagates."""
-    try:
-        d = json.loads(path.read_text())
-    except FileNotFoundError:
-        return {}
-    except ValueError:
-        return {}
-    return d if isinstance(d, dict) else {}
-
-
 def _is_5090(run_dir: Path, receipt: dict) -> bool:
     env = receipt.get("environment") if isinstance(receipt.get("environment"), dict) else {}
     name = str(env.get("vast_gpu_name") or receipt.get("gpu_model") or "")
@@ -221,14 +210,28 @@ def _is_5090(run_dir: Path, receipt: dict) -> bool:
     return False
 
 
+def _utc(value):
+    """``started_at`` as a sortable datetime, or None when missing or not ``YYYY-MM-DDTHH:MM:SSZ`` (fractional seconds allowed)."""
+    import datetime
+    m = re.fullmatch(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?Z", str(value or ""))
+    if not m:
+        return None
+    try:
+        return datetime.datetime.strptime(m.group(1), "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return None
+
+
 def recorded_clocks(store: Path):
     """SC2f Amendment 10's recorded-clock census (P238 amendment 2's rule): ``{machine: {"ok", "run", "why"}}`` for every RTX
     5090 machine with a loaded clock record, read from its LATEST receipt (by ``started_at``, then day, then run id) that
     has one. ``ok`` is True only when EVERY loaded record in that receipt passes ``card_clock.passes(summary, 2700,
     mode="clock")``; a record that does not parse fails, and a burn summary written before TC1 amendment 83 fails (its
     Reliability clause reads UNREAD). A record with fewer than 10 busy samples (a harness error summary among them) is
-    no record. Returns ``None`` (UNREAD) on any store error other than a missing file: a skipped run could hide a
-    machine's failing latest record behind an older passing one."""
+    no record. Returns ``None`` (UNREAD) on any store error other than a missing file, and when a run with a clock record
+    has a ``receipt.json`` that exists but does not parse as an object, or a ``started_at`` that is missing or does not
+    parse as ``YYYY-MM-DDTHH:MM:SSZ`` (no defined "latest"): a skipped or mis-sorted run could hide a machine's failing
+    latest record behind an older passing one. A run with no ``receipt.json`` names no machine and vouches for none."""
     cc = _card_clock()
 
     def _err(e):
@@ -246,7 +249,14 @@ def recorded_clocks(store: Path):
                         runs.setdefault(store / rel[0] / rel[1], []).append(Path(root, fn))
         latest = {}
         for rd, files in sorted(runs.items()):
-            rj = _json_dict(rd / "receipt.json")
+            try:
+                rj = json.loads((rd / "receipt.json").read_text())
+            except FileNotFoundError:
+                continue
+            except ValueError:
+                return None
+            if not isinstance(rj, dict):
+                return None
             env = rj.get("environment") if isinstance(rj.get("environment"), dict) else {}
             m = str(env.get("vast_machine_id") or "")
             if not m or not _is_5090(rd, rj):
@@ -263,7 +273,10 @@ def recorded_clocks(store: Path):
                 if not isinstance(summ, dict) or (summ.get("busy_samples") or 0) < RECORD_MIN_BUSY or summ.get("sm_median") is None:
                     continue
                 recs.append(cc.passes(summ, CLOCK_FLOOR_MHZ, min_busy=RECORD_MIN_BUSY, mode="clock"))
-            key = (str(rj.get("started_at") or ""), rd.parent.name, rd.name)
+            started = _utc(rj.get("started_at"))
+            if started is None:
+                return None
+            key = (started, rd.parent.name, rd.name)
             if recs and (m not in latest or key > latest[m]["key"]):
                 latest[m] = {"key": key, "run": f"{rd.parent.name}/{rd.name}", "ok": all(ok for ok, _ in recs),
                              "why": "; ".join(sorted({w for ok, w in recs if not ok}))}

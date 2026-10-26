@@ -784,7 +784,10 @@ machine whose own record already failed the floor.
   whose latest receipt with a loaded clock record (a run's `gpuclk_*.txt`, or a pre-install burn's `card_clock_burn.json`
   or `card_clock.json`, each with >= 10 busy samples) has any such record that fails `card_clock.passes(summary, 2700,
   mode="clock")` is never admitted. A record that does not parse fails; a burn summary written before TC1 amendment 83
-  fails (its Reliability clause reads UNREAD). Amendment 7's clean-runs order does NOT already exclude such a machine:
+  fails (its Reliability clause reads UNREAD). "Latest" orders runs by `started_at`, then day, then run id. In a run with
+  a clock record, a `receipt.json` that exists but does not parse, or a `started_at` that is missing or does not parse (no
+  defined "latest"), makes the census UNREAD; neither is ever skipped (at registration: 0 such runs, every one of the
+  store's 1,061 receipts carries a parseable `started_at`). Amendment 7's clean-runs order does NOT already exclude such a machine:
   clean runs count host outcomes, never clocks. So the rule is added here, in `recorded_clocks()` and `walk_order()`. A
   store error other than a missing file makes the census UNREAD, and only continuity and NAMED are then walked (fail
   closed). At registration, 48 RTX 5090 machines carry a loaded clock record, and 24 pass.
