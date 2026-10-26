@@ -111,11 +111,11 @@ RAM_GIB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
 [ "${RAM_GIB:-0}" -ge "$MIN_RAM_GIB" ] || { say "REFUSED: ${RAM_GIB:-?} GiB host RAM < ${MIN_RAM_GIB} GiB"; echo "refused: ram ${RAM_GIB:-?} GiB" > REFUSAL; finish 16; }
 [ "$ccr" = 0 ] || { say "REFUSED: CPU '$CPU_NAME' is not a registered fast class"; echo "BOX_REFUSED host floor: cpu class ($CPU_NAME)" | tee -a summary.txt > REFUSAL; finish 18; }
 echo "HOST cpu_class=$CPU_CLASS ram=${RAM_GIB}GiB disk=${FREE_GB}GB card_gib=$CARD_GIB" | tee -a summary.txt
-# TC1 amendment 80's loaded card clock, with the 4090's own floor: a 20 s bf16 burn, busy SM median >= 2500 MHz, no hard reason on any
-# sample, SwPowerCap clear on >= 95 %
-perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $CLOCK_FLOOR --seconds 20 --min-clean 0.95 --out $W/card_clock_burn.json > logs/card_clock_burn.log 2>&1; crc=$?
+# the loaded card clock by TC1 amendment 83's clock rule, with the 4090's own floor: a 20 s bf16 burn, busy SM median >= 2500 MHz, no
+# hardware or thermal slowdown on any sample, Reliability on fewer than 95 % of busy samples; SwPowerCap is recorded, never refusing
+perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $CLOCK_FLOOR --seconds 20 --mode clock --out $W/card_clock_burn.json > logs/card_clock_burn.log 2>&1; crc=$?
 { echo -n "CARD_CLOCK rc=$crc "; tail -1 logs/card_clock_burn.log | cut -c1-240; } | tee -a summary.txt
-case "$crc" in 0) ;; 18) say "REFUSED: the card clock is under its floor"; echo "BOX_REFUSED host floor: card clock (busy median under $CLOCK_FLOOR MHz or a reason bit)" | tee -a summary.txt > REFUSAL; finish 18;; *) say "CARD CLOCK PROBE FAULT rc=$crc"; finish 9;; esac
+case "$crc" in 0) ;; 18) say "REFUSED: the card clock is under its floor"; echo "BOX_REFUSED host floor: card clock (amendment 83: busy median under $CLOCK_FLOOR MHz, a slowdown bit, or persistent Reliability)" | tee -a summary.txt > REFUSAL; finish 18;; *) say "CARD CLOCK PROBE FAULT rc=$crc"; finish 9;; esac
 # the download floor (40 MB/s): only a MEASURED slow read is the egress code; no transfer at all names nothing (9)
 perl -e 'alarm 120; exec @ARGV' python3 $W/p237_egress_probe.py "$MODEL" "$REVISION" > logs/egress_probe.log 2>&1; erc=$?
 tail -1 logs/egress_probe.log | tee -a summary.txt

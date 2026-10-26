@@ -314,6 +314,35 @@ def test_the_reducer_selftest():
     assert red.selftest() >= 100
 
 
+# -- the card clock: TC1 amendment 83's clock rule, named at every call -------------------------------------------------------------
+REAL_4090 = [REPO / "bench" / "h2h-2026-10-02" / "tc1" / "receipts" / f"tc1-4090-{n}" / "tc1" / "gpuclk_qwen3pos78fit_e4b_fused_attn4_m_fd_pb1cl256.txt"
+             for n in (1, 2)]
+
+
+@pytest.mark.parametrize("path", REAL_4090, ids=["tc1-4090-1", "tc1-4090-2"])
+def test_a_real_4090_training_log_passes_the_per_draw_clock_rule(path):
+    """Amendment 78's two RTX 4090 training logs (this repository's only 4090 per-second clock records): a busy median of 2,655 MHz
+    and no refusing bit. Read through the reducer's own clock_facts and check_card, P237's floor of 2,500 MHz passes them."""
+    red = importlib.import_module("p237_reduce")
+    k = red.clock_facts(str(path))
+    assert k["sm_median"] == 2655 and k["busy_reliability_samples"] == 0 and k["any_sample_bits_seen"] == []
+    row = {"card": {"name": "NVIDIA GeForce RTX 4090", "cap": [8, 9], "sm_count": 128}, "clock": k}
+    assert red.check_card(row) == []
+    slow = dict(k, sm_median=2499)
+    assert any("< floor 2500" in w for w in red.check_card(dict(row, clock=slow)))
+
+
+def test_every_clock_call_names_amendment_83s_rule():
+    """card_clock.passes takes ``mode`` keyword-only with no default (amendment 83), so the reducer names it; the box's burn names it
+    too, and amendment 80's --min-clean bar is gone from the runner."""
+    import ast
+    tree = ast.parse((P / "p237_reduce.py").read_text(encoding="utf-8"))
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "passes"]
+    assert calls and all(any(k.arg == "mode" and getattr(k.value, "value", None) == "clock" for k in c.keywords) for c in calls)
+    burn = next(ln for ln in _run_text().splitlines() if "card_clock.py burn" in ln and not ln.lstrip().startswith("#"))
+    assert "--mode clock" in burn and "--min-clean" not in burn and "--floor $CLOCK_FLOOR" in burn
+
+
 # -- the box environment: one list for the runner's refusal, its dump and the reducer --------------------------------------------
 def _ambient_block(run=None):
     run = run or _run_text()

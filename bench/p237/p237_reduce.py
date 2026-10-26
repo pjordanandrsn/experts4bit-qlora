@@ -45,7 +45,7 @@ FRAMEWORK = {"E": "e4b", "UA": "unsloth", "UT": "unsloth"}
 PINS = {"experts4bit-qlora": "0.58.1", "grouped-nf4-gemm": "0.51.0", "unsloth": "2026.10.8", "unsloth_zoo": "2026.10.8"}
 TORCH_PREFIX = "2.12.1"
 CARD, CAP, MIN_SMS = "4090", [8, 9], 128
-CLOCK_FLOOR_MHZ, SWPC_CLEAR = 2500, 0.95
+CLOCK_FLOOR_MHZ = 2500                               # the 4090's loaded-clock floor (PREREG Host floors; TC1 amendment 83's rule)
 CAP_12G_GIB = 12
 RUNNER_UNSLOTH = {"UNSLOTH_MOE_GROUPED_TRITON": "auto", "UNSLOTH_MOE_NF4_FUSED": "0", "UNSLOTH_MOE_NF4_AUTO_MAX_ROWS": "128",
                   "UNSLOTH_MOE_NF4_AUTOTUNE": "0", "UNSLOTH_MOE_FUSED_ROUTER": "0", "UNSLOTH_ENABLE_LOGGING": "1"}
@@ -119,8 +119,8 @@ def check_card_identity(row):
 def check_card(row):
     k = row.get("clock") or {}
     why = check_card_identity(row)
-    try:                                            # the PREREG's per-draw rule is card_clock's run-log mode: the busy median at
-        ok, w = card_clock.passes(k, CLOCK_FLOOR_MHZ, SWPC_CLEAR, burn=False)   # the floor, every refusing bit clear on >= 95 %
+    try:                                            # TC1 amendment 83's clock rule, named: the busy median at the floor, no slowdown
+        ok, w = card_clock.passes(k, CLOCK_FLOOR_MHZ, mode="clock")     # bit on any sample, Reliability under 95 % of busy samples
     except (KeyError, TypeError) as e:
         ok, w = False, f"unreadable clock summary ({type(e).__name__}: {e})"
     if not ok:
@@ -361,6 +361,8 @@ def measures(row):
          "dmon_rx_mbps": _or(row.get("dmon_rx")), "dmon_tx_mbps": _or(row.get("dmon_tx")),
          "pcie_gen_max": _or(box.get("pcie_gen_max") or None), "pcie_width_max": _or(box.get("pcie_width_max") or None),
          "sm_busy_median_mhz": _or(_num(clk.get("sm_median"))), "clock_reasons_seen": clk["reasons_seen"] if "reasons_seen" in clk else UNREAD,
+         "busy_swpowercap_fraction": _or(_num(clk.get("busy_swpowercap_fraction"))),           # recorded, never refusing (am83)
+         "busy_reliability_fraction": _or(_num(clk.get("busy_reliability_fraction"))),
          "cpu_class": _or(box.get("cpu_class") or None)}
     hr = row.get("host_ram") or {}
     for k in ("rss_hwm_gb", "ru_maxrss_gb", "cgroup_peak_gb"):
@@ -677,6 +679,8 @@ def _good_e(steps=STEPS):
             "load_s": 300.0, "prologue_s": 420.0, "peak_vram_gb": 11.5, "trainable_params": 26_738_688, "smi_peak_used_mib": 12100.0, "dmon_rx": 9000.0, "dmon_tx": 200.0,
             "host_ram": {"rss_hwm_gb": 110.0, "ru_maxrss_gb": 110.0, "cgroup_peak_gb": 115.0},
             "clock": {"busy_samples": 400, "sm_median": 2600, "busy_clean_fraction": 1.0, "busy_soft_clean_fraction": 1.0,
+                      "busy_reliability_samples": 0, "busy_swpowercap_samples": 0, "any_sample_bits_seen": [],
+                      "busy_reliability_fraction": 0.0, "busy_swpowercap_fraction": 0.0,
                       "hard_reasons_any_sample": [], "reasons_seen": []},
             "vram_cap": {"given_gib": 12.0, "resolved": {"fraction": 12 * 2 ** 30 / 25_757_220_864, "total_bytes": 25_757_220_864,
                                                         "getter_reads": 12 * 2 ** 30 / 25_757_220_864}},
@@ -744,9 +748,10 @@ def selftest():
             (lambda r: r.update(dry=True), "a dry row"),
             (lambda r: r["versions"].update(unsloth="2026.10.9"), "another Unsloth"),
             (lambda r: r["clock"].update(sm_median=2400), "a capped card"),
-            (lambda r: r["clock"].update(busy_clean_fraction=0.94), "refusing bits on 6 % of busy samples"),
+            (lambda r: r["clock"].update(busy_reliability_samples=380), "Reliability on 95 % of busy samples (persistent)"),
+            (lambda r: r["clock"].update(any_sample_bits_seen=["HwSlowdown"]), "a slowdown bit on a sample"),
             (lambda r: r["clock"].update(busy_samples=9), "a card not read under load"),
-            (lambda r: r["clock"].pop("busy_clean_fraction"), "an unreadable clock summary"),
+            (lambda r: r["clock"].pop("busy_reliability_samples"), "a summary without amendment 83's counts"),
             (lambda r: r["card"].update(name="NVIDIA GeForce RTX 5090"), "another card"),
             (lambda r: r["step_mem"][7].update(max_reserved=13 * 2 ** 30), "a reserved peak over the cap"),
             (lambda r: r["vram_cap"]["resolved"].update(getter_reads=1.0), "a cap not read back"),
@@ -770,6 +775,15 @@ def selftest():
             r = copy.deepcopy(e)
             mutate(r)
             assert draw_faults(r), f"E: {label} still reads clean"
+            cases += 1
+        # TC1 amendment 83's clock rule, by its own boundaries: SwPowerCap is recorded and never refuses (a healthy card at its
+        # limit), Reliability refuses at >= 95 % of busy samples (380 of 400) and not below (379), and amendment 80's clean
+        # fraction no longer rules
+        for change in ({"busy_swpowercap_samples": 394, "busy_swpowercap_fraction": 0.985}, {"busy_reliability_samples": 379},
+                       {"busy_clean_fraction": 0.0, "busy_soft_clean_fraction": 0.0}):
+            r = copy.deepcopy(e)
+            r["clock"].update(change)
+            assert draw_faults(r) == [], (change, draw_faults(r))
             cases += 1
         # E: a step after an eval starts cold (no layer resident at its edge): 96 is right there, 95 is not
         r = copy.deepcopy(e)
@@ -843,7 +857,8 @@ def selftest():
             ("the vram log", lambda r: r.update(smi_peak_used_mib=None), ("smi_peak_used_mib",)),
             ("the dmon log", lambda r: r.update(dmon_rx=None, dmon_tx=None), ("dmon_rx_mbps", "dmon_tx_mbps")),
             ("the box facts", lambda r: r.update(card={}), ("pcie_gen_max", "pcie_width_max", "cpu_class")),
-            ("the clock", lambda r: r.update(clock={}), ("sm_busy_median_mhz", "clock_reasons_seen")),
+            ("the clock", lambda r: r.update(clock={}), ("sm_busy_median_mhz", "clock_reasons_seen", "busy_swpowercap_fraction",
+                                                         "busy_reliability_fraction")),
             ("the profile", lambda r: r.pop("profile"), ("device_ms",)),
             ("the held-out loss", lambda r: r.pop("heldout_loss"), ("heldout_loss",)),
             ("peak_vram_gb", lambda r: r.pop("peak_vram_gb"), ("peak_vram_gb",)),

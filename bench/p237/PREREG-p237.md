@@ -331,23 +331,31 @@ registered.
     ruling.
 - **nvidia-smi's peak `memory.used`** per process (MiB), beside `peak_vram_gb`.
 - **The card:**
-  - the busy SM-clock median and the reason bits seen;
+  - the busy SM-clock median, the reason bits seen, and the SwPowerCap and Reliability shares of busy samples;
   - the PCIe generation and width (their maxima, from `nvidia-smi`, in `box.json`).
   A pinned host-to-device ceiling probe was drafted here and is struck before data, by ruling: no decision rule reads it.
 
 ## The host floors (refusals before install, never strikes)
 
 - **Loaded clock:** `card_clock.py`'s loaded bf16 matmul burn before install.
-  - The host is refused unless, at the burn (amendment 80's rule, with the 4090's own floor):
-    - the busy SM-clock median is at least **2,500 MHz**;
-    - Reliability (0x400), HW slowdown (0x8), SW and HW thermal (0x20, 0x40), HW power brake (0x80) and 0x200 are absent
-      on EVERY busy sample;
-    - SwPowerCap (0x4) is absent on at least 95 % of busy samples. A healthy card can touch it briefly under a
-      full-power burn, and refusing that would cost a retry id for nothing.
+  - The host is refused unless, at the burn (TC1 amendment 83's clock rule, `card_clock.py burn --mode clock`, with the
+    4090's own floor):
+    - the busy SM-clock median is at least **2,500 MHz** (the clock binds);
+    - no hardware or thermal slowdown is set on ANY sample: HW slowdown (0x8), SW and HW thermal (0x20, 0x40), HW power
+      brake (0x80) and board limit (0x200);
+    - Reliability (0x400) is set on fewer than 95 % of busy samples (persistent Reliability refuses).
+  - SwPowerCap (0x4) is RECORDED and never refuses. A sustained bf16 matmul is power-bound, so a healthy card holds it
+    for most of the burn. Amendment 83's store-wide scan found that the old 95 %-clear bar would have refused 28 % of
+    healthy RTX 5090 training logs. Its share is reported per draw. Amendment 80's rule (SwPowerCap held to 95 %,
+    Reliability on any sample), which this registration drafted against, is superseded before data.
   - Calibration: across 12 logged 4090 arms in the private receipt store, busy medians ran 2,520-2,745 MHz, and 2,500
     clears all 12. 2,520 MHz is the 4090's rated boost clock. **Limit:** n = 12 arms is a small calibration set. A
-    capped card still refuses: HP3's ran about 1,492 MHz with reason bits 0x0, which a bit-only screen would pass.
-  - Per draw, a busy median under 2,500 MHz, or the bits present on more than 5 % of busy samples, VOIDs that draw.
+    capped card still refuses: HP3's ran about 1,492 MHz with reason bits 0x0, which a bit-only screen would pass. The
+    two 4090 training logs in this repository (amendment 78's fit) read a busy median of 2,655 MHz with no refusing bit,
+    and a test holds that they pass.
+  - Per draw, the same clock rule over the draw's own per-second clock log (`card_clock.passes(..., mode="clock")`): a
+    busy median under 2,500 MHz, a slowdown bit on any sample, or persistent Reliability VOIDs that draw. The SwPowerCap
+    and Reliability shares are reported in the draw's measures.
 - **Host CPU class:** a fast class only: AMD EPYC 9xx5 (Zen 5), Ryzen 7000 or 9000 desktop, or Intel Core 13th/14th
   gen or Ultra desktop. EPYC Zen 2-4 and Xeon hosts are refused. B=1 offload steps are host-bound, so the CPU class is
   named on every result line.
