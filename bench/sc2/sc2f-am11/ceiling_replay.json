@@ -8,8 +8,8 @@
    "run_id": "sc2f-prove-11"
   }
  ],
- "by_ceiling": {
-  "1.05": {
+ "by_terms": {
+  "1.05@320": {
    "admit_reads": 59,
    "machines": {
     "131173": 6,
@@ -21,7 +21,22 @@
     "6619": 4
    }
   },
-  "1.25": {
+  "1.25@320": {
+   "admit_reads": 85,
+   "machines": {
+    "131173": 6,
+    "152440": 3,
+    "152587": 6,
+    "152938": 24,
+    "153193": 1,
+    "154850": 16,
+    "35052": 10,
+    "35963": 13,
+    "36206": 2,
+    "6619": 4
+   }
+  },
+  "1.25@340": {
    "admit_reads": 85,
    "machines": {
     "131173": 6,
@@ -88,6 +103,11 @@
   "94700": true,
   "96642": false
  },
+ "offer_rows": {
+  "320_to_340_gb": 54,
+  "total": 2602
+ },
+ "prices_note": "usd_h is each read's all-in hourly priced at 320 GB; the 340 GB rows drop offers listing under 340 GB and add no storage uplift",
  "reads": 228,
  "reads_file": "bench/sc2/sc2f-am10/screen_reads.json"
 }

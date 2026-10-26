@@ -28,7 +28,7 @@ approves compute; the launcher (``tools/pod-launch.sh``) creates, and applies it
         is admitted. With 3 attempts consumed and no proof PROVED, the lane PARKS;
       - STABILITY: a machine is admitted only when an offer on it at or under the $1.25/h ceiling (SC2f Amendment 11, one
         ceiling for SC2f, SC2h and SC2i) with at least
-        320 GB of disk is present in each of the last 3 reads, by offer id (``READS.json``: a list of reads, oldest
+        340 GB of disk (SC2f Amendment 11) is present in each of the last 3 reads, by offer id (``READS.json``: a list of reads, oldest
         first, each a list of ``{"machine_id", "offer_id", "usd_h", "disk_gb", "listed_power_w"}``;
         ``listed_power_w`` null when the listing carries none). ``--clean-runs FILE`` (``{machine: n}``, from the
         launcher's receipt ranking) supplies the order; a machine absent from it has 0. The first admissible machine
@@ -82,7 +82,10 @@ MAX_ATTEMPTS = 3
 #: SC2f Amendment 11: the per-hour offer ceiling (the launcher's all-in hourly at 320 GB), one for SC2f, SC2h and SC2i ($1.05 before it).
 #: Every run's worst stays <= $15 (the largest, SC2i's reading, $6.36); lane totals are stated, not capped.
 CEILING_USD_H = 1.25
-MIN_DISK_GB = 320
+#: SC2f Amendment 11: offers must list >= 340 GB and the launch orders 340 GB (``sc2f_launch.json``): SC1's own floor
+#: (``sc1_run.sh``, 320 GB FREE) plus 20 GB for the image and margin. Ordering exactly the floor refused sc2f-prove-12 (a host
+#: enforcing its 320 GB quota left 319 GB free), as it had sc2j-prove-1 and sc1g-prove-a5-1/-2.
+MIN_DISK_GB = 340
 STABLE_READS = 3
 #: SC2f Amendment 10: the listed-power class and the enforced limits that pass, one set (Amendment 7's 575 W alone before it)
 POWER_W = (575.0, 600.0)
@@ -525,7 +528,7 @@ def self_test() -> int:
          and adm([], named[:2] + [rd()], False)["verdict"] == "NONE" and adm([], named[:2], False)["verdict"] == "NONE"),
         ("admit: over the ceiling (the all-in usd_h) is not admissible",
          adm([], [rd(("52780", "1", 1.26, 400, 575.0))] * 3, False)["verdict"] == "NONE"),
-        ("admit: under 320 GB disk is not admissible", adm([], [rd(("52780", "1", 0.9, 319, 575.0))] * 3, False)
+        ("admit: under 340 GB disk (SC2f Amendment 11) is not admissible", adm([], [rd(("52780", "1", 0.9, 339, 575.0))] * 3, False)
          ["verdict"] == "NONE"),
         ("admit: an offer must persist by id", adm([], [rd(("52780", "1", 0.9, 400, 575.0)),
                                                          rd(("52780", "2", 0.9, 400, 575.0)),

@@ -44,7 +44,7 @@ def test_the_constants_are_the_texts():
     assert Q.CLOCK_FLOOR_MHZ == 2700 and "`card_clock.passes(summary, 2700, mode=\"clock\")`" in AM10_FLAT
     assert Q.RECORD_MIN_BUSY == 10 and ">= 10 busy samples" in AM10_FLAT
     assert Q.CLOCK_RECORDS == ("card_clock_burn.json", "card_clock.json")
-    assert (Q.MAX_ATTEMPTS, Q.CEILING_USD_H, Q.MIN_DISK_GB, Q.STABLE_READS) == (3, 1.25, 320, 3)   # the ceiling moves at SC2f Amendment 11
+    assert (Q.MAX_ATTEMPTS, Q.CEILING_USD_H, Q.MIN_DISK_GB, Q.STABLE_READS) == (3, 1.25, 340, 3)   # ceiling and disk move at SC2f Am. 11
     assert "the deadline 2026-10-28T14:12:34Z" in AM10_FLAT and "proof worst $1.18 per attempt, lane worst $12.42" in AM10_FLAT
 
 

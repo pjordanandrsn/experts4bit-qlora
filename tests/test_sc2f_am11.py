@@ -37,22 +37,44 @@ def test_the_replay_is_re_derived_from_the_committed_reads():
     assert len(reads) == REPLAY["reads"] == 228
     clocks = {m: {"ok": ok, "run": "", "why": ""} for m, ok in REPLAY["clock_ok"].items()}
     assert (len(clocks), sum(REPLAY["clock_ok"].values())) == (49, 25) and "(49 machines, 25 pass)" in AM11
-    saved = Q.CEILING_USD_H
+    saved = Q.CEILING_USD_H, Q.MIN_DISK_GB
     try:
-        for ceiling, want in REPLAY["by_ceiling"].items():
-            Q.CEILING_USD_H = float(ceiling)
+        for terms, want in REPLAY["by_terms"].items():
+            ceiling, disk = terms.split("@")
+            Q.CEILING_USD_H, Q.MIN_DISK_GB = float(ceiling), int(disk)
             pts = collections.Counter()
             for i in range(Q.STABLE_READS, len(reads) + 1):
                 r = Q.admit(REPLAY["attempts"], reads[:i], False, clocks=clocks)
                 if r["verdict"] == "ADMIT":
                     pts[r["machine"]] += 1
-            assert {"admit_reads": sum(pts.values()), "machines": dict(sorted(pts.items()))} == want
+            assert {"admit_reads": sum(pts.values()), "machines": dict(sorted(pts.items()))} == want, terms
     finally:
-        Q.CEILING_USD_H = saved
-    lo, hi = REPLAY["by_ceiling"]["1.05"], REPLAY["by_ceiling"]["1.25"]
-    assert f"at $1.05, **{lo['admit_reads']}** reads ADMIT ({len(lo['machines'])} machines)" in AM11
-    assert f"at $1.25, **{hi['admit_reads']}** reads ADMIT ({len(hi['machines'])} machines)" in AM11
-    assert "55337" not in hi["machines"] and hi["machines"]["152938"] == 24 and "152938 (24 reads)" in AM11
+        Q.CEILING_USD_H, Q.MIN_DISK_GB = saved
+    old, new = REPLAY["by_terms"]["1.05@320"], REPLAY["by_terms"]["1.25@340"]
+    assert f"at $1.05 and 320 GB, **{old['admit_reads']}** reads ADMIT ({len(old['machines'])} machines)" in AM11
+    assert f"at $1.25 and 340 GB, **{new['admit_reads']}** reads ADMIT ({len(new['machines'])} machines)" in AM11
+    assert new == REPLAY["by_terms"]["1.25@320"]                  # the 340 GB floor drops no admitted offer on these reads
+    assert "55337" not in new["machines"] and new["machines"]["152938"] == 24 and "152938 (24 reads)" in AM11
+    assert REPLAY["offer_rows"] == {"total": 2602, "320_to_340_gb": 54} and "54 of the 2,602 offer rows" in AM11
+    assert "all-in hourly priced at 320 GB" in REPLAY["prices_note"] and "priced at 320 GB" in AM11
+
+
+# ---- the ordered disk: the repo owns it, and CI fails on drift (the two-strikes simplification after sc2f-prove-12)
+LAUNCH = json.loads((SC2 / "sc2f_launch.json").read_text())
+
+
+def test_the_ordered_disk_and_the_admission_minimum_clear_sc1s_floor():
+    run = (REPO / "bench" / "sc1" / "sc1_run.sh").read_text()
+    floor = int(re.search(r"MIN_DISK_GB=\$\{SC1_MIN_DISK_GB:-(\d+)\}", run).group(1))
+    assert floor == 320
+    assert LAUNCH["vast_disk_gb"] >= floor + 20 and Q.MIN_DISK_GB >= floor + 20
+    assert (LAUNCH["vast_disk_gb"], Q.MIN_DISK_GB) == (340, 340)
+    assert LAUNCH["usd_per_hour"] == Q.CEILING_USD_H
+
+
+def test_a_floor_rise_fails_this_check():
+    """The check is not vacuous: SC1's floor moved to 330 GB with the order at 340 would leave 10 GB, and fail."""
+    assert not (LAUNCH["vast_disk_gb"] >= 330 + 20)
 
 
 def _c(x):

@@ -37,7 +37,7 @@ def test_the_admission_constants_are_the_texts():
     assert "The walk is **open**" in AM7_FLAT and "**any other machine whose offers list 575 W**" in AM7_FLAT
     assert Q.EXCLUDED == ("13828", "37367") and Q.UNTIL_CREATE == ("26157",)
     assert "Excluded throughout: 13828 (clock-bound) and 37367" in AM7_FLAT and "26157 until a create there succeeds" in AM7_FLAT
-    assert (Q.MAX_ATTEMPTS, Q.CEILING_USD_H, Q.MIN_DISK_GB, Q.STABLE_READS) == (3, 1.25, 320, 3)   # SC2f Amendment 11: $1.05 -> $1.25
+    assert (Q.MAX_ATTEMPTS, Q.CEILING_USD_H, Q.MIN_DISK_GB, Q.STABLE_READS) == (3, 1.25, 340, 3)   # SC2f Amendment 11: $1.25, 340 GB
     assert 575.0 in Q.POWER_W                          # Amendment 7's 575 W; SC2f Amendment 10 widens the class (test_sc2f_am10)
     assert "**Every create consumes one of 3 proof attempts** (`sc2f-prove-11`, `-12`, `-13`), whatever its exit" in AM7_FLAT
     assert Q.FIRST_ID == {"sc2f": 11, "sc2h": 1, "sc2i": 1}
@@ -118,7 +118,7 @@ def test_26157_is_admissible_only_after_a_create_there(tmp_path):
 
 
 # ---- the basis window's stability recount (F4): the rule admission binds on, from the window's own record
-def test_the_stability_recount_is_the_texts():
+def test_the_stability_recount_is_the_texts(monkeypatch):
     rec = json.loads((REC / "sc2j_screen_reads.json").read_text())
     reads = rec["reads"]
     assert len(reads) == 40 and reads[0]["at"] == "2026-10-23T15:12:02Z" and reads[-1]["at"] == "2026-10-23T22:35:22Z"
@@ -142,6 +142,8 @@ def test_the_stability_recount_is_the_texts():
     lp = rec["listed_power_w"]
     window = [[{"machine_id": m, "offer_id": o, "usd_h": 1.0, "disk_gb": 320, "listed_power_w": lp.get(m)}
                for m, o in rd["under_ceiling"]] for rd in reads]
+    monkeypatch.setattr(Q, "MIN_DISK_GB", 320)        # the window is Amendment 7's own recount: its registered disk and ceiling
+    monkeypatch.setattr(Q, "CEILING_USD_H", 1.05)
     hits = {Q.admit([], window[:i + 1], False, clocks={}).get("machine") for i in range(len(window))} - {None}
     assert hits == {"52780"}
     no52780 = [[o for o in rd if o["machine_id"] != "52780"] for rd in window]
