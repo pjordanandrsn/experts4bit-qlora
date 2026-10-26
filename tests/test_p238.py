@@ -854,8 +854,9 @@ def _grid(R, monkeypatch, oom=(), **status):
         r.update(index=idx, draw=draw, point=point, arm=arm, framework=R.ARMS[arm], step_ms=[1000.0 * SPEED[arm]] * R.STEPS,
                  rc=0, phase=None, peak_vram_gb=20.0 + idx / 100)
         r["profile"]["summary"]["device_ms"] = 900.0 * SPEED[arm]
-        if (point, arm, draw) in oom:
-            r.update(status="oom", rc=R.OOM_EXIT, phase="train", step_ms=[1000.0] * 3)
+        if (point, arm, draw) in oom:                  # a genuine OOM a few steps in: a short step list and a short clock log
+            r.update(status="oom", rc=R.OOM_EXIT, phase="train", step_ms=[1000.0] * 3,
+                     clock={"busy_median_mhz": None, "hard_reason_any": None, "swpowercap_clear_frac": None, "busy_samples": 3})
         if f"{point}:{arm}:{draw}" in status:
             st, rc = status[f"{point}:{arm}:{draw}"]
             r.update(status=st, rc=rc, phase="train")
@@ -882,6 +883,24 @@ def test_a_reproduced_oom_is_a_read_outcome_kept_out_of_every_ratio(monkeypatch)
     assert all(o["s_per_step"] is None for o in out["rows"] if o["verdict"] == "OOM")
     monkeypatch.setattr(R, "is_oom_row", lambda r: False)                      # mutant: today's code, an OOM row is just not ok
     assert R.reduce(_grid(R, monkeypatch, oom), [])["verdict"] == "VOID"
+
+
+def test_an_ooms_short_clock_log_never_voids_it(monkeypatch):
+    """An OOM a few steps in leaves fewer than 10 busy clock samples: the OOM rule reads the card's identity, never its loaded
+    clock (the box's other rows carry that). The mutant that reads the whole check_card VOIDs every genuine OOM and fails here."""
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    oom = {("8k", "U1", 1), ("8k", "U1", 2)}
+    assert R.reduce(_grid(R, monkeypatch, oom), [])["verdict"] == "READ"
+    import types
+    path = ROOT / "bench" / "p238" / "p238_reduce.py"
+    src = path.read_text(encoding="utf-8")
+    mut = src.replace("return why + check_env_box(row) + check_card_identity(row)", "return why + check_env_box(row) + check_card(row)")
+    assert mut != src
+    M = types.ModuleType("p238_reduce_mutant")
+    M.__file__ = str(path)
+    exec(compile(mut, str(path), "exec"), M.__dict__)
+    out = M.reduce(_grid(M, monkeypatch, oom), [])
+    assert out["verdict"] == "VOID" and out["n_oom"] == 0
 
 
 def test_both_sides_oom_at_a_point_leaves_it_out_of_that_pairs_step_read(monkeypatch):
@@ -935,7 +954,13 @@ def test_an_oom_on_an_unregistered_box_is_void(monkeypatch):
 def test_the_runners_proc_lines_carry_each_loads_exit(tmp_path):
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
     run = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
-    assert 'echo "PROC $idx step $who $point draw=$draw pos=$pos rc=$rc"' in run
+    line = next(x.strip() for x in run.splitlines() if x.strip().startswith('echo "PROC $idx step '))
+    assert line.endswith(" | tee -a summary.txt")
+    import subprocess                                                              # the writer, rendered by bash, read by proc_rcs
+    out = subprocess.run(["bash", "-c", "idx=17; who=U1; point=8k; draw=2; pos=3; rc=5\n" + line[:-len(" | tee -a summary.txt")]],
+                         capture_output=True, text=True).stdout
+    (tmp_path / "rendered.txt").write_text(out, encoding="utf-8")
+    assert R.proc_rcs(str(tmp_path / "rendered.txt")) == {17: 5}, out
     (tmp_path / "summary.txt").write_text("PROC 3 step U1 8k draw=1 pos=2 rc=5\nPROC 1 op e4b draw=1 rc=0\nPROC 4 step E_F 2k draw=1 "
                                           "pos=0 rc=0\nPROC 5 step E_F 2k draw=1 pos=0 rc=x\n", encoding="utf-8")
     assert R.proc_rcs(str(tmp_path / "summary.txt")) == {3: 5, 4: 0}

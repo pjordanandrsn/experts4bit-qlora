@@ -102,7 +102,8 @@ def check_env_box(row):
     return why
 
 
-def check_card(row):
+def check_card_identity(row):
+    """The card is the registered class: an RTX 5090, cc 12.0, >= 160 SMs (box.json)."""
     c = row.get("card") or {}
     why = []
     if "5090" not in str(c.get("name") or ""):
@@ -111,6 +112,13 @@ def check_card(row):
         why.append(f"cc {c.get('cap')}")
     if (c.get("sm_count") or 0) < 160:
         why.append(f"SMs {c.get('sm_count')}")
+    return why
+
+
+def check_card(row):
+    """The card's identity, and the card under load at the registered bars (its own clock log): >= 10 busy samples, a busy SM
+    median >= 2,700 MHz, no hard clock reason, SwPowerCap clear on >= 95 % of busy samples."""
+    why = check_card_identity(row)
     k = row.get("clock") or {}
     if (k.get("busy_samples") or 0) < 10:
         why.append(f"{k.get('busy_samples') or 0} busy clock samples < 10 (the card was not read under load)")
@@ -465,8 +473,10 @@ def is_oom_row(row):
 
 def oom_faults(row):
     """A step row that is tc1_arm's OOM stub (status "oom", exit 5, with its phase) is an OOM outcome, a READ result (the PREREG:
-    "An OOM is a result"), when it ran on the registered box: the release proof, env_box.txt and the card. A row that is a
-    harness_error, a hook fault (exit 10) or anything else not "ok" stays VOID (check_present)."""
+    "An OOM is a result"), when it ran on the registered box: the release proof, env_box.txt and the card's IDENTITY. Not its
+    loaded clock: an OOM a few steps in leaves fewer than 10 busy samples, so the clock bars would VOID every genuine OOM (the
+    box's other rows carry the clock). A row that is a harness_error, a hook fault (exit 10) or anything else not "ok" stays
+    VOID (check_present)."""
     why = ["a dry run"] if row.get("dry") else []
     if row.get("rc") != OOM_EXIT:
         why.append(f"exit {row.get('rc')!r}, not tc1_arm's OOM exit {OOM_EXIT}")
@@ -474,7 +484,7 @@ def oom_faults(row):
         why.append("an OOM stub with no phase")
     if not (row.get("versions") or {}).get("release_proof_ok"):
         why.append("the release proof is missing or refused")
-    return why + check_env_box(row) + check_card(row)
+    return why + check_env_box(row) + check_card_identity(row)
 
 
 def _mean(xs):
