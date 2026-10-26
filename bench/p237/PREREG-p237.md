@@ -131,9 +131,9 @@ TC1's reviewed harness is extended, and nothing in it is replaced.
   - `release_proof.py`: provenance.
 - **Shared with P238:** `bench/common/unsloth_moe_counter.py`, one module counting Unsloth's generic grouped calls and
   `NF4_FUSED_STATS`, with mutants for both paths, the fused path's bypass of the generic counter included. It lands as
-  its OWN small PR (ruled 09:12Z): b1-decode writes it, cerin-maintainer reviews it, then the maintainer's pass. P237
+  its OWN small PR (ruled on the bus, 2026-10-25), written by one lane and reviewed by another before the maintainer's pass. P237
   and P238 both import it from main. P237 imports it unchanged and adds only its own arm wiring; its sm_89 per-call
-  dispatch bar (below) comes from the module's per-call record (ruled 09:34Z).
+  dispatch bar (below) comes from the module's per-call record (ruled 2026-10-25).
 - **Order, as it landed:** amendment 80, the shared counter (e4b#2132, `42b6f2b9`), amendment 81 (e4b#2144, `1f43d364`),
   the harness extension (e4b#2146, `8e92ac66`), and amendment 82 (e4b#2148, a dataset refusal is lane code 21). This
   registration and its kit are cut on their bytes. This lane's runner and staged pin follow `tc1_arm.py` at `434c77c1…`.
@@ -196,7 +196,7 @@ returns early if a layer is already staged).
   - **Frozen base GEMMs (many):** Triton only at M ≤ 32 × 128 = 4,096 routed rows; above that, `torch._grouped_mm`. A
     full micro-batch (2 × 2048 tokens × top-8 = 32,768 rows) takes torch. Under TC1's dynamic padding, a micro-batch of
     ≤ 512 padded tokens (≤ 4,096 routed rows) flips back to Triton, so the split varies per call.
-  - The 9E / 2E figures of amendments 79-80 are sm_120 (RTX 5090) facts and do NOT transfer to this card (ruled 09:34Z,
+  - The 9E / 2E figures of amendments 79-80 are sm_120 (RTX 5090) facts and do NOT transfer to this card (ruled 2026-10-25,
     option A).
 - **The binding bar: per call, per class, from the library's OWN predicate**, via the shared module
   (`bench/common/unsloth_moe_counter.py`, e4b#2132). It wraps the predicate in every module object that can run the
@@ -227,10 +227,10 @@ returns early if a layer is already staged).
 
 **Every knob an arm depends on is set explicitly, both frameworks'.** Each arm's env dump proves no ambient value
 leaked in.
-- **UA and UT:** `UNSLOTH_MOE_GROUPED_TRITON=auto`, the shipped default, set explicitly (ruled 09:34Z).
+- **UA and UT:** `UNSLOTH_MOE_GROUPED_TRITON=auto`, the shipped default, set explicitly (ruled 2026-10-25).
   - Every `UNSLOTH_*` environment read in ANY module of the pinned unsloth_zoo and unsloth wheels must be unset or at
     its registered value. The shared module's `check_env` enforces this by a SOURCE SCAN of every module in both wheels
-    (ruled 14:43Z), not a hand-kept module list or a name prefix. It records the scanned key count per module.
+    (ruled 2026-10-25), not a hand-kept module list or a name prefix. It records the scanned key count per module.
   - Unset keys cost nothing. A SET key that is not registered VOIDs the draw, so an ambient
     `UNSLOTH_DISABLE_MOE_TRITON=1` VOIDs it.
   - The registered set is exactly the scanned keys this lane's arms set, each with its value: the pins above, plus the
@@ -241,7 +241,7 @@ leaked in.
 - **UA and UT:** `UNSLOTH_MOE_NF4_FUSED=0`. That path (unsloth-zoo#1935, in 2026.10.8) bypasses the generic grouped calls
   the binding counter wraps. So every Unsloth draw must record `NF4_FUSED_STATS` with `launches == 0` and `calls == 0`
   (the shared module's `check_unfused`); any other value VOIDs the draw. The same arms also pin
-  `UNSLOTH_MOE_NF4_AUTO_MAX_ROWS=128` and `UNSLOTH_MOE_NF4_AUTOTUNE=0`, the shipped defaults (ruled 09:26Z). They are
+  `UNSLOTH_MOE_NF4_AUTO_MAX_ROWS=128` and `UNSLOTH_MOE_NF4_AUTOTUNE=0`, the shipped defaults (ruled 2026-10-25). They are
   inert while the fused path is off, but are set so no ambient value can reach a timed arm.
 - **UA and UT:** `UNSLOTH_MOE_FUSED_ROUTER=0`, the shipped default. It is opt-in, `"1"` only, and re-read on every
   eager router call (unsloth_zoo 2026.10.8 `moe_router_triton.py:28,69`; used in `qwen3_moe.py:123`). So it would switch
@@ -254,10 +254,10 @@ leaked in.
   - Decisions are shape-determined, so each layer's two passes must decide the same Triton/torch path and class. That
     decision is the one counted, and a disagreement VOIDs the draw. The under-grad split is kept as a cross-check.
   - So the bar holds under either checkpointer. Under HF non-reentrant checkpointing both passes run under grad, yet
-    each backward runs once (measured by review-desk, 14:48Z).
+    each backward runs once (measured in review, 2026-10-25).
   - Any `ckpt_mode` other than `unsloth` VOIDs the draw.
 - **E:** `GNF4_TRAIN_GEMM=auto`, e4b's shipped default, set explicitly. The lane compares each framework's offload
-  as shipped, and Unsloth's `UNSLOTH_MOE_NF4_FUSED=0` is its default too (ruled 09:11Z). On an RTX 4090 (sm_89),
+  as shipped, and Unsloth's `UNSLOTH_MOE_NF4_FUSED=0` is its default too (ruled 2026-10-25). On an RTX 4090 (sm_89),
   grouped-nf4-gemm 0.51.0's `auto` routes each call by its present-group count (`nf4_route.route_for`):
   - `fused` above `DENSE_AUTO_MAX_GROUPS` = 16;
   - `dense` for 1 to 16;
