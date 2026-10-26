@@ -210,9 +210,26 @@ def test_the_allowances_cover_the_measured_walls():
 
 
 # ---- the box and the controller
+# The G3 GPU check is CLOSED (g3-gpu-check-4 PASS, 2026-10-25): its pin is checked against the REGISTERED bytes of each
+# staged source at the kit's merge, never against the live tree, so a later change to a shared file (bench/common's
+# card_clock.py, bench/p39's bake) cannot turn this closed lane's test red. A relaunch would re-pin by its own PR.
+KIT_COMMIT = "47fac3ac1af34ff835142251a25634938e841990"   # e4b#2137's merge: the kit g3-gpu-check-4 ran
+SOURCES = {"g3check_run.sh": "bench/kv-pool-g/g3-gpu-check/g3check_run.sh", "g3check.py": "bench/kv-pool-g/g3-gpu-check/g3check.py",
+           "k8_bake.py": "bench/p39/k8_bake.py", "calib.json": "bench/p39/calib.json", "card_clock.py": "bench/common/card_clock.py"}
+
+
+def _registered(path: str) -> bytes:
+    out = subprocess.run(["git", "-C", str(REPO), "show", f"{KIT_COMMIT}:{path}"], capture_output=True)
+    assert out.returncode == 0, f"cannot read {path} at the kit commit {KIT_COMMIT[:8]}: {out.stderr[:200]!r}"
+    return out.stdout
+
+
 def test_the_pin_covers_every_staged_file_and_matches():
-    out = subprocess.run(["bash", str(KIT / "make_pin.sh"), "--check"], capture_output=True, text=True)
-    assert out.returncode == 0, out.stdout + out.stderr
+    import hashlib
+    pin = [ln.split() for ln in (KIT / "staged.sha256").read_text().splitlines()]
+    for sha, name in pin:
+        assert hashlib.sha256(_registered(SOURCES[name])).hexdigest() == sha, f"{name}: the pin is not its registered bytes"
+    assert (KIT / "staged.sha256").read_bytes() == _registered("bench/kv-pool-g/g3-gpu-check/staged.sha256")
     names = [ln.split()[1] for ln in (KIT / "staged.sha256").read_text().splitlines()]
     assert names == ["g3check_run.sh", "g3check.py", "k8_bake.py", "calib.json", "card_clock.py"]
     for n in names:
