@@ -156,6 +156,20 @@ def test_the_read_rule_an_unreadable_store_raises(tmp_path, H, cc):
         os.chmod(rd.parent, 0o755)
 
 
+def test_the_shared_constants_are_the_registered_ones(H):
+    """The screen and any census read p238_hosts' constants, never their own copies: the clock floor, the power clause and the
+    listed-download floor are the values PREREG-p238.md amendment 3 registers, and the download floor keeps its margin over the
+    box's own snapshot alarm (FETCH_S in p238_run.sh, for the ~72 GB snapshot)."""
+    import re
+    assert (H.CLOCK_FLOOR_MHZ, H.POWER_MIN_W, H.MIN_BUSY, H.INET_MIN_MBPS) == (2700, 575.0, 10, 600)
+    prereg = (REPO / "bench" / "p238" / "PREREG-p238.md").read_text(encoding="utf-8")
+    a3 = prereg[prereg.index("## Amendment 3 "):]
+    assert "lowers the screen floor to 600" in a3 and ">= 575 W" in a3
+    fetch_s = int(re.search(r"\bFETCH_S=(\d+)", (REPO / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")).group(1))
+    need_mbps = 72e9 * 8 / fetch_s / 1e6                                 # the snapshot in the alarm, in Mbps
+    assert fetch_s == 2400 and H.INET_MIN_MBPS >= 2.5 * need_mbps
+
+
 def test_mutant_without_the_power_clause_rejoins_the_r3_host(tmp_path, cc):
     """The amendment-2 rule (no power clause) as a mutant: the 475 W training log reads good again, which is how r3 was spent."""
     src = HOSTS.read_text(encoding="utf-8")

@@ -613,7 +613,9 @@ launch), within the USD 15 box rule.
 >= 1,000 Mbps download, a value inherited from earlier kits and not registered in this PREREG. The box's own bound is the snapshot
 alarm, `FETCH_S` = 2,400 s for about 72 GB, which needs about 240 Mbps sustained. This amendment lowers the screen floor to 600
 Mbps, a 2.5x margin over that need. The runner's alarm still binds on the box: a slow fetch ends the box before any load, and that
-costs no load data. It is the filter that turned away the recorded-good host above.
+costs no load data. It is the filter that turned away the recorded-good host above. The floor is `INET_MIN_MBPS` in
+`bench/p238/p238_hosts.py`, which the screen and any census read, as they read `recorded_good`, so neither can disagree with the
+other about it.
 
 **The re-cut kit.** The kit re-cut follows amendment 2's form (a new read-only directory, a generator with counted edits, the
 whole-tree residual grep, the template's guards checked at the launch commit). Its screen replaces its inline census with a call to

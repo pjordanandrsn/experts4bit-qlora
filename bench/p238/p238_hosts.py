@@ -35,6 +35,9 @@ import time
 CLOCK_FLOOR_MHZ = 2700
 POWER_MIN_W = 575.0
 MIN_BUSY = 10
+# the screen's listed-download floor (amendment 3): the box's own snapshot alarm (FETCH_S 2,400 s for ~72 GB) needs ~240 Mbps,
+# so 600 is a 2.5x margin. The screen and any census read THIS constant, as they read recorded_good, so they cannot disagree.
+INET_MIN_MBPS = 600
 
 
 def _walk_err(e):
