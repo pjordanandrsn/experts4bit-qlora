@@ -6,6 +6,7 @@ so this file names none. The mutants the redaction review asked for: a UUID insi
 "Vast box <n>", an id wrapped onto the next line, and a UUID cut to its prefix. Each must be refused."""
 import gzip
 import hashlib
+import os
 import pathlib
 import shutil
 import subprocess
@@ -70,6 +71,34 @@ def test_a_uuid_inside_a_nul_byte_file_is_refused(repo):
 def test_a_uuid_inside_a_gzip_member_is_refused(repo):
     _add(repo, "bench/steps.jsonl.gz", gzip.compress(('{"uuid": "%s"}\n' % UUID).encode(), mtime=0))
     assert _run(repo, "--tree").returncode == 1
+
+
+def _bad_gz():
+    g = gzip.compress(b"clean data " * 50, mtime=0)
+    flipped = bytearray(g)
+    flipped[len(g) // 2] ^= 0xFF
+    flipped[len(g) // 2 + 1] ^= 0xFF
+    return {"truncated": g[:12],                              # EOFError
+            "bad deflate block": g[:10] + b"\xff" + g[11:],   # zlib.error, which is not an OSError
+            "flipped body bytes": bytes(flipped)}             # gzip.BadGzipFile, an OSError
+
+
+@pytest.mark.parametrize("kind", sorted(_bad_gz()))
+def test_a_gz_that_does_not_decompress_is_refused(repo, kind):
+    _add(repo, "bench/steps.jsonl.gz", _bad_gz()[kind])
+    r = _run(repo, "--tree")
+    assert r.returncode == 1 and "does not decompress" in r.stdout and "Traceback" not in r.stderr, (kind, r.stderr)
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="root reads a mode-000 file anyway")
+def test_an_unreadable_file_is_refused_not_skipped(repo):
+    _add(repo, "bench/locked.json", '{"clean": true}')
+    (repo / "bench" / "locked.json").chmod(0)
+    try:
+        r = _run(repo, "--tree")
+    finally:
+        (repo / "bench" / "locked.json").chmod(0o644)
+    assert r.returncode == 1 and "bench/locked.json: unreadable" in r.stdout
 
 
 def test_the_canary_uuid_stays_allowed(repo):

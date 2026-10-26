@@ -1,0 +1,25 @@
+{
+ "samples": 75,
+ "busy_samples": 74,
+ "sm_median": 2493.5,
+ "sm_p10": 2482,
+ "sm_max": 2580,
+ "mem_median": 13801.0,
+ "reasons_seen": [
+  "SwPowerCap"
+ ],
+ "reasons_seen_mask": "0x4",
+ "busy_clean_fraction": 0.0,
+ "busy_soft_clean_fraction": 0.0,
+ "hard_reasons_any_sample": [],
+ "burn_seconds": 20.0,
+ "matmul_n": 8192,
+ "dtype": "bfloat16",
+ "sample_period_s": 0.25,
+ "floor_mhz": 2700.0,
+ "min_clean": 0.95,
+ "hard_bits_every_sample": true,
+ "pass": false,
+ "why": "busy SM median 2493.5 MHz < floor 2700.0; SwPowerCap on 100.0% of busy samples (clean 0.0% < 95%)",
+ "refusal": "below_floor"
+}

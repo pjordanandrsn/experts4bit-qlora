@@ -1,5 +1,7 @@
 # SC2h: does P118's decode lookahead lift e4b `serve_paged`'s capacity at 64 slots? `E4B_PAGED_DECODE_LOOKAHEAD=1` against the release's default (off), on 0.54.0's s64a server, paired on one RTX 5090 with same-seed replicates, the bucket-64 step's saving against its own host gap, and a knee block placed by SC2f's reading (lane SC2h of #846; registered 2026-10-11)
 
+**Status: PARKED on 2026-10-26.** See the record at the end of this file.
+
 **Registered** when this file merges to `main`, before any SC2h run. Opened without `ready-to-merge` or auto-merge,
 for maintainer review. Box O rents **after SC2f's reading** (it needs SC2f's verdict, below), behind P131 and P132 in
 the maintainer's queue, on **e4b 0.54.0** as SC2f, and every paid ACK names the host.
@@ -332,3 +334,17 @@ grouped-nf4-gemm 0.51.0. SC2f's committed verdict is read here, so the three lan
   The lane order, SC2f then SC2h then SC2i, is unchanged.
 
 **Unchanged:** everything else this lane registered; every constant, threshold and cost not named above.
+
+### Amendment 6 (registered before any SC2h run): the price ceiling is $1.25 an hour (SC2f Amendment 11)
+
+SC2f Amendment 11 moves the ceiling the three lanes share from $1.05 to **$1.25** an hour. Restated by this file's own
+formula (download at <= $0.011/GB): a proof, 1.0 h <= $1.25 + ~$0.10 = **$1.35** (was $1.15); the reading, 4.0 h <= $5.00 +
+~$0.73 = **$5.73** (was $4.93); the lane (two proofs, one reading, one re-run counted as a reading) 2 x $1.35 + 2 x $5.73 =
+**$14.16** (was $12.16). Each run is under the standing single-run tier ($15). Everything else is unchanged.
+
+### Record (2026-10-26): SC2h PARKED with SC2f
+
+**Status: PARKED on 2026-10-26**, with SC2f, by SC2f Amendment 7(c) (the three lanes park together, with no further change
+to the bar). SC2h launched nothing: it needs a valid SC2f `on` verdict and SC2f's proved host, and SC2f parked after three
+creates with no proof PROVED (`sc2f-prove-11` VOID rc 25, `-12` rc 13, `-13` rc 18; SC2f-PREREG's record of 2026-10-26).
+SC2h's spend: $0.

@@ -1,5 +1,7 @@
 # SC2i: does spacing or shortening prefill lift e4b `serve_paged`'s served decode under load at 64 slots? `E4B_PAGED_PREFILL_EVERY` and `E4B_PAGED_LOADED_CHUNK_TOKENS` (e4b#2017) against the release's defaults, on one RTX 5090 (lane SC2i of #846; serving roadmap lever A1)
 
+**Status: PARKED on 2026-10-26.** See the record at the end of this file.
+
 **Registered** when this file merges to `main`, before any SC2i run. Box P rents after SC2f's and SC2h's boxes (their
 order is SC2f Amendment 3's), on separate boxes, through the guarded launcher (`tools/pod-launch.sh`). The independent
 deadline watcher is armed at create.
@@ -218,3 +220,18 @@ grouped-nf4-gemm 0.51.0. SC2i reads no other lane's verdict, but the three lanes
   The lane order, SC2f then SC2h then SC2i, is unchanged.
 
 **Unchanged:** everything else this lane registered; every constant, threshold and cost not named above.
+
+### Amendment 5 (registered before any SC2i run): the price ceiling is $1.25 an hour (SC2f Amendment 11)
+
+SC2f Amendment 11 moves the ceiling the three lanes share from $1.05 to **$1.25** an hour. Restated by this file's own
+formula (download at <= $0.011/GB): a proof, 1.0 h <= $1.25 + about $0.10 = **$1.35** (was $1.15); the reading, 4.5 h <=
+$5.63 + about $0.73 = **$6.36** (was $5.46); the lane (two proofs, one reading, one re-run counted as a reading) 2 x $1.35 +
+2 x $6.355 = **$15.41** (was $13.21; the reading enters unrounded, as this file's $13.21 at $1.05 did: 2 x $5.455). Each run is under the standing single-run tier ($15); the lane total is stated, not
+capped, and is above $15 by $0.41. Everything else is unchanged.
+
+### Record (2026-10-26): SC2i PARKED with SC2f
+
+**Status: PARKED on 2026-10-26**, with SC2f, by SC2f Amendment 7(c) (the three lanes park together, with no further change
+to the bar). SC2i launched nothing: it rents after SC2f's and SC2h's boxes, on the host continuity SC2f's proof would have set, and SC2f parked after three
+creates with no proof PROVED (`sc2f-prove-11` VOID rc 25, `-12` rc 13, `-13` rc 18; SC2f-PREREG's record of 2026-10-26).
+SC2i's spend: $0.
