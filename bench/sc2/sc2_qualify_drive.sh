@@ -7,8 +7,8 @@
 #   24       the lane driver exited 0 without THIS run's SC1_RUN_NONCE, SC1_SUCCESS.<nonce> and SC1_EXIT_CODE.<nonce> = 0
 #            (SC2f Amendment 8): a malformed record, a harness fault, never a PASS.
 # Before any install, on the rented card:
-#   1. nvidia-smi enforced.power.limit (with power.limit and power.max_limit, recorded) must be 575 W, compared as a
-#      float (bench/sc2/sc2_qualify.py power): READ at another limit 17, unreadable 25;
+#   1. nvidia-smi enforced.power.limit (with power.limit and power.max_limit, recorded) must be 575 or 600 W (SC2f Amendment
+#      10), compared as a float (bench/sc2/sc2_qualify.py power): READ at another limit 17, unreadable 25;
 #   2. bench/common/card_clock.py burn --floor 2700 --mode clock (TC1 amendment 83's clock rule, SC2f Amendment 9: the clock
 #      binds, a slowdown bit on any sample or persistent Reliability refuses, SwPowerCap is recorded) in a throwaway venv
 #      whose torch 2.8.0+cu128 is a pip DOWNLOAD (the
@@ -19,8 +19,9 @@
 # stopped and fetched. After a CLEAN run (exit 0) the sampler is judged over the whole timed run (sc2_qualify.py
 # judge-run, SC2f Amendment 9: card_clock's clock rule at a 0 MHz floor, so a slowdown bit on any sample or persistent
 # Reliability refuses, SwPowerCap is recorded, and the clock is screened only by the burn above): READ and failed 18,
-# unreadable 25. After a clean PROOF, its own host records too (judge-proof, forensics.txt and host_facts.json, both
-# always passed): READ at another limit 18, missing or unreadable 25. A run that did not finish clean keeps its own
+# unreadable 25. After a clean PROOF, its own host records too (judge-proof, forensics.txt and host_facts.json against
+# the qualify step's power.json, all three always passed): READ at a limit outside {575, 600} W or other than the
+# qualify reading 18, missing or unreadable 25. A run that did not finish clean keeps its own
 # exit code; its records are fetched and judged for the record only. Every record lands in <run>/qualify/ (rsync
 # --no-links, bench/common rule 8) before teardown. Each create consumes one of the lane's 3 attempts whatever its
 # exit (sc2_qualify.py admit reads that from the receipt store). Nothing here creates, destroys or approves compute,
@@ -90,7 +91,8 @@ fetch_q
 python3 "$Q" judge-run --sampler "$QD/box/sampler.csv" --out "$QD/run_judge.json"; jr=$?
 PJ=0
 if [ "${SC1_PROVE:-0}" = 1 ]; then
-  python3 "$Q" judge-proof --forensics "$RUN_DIR/sc1/forensics.txt" --host-facts "$RUN_DIR/host_facts.json" --out "$QD/proof_judge.json"; PJ=$?
+  python3 "$Q" judge-proof --forensics "$RUN_DIR/sc1/forensics.txt" --host-facts "$RUN_DIR/host_facts.json" --qualify-power "$QD/power.json" \
+    --out "$QD/proof_judge.json"; PJ=$?
 fi
 # a run that did not finish clean keeps its own exit code: the lane's rules classify it, and its records are never
 # read as a host fault (they are fetched and judged above for the record only)

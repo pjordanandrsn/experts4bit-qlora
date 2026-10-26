@@ -37,11 +37,12 @@ def test_the_admission_constants_are_the_texts():
     assert "The walk is **open**" in AM7_FLAT and "**any other machine whose offers list 575 W**" in AM7_FLAT
     assert Q.EXCLUDED == ("13828", "37367") and Q.UNTIL_CREATE == ("26157",)
     assert "Excluded throughout: 13828 (clock-bound) and 37367" in AM7_FLAT and "26157 until a create there succeeds" in AM7_FLAT
-    assert (Q.MAX_ATTEMPTS, Q.CEILING_USD_H, Q.MIN_DISK_GB, Q.STABLE_READS, Q.LISTED_W) == (3, 1.05, 320, 3, 575.0)
+    assert (Q.MAX_ATTEMPTS, Q.CEILING_USD_H, Q.MIN_DISK_GB, Q.STABLE_READS) == (3, 1.05, 320, 3)
+    assert 575.0 in Q.POWER_W                          # Amendment 7's 575 W; SC2f Amendment 10 widens the class (test_sc2f_am10)
     assert "**Every create consumes one of 3 proof attempts** (`sc2f-prove-11`, `-12`, `-13`), whatever its exit" in AM7_FLAT
     assert Q.FIRST_ID == {"sc2f": 11, "sc2h": 1, "sc2i": 1}
     assert "`vast_provider.hourly(offer)` at 320 GB disk" in AM7_FLAT and "`gpu_max_power` as `listed_power_w`" in AM7_FLAT
-    assert Q.ENFORCED_W == 575.0 and "--floor 2700" in AM7 and Q.SERVING_JUDGE_FLOOR_MHZ == 0   # SC2f Amendment 9 supersedes the 95 % bar
+    assert 575.0 in Q.POWER_W and "--floor 2700" in AM7 and Q.SERVING_JUDGE_FLOOR_MHZ == 0   # SC2f Amendment 9 supersedes the 95 % bar
 
 
 def _receipt(store, day, run_id, machine, instance="1", status="OK", result="pass"):
@@ -58,7 +59,7 @@ def _reads(*machines, n=3, usd=0.9, disk=400, w=575.0):
 
 def _admit(store, lane, reads, clean_runs=None):
     return Q.admit(Q.lane_attempts(store, lane), reads, Q.creates_on(store, "26157"),
-                   prefer=Q.earlier_hosts(store, lane), clean_runs=clean_runs)
+                   prefer=Q.earlier_hosts(store, lane), clean_runs=clean_runs, clocks=Q.recorded_clocks(store))
 
 
 def test_admission_from_the_receipt_store(tmp_path):
@@ -141,10 +142,10 @@ def test_the_stability_recount_is_the_texts():
     lp = rec["listed_power_w"]
     window = [[{"machine_id": m, "offer_id": o, "usd_h": 1.0, "disk_gb": 320, "listed_power_w": lp.get(m)}
                for m, o in rd["under_ceiling"]] for rd in reads]
-    hits = {Q.admit([], window[:i + 1], False).get("machine") for i in range(len(window))} - {None}
+    hits = {Q.admit([], window[:i + 1], False, clocks={}).get("machine") for i in range(len(window))} - {None}
     assert hits == {"52780"}
     no52780 = [[o for o in rd if o["machine_id"] != "52780"] for rd in window]
-    assert all(Q.admit([], no52780[:i + 1], False)["verdict"] == "NONE" for i in range(len(no52780)))
+    assert all(Q.admit([], no52780[:i + 1], False, clocks={})["verdict"] == "NONE" for i in range(len(no52780)))
     assert lp["55337"] == 575.0 and "its one logged offer lists 575 W" in AM7_FLAT
 
 
@@ -165,9 +166,10 @@ def test_the_post_proof_judge_on_a_real_proofs_records():
     assert hashlib.sha256(raw).hexdigest() == SC2J_PROVE2_HOST_FACTS_SHA256
     hf = json.loads(raw)
     forensics = "GPU 0: NVIDIA GeForce RTX 5090\n" + SC2J_PROVE2_POWER_LINE + "\n"
-    assert Q.judge_proof(forensics, hf)["verdict"] == "PASS"
-    assert Q.judge_proof(forensics, dict(hf, gpu_power_limit_w=450.0))["verdict"] == "REFUSE"
-    assert Q.judge_proof(forensics, None)["verdict"] == "UNREAD"                 # host_facts.json deleted
+    qp = {"enforced_w": 575.0}                                                    # the qualify step's power.json
+    assert Q.judge_proof(forensics, hf, qp)["verdict"] == "PASS"
+    assert Q.judge_proof(forensics, dict(hf, gpu_power_limit_w=450.0), qp)["verdict"] == "REFUSE"
+    assert Q.judge_proof(forensics, None, qp)["verdict"] == "UNREAD"                 # host_facts.json deleted
 
 
 # ---- the wrapper, on a stubbed box

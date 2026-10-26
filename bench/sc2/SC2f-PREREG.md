@@ -753,3 +753,71 @@ SC2h (Amendment 5) and SC2i (Amendment 4) take this with Amendment 7, by referen
 - the burn line names `--mode clock`, and the launch template's two guard strings are unchanged.
 
 **Unchanged:** everything else Amendments 7 and 8 registered.
+
+### Amendment 10 (registered before any SC2f run): the power class is {575, 600} W, and a recorded clock fail is never admitted
+
+**Why.** Amendment 7 admits only machines listing 575 W and qualifies only a card enforcing 575.0 W. Over the screen's
+first 228 reads (2026-10-25T14:14:14Z to 2026-10-26T09:09:24Z, `bench/sc2/sc2f-am10/screen_reads.json`), 575 W listings
+reached an admit point 7 times (3 machines) and no proof ran (attempts 0 of 3). 600 W listings reached one 61 times
+(7 machines). This is pre-data: no SC2f proof, and no read of any arm, exists.
+
+**The evidence** (`bench/sc2/sc2f-am10/census.json`, written by `power_census.py` from those reads and the private receipt
+store at `49683ed6`; counts only):
+- **The market, by listed power** (machines seen / with a qualifying offer / reaching an admit point; admit points): 575 W
+  14 / 10 / 3, 7 points; 600 W 17 / 13 / 7, 61 points; 500 W 13 / 10 / 6, 49 points; 450 W 7 / 4 / 3, 85 points
+  (nearly all one machine).
+- **Burns** (the gate's own load, `card_clock.py burn`, bf16 matmul n=8192 for 20 s; 5 in the store): 575 W 2,827 MHz
+  (pass); 500 W 2,647; 470 W 2,482; 430 W 2,493.5; 400 W 1,972 (each under the floor). No 600 W burn exists.
+- **Training clocks, by enforced power** (per run, the median of its per-second clock logs' busy medians): at 600 W, 13
+  of 19 runs, and 4 of 8 machines on every run, held >= 2,700 MHz (median 2,940); at 575 W, 33 of 41 runs and 9 of 14
+  machines (median 2,865); at 500 W, 5 of 7 runs and 3 of 5 machines (median 2,857).
+- **Listed vs enforced**: of 30 machines in both the reads and the store, 22 agree. Among the 8 that do not, two list
+  600 W and enforced 500 W and 520 W. So a listing is an upper bound, and the enforced read on the card stays the gate.
+
+The burn decides per card. The weaker 600 W share is why the recorded-clock rule below exists: it spends no attempt on a
+machine whose own record already failed the floor.
+
+**The change** (the floor, 2,700 MHz, and the clock mode do not change):
+- **(a) admission.** `sc2_qualify.py admit`'s listed-power class is {575, 600} W (`POWER_W`): a machine is in it when every
+  listed power on its offers in the last 3 reads is 575 or 600 W. Any other listed power is never admitted, as before.
+- **(b) the recorded clock** (P238 amendment 2's rule, used the same way). Outside host continuity and NAMED, a machine
+  whose latest receipt with a loaded clock record (a run's `gpuclk_*.txt`, or a pre-install burn's `card_clock_burn.json`
+  or `card_clock.json`, each with >= 10 busy samples) has any such record that fails `card_clock.passes(summary, 2700,
+  mode="clock")` is never admitted. A record that does not parse fails; a burn summary written before TC1 amendment 83
+  fails (its Reliability clause reads UNREAD). Amendment 7's clean-runs order does NOT already exclude such a machine:
+  clean runs count host outcomes, never clocks. So the rule is added here, in `recorded_clocks()` and `walk_order()`. A
+  store error other than a missing file makes the census UNREAD, and only continuity and NAMED are then walked (fail
+  closed). At registration, 48 RTX 5090 machines carry a loaded clock record, and 24 pass.
+- **(c) the order.** Host continuity first, then 52780, then 145701 (both unchanged, whatever their records). Then the
+  {575, 600} W class: recorded-pass machines first, then unrecorded ones, each by prior clean runs descending, then
+  machine id. Then listed-power-unknown machines, last, in the same order, with the same recorded-clock rule.
+- **(d) the qualify read** (rc 17): PASS only at an enforced limit of 575.0 or 600.0 W, compared as floats. Every create
+  still counts, so a 600 W listing that enforces less refuses at the power read, before the burn, and uses an attempt.
+- **(e) after a clean proof** (rc 18 / 25): `forensics.txt` and `host_facts.json` must each read 575.0 or 600.0 W **and**
+  equal the enforced limit the qualify step read on the card. `judge-proof` takes the qualify step's `power.json` as
+  `--qualify-power`, always passed by `sc2_qualify_drive.sh`. A record read at another limit, or at one other than the
+  qualify reading, is a host fault (18). That record, or the qualify `power.json`, missing or unreadable is probe_error (25).
+- **Not changed:** 500 W listings are not admitted, and no machine is named as an exception, so one rule holds with no
+  special cases. If the 72 h deadline nears its end with no ADMIT, the question returns with the new reads.
+
+**Spend and deadline.** Unchanged: 3 attempts, proof worst $1.18 per attempt, lane worst $12.42, and the deadline
+2026-10-28T14:12:34Z, after which the lanes park with no further change to the bar.
+
+SC2h (Amendment 5) and SC2i (Amendment 4) take this with Amendment 7, by reference.
+
+**Evidence.** `bench/sc2/sc2_qualify.py --self-test` and `tests/test_sc2f_am10.py`, each clause alone:
+- 575 W, 600 W, and a machine listing both, pass; 500, 599.9 and 600.1 W listings never admit, and a machine with one 500 W
+  offer beside a 600 W one is out;
+- 575 and 600 W machines interleave by clean runs;
+- recorded-pass before unrecorded, whatever the clean runs;
+- a recorded fail is never admitted, in the class and in the listed-unknown tier alike;
+- NAMED is walked whatever its record; an UNREAD census walks continuity and NAMED only;
+- the census itself on a planted store: the latest receipt decides, every record in it must pass, a legacy burn fails, a
+  sub-10-busy record is no record, and a non-5090 receipt is ignored;
+- the enforced read at 600 W passes, and at 500, 599.9 and 600.1 W refuses;
+- the post-proof records at 600 W against a 600 W qualify reading pass, and against a 575 W reading refuse; a missing
+  qualify `power.json` is UNREAD; the wrapper passes it.
+- The PREREG numbers are tested against `census.json`, and the market half of `census.json` is re-derived from
+  `screen_reads.json` in the test.
+
+**Unchanged:** everything else Amendments 7, 8 and 9 registered.
