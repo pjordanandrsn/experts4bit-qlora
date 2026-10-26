@@ -1,5 +1,7 @@
 # SC2h: does P118's decode lookahead lift e4b `serve_paged`'s capacity at 64 slots? `E4B_PAGED_DECODE_LOOKAHEAD=1` against the release's default (off), on 0.54.0's s64a server, paired on one RTX 5090 with same-seed replicates, the bucket-64 step's saving against its own host gap, and a knee block placed by SC2f's reading (lane SC2h of #846; registered 2026-10-11)
 
+**Status: PARKED on 2026-10-26.** See the record at the end of this file.
+
 **Registered** when this file merges to `main`, before any SC2h run. Opened without `ready-to-merge` or auto-merge,
 for maintainer review. Box O rents **after SC2f's reading** (it needs SC2f's verdict, below), behind P131 and P132 in
 the maintainer's queue, on **e4b 0.54.0** as SC2f, and every paid ACK names the host.

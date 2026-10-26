@@ -1,5 +1,7 @@
 # SC2f: do P130's two prefill defaults lift e4b `serve_paged`'s capacity at 64 slots? `E4B_FUSE_PREFILL_GLUE` and `E4B_PREFILL_LEAN_DISPATCH` at the release's defaults against both at 0, paired on one RTX 5090, with same-seed replicates and a knee block at 12–14 req/s (lane SC2f of #846; registered 2026-10-10)
 
+**Status: PARKED on 2026-10-26.** See the record at the end of this file.
+
 **Registered** when this file merges to `main`, before any SC2f run. Opened without `ready-to-merge` or auto-merge,
 for maintainer review. Box N rents only after DQ11 closes (the standing stabilize-first rule), on **e4b 0.54.0** (the
 first release that carries #1608 and #1615), and every paid ACK names the host.

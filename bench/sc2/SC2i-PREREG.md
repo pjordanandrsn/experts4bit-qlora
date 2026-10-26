@@ -1,5 +1,7 @@
 # SC2i: does spacing or shortening prefill lift e4b `serve_paged`'s served decode under load at 64 slots? `E4B_PAGED_PREFILL_EVERY` and `E4B_PAGED_LOADED_CHUNK_TOKENS` (e4b#2017) against the release's defaults, on one RTX 5090 (lane SC2i of #846; serving roadmap lever A1)
 
+**Status: PARKED on 2026-10-26.** See the record at the end of this file.
+
 **Registered** when this file merges to `main`, before any SC2i run. Box P rents after SC2f's and SC2h's boxes (their
 order is SC2f Amendment 3's), on separate boxes, through the guarded launcher (`tools/pod-launch.sh`). The independent
 deadline watcher is armed at create.

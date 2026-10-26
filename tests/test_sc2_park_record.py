@@ -21,6 +21,13 @@ def test_each_lane_records_the_park():
         assert f"### Record (2026-10-26): {lane} PARKED with SC2f" in FLAT[lane] and f"{lane}'s spend: $0." in FLAT[lane]
 
 
+def test_each_prereg_opens_with_the_parked_status_above_its_registered_sentence():
+    for lane in ("SC2f", "SC2h", "SC2i"):
+        text = (SC2 / f"{lane}-PREREG.md").read_text()
+        status = "**Status: PARKED on 2026-10-26.** See the record at the end of this file.\n\n**Registered**"
+        assert status in text and text.index(status) < 1000, lane      # its own paragraph, at the head, before the registered sentence
+
+
 def test_the_market_record_closes_the_screen():
     reads = json.loads((SC2 / "sc2f-park" / "screen_reads_after_am10.json").read_text())
     assert len(reads) == 39 and "the 39 screen reads after Amendment 10's committed file" in FLAT["SC2f"]
