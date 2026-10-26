@@ -73,7 +73,7 @@
     {
       "repo": "e4b",
       "path": "bench/common/card_clock.py",
-      "pattern": "REFUSE_BITS = 0x4 | 0x8 | 0x20 | 0x40 | 0x80 | 0x200 | 0x400"
+      "pattern": "ANY_SAMPLE_BITS = 0x8 | 0x20 | 0x40 | 0x80 | 0x200"
     },
     {
       "repo": "e4b",

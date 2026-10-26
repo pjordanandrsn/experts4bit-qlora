@@ -352,9 +352,9 @@ case " $FAMILIES " in *" qwen3pos80 "*)
   echo "SINGLE_THREAD ${MOPS:-unreadable} Mops (median of 5; floor $POS77_MIN_MOPS; amendment 80)" | tee -a summary.txt
   python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "${MOPS:-0}" "$POS77_MIN_MOPS" 2>/dev/null \
     || { say "BOX REFUSED: single-thread speed ${MOPS:-unreadable} Mops is under the floor ($POS77_MIN_MOPS) (host floor)"; echo "BOX_REFUSED single_thread_mops=${MOPS:-unreadable} floor=$POS77_MIN_MOPS (amendment 80)" >> summary.txt; finish 18; }
-  perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $POS80_CLOCK_FLOOR --seconds 20 --min-clean 0.95 --out $W/card_clock_burn.json > logs/card_clock_burn.log 2>&1; crc=$?
+  perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $POS80_CLOCK_FLOOR --seconds 20 --mode clock --min-clean 0.95 --out $W/card_clock_burn.json > logs/card_clock_burn.log 2>&1; crc=$?
   grep "^CARD_CLOCK " logs/card_clock_burn.log | tail -1 | tee -a summary.txt
-  [ $crc -eq 0 ] || { say "BOX REFUSED: the card's loaded SM clock fails amendment 80's floor ($POS80_CLOCK_FLOOR MHz, no hard slowdown or cap reason, SwPowerCap on <= 5 %): $(tail -1 logs/card_clock_burn.log | cut -c1-300) (host floor)"; echo "BOX_REFUSED card_clock rc=$crc floor=$POS80_CLOCK_FLOOR (amendment 80)" >> summary.txt; finish 18; };;
+  [ $crc -eq 0 ] || { say "BOX REFUSED: the card's loaded SM clock fails amendment 83's floor ($POS80_CLOCK_FLOOR MHz, no slowdown bit on any sample, Reliability on < 95 % of busy samples): $(tail -1 logs/card_clock_burn.log | cut -c1-300) (host floor)"; echo "BOX_REFUSED card_clock rc=$crc floor=$POS80_CLOCK_FLOOR (amendment 83)" >> summary.txt; finish 18; };;
 esac
 # P48 run 1 (2026-09-19) drew a host whose container overlay was 32 GB and died ENOSPC mid-fetch; box B fetches ~120 GB of
 # checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.

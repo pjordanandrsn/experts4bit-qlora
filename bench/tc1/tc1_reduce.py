@@ -1137,14 +1137,14 @@ POS80_PROVEN = tuple(POS80_PINS)                                   # all four ar
 #: the import each proof must show among its origins: the arms' entry module (grouped-nf4-gemm installs flat modules, no package of its name)
 POS80_OWN_IMPORT = {"experts4bit-qlora": "experts4bit_qlora", "grouped-nf4-gemm": "nf4_qlora", "unsloth": "unsloth", "unsloth_zoo": "unsloth_zoo"}
 POS80_HELPER_SHA256 = {"release_proof": "aff3fc80db8d35bbf94a9aaeed125c9d424cfe93bf16eb0e6868b6f9d03f13e0",
-                       "card_clock": "1dae29569b776f7ce4595e07b1582011ed8ed1b7068b07ce7cb484aa8ed266ac", "f15v2": "e32f6bcb8c09abb4b09f918cfc55f7b70ad6488400bd61e297440ceb5c4de3ff"}
+                       "card_clock": "14494c6d045f5840457fb26477c83435f17ecfdf35438a0cfcbd703d6547eba8", "f15v2": "e32f6bcb8c09abb4b09f918cfc55f7b70ad6488400bd61e297440ceb5c4de3ff"}
 POS80_HARNESS_ENV = POS79_HARNESS_ENV
 POS80_PYCACHE_PREFIX = "/tmp/tc1-pycache-"
 POS80_HELDOUT_MAX = POS79_HELDOUT_MAX                              # amendment 69's P209
 POS80_STABLE = POS79_STABLE
 POS80_CLOCK_FLOOR = 2700                                           # MHz, the RTX 5090's: before install (the burn) and per draw
-POS80_DRAW_MIN_CLEAN = 0.95                                        # per draw: no slowdown or cap reason on >= 95 % of busy samples
-POS80_BURN_MIN_CLEAN = 0.95                                        # the burn: SwPowerCap clear on >= 95 % of busy samples; every hard reason on every sample
+POS80_CARD_MODE = "clock"                                          # TC1 amendment 83: the burn and every draw, card_clock's clock mode
+POS80_PERSISTENT_SHARE = 0.95                                      # card_clock.PERSISTENT_SHARE: Reliability refuses on >= 95 % of busy samples
 POS80_MIN_MOPS = 15                                                # amendment 77's single-thread floor
 FAMS.append(POS80_FAM)
 NAMES[POS80_FAM] = "Qwen3-30B-A3B (amendment 80: amendment 79's box at the 0.58.1 release, PyPI wheels, F15 v2, the card floor; two profiled draws each)"
@@ -3371,8 +3371,8 @@ def pos80_why(tag, r):
     - torch 2.12, and the kit's four pins as the arm recorded them;
     - the registered tags, e4b's chunked loss with no run-time refusal, and a full profile beside the receipt;
     - on an Unsloth arm, F15 v2 ENGAGED (f15v2.engagement: exact counts on the dispatch the pinned zoo takes);
-    - on every arm, the card floor on its own clock log (card_clock: busy median >= POS80_CLOCK_FLOOR, no slowdown or cap reason on
-      >= POS80_DRAW_MIN_CLEAN of busy samples).
+    - on every arm, the card floor on its own clock log (TC1 amendment 83, card_clock's clock mode: busy median >= POS80_CLOCK_FLOOR,
+      no slowdown bit on any sample, Reliability on fewer than POS80_PERSISTENT_SHARE of busy samples; SwPowerCap recorded).
     Empty string = as registered."""
     r = r or {}
     env = r.get("env") or {}
@@ -3412,7 +3412,7 @@ def pos80_why(tag, r):
     if cc is None or not isinstance(g, dict):
         bad.append("no gpuclk log (or no card_clock.py at the kit's digest): the card floor is unread for this draw")
     else:
-        ok, why = cc.passes(g, POS80_CLOCK_FLOOR, POS80_DRAW_MIN_CLEAN)
+        ok, why = cc.passes(g, POS80_CLOCK_FLOOR, mode=POS80_CARD_MODE)
         if not ok:
             bad.append(f"card floor: {why}")
     return "; ".join(bad)
@@ -3494,8 +3494,10 @@ def pos80_box(d):
     except ValueError:
         burn = None
     if not (isinstance(burn, dict) and burn.get("pass") is True and burn.get("floor_mhz") == POS80_CLOCK_FLOOR
-            and burn.get("min_clean") == POS80_BURN_MIN_CLEAN and burn.get("hard_bits_every_sample") is True):
-        bad.append(f"no single passing CARD_CLOCK burn line at floor {POS80_CLOCK_FLOOR} MHz, min_clean {POS80_BURN_MIN_CLEAN}, hard bits on every sample")
+            and burn.get("mode") == POS80_CARD_MODE and burn.get("persistent_share") == POS80_PERSISTENT_SHARE
+            and burn.get("any_sample_bits_every_sample") is True):
+        bad.append(f"no single passing CARD_CLOCK burn line at floor {POS80_CLOCK_FLOOR} MHz, mode {POS80_CARD_MODE}, persistent_share "
+                   f"{POS80_PERSISTENT_SHARE}, any-sample bits on every sample (TC1 amendment 83)")
     fx["burn"] = burn
     ms = [ln for ln in lines if ln.startswith("SINGLE_THREAD ")]
     try:
