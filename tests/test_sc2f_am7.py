@@ -37,7 +37,7 @@ def test_the_admission_constants_are_the_texts():
     assert "The walk is **open**" in AM7_FLAT and "**any other machine whose offers list 575 W**" in AM7_FLAT
     assert Q.EXCLUDED == ("13828", "37367") and Q.UNTIL_CREATE == ("26157",)
     assert "Excluded throughout: 13828 (clock-bound) and 37367" in AM7_FLAT and "26157 until a create there succeeds" in AM7_FLAT
-    assert (Q.MAX_ATTEMPTS, Q.CEILING_USD_H, Q.MIN_DISK_GB, Q.STABLE_READS) == (3, 1.05, 320, 3)
+    assert (Q.MAX_ATTEMPTS, Q.CEILING_USD_H, Q.MIN_DISK_GB, Q.STABLE_READS) == (3, 1.25, 320, 3)   # SC2f Amendment 11: $1.05 -> $1.25
     assert 575.0 in Q.POWER_W                          # Amendment 7's 575 W; SC2f Amendment 10 widens the class (test_sc2f_am10)
     assert "**Every create consumes one of 3 proof attempts** (`sc2f-prove-11`, `-12`, `-13`), whatever its exit" in AM7_FLAT
     assert Q.FIRST_ID == {"sc2f": 11, "sc2h": 1, "sc2i": 1}
@@ -97,7 +97,7 @@ def test_the_open_walk_orders_by_tier_then_clean_runs_then_id(tmp_path):
 
 def test_a_new_machine_appearing_mid_screen(tmp_path):
     s = tmp_path / "store"
-    reads = _reads("52780", usd=1.2, n=2) + _reads("888", n=2)
+    reads = _reads("52780", usd=1.3, n=2) + _reads("888", n=2)
     assert _admit(s, "sc2f", reads)["verdict"] == "NONE"                       # two reads: not yet
     assert _admit(s, "sc2f", reads + _reads("888", n=1))["machine"] == "888"   # its third read admits it
 
@@ -105,7 +105,7 @@ def test_a_new_machine_appearing_mid_screen(tmp_path):
 def test_the_price_is_the_all_in_hourly_never_a_base_rate(tmp_path):
     """``usd_h`` is the launcher's hourly at 320 GB (GPU plus storage); an offer whose base rate is under the ceiling but
     whose all-in hourly is over it is never admitted, whatever other field the read carries."""
-    reads = [[{"machine_id": "52780", "offer_id": "1", "usd_h": 1.08, "base_usd_h": 0.95, "disk_gb": 400,
+    reads = [[{"machine_id": "52780", "offer_id": "1", "usd_h": 1.28, "base_usd_h": 1.15, "disk_gb": 400,   # SC2f Am. 11: $1.25
                "listed_power_w": 575.0}]] * 3
     assert _admit(tmp_path / "store", "sc2f", reads)["verdict"] == "NONE"
 

@@ -869,3 +869,40 @@ SC2h (Amendment 5) and SC2i (Amendment 4) take this with Amendment 7, by referen
 - the wrapper runs `SAMPLER_QUERY` exactly, and its text no longer says rc 25 never excludes the machine.
 
 **Unchanged:** everything else Amendments 7, 8 and 9 registered.
+
+### Amendment 11 (registered before any SC2f reading): the price ceiling is $1.25 an hour, for SC2f, SC2h and SC2i
+
+**Why.** The screen's admissions are price-bound: at 11:26Z on 2026-10-26 no 575 or 600 W offer sat under $1.05. This is
+pre-data. Attempt 1 (`sc2f-prove-11`) was VOID (rc 25), and no arm has been read.
+
+**The change.** `CEILING_USD_H` (the launcher's all-in hourly at 320 GB, the stability rule's price bound) moves from $1.05
+to **$1.25**. It is one ceiling for the three lanes, as Amendment 3 set. It is a budget parameter, not a gate: the
+{575, 600} W class, the 2,700 MHz floor, the recorded-clock rule, the 3 attempts (1 used) and the deadline
+(2026-10-28T14:12:34Z) do not change. The launch template's `usd_per_hour` and `est_usd` move with it.
+
+**Which reads it admits** (`bench/sc2/sc2f-am11/ceiling_replay.json`). Replayed read by read over the 228 committed screen
+reads (`bench/sc2/sc2f-am10/screen_reads.json`), with attempt 1 counted, 55337 not revisited, and the recorded-clock census
+as committed in that file (49 machines, 25 pass):
+- at $1.05, **59** reads ADMIT (7 machines);
+- at $1.25, **85** reads ADMIT (10 machines): 152938 (24 reads), 152440 (3, a recorded pass) and 36206 (2) join.
+
+**Worst cases, old -> new**, each by its own file's formula (guard hours x ceiling plus downloads):
+- **SC2f** (Amendment 7's formula, with the burn's torch): a proof $1.18 -> **$1.38**; the reading $4.44 -> **$5.14**; the lane
+  (3 proofs, the reading and one re-run) $12.42 -> **$14.42**.
+- **SC2h** (SC2h-PREREG's formula: two proofs, one reading, one re-run counted as a reading): a proof $1.15 -> **$1.35**; the
+  reading (4.0 h) $4.93 -> **$5.73**; the lane $12.16 -> **$14.16**.
+- **SC2i** (SC2i-PREREG's formula, as SC2h's): a proof $1.15 -> **$1.35**; the reading (4.5 h) $5.46 -> **$6.36**; the lane
+  $13.21 -> **$15.41** (that file sums the reading unrounded, $6.355).
+
+**Every run stays at or under $15**: the largest is SC2i's reading, at $6.36. The $15 bar is per run, and a lane total is
+stated, not capped. SC2i's lane total is above $15, by $0.41. Counted with the 3 proof attempts that SC2h Amendment 5 and
+SC2i Amendment 4 register, plus the burn (about $0.03 each), the two lane totals would be $15.66 and $16.92. No guard is
+trimmed.
+
+SC2h (Amendment 6) and SC2i (Amendment 5) record their own restated worsts and take this ceiling by reference.
+
+**Evidence.** `bench/sc2/sc2_qualify.py --self-test` and `tests/test_sc2f_am11.py`: an offer at $1.25 admits and one at
+$1.26 does not; the replay counts are re-derived from the committed reads and census snapshot; the worst-case
+arithmetic is recomputed from each formula.
+
+**Unchanged:** everything else Amendments 7 to 10 registered.

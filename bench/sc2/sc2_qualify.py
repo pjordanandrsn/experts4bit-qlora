@@ -26,7 +26,8 @@ approves compute; the launcher (``tools/pod-launch.sh``) creates, and applies it
         before any create (no instance) consumes none. A machine already tried is never admitted again, whatever its
         outcome, unless its proof PROVED (status OK, result pass): that machine is then the lane's host, and only it
         is admitted. With 3 attempts consumed and no proof PROVED, the lane PARKS;
-      - STABILITY: a machine is admitted only when an offer on it at or under the $1.05/h ceiling with at least
+      - STABILITY: a machine is admitted only when an offer on it at or under the $1.25/h ceiling (SC2f Amendment 11, one
+        ceiling for SC2f, SC2h and SC2i) with at least
         320 GB of disk is present in each of the last 3 reads, by offer id (``READS.json``: a list of reads, oldest
         first, each a list of ``{"machine_id", "offer_id", "usd_h", "disk_gb", "listed_power_w"}``;
         ``listed_power_w`` null when the listing carries none). ``--clean-runs FILE`` (``{machine: n}``, from the
@@ -78,7 +79,9 @@ NAMED = ("52780", "145701")                       # ruled first, from the recoun
 EXCLUDED = ("13828", "37367")
 UNTIL_CREATE = ("26157",)
 MAX_ATTEMPTS = 3
-CEILING_USD_H = 1.05
+#: SC2f Amendment 11: the per-hour offer ceiling (the launcher's all-in hourly at 320 GB), one for SC2f, SC2h and SC2i ($1.05 before it).
+#: Every run's worst stays <= $15 (the largest, SC2i's reading, $6.36); lane totals are stated, not capped.
+CEILING_USD_H = 1.25
 MIN_DISK_GB = 320
 STABLE_READS = 3
 #: SC2f Amendment 10: the listed-power class and the enforced limits that pass, one set (Amendment 7's 575 W alone before it)
@@ -521,7 +524,7 @@ def self_test() -> int:
         ("admit: 2 of the last 3 reads is not stable", adm([], [rd()] + named[:2], False)["verdict"] == "NONE"
          and adm([], named[:2] + [rd()], False)["verdict"] == "NONE" and adm([], named[:2], False)["verdict"] == "NONE"),
         ("admit: over the ceiling (the all-in usd_h) is not admissible",
-         adm([], [rd(("52780", "1", 1.06, 400, 575.0))] * 3, False)["verdict"] == "NONE"),
+         adm([], [rd(("52780", "1", 1.26, 400, 575.0))] * 3, False)["verdict"] == "NONE"),
         ("admit: under 320 GB disk is not admissible", adm([], [rd(("52780", "1", 0.9, 319, 575.0))] * 3, False)
          ["verdict"] == "NONE"),
         ("admit: an offer must persist by id", adm([], [rd(("52780", "1", 0.9, 400, 575.0)),
@@ -586,6 +589,10 @@ def self_test() -> int:
         ("am10 judge: a missing qualify power.json is UNREAD", judge_proof(fx, {"gpu_power_limit_w": 575.0}, None)["verdict"] == "UNREAD"
          and judge_proof(fx, {"gpu_power_limit_w": 575.0}, "unreadable")["verdict"] == "UNREAD"
          and judge_proof(fx, {"gpu_power_limit_w": 575.0}, {})["verdict"] == "UNREAD"),
+        # SC2f Amendment 11: one ceiling, $1.25, for the three lanes
+        ("am11 admit: an offer at $1.25 is admitted", adm([], [rd(("152938", "x", 1.25, 400, 600.0))] * 3, False)
+         .get("machine") == "152938" and CEILING_USD_H == 1.25),
+        ("am11 admit: $1.26 is refused", adm([], [rd(("152938", "x", 1.26, 400, 600.0))] * 3, False)["verdict"] == "NONE"),
         ("run: a clean sampler passes", judge_run(hdr + row() * 30)["verdict"] == "PASS"),
         ("run: one HwSlowdown sample refuses", judge_run(hdr + row() * 29 + row("0x0000000000000008"))["verdict"]
          == "REFUSE"),
