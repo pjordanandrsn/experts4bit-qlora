@@ -215,17 +215,33 @@ def test_the_host_line_records_the_ram_source():
     assert "ram=${RAM_GIB}GiB($RAM_FROM)" in RUN and 'echo "refused: ram ${RAM_GIB:-?} GiB ($RAM_FROM)" > REFUSAL' in RUN
 
 
+# -- fix 5: the price cap ---------------------------------------------------------------------------------------------------------
+def test_the_price_cap_is_085_and_the_screen_reads_it():
+    """The ruled USD 0.85/h: the screen's cap IS the fit's box rate and the FIT line's price; the cap turns USD-bound (16.35 h); the
+    reading's worst stays <= USD 15 at its fit and at its launch wall; the PREREG states the old and new numbers."""
+    assert host.USD_PER_H == 0.85 and host.SCREEN_MAX_USD_PER_H == host.USD_PER_H
+    assert float(re.search(r"price ([\d.]+) USD/h", PREREG).group(1)) == host.SCREEN_MAX_USD_PER_H
+    assert host.cap_s() == 58870 < host.RUN_OVERRIDE_MAX_H * 3600
+    read_fit = host.fit_s(host.n_proc("read"), 1500)
+    assert host.worst_usd(read_fit) == 13.85 and host.worst_usd(host.wall_s("read", 1500)) == 14.2 <= host.RUN_CAP_USD
+    for s in ("The 4090 price cap rises to USD 0.85/h", "USD 10.10 -> 13.85", "USD 3.85 -> 5.00", "USD 4.10 -> 5.35",
+              "USD 14.45 -> 19.70", "18 h -> 58870 s (16.35 h)", "the lane stops, as registered", "never trimmed",
+              "A later census the same morning (08:42Z) found a fast-class Core Ultra 9 285K 4090 listing 188 GiB at USD 0.80/h",
+              "the 07:51Z search undersampled (Vast returns a rotating subset per call)"):
+        assert s in AM1, s
+
+
 # -- the shake's launch wall --------------------------------------------------------------------------------------------------------
 def test_the_shake_wall_is_the_fit_plus_the_launch_slack():
     assert host.LAUNCH_SLACK_S == 1500
-    assert host.fit_s(host.n_proc("shake"), 1500) == 16500 and host.worst_usd(16500) == 3.85
-    assert host.wall_s("shake", 1500) == 18000 == 5.0 * 3600 and host.worst_usd(18000) == 4.10
+    assert host.fit_s(host.n_proc("shake"), 1500) == 16500 and host.worst_usd(16500) == 5.0
+    assert host.wall_s("shake", 1500) == 18000 == 5.0 * 3600 and host.worst_usd(18000) == 5.35
     assert host.wall_s("shake", 1500) <= host.POLICY_MAX_WALLCLOCK_H * 3600                 # no override
 
 
 def test_the_amendment_states_the_ruled_numbers():
     for s in ("min(MemTotal, every cgroup memory limit", "1 TB host held to 64 GiB", "Only a missing file counts as absent",
               "a limit above the namespace's root is not visible", "`p237_host.vast_cpu_class`", "listed `cpu_ram` >= 128 GiB",
-              "18,000 s (5.0 h)", "Worst USD 4.10", "USD 3.85", "no override", "111 offers", "0 offers",
+              "18,000 s (5.0 h)", "Worst USD 5.35", "USD 5.00 at", "no override", "111 offers", "0 offers",
               "2026-10-28T07:51Z", "The CPU class is unchanged"):
         assert s in AM1, s

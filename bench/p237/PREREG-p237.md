@@ -476,7 +476,7 @@ registered.
 **The guard is FITTED, never chosen** (ruled before data). It is `p237_host.fit_s`, the function the runner's 41 check
 calls:
 
-`FIT: install 2700 s, fetch 3600 s, reserve 900 s, margin 125 %; processes 24 (reading), 4 (shakedown); price 0.60 USD/h, downloads 1.10 USD; run cap 15 USD; per-run override 18 h; global max_wallclock_h 6 h`
+`FIT: install 2700 s, fetch 3600 s, reserve 900 s, margin 125 %; processes 24 (reading), 4 (shakedown); price 0.85 USD/h, downloads 1.10 USD; run cap 15 USD; per-run override 18 h; global max_wallclock_h 6 h`
 
 - **guard** = (install + fetch + processes × LOAD_S + reserve) × 1.25.
   - The reading's processes are its 16 primers and draws plus 4 probes per budget. The shakedown's are its 3 draws
@@ -487,17 +487,18 @@ calls:
   - The rental policy's GLOBAL cap, `teardown.max_wallclock_h`, stays at 6 h, and the launcher enforces it.
   - A rental-policy decision (2026-10-26) added a PER-RUN override up to 18 h, allowed only when the run's worst at its guard is
     at most USD 15. Both values are constants here, pinned by a test, and they move only with that policy.
-  - The cap is 18 h, since the USD bound is about 23 h.
-- **worst** = guard × 0.60 + 1.10 USD (the box rate, plus downloads of at most 100 GB at ≤ $0.011/GB).
+  - The cap is the USD bound, 58870 s (16.35 h): at USD 0.85/h, (15 - 1.10) / 0.85 h is under the 18 h override (amendment 1,
+    fix 5; at the registered USD 0.60/h it was 18 h).
+- **worst** = guard × 0.85 + 1.10 USD (the box rate, plus downloads of at most 100 GB at ≤ $0.011/GB).
 - A fit over the cap is never trimmed. The lane stops and reports. Fewer steps, probes or primers would be a new
   registration before data.
 
 Today's estimate, at LOAD_S 1500 s:
-- **Reading:** a guard of 54000 s (15.0 h), worst USD 10.10. It fits the 18 h cap and the USD 15 run worst, so the
+- **Reading:** a guard of 54000 s (15.0 h), worst USD 13.85. It fits the 16.35 h cap and the USD 15 run worst, so the
   reading is one host and one session, as registered. Being over 6 h, it launches only under the per-run override
   (Sequencing, step 9).
-- **Shakedown:** a guard of 16500 s (4.58 h), worst USD 3.85. It fits the cap, and the maintainer approved it at this
-  cost. It is one box, registered and never a reading (`p237_schedule.py --shake`):
+- **Shakedown:** a guard of 16500 s (4.58 h), worst USD 5.00. It fits the cap, and the maintainer approved it at this
+  cost (amendment 1: USD 5.35 at its 5.0 h launch wall). It is one box, registered and never a reading (`p237_schedule.py --shake`):
   - E and UA at 12 GiB, 24 steps each, so the profiled window (loop indices 21..23) is inside the run and every
     engagement check runs on a real record.
   - ONE UT probe at 12 GiB (N_auto − 1). It tests the probe path and never tunes.
@@ -506,7 +507,8 @@ Today's estimate, at LOAD_S 1500 s:
     seconds of at least 300, else 78.
 - **Per box** the worst is at most USD 15, the run cap. **The lane** is the shakedown's worst plus the reading's worst
   at its fitted guard, plus one retry id for a box that did not start (≤ USD 0.50). At today's estimate that is
-  3.85 + 10.10 + 0.50 = **USD 14.45**. A retry of the reading itself would be a second reading box (another ≤ USD 15),
+  5.35 + 13.85 + 0.50 = **USD 19.70** (the shakedown at its 5.0 h wall; amendment 1, fix 5: it was 3.85 + 10.10 + 0.50 = USD 14.45
+  at USD 0.60/h). A retry of the reading itself would be a second reading box (another ≤ USD 15),
   so the lane total is reported against the rental rails: USD 15 per box and USD 100 per day.
 - **The fetch carries receipts and logs only** (the store's rules). `p237_drive.sh`'s exclude list follows TC1's (the
   venv, the caches, the adapters, `tp4_alpaca`'s downloaded source text), adds every tensor extension, and caps any one
@@ -519,7 +521,8 @@ Amendments, dated, go below this line before any data is read.
 **Why.** The shakedown's pin screen was cut from the registered floors and read the RTX 4090 market at $0 (2026-10-26 07:51Z;
 20 offer searches, 10 at a 16 GB RAM floor and 10 at 128; 111 offers, all verified, direct SSH, disk >= 240 GB). Three findings:
 - A fast CPU class AND listed RAM >= 128 GiB: **0 offers.** The six fast-class offers are Ryzen 7000/9000 desktops listing 30-62 GiB.
-  The five listing >= 128 GiB are all EPYC Zen 2/3.
+  The five listing >= 128 GiB are all EPYC Zen 2/3. A later census the same morning (08:42Z) found a fast-class Core Ultra 9 285K
+  4090 listing 188 GiB at USD 0.80/h; the 07:51Z search undersampled (Vast returns a rotating subset per call).
 - Vast's `cpu_ram` is the offer's SHARE of the host. A container's `/proc/meminfo` MemTotal is the whole host's, so the registered
   rc 16 line (MemTotal only) would pass a 64 GiB slice of a 1 TB host. The e4b arm's 113.5 GB peak would then meet the slice's cgroup
   limit, not the floor.
@@ -546,13 +549,25 @@ vary with CPU generation, so widening the class would change what the speed rati
    `MIN_RAM_GIB`), the offer's share, so the screen agrees with fix 1 before a create.
 4. **The shake's launch wall is 18,000 s (5.0 h):** the fit of 16,500 s that rc 41 reads, plus 1,500 s of launch slack
    (`LAUNCH_SLACK_S`, `wall_s`; P238's precedent of the same day). pod-launch boots, waits for SSH and stages before rc 41 reads
-   its time left. Worst USD 4.10 at 5.0 h x 0.60 + 1.10, beside the registered USD 3.85 at the bare fit. It is under the 6 h
-   global cap, with no override.
+   its time left. Worst USD 5.35 at 5.0 h x 0.85 + 1.10 (fix 5's price; USD 4.10 at the registered 0.60), beside USD 5.00 at
+   the bare fit (USD 3.85 at 0.60). It is under the 6 h global cap, with no override.
+5. **The 4090 price cap rises to USD 0.85/h** (ruled 2026-10-26: a budget parameter, not a science gate; the host class, the
+   floors and the recipe are unchanged). The only fast-class host with >= 128 GiB listed that either census found lists at
+   USD 0.80/h. The registered budget lines above move with it, before data (old -> new):
+   - the FIT line's price, 0.60 -> 0.85 USD/h, and the worst's rate with it;
+   - the cap, 18 h -> 58870 s (16.35 h): it is now the USD bound, since (15 - 1.10) / 0.85 h is under the 18 h override;
+   - the reading's worst, USD 10.10 -> 13.85 at its 15.0 h fit (USD 14.20 with the same 1,500 s launch slack), still at most
+     the USD 15 run cap that the per-run override requires;
+   - the shakedown's worst, USD 3.85 -> 5.00 at its fit, and USD 4.10 -> 5.35 at its 5.0 h wall (fix 4);
+   - the lane, USD 14.45 -> 19.70 (5.35 + 13.85 + 0.50).
+   If the shakedown's measured per-process wall pushes the reading's worst over USD 15, the lane stops, as registered; the
+   reading is never trimmed. The pin screen's price cap is `p237_host.SCREEN_MAX_USD_PER_H`, bound by a test to the fit's
+   `USD_PER_H` and to the FIT line.
 
 **The market, bounded.** The shakedown's pin loop screens on its cadence for a host that passes both floors, and creates nothing
 otherwise. If none passes by 2026-10-28T07:51Z (48 h after the census), the lane stops and reports a new census: the fast-class RAM
 shares seen and the EPYC listings. The maintainer then rules again, on that evidence. A ruling to widen the class would also need the
 private receipt store's evidence on the Zen 3/4 host gap at B=1 offload.
 
-**Unchanged:** every other registered line, the reading's fit and its cost, and the exit table. Code 16 still means host RAM under
+**Unchanged:** every other registered line, the reading's fit (its cost moves with fix 5 only), and the exit table. Code 16 still means host RAM under
 128 GiB, now the usable RAM.

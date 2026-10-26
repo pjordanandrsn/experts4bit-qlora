@@ -29,7 +29,7 @@ HOST_FLOOR = 18
 # override up to 18 h, allowed only when the run's worst at its guard is <= USD 15. Both are registered here as constants, pinned by
 # the test, and move only with that policy. A box longer than 6 h launches only once the override is in the policy.
 INSTALL_S, FETCH_S, RESERVE_S, FIT_MARGIN_PCT = 2700, 3600, 900, 125
-USD_PER_H, DOWNLOAD_USD, RUN_CAP_USD = 0.60, 1.10, 15.0
+USD_PER_H, DOWNLOAD_USD, RUN_CAP_USD = 0.85, 1.10, 15.0     # amendment 1 (fix 5): the 4090 price cap 0.60 -> 0.85 USD/h
 POLICY_MAX_WALLCLOCK_H = 6                             # the global cap: every launch without the per-run override
 RUN_OVERRIDE_MAX_H = 18                                # the per-run override's ceiling (rental policy, 2026-10-26)
 PROBES_MAX = {"read": 4, "shake": 1}                   # the shakedown runs ONE probe (N_auto - 1): it tests the probe path, never tunes
@@ -92,6 +92,7 @@ def cpu_class(name):
 # Amendment 1 (pre-data): the pin screen's view of a Vast offer, so it refuses what the runner would. The runner's lscpu reading above
 # is unchanged.
 SCREEN_MIN_LISTED_RAM_GIB = 128                        # Vast's listed cpu_ram (the offer's SHARE of the host) >= the runner's floor
+SCREEN_MAX_USD_PER_H = USD_PER_H                       # the screen's price cap (GPU + the create disk) IS the fit's box rate (fix 5)
 
 
 def vast_cpu_class(name):

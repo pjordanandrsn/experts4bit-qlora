@@ -466,9 +466,9 @@ def test_the_registered_fit_is_the_runners_and_the_prereg_states_it():
     import p237_host as h
     assert h.POLICY_MAX_WALLCLOCK_H == 6                                         # the rental policy's global teardown.max_wallclock_h
     assert h.RUN_OVERRIDE_MAX_H == 18                                            # the rental policy's per-run override (2026-10-26)
-    assert h.cap_s() == 18 * 3600 and h.PROBES_MAX == {"read": 4, "shake": 1}
+    assert h.cap_s() == 58870 and h.PROBES_MAX == {"read": 4, "shake": 1}       # amendment 1: the USD bound at 0.85/h
     assert h.n_proc("read") == 24 and h.n_proc("shake") == 4
-    assert h.fit_s(24, 1500) == 54000 and h.fit_s(4, 1500) == 16500 and h.worst_usd(16500) == 3.85 and h.worst_usd(54000) == 10.1
+    assert h.fit_s(24, 1500) == 54000 and h.fit_s(4, 1500) == 16500 and h.worst_usd(16500) == 5.0 and h.worst_usd(54000) == 13.85
     assert h.worst_usd(h.cap_s()) <= h.RUN_CAP_USD                               # the override is allowed only at a worst <= USD 15
     prereg = PREREG.read_text(encoding="utf-8")
     assert fit_disagreements(prereg, _run_text(), h) == []
@@ -480,8 +480,8 @@ def test_mutants_of_the_fit_are_caught(monkeypatch):
     import p237_host as h
     prereg, run = PREREG.read_text(encoding="utf-8"), _run_text()
     for old, new in [("fetch 3600 s", "fetch 3000 s"), ("per-run override 18 h", "per-run override 24 h"),
-                     ("global max_wallclock_h 6 h", "global max_wallclock_h 8 h"), ("worst USD 3.85", "worst USD 1.50"),
-                     ("It fits the 18 h cap", "It is over the cap"), ("it launches only under the per-run override", "it launches as usual")]:
+                     ("global max_wallclock_h 6 h", "global max_wallclock_h 8 h"), ("worst USD 5.00", "worst USD 1.50"),
+                     ("It fits the 16.35 h cap", "It is over the cap"), ("it launches only under the per-run override", "it launches as usual")]:
         assert prereg.count(old) == 1, old
         assert fit_disagreements(prereg.replace(old, new), run, h), f"PREREG mutant survives: {new}"
     assert fit_disagreements(prereg, run.replace("FETCH_S=3600", "FETCH_S=3000"), h)
