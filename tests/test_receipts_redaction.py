@@ -16,9 +16,11 @@ import gzip
 import hashlib
 import ipaddress
 import json
+import os
 import pathlib
 import re
 import subprocess
+import zlib
 
 import pytest
 
@@ -165,9 +167,19 @@ def scan_file(path):
     if path.name.endswith(".gz"):
         try:
             found += scan(gzip.decompress(data))
-        except (OSError, EOFError):
+        except (OSError, EOFError, zlib.error):
             found["a .gz that does not decompress"] += 1   # its contents cannot be checked: a finding, never a pass
     return found
+
+
+def scan_tracked(path):
+    """scan_file for one tracked path: None when it is not in this checkout, a finding when it cannot be read."""
+    try:
+        return scan_file(path)
+    except FileNotFoundError:
+        return None
+    except OSError as e:
+        return collections.Counter({f"unreadable ({type(e).__name__})": 1})
 
 
 ALLOWED = {   # (path, rule) -> (count, why it stays)
@@ -211,12 +223,9 @@ def test_no_identifier_outside_the_holds():
     for fx in tracked.decode("utf-8").split("\0"):
         if not fx or fx in HOLDS or fx in TEST_SOURCES or fx in GUARD_FILES or fx in LEDGER_FIXTURES:
             continue
-        try:
-            hits = scan_file(ROOT / fx)
-        except FileNotFoundError:
+        hits = scan_tracked(ROOT / fx)
+        if hits is None:
             continue                                        # tracked but not in this checkout
-        except OSError as e:                                # unreadable: the scan cannot vouch for it
-            hits = collections.Counter({f"unreadable ({type(e).__name__})": 1})
         for why, n in hits.items():
             found[(fx, why)] = n
     allowed = {k: n for k, (n, _) in ALLOWED.items()}
@@ -224,6 +233,29 @@ def test_no_identifier_outside_the_holds():
     stale = {k: n for k, n in allowed.items() if found.get(k) != n}
     assert not extra, f"identifiers outside the holds (redact them, or rule an allowance): {dict(list(extra.items())[:5])}"
     assert not stale, f"allowances that no longer match the tree; remove or re-count them: {stale}"
+
+
+@pytest.mark.parametrize("kind", ["truncated", "bad deflate block", "flipped body bytes"])
+def test_scan_file_refuses_a_gz_that_does_not_decompress(tmp_path, kind):
+    g = gzip.compress(b"clean data " * 50, mtime=0)
+    body = {"truncated": g[:12], "bad deflate block": g[:10] + b"\xff" + g[11:],
+            "flipped body bytes": g[:len(g) // 2] + bytes([g[len(g) // 2] ^ 0xFF, g[len(g) // 2 + 1] ^ 0xFF])
+            + g[len(g) // 2 + 2:]}[kind]
+    (tmp_path / "steps.jsonl.gz").write_bytes(body)
+    assert scan_file(tmp_path / "steps.jsonl.gz")["a .gz that does not decompress"] == 1
+
+
+def test_scan_tracked_reads_a_missing_file_as_absent_and_an_unreadable_one_as_a_finding(tmp_path):
+    assert scan_tracked(tmp_path / "gone.json") is None
+    if os.name != "posix" or os.geteuid() == 0:
+        pytest.skip("root reads a mode-000 file anyway")
+    locked = tmp_path / "locked.json"
+    locked.write_text("{}", encoding="utf-8")
+    locked.chmod(0)
+    try:
+        assert scan_tracked(locked) == collections.Counter({"unreadable (PermissionError)": 1})
+    finally:
+        locked.chmod(0o644)
 
 
 @pytest.mark.parametrize("why,data", [

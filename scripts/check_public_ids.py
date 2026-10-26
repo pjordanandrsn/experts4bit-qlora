@@ -24,6 +24,7 @@ import ipaddress
 import re
 import subprocess
 import sys
+import zlib
 
 MARKERS = ".github/private-markers.txt"
 GUARD_FILES = {MARKERS, ".github/workflows/private-marker-guard.yml", "scripts/check_public_ids.py"}
@@ -103,7 +104,7 @@ def tree():
         if path.endswith(".gz"):
             try:
                 blobs.append(gzip.decompress(b))
-            except (OSError, EOFError) as e:
+            except (OSError, EOFError, zlib.error) as e:   # truncated, bad CRC, a corrupt deflate stream
                 bad.append(f"{path}: a .gz that does not decompress ({type(e).__name__}), so its contents are not checked")
         for x in blobs:
             for m in UUID.finditer(x):
