@@ -459,19 +459,41 @@ registered.
 
 ## Runs and budget
 
-- **Box:** one RTX 4090 at ≤ $0.60/h, guard 6.0 h, download ≤ 100 GB at ≤ $0.011/GB. The worst case is
-  6.0 × 0.60 + 100 × 0.011 = **$4.70**.
-- **Shakedown:** one short box, at most **$1.50**, registered and never a reading (`p237_schedule.py --shake`).
+**The guard is FITTED, never chosen** (ruled before data). It is `p237_host.fit_s`, the function the runner's 41 check
+calls:
+
+`FIT: install 2700 s, fetch 3600 s, reserve 900 s, margin 125 %; processes 24 (reading), 4 (shakedown); price 0.60 USD/h, downloads 1.10 USD; run cap 15 USD; policy max_wallclock_h 6 h`
+
+- **guard** = (install + fetch + processes × LOAD_S + reserve) × 1.25.
+  - The reading's processes are its 16 primers and draws plus 4 probes per budget. The shakedown's are its 3 draws
+    plus ONE probe.
+  - LOAD_S is the shakedown's measured per-process wall, registered by amendment before the reading
+    (`P237_LOAD_S_REGISTERED`).
+- **cap** = min(the rental policy's `teardown.max_wallclock_h`, the guard whose worst cost is the USD 15 run cap).
+  - The policy value is adertha's GLOBAL compute policy (`adertha/compute/policy.json`), which `rent.py` enforces at
+    launch. It is 6 h today. A test pins it, and it moves only with that policy, which is the owner's decision.
+  - Today the cap is 6 h, since the USD bound is about 23 h.
+- **worst** = guard × 0.60 + 1.10 USD (the box rate, plus downloads of at most 100 GB at ≤ $0.011/GB).
+- A fit over the cap is never trimmed. The lane stops and reports. Fewer steps, probes or primers would be a new
+  registration before data.
+
+Today's estimate, at LOAD_S 1500 s:
+- **Reading:** a guard of 54000 s (15.0 h), worst USD 10.10. That is **over today's 6 h policy cap, so the reading is on
+  HOLD** until the owner rules on the cap. The decision packet covers this lane and P238. Under a 6 h cap the reading
+  fits only if the shakedown measures LOAD_S ≤ 420 s.
+- **Shakedown:** a guard of 16500 s (4.58 h), worst USD 3.85. It fits the cap, and the maintainer approved it at this
+  cost. It is one box, registered and never a reading (`p237_schedule.py --shake`):
   - E and UA at 12 GiB, 24 steps each, so the profiled window (loop indices 21..23) is inside the run and every
     engagement check runs on a real record.
-  - UT's probes at 12 GiB.
+  - ONE UT probe at 12 GiB (N_auto − 1). It tests the probe path and never tunes.
   - UA at the full card, the N_auto = 0 path.
-  - Its measured per-process wall becomes `P237_LOAD_S_REGISTERED`, the guard fit's per-process term for the reading,
-    registered by amendment before the reading box. The runner takes it only as whole seconds of at least 300, else 78.
+  - Its measured per-process wall becomes `P237_LOAD_S_REGISTERED` by amendment. The runner takes it only as whole
+    seconds of at least 300, else 78.
+- **Lane worst:** the shakedown's worst, plus the reading's worst at the fitted guard under the cap in force, plus one
+  retry id for a box that did not start (≤ USD 0.50). At today's cap that is at most 3.85 + 4.70 + 0.50 = **USD 9.05**,
+  inside the USD 15 lane cap.
 - **The fetch carries receipts and logs only** (the store's rules). `p237_drive.sh`'s exclude list follows TC1's (the
   venv, the caches, the adapters, `tp4_alpaca`'s downloaded source text), adds every tensor extension, and caps any one
   file at 10 MiB. The driver lists what it leaves on the box, and a test runs the list over a stub box tree.
-- **Lane worst:** one reading box and one shakedown, plus one retry id for a box that did not start, at most **$8**,
-  inside the $15 lane cap.
 
 Amendments, dated, go below this line before any data is read.

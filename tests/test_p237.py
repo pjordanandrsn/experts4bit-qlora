@@ -388,6 +388,62 @@ def test_one_env_list_binds_the_refusal_the_dump_and_the_reducer(monkeypatch):
     assert _env_disagreements(run, red)
 
 
+# -- the guard fit: the PREREG's numbers, the helper's constants and the runner's agree ---------------------------------------------
+PREREG = P / "PREREG-p237.md"
+
+
+def _fit_line(text):
+    m = re.search(r"^`FIT: install (\d+) s, fetch (\d+) s, reserve (\d+) s, margin (\d+) %; processes (\d+) \(reading\), (\d+) \(shakedown\); "
+                  r"price ([\d.]+) USD/h, downloads ([\d.]+) USD; run cap ([\d.]+) USD; policy max_wallclock_h (\d+) h`$", text, re.M)
+    assert m, "the PREREG has no FIT line"
+    g = m.groups()
+    return {"install": int(g[0]), "fetch": int(g[1]), "reserve": int(g[2]), "margin": int(g[3]), "n_read": int(g[4]),
+            "n_shake": int(g[5]), "usd_h": float(g[6]), "dl": float(g[7]), "cap_usd": float(g[8]), "policy_h": int(g[9])}
+
+
+def fit_disagreements(prereg, run, h):
+    f, bad = _fit_line(prereg), []
+    want = {"install": h.INSTALL_S, "fetch": h.FETCH_S, "reserve": h.RESERVE_S, "margin": h.FIT_MARGIN_PCT, "n_read": h.n_proc("read"),
+            "n_shake": h.n_proc("shake"), "usd_h": h.USD_PER_H, "dl": h.DOWNLOAD_USD, "cap_usd": h.RUN_CAP_USD, "policy_h": h.POLICY_MAX_WALLCLOCK_H}
+    bad += [(k, f[k], v) for k, v in want.items() if f[k] != v]
+    m = re.search(r"^INSTALL_S=(\d+); FETCH_S=(\d+); RESERVE=(\d+)$", run, re.M)
+    if not m or tuple(map(int, m.groups())) != (h.INSTALL_S, h.FETCH_S, h.RESERVE_S):
+        bad.append(("runner constants", m and m.groups()))
+    for name, n in (("Reading", h.n_proc("read")), ("Shakedown", h.n_proc("shake"))):
+        g = h.fit_s(n, 1500)
+        line = next((ln for ln in prereg.splitlines() if ln.startswith(f"- **{name}:**")), "")
+        stated = f"a guard of {g} s ({g / 3600:.{1 if name == 'Reading' else 2}f} h), worst USD {h.worst_usd(g):.2f}"
+        if stated not in line:
+            bad.append((name, stated, line[:120]))
+        if (g > h.cap_s()) != ("HOLD" in line):
+            bad.append((name, "HOLD stated iff the fit is over the cap", g, h.cap_s()))
+    return bad
+
+
+def test_the_registered_fit_is_the_runners_and_the_prereg_states_it():
+    import p237_host as h
+    assert h.POLICY_MAX_WALLCLOCK_H == 6                                         # adertha/compute/policy.json teardown.max_wallclock_h
+    assert h.cap_s() == 6 * 3600 and h.PROBES_MAX == {"read": 4, "shake": 1}
+    assert h.n_proc("read") == 24 and h.n_proc("shake") == 4
+    assert h.fit_s(24, 1500) == 54000 and h.fit_s(4, 1500) == 16500 and h.worst_usd(16500) == 3.85
+    prereg = PREREG.read_text(encoding="utf-8")
+    assert fit_disagreements(prereg, _run_text(), h) == []
+    assert 'read -r N_PROC FIT_NEED CAP_S PMAX < <(python3 $W/p237_host.py fit "$P237_MODE" "$LOAD_S")' in _run_text()
+    assert '[ "$FIT_NEED" -le "$CAP_S" ]' in _run_text() and 'while [ $k -le "$PMAX" ]' in _run_text()
+
+
+def test_mutants_of_the_fit_are_caught(monkeypatch):
+    import p237_host as h
+    prereg, run = PREREG.read_text(encoding="utf-8"), _run_text()
+    for old, new in [("fetch 3600 s", "fetch 3000 s"), ("policy max_wallclock_h 6 h", "policy max_wallclock_h 8 h"),
+                     ("worst USD 3.85", "worst USD 1.50"), ("**over today's 6 h policy cap, so the reading is on\n  HOLD**", "within the cap")]:
+        assert prereg.count(old) == 1, old
+        assert fit_disagreements(prereg.replace(old, new), run, h), f"PREREG mutant survives: {new}"
+    assert fit_disagreements(prereg, run.replace("FETCH_S=3600", "FETCH_S=3000"), h)
+    monkeypatch.setattr(h, "POLICY_MAX_WALLCLOCK_H", 24)                        # a wider policy alone: the PREREG no longer agrees
+    assert fit_disagreements(prereg, run, h)
+
+
 # -- the writer and the reader of each process's exit -------------------------------------------------------------------------------
 @pytest.mark.parametrize("idx,kind,arm,off,rc", [("3", "draw", "E", "", "5"), ("5.2", "probe", "UT", "22", "0"), ("12", "draw", "UA", "auto", "137")])
 def test_the_runners_proc_line_is_what_the_reducer_reads(idx, kind, arm, off, rc):

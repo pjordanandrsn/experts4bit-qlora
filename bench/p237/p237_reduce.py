@@ -621,7 +621,7 @@ def reduce_work(work, mode="read"):
         if kind == "probes":
             na = n_auto.get(budget)
             outs = []
-            for k in range(1, 5):
+            for k in range(1, p237_host.PROBES_MAX[mode] + 1):
                 if na is None or na - k < 1:
                     break
                 r = normalize_proc(work, f"{idx}.{k}", "probe", budget, "UT", 0, box, proof, off=na - k, env_box=env_box, rc=rcs.get(f"{idx}.{k}"))

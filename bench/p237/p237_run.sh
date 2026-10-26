@@ -121,14 +121,14 @@ perl -e 'alarm 120; exec @ARGV' python3 $W/p237_egress_probe.py "$MODEL" "$REVIS
 tail -1 logs/egress_probe.log | tee -a summary.txt
 if [ "$erc" = 4 ]; then echo "BOX_REFUSED egress: $(tail -1 logs/egress_probe.log | cut -c1-200)" | tee -a summary.txt > REFUSAL; finish 14
 elif [ "$erc" != 0 ]; then say "EGRESS PROBE ERROR rc=$erc (not a host refusal)"; finish 9; fi
-# the guard fit: installs + the snapshot fetch + every process this box runs x the registered per-process wall, x 1.25
-case "$P237_MODE" in
-  read) N_PROC=$(( $(python3 $W/p237_schedule.py | grep -vc ' probes ') + 2 * 4 ));;   # every primer and draw, plus 4 probes per budget
-  shake) N_PROC=$(( $(python3 $W/p237_schedule.py --shake | grep -vc ' probes ') + 1 ));;
-esac
-FIT=$((INSTALL_S + FETCH_S + N_PROC * LOAD_S + RESERVE)); FIT_NEED=$((FIT * 125 / 100)); LEFT=$((P237_DEADLINE_EPOCH - $(date +%s)))
-[ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x 125%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
-echo "GUARD_FIT processes=$N_PROC fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s" | tee -a summary.txt
+# the guard fit (p237_host.py fit: one function for the runner, the reducer and the PREREG's lines): (installs + the snapshot fetch +
+# every process this box runs x the registered per-process wall + reserve) x 1.25, against the cap min(policy max_wallclock_h, the
+# USD 15 run-worst); a fit over the cap is never trimmed: the lane stops and reports
+read -r N_PROC FIT_NEED CAP_S PMAX < <(python3 $W/p237_host.py fit "$P237_MODE" "$LOAD_S") && [ -n "${PMAX:-}" ] || { say "FIT UNREAD"; finish 9; }
+LEFT=$((P237_DEADLINE_EPOCH - $(date +%s)))
+[ "$FIT_NEED" -le "$CAP_S" ] || { say "REFUSED: the fit ${FIT_NEED}s is over the cap ${CAP_S}s (policy wall clock / USD 15): the lane stops"; echo "refused: fit ${FIT_NEED}s over the cap ${CAP_S}s" > REFUSAL; finish 41; }
+[ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s, ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
+echo "GUARD_FIT processes=$N_PROC need=${FIT_NEED}s cap=${CAP_S}s left=${LEFT}s probes_max=$PMAX" | tee -a summary.txt
 # ---- the start: every pre-install check has passed; from here the box counts toward the box-started cap
 : > $W/STARTED; echo "STARTED $(date -u +%FT%TZ)" | tee -a summary.txt
 left(){ echo $(( P237_DEADLINE_EPOCH - $(date +%s) )); }
@@ -248,7 +248,7 @@ while read -r idx kind budget arm draw; do
     case "$n" in unread) echo "PROBES $budget skipped: UA's N_auto is unread" | tee -a summary.txt; NT[$budget]=unread; continue;;
                  0) echo "PROBES $budget skipped: N_auto 0 (auto swaps nothing; UT has nothing to tune)" | tee -a summary.txt; NT[$budget]=none; continue;; esac
     outs=""; k=1
-    while [ $k -le 4 ] && [ $((n - k)) -ge 1 ]; do
+    while [ $k -le "$PMAX" ] && [ $((n - k)) -ge 1 ]; do
       run_proc "$idx.$k" probe "$budget" UT 0 $S $((n - k))
       o=$(python3 $W/p237_host.py probe "$RECEIPT" "$(cap_of $budget)"); echo "PROBE $budget n=$((n - k)) $o" | tee -a summary.txt
       outs="$outs ${o%% *}"; [ "${o%% *}" = oom ] && break; [ "${o%% *}" = fault ] && break

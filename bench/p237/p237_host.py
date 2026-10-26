@@ -20,6 +20,38 @@ import re
 import sys
 
 HOST_FLOOR = 18
+# The guard fit (the maintainer's ruling before data; the runner's 41 check and the PREREG's guard and cost lines are this, and
+# tests/test_p237.py ties the three): guard = (INSTALL + FETCH + N_PROC x LOAD_S + RESERVE) x 1.25, against a cap of
+# min(the run-worst USD 15 at the box rate, the rental policy's teardown.max_wallclock_h). The policy value is adertha's GLOBAL
+# compute policy (adertha/compute/policy.json, "teardown": {"max_wallclock_h": 6}; rent.py's check_wallclock refuses any launch above
+# it); it is registered here as a constant, pinned by the test, and moves only with that policy (the owner's call).
+INSTALL_S, FETCH_S, RESERVE_S, FIT_MARGIN_PCT = 2700, 3600, 900, 125
+USD_PER_H, DOWNLOAD_USD, RUN_CAP_USD = 0.60, 1.10, 15.0
+POLICY_MAX_WALLCLOCK_H = 6
+PROBES_MAX = {"read": 4, "shake": 1}                   # the shakedown runs ONE probe (N_auto - 1): it tests the probe path, never tunes
+
+
+def n_proc(mode):
+    """The processes a box runs: every primer and draw in the schedule, plus the probes it may run (PROBES_MAX per probe slot)."""
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import p237_schedule
+    rows = p237_schedule.schedule(shake=mode == "shake")
+    return sum(1 for r in rows if r["kind"] != "probes") + PROBES_MAX[mode] * sum(1 for r in rows if r["kind"] == "probes")
+
+
+def fit_s(nproc, load_s):
+    """The guard fit in whole seconds, exactly as bash computes it: ((INSTALL + FETCH + N x LOAD_S + RESERVE) * 125) / 100."""
+    return (INSTALL_S + FETCH_S + int(nproc) * int(load_s) + RESERVE_S) * FIT_MARGIN_PCT // 100
+
+
+def cap_s():
+    """The longest guard a box may hold: the policy's wall clock, or the run-worst USD bound at the box rate, whichever is less."""
+    return int(min(POLICY_MAX_WALLCLOCK_H * 3600, (RUN_CAP_USD - DOWNLOAD_USD) / USD_PER_H * 3600))
+
+
+def worst_usd(guard_s):
+    return round(guard_s / 3600 * USD_PER_H + DOWNLOAD_USD, 2)
 PROBE_STEPS, MARGIN_BYTES = 8, 512 * 2 ** 20
 #: Unsloth 2026.10.8's own lines when ``offload_layers="auto"`` swaps nothing (models/_utils.py:9703-9705, models/loader_utils.py:1045,
 #: models/_utils.py:9015), matched by prefix
@@ -113,6 +145,10 @@ def main(argv=None):
         cls = cpu_class(" ".join(rest))
         print(cls or "refused")
         return 0 if cls else HOST_FLOOR
+    if cmd == "fit" and len(rest) == 2 and rest[0] in PROBES_MAX and rest[1].isdigit():
+        n = n_proc(rest[0])
+        print(n, fit_s(n, int(rest[1])), cap_s(), PROBES_MAX[rest[0]])
+        return 0
     if cmd == "cap_gib" and len(rest) == 1:
         print(cap_gib(rest[0]))
         return 0
