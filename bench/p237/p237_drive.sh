@@ -12,7 +12,7 @@ say(){ echo "[$(date -u +%FT%TZ)] [p237_drive] $*"; }
 # The driver's OWN exit code is what the launcher reads (it excludes a machine on 13 14 17 18), so its last step is the shared
 # bench/common/drive_tail.sh: the host codes always pass through, and so do the codes P237's PREREG registers; 23 no readable exit
 # file, 24 the box said 0 without this nonce's P237_SUCCESS marker, 26 any other code.
-BOX_CODES="9 10 15 16 21 27 41 78 130"
+BOX_CODES="9 10 15 16 27 29 41 78 130"
 . "$(cd "$(dirname "$0")/../.." && pwd)/bench/common/drive_tail.sh" || { say "refusing: bench/common/drive_tail.sh is missing"; exit 78; }
 finish(){ drive_finish "$1" "$2" P237 "$BOX_CODES"; }
 if [ -n "${P237_DRIVE_TAIL_DIR:-}" ]; then finish "$P237_DRIVE_TAIL_DIR" "${P237_DRIVE_TAIL_NONCE:?}"; fi   # the tail, alone (tests)
@@ -60,8 +60,15 @@ while :; do
   sleep 60
 done
 OUT="$RUN_DIR/p237"
+# The fetch carries receipts and logs only (the store's rules: no tensor, nothing over 10 MiB): TC1's list (tc1_drive.sh) for the venv,
+# the caches, the adapters and tp4_alpaca's downloaded source text, plus every tensor extension and a 10 MiB cap on any one file.
+# tests/test_p237.py runs this exact array over a stub box tree.
+P237_RSYNC_EXCLUDES=(--max-size=10M --exclude 'venv*' --exclude '.cache' --exclude '__pycache__' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json'
+                     --exclude 'unsloth_compiled_cache' --exclude 'hf-cache' --exclude '*.safetensors' --exclude '*.pt' --exclude '*.bin' --exclude '*.pth')
 mkdir -p "$OUT" && [ -z "$(find "$OUT" -mindepth 1 -maxdepth 1 -print -quit)" ] || { say "fetch failed: $OUT is not an empty directory"; exit 22; }
-rsync -az --no-links --exclude venv-unsloth/ --exclude 'loads/*/adapters/' -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "root@$HOST:$W/" "$OUT/" \
+big=$($SSH "cd $W && find . -type f -size +10M -not -path './venv*' -not -path '*/adapters/*' -not -path './.cache/*' -not -path './unsloth_compiled_cache/*' 2>/dev/null | head -20" 2>/dev/null | tr '\n' ' ')
+[ -z "$big" ] || say "left on the box (over 10 MiB): $big"
+rsync -az --no-links "${P237_RSYNC_EXCLUDES[@]}" -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "root@$HOST:$W/" "$OUT/" \
   || { say "fetch failed"; exit 22; }
 say "fetched $(find "$OUT" -type f | wc -l | tr -d ' ') files into $OUT"
 finish "$OUT" "$NONCE"

@@ -38,7 +38,8 @@ import p237_host  # noqa: E402
 import unsloth_moe_counter as C  # noqa: E402
 
 N_LAYERS, STEPS, ACCUM, TIMED = 48, 60, 4, (10, 60)    # timed steps 11..60 (0-based 10..59)
-PROFILED = (20, 23)                                  # --profile-warm 20 --profile-steps 3: loop steps 20..22, edges 20 and 23
+PROFILED = (21, 24)                                  # --profile-warm 21 --profile-steps 3: loop steps 21..23, edges 21 and 24 (past
+#                                                      the cold step after the eval at 20)
 SHAKE_STEPS = 24
 FRAMEWORK = {"E": "e4b", "UA": "unsloth", "UT": "unsloth"}
 PINS = {"experts4bit-qlora": "0.58.1", "grouped-nf4-gemm": "0.51.0", "unsloth": "2026.10.8", "unsloth_zoo": "2026.10.8"}
@@ -48,7 +49,18 @@ CLOCK_FLOOR_MHZ, SWPC_CLEAR = 2500, 0.95
 CAP_12G_GIB = 12
 RUNNER_UNSLOTH = {"UNSLOTH_MOE_GROUPED_TRITON": "auto", "UNSLOTH_MOE_NF4_FUSED": "0", "UNSLOTH_MOE_NF4_AUTO_MAX_ROWS": "128",
                   "UNSLOTH_MOE_NF4_AUTOTUNE": "0", "UNSLOTH_MOE_FUSED_ROUTER": "0", "UNSLOTH_ENABLE_LOGGING": "1"}
-WHOLE_LAYER = {"sync", "cold_miss", "prefetch"}       # offload.py's whole-layer staging tags; routed / speculative stage rows
+# The box's environment: ONE list for three places, bound by tests/test_p237.py (a mutant widening or narrowing any one fails it): the
+# runner's ambient refusal (any key under these prefixes but the registered ones refuses, 78, before STARTED), its env_box.txt grep
+# (these prefixes plus the exact names), and check_env_box's registered set. The per-process keys (E4B_OFFLOAD_STATS, TC1_STEP_MEM,
+# TC1_ARM_HOOK, TC1_ARM_HOOK_SHA256) are set on each process's own line, after the dump, so the registered set has no TC1_* key. Any
+# other PYTORCH_* key, and the image's own environment, is information (env_image.txt), never a fault.
+ENV_PREFIXES = ("UNSLOTH", "E4B", "GNF4", "NF4_QLORA", "TC1")
+ENV_EXACT = {"PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"}
+ENV_BOX = {**RUNNER_UNSLOTH, "GNF4_TRAIN_GEMM": "auto", **ENV_EXACT, "E4B_SHA": None}   # None: any 40-hex commit (the driver's HEAD)
+ENV_REFUSE_GREP = "^(" + "|".join(ENV_PREFIXES) + ")_[A-Za-z0-9_]+"
+ENV_BOX_GREP = "^(" + "|".join(p + "_" for p in ENV_PREFIXES) + ")|" + "|".join(f"^{k}=" for k in ENV_EXACT)
+UNREAD = "UNREAD"                                    # a measure whose input is missing: never 0, never a guess
+WHOLE_LAYER = {"sync", "cold_miss", "prefetch"}      # offload.py's whole-layer staging tags; routed / speculative stage rows
 DENSE_AUTO_MAX_GROUPS = 16                           # gnf4 0.51.0 nf4_route: auto is dense at 1..16 present groups, fused above
 DEVICE_MS_METHOD = "kernels_only_at_source"         # amendment 81's marker
 COMPARABLE, SAME_STACK, UNSTABLE = 0.05, 0.01, 0.05
@@ -73,6 +85,20 @@ def check_pins(row):
         why.append(f"torch {v.get('torch')!r} is not {TORCH_PREFIX}")
     if not v.get("release_proof_ok"):
         why.append("the release proof is missing or refused")
+    return why
+
+
+def check_env_box(row):
+    """The box's env_box.txt: its key set must EQUAL ENV_BOX at the registered values (E4B_SHA any 40-hex commit). No file, an
+    unregistered key (a line that is not KEY=VALUE included) or a missing one VOIDs."""
+    env = row.get("env_box")
+    if env is None:
+        return ["no env_box.txt"]
+    why = [f"env_box: an unregistered {k}" for k in sorted(set(env) - set(ENV_BOX))]
+    why += [f"env_box: {k} missing" for k in sorted(set(ENV_BOX) - set(env))]
+    why += [f"env_box: {k}={env[k]!r} != {v!r}" for k, v in ENV_BOX.items() if v is not None and k in env and env[k] != v]
+    if "E4B_SHA" in env and not re.fullmatch(r"[0-9a-f]{40}", env["E4B_SHA"] or ""):
+        why.append(f"env_box: E4B_SHA {env['E4B_SHA']!r} is not a commit")
     return why
 
 
@@ -269,7 +295,7 @@ def draw_faults(row, steps=STEPS, n_want=None):
     why = check_present(row)
     if why:
         return why
-    why += check_pins(row) + check_card(row) + check_cap(row) + check_steps(row, steps)
+    why += check_pins(row) + check_env_box(row) + check_card(row) + check_cap(row) + check_steps(row, steps)
     why += check_e4b(row, steps) if row.get("framework") == "e4b" else check_unsloth(row, steps, n_want)
     return why
 
@@ -282,6 +308,87 @@ def s_per_step(row):
 
 def device_ms(row):
     return ((row.get("profile") or {}).get("summary") or {}).get("device_ms")
+
+
+def _num(x):
+    return x if isinstance(x, (int, float)) and not isinstance(x, bool) else None
+
+
+def _or(x):
+    return UNREAD if x is None else x
+
+
+def measures(row):
+    """Every per-draw measure the PREREG registers ("Measures (recorded per draw)"), computed here and never assembled by hand: each
+    reads UNREAD, never 0, when its input is missing. Setup partitions the time before the first timed step:
+    load_s + placement_s + warmup_s == prologue_s + step 0, where placement = prologue - load - E's guard (eval0 and the harness setup
+    included) and warm-up = step 0 + E's guard."""
+    e4b = row.get("framework") == "e4b"
+    h, box, clk = row.get("hook") or {}, row.get("card") or {}, row.get("clock") or {}
+    lm_guard = ((row.get("layer_major") or {}).get("guard") or {}) if e4b else {}
+    load, pro = _num(row.get("load_s")), _num(row.get("prologue_s"))
+    step_ms = row.get("step_ms") or []
+    s0 = _num(step_ms[0]) if step_ms else None
+    guard = _num(lm_guard.get("s")) if e4b else 0.0
+    m = {"heldout_loss": _or(_num(row.get("heldout_loss"))), "s_per_step": _or(s_per_step(row)), "device_ms": _or(_num(device_ms(row))),
+         "setup_load_s": _or(load),
+         "setup_placement_s": UNREAD if None in (load, pro, guard) else round(pro - load - guard, 3),
+         "setup_warmup_s": UNREAD if None in (s0, guard) else round(s0 / 1e3 + guard, 3),
+         "peak_vram_gb": _or(_num(row.get("peak_vram_gb"))),
+         "guard_peak_vram_gb": _or(_num(lm_guard.get("peak_vram_gb"))) if e4b else "n/a (no guard)",
+         "smi_peak_used_mib": _or(_num(row.get("smi_peak_used_mib"))),
+         "dmon_rx_mbps": _or(row.get("dmon_rx")), "dmon_tx_mbps": _or(row.get("dmon_tx")),
+         "pcie_gen_max": _or(box.get("pcie_gen_max") or None), "pcie_width_max": _or(box.get("pcie_width_max") or None),
+         "sm_busy_median_mhz": _or(_num(clk.get("sm_median"))), "clock_reasons_seen": clk["reasons_seen"] if "reasons_seen" in clk else UNREAD,
+         "cpu_class": _or(box.get("cpu_class") or None)}
+    hr = row.get("host_ram") or {}
+    for k in ("rss_hwm_gb", "ru_maxrss_gb", "cgroup_peak_gb"):
+        m[f"host_ram_{k}"] = _or(_num(hr.get(k)))
+    steps = [str(i) for i in range(*TIMED) if i < len(step_ms)] or None
+    per, by = [], {}
+    for i in steps or []:
+        if e4b:
+            st = (h.get("stage") or {}).get(i)
+            train = {k.split("|", 1)[1]: v for k, v in (st or {}).items() if k.startswith("train|")}
+            per.append(sum(v[1] for v in train.values()) if st is not None else None)
+            for pol, v in train.items():
+                by[pol] = by.get(pol, 0) + v[1]
+        else:
+            f = ((h.get("fetch") or {}).get(i) or {}).get("train")
+            per.append(sum(v[1] for v in f.values()) if f is not None else None)
+    m["h2d_bytes_per_step"] = UNREAD if not per or any(v is None for v in per) else statistics.median(per)
+    if e4b:
+        m["h2d_bytes_by_policy"] = by if by and m["h2d_bytes_per_step"] != UNREAD else UNREAD
+    return m
+
+
+def parse_dmon(text):
+    """``nvidia-smi dmon -s ut`` rows: the median rxpci and txpci (MB/s) over the samples, by the header's own column names."""
+    cols, rx, tx = None, [], []
+    for line in (text or "").splitlines():
+        parts = line.lstrip("#").split()
+        if line.startswith("#") and "rxpci" in parts:
+            cols = parts
+            continue
+        if line.startswith("#") or not parts or cols is None or len(parts) != len(cols):
+            continue
+        for name, out in (("rxpci", rx), ("txpci", tx)):
+            try:
+                out.append(float(parts[cols.index(name)]))
+            except ValueError:
+                pass
+    return (statistics.median(rx) if rx else None), (statistics.median(tx) if tx else None)
+
+
+def parse_smi_used(text):
+    """The peak ``memory.used`` (MiB) of a ``timestamp, memory.used`` log."""
+    vals = []
+    for line in (text or "").splitlines():
+        try:
+            vals.append(float(line.rsplit(",", 1)[1]))
+        except (IndexError, ValueError):
+            pass
+    return max(vals) if vals else None
 
 
 def unstable(d1, d2):
@@ -351,8 +458,7 @@ def reduce_budget(rows, budget, n_auto, n_t):
         out["words"] = "Unsloth needed no offload at the full card; E's offload was not required to fit."
     for a in out["arms"].values():                      # the rows stay in the receipts; the verdict carries their scalars
         if "draws" in a and isinstance(a["draws"], list):
-            a["draws"] = [{"index": r.get("index"), "s_per_step": s_per_step(r), "device_ms": device_ms(r),
-                           "heldout_loss": r.get("heldout_loss"), "peak_vram_gb": r.get("peak_vram_gb")} for r in a["draws"]]
+            a["draws"] = [{"index": r.get("index"), "draw": r.get("draw"), **measures(r)} for r in a["draws"]]
     return out
 
 
@@ -393,12 +499,33 @@ def tag_of(idx, kind, budget, arm, draw, off=None):
     return f"p237_{idx}_{kind}_{budget}_{arm}_d{draw}" + (f"_n{off}" if off is not None else "")
 
 
-def normalize_proc(work, idx, kind, budget, arm, draw, box, proof_ok, off=None):
+def _text(path):
+    try:
+        return open(path, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return None
+
+
+def read_env(path):
+    """``KEY=VALUE`` lines into a dict; a line that is not one is kept under its own text as a key, so it reads as unregistered."""
+    text = _text(path)
+    if text is None:
+        return None
+    env = {}
+    for line in text.splitlines():
+        if line.strip():
+            k, sep, v = line.partition("=")
+            env[k if sep and k else line] = v
+    return env
+
+
+def normalize_proc(work, idx, kind, budget, arm, draw, box, proof_ok, off=None, env_box=None):
     fw = FRAMEWORK[arm]
     base = os.path.join(work, "loads", str(idx), f"qwen3_{fw}_{tag_of(idx, kind, budget, arm, draw, off)}")
     cell = _json(base + ".json") or {}
     rec = ((cell.get("arm_hook") or {}).get("record")) or {}
     env = cell.get("env") or {}
+    rx, tx = parse_dmon(_text(os.path.join(work, "loads", f"dmon_{idx}.txt")))
     return {"index": idx, "kind": kind, "budget": budget, "arm": arm, "draw": draw, "framework": fw, "offload_given": off,
             "status": cell.get("status"), "reason": cell.get("reason"), "dry": False, "cell": cell,
             "versions": {**{k: env.get(k) for k in PINS}, "torch": env.get("torch"), "release_proof_ok": proof_ok},
@@ -408,7 +535,9 @@ def normalize_proc(work, idx, kind, budget, arm, draw, box, proof_ok, off=None):
             "unsloth_knobs": cell.get("unsloth_knobs"), "unsloth_env": env.get("unsloth_env"), "ckpt_mode": cell.get("ckpt_mode"),
             "hook": rec, "step_ms": cell.get("step_ms"), "tokens_per_step": cell.get("tokens_per_step"),
             "profile": _json(base + "_profile.json"), "heldout_loss": cell.get("eval_loss_final"),
-            "peak_vram_gb": cell.get("peak_vram_gb"), "trainable_params": cell.get("trainable_params")}
+            "peak_vram_gb": cell.get("peak_vram_gb"), "trainable_params": cell.get("trainable_params"), "env_box": env_box,
+            "load_s": cell.get("load_s"), "prologue_s": cell.get("prologue_s"), "host_ram": cell.get("host_ram"),
+            "smi_peak_used_mib": parse_smi_used(_text(os.path.join(work, "loads", f"vram_{idx}.txt"))), "dmon_rx": rx, "dmon_tx": tx}
 
 
 def _log(work, idx):
@@ -425,6 +554,7 @@ def reduce_work(work, mode="read"):
     import p237_schedule
     box = _json(os.path.join(work, "box.json")) or {}
     proof = release_proof_ok(os.path.join(work, "release_proof.json"))
+    env_box = read_env(os.path.join(work, "env_box.txt"))
     sched = p237_schedule.schedule(shake=mode == "shake")
     steps_of = {"primer": 10, "draw": SHAKE_STEPS if mode == "shake" else STEPS}
     rows, n_auto, n_t, probes = [], {}, {}, {}
@@ -436,7 +566,7 @@ def reduce_work(work, mode="read"):
             for k in range(1, 5):
                 if na is None or na - k < 1:
                     break
-                r = normalize_proc(work, f"{idx}.{k}", "probe", budget, "UT", 0, box, proof, off=na - k)
+                r = normalize_proc(work, f"{idx}.{k}", "probe", budget, "UT", 0, box, proof, off=na - k, env_box=env_box)
                 o = p237_host.probe_outcome(r["cell"], CAP_12G_GIB if budget == "12g" else box.get("card_gib"))
                 outs.append({"n": na - k, "outcome": o})
                 if o.split()[0] in ("oom", "fault"):
@@ -447,16 +577,19 @@ def reduce_work(work, mode="read"):
         off = None if arm == "E" else ("auto" if arm == "UA" else n_t.get(budget))
         if arm == "UT" and off is None:
             continue
-        r = normalize_proc(work, idx, kind, budget, arm, draw, box, proof, off=off)
+        r = normalize_proc(work, idx, kind, budget, arm, draw, box, proof, off=off, env_box=env_box)
         rows.append(r)
         if arm == "UA" and kind == "draw" and draw == 1:
             n_auto[budget] = p237_host.n_auto(r["cell"], _log(work, idx))
-    out = {"mode": mode, "n_auto": n_auto, "n_t": n_t, "probes": probes, "budgets": []}
+    out = {"mode": mode, "n_auto": n_auto, "n_t": n_t, "probes": probes, "budgets": [], "image_env": read_env(os.path.join(work, "env_image.txt")),
+           "primers": [{"index": r["index"], "budget": r["budget"], "arm": r["arm"], "cold_cache": True, **measures(r)}
+                       for r in rows if r["kind"] == "primer"]}
     steps = steps_of["draw"]
     for budget in sorted({s["budget"] for s in sched}, key=["12g", "full"].index):
         if mode == "shake":
             b = {"budget": budget, "rows": [{"index": r["index"], "arm": r["arm"], "kind": r["kind"],
-                                             "faults": draw_faults(r, steps=steps, n_want=n_auto.get(budget) if r["arm"] == "UA" else None)}
+                                             "faults": draw_faults(r, steps=steps, n_want=n_auto.get(budget) if r["arm"] == "UA" else None),
+                                             "measures": measures(r)}
                                             for r in rows if r["budget"] == budget]}
             b["verdict"] = "VOID" if any(x["faults"] for x in b["rows"]) else "READ"
         else:
@@ -469,18 +602,23 @@ def reduce_work(work, mode="read"):
 # -- the self-test ---------------------------------------------------------------------------------------------------------------
 def _good_e(steps=STEPS):
     edges = [{"i": i, "mode": "train", "staging": {"resident_handle": None if i == 0 else 0}} for i in range(steps + 1)]
-    stage = {str(i): {"train|sync": [2 * N_LAYERS - (0 if i == 0 else 1), 0, 0]} for i in range(steps)}
+    stage = {str(i): {"train|sync": [2 * N_LAYERS - (0 if i == 0 else 1), (2 * N_LAYERS - (0 if i == 0 else 1)) * 10 ** 6, 0]}
+             for i in range(steps)}
     stage["pre"] = {"load|sync": [3, 0, 0], "eval|sync": [N_LAYERS, 0, 0], "train|sync": [2 * N_LAYERS, 0, 0]}
     return {"status": "ok", "dry": False, "framework": "e4b", "arm": "E", "budget": "12g", "kind": "draw", "draw": 1,
             "versions": {**PINS, "torch": "2.12.1+cu130", "release_proof_ok": True},
-            "card": {"name": "NVIDIA GeForce RTX 4090", "cap": [8, 9], "sm_count": 128},
+            "card": {"name": "NVIDIA GeForce RTX 4090", "cap": [8, 9], "sm_count": 128, "pcie_gen_max": "4", "pcie_width_max": "16",
+                     "cpu_class": "ryzen-7000-9000-desktop"},
+            "env_box": {**{k: v for k, v in ENV_BOX.items() if v is not None}, "E4B_SHA": "a" * 40},
+            "load_s": 300.0, "prologue_s": 420.0, "peak_vram_gb": 11.5, "smi_peak_used_mib": 12100.0, "dmon_rx": 9000.0, "dmon_tx": 200.0,
+            "host_ram": {"rss_hwm_gb": 110.0, "ru_maxrss_gb": 110.0, "cgroup_peak_gb": 115.0},
             "clock": {"busy_samples": 400, "sm_median": 2600, "busy_clean_fraction": 1.0, "busy_soft_clean_fraction": 1.0,
                       "hard_reasons_any_sample": [], "reasons_seen": []},
             "vram_cap": {"given_gib": 12.0, "resolved": {"fraction": 12 * 2 ** 30 / 25_757_220_864, "total_bytes": 25_757_220_864,
                                                         "getter_reads": 12 * 2 ** 30 / 25_757_220_864}},
             "step_mem": [{"step": i + 1, "max_reserved": 11 * 2 ** 30} for i in range(steps)],
             "step_contract": {"optimizer_steps": steps, "accum": ACCUM, "micro_batch": 2, "tokens_per_step_sha256": "ab"},
-            "layer_major": {"given": 1}, "step_ms": [3000.0] * steps, "tokens_per_step": [16000] * steps,
+            "layer_major": {"given": 1, "guard": {"s": 30.0, "peak_vram_gb": 14.0}}, "step_ms": [3000.0] * steps, "tokens_per_step": [16000] * steps,
             "profile": {"summary": {"device_ms_method": DEVICE_MS_METHOD, "device_ms": 2000.0, "profiled_steps": 3},
                         "top_device": [], "top_cpu": []},
             "hook": {"facts": {"env": {"E4B_OFFLOAD_STATS": "1"}, "stats_enabled": True, "offload_handles": N_LAYERS},
@@ -497,7 +635,7 @@ def _good_u(arm="UA", n=24, steps=STEPS):
         snaps.append({"dispatch": {"gemm:lora:triton": 200 * i, "gemm:many:triton": (triton - 200) * i, "gemm:many:torch": torch_ * i}})
     edges = [{"i": i, "mode": "train", "swap": {"resident": idx[:2], "evicted_nonempty": [], "resident_empty": []},
               "unsloth": snaps[i]} for i in range(steps + 1)]
-    fetch = {str(i): {"train": {str(L): [ACCUM, 1000] for L in idx}} for i in range(steps)}
+    fetch = {str(i): {"train": {str(L): [ACCUM, 1000 * ACCUM] for L in idx}} for i in range(steps)}
     evict = {str(i): {"train": {str(L): ACCUM for L in idx}} for i in range(steps)}
     prof = {"summary": {"device_ms_method": DEVICE_MS_METHOD, "device_ms": 2500.0, "profiled_steps": 3},
             "top_device": [{"name": f15v2.TRITON_GEMM, "count": triton * 3}], "top_cpu": [{"name": f15v2.CPU_GROUPED, "count": torch_ * 3}]}
@@ -590,7 +728,7 @@ def selftest():
             (lambda r: r["hook"]["structural"].update(faults=["step 3: expert module 7 ran no training pass"]), "a structural fault"),
             (lambda r: r["hook"]["structural"].update(steps=59), "a structure over the wrong steps"),
             (lambda r: r["hook"]["edges"][-1].pop("unsloth"), "no closing snapshot"),
-            (lambda r: r["hook"]["edges"][23]["unsloth"]["dispatch"].update({"gemm:many:torch": 60 * 23 + 1}), "a window decision more than the kernels"),
+            (lambda r: r["hook"]["edges"][24]["unsloth"]["dispatch"].update({"gemm:many:torch": 60 * 24 + 1}), "a window decision more than the kernels"),
             (lambda r: r["profile"]["top_cpu"][0].update(count=179), "a window kernel short"),
             (lambda r: r["unsloth_offload_layers"]["resolved"].update(n_layers=23), "a resolved count that is not the swap's"),
         ]:
@@ -609,6 +747,58 @@ def selftest():
             assert any("unreadable snapshot" in w for w in draw_faults(u, n_want=24)), f"a raising check_{name} is not a fault"
             setattr(C, f"check_{name}", saved)
             cases += 2
+        # the box environment: one registered set, at its values
+        for mutate, label in [
+            (lambda r: r["env_box"].update(E4B_TRAIN_DETERMINISTIC="1"), "an ambient e4b knob"),
+            (lambda r: r["env_box"].update(TC1_QKV_FLOOR="1"), "an ambient TC1 key"),
+            (lambda r: r["env_box"].pop("GNF4_TRAIN_GEMM"), "a registered key missing"),
+            (lambda r: r["env_box"].update(UNSLOTH_MOE_NF4_FUSED="auto"), "a registered key at another value"),
+            (lambda r: r["env_box"].update(E4B_SHA="main"), "a launch commit that is not a sha"),
+            (lambda r: r.update(env_box=None), "no env_box.txt"),
+        ]:
+            r = copy.deepcopy(e)
+            mutate(r)
+            assert any("env_box" in w for w in draw_faults(r)), f"{label} still reads clean"
+            cases += 1
+        # the measures: every registered one computed per draw, UNREAD (never 0) when its input is removed
+        m = measures(e)
+        assert m["setup_load_s"] == 300.0 and m["setup_placement_s"] == 90.0 and m["setup_warmup_s"] == 33.0, m
+        assert m["h2d_bytes_per_step"] == 95 * 10 ** 6 and m["h2d_bytes_by_policy"] == {"sync": 50 * 95 * 10 ** 6}, m
+        assert m["guard_peak_vram_gb"] == 14.0 and m["host_ram_cgroup_peak_gb"] == 115.0 and m["pcie_gen_max"] == "4", m
+        assert measures(u)["h2d_bytes_per_step"] == 24 * 1000 * ACCUM and measures(u)["guard_peak_vram_gb"].startswith("n/a")
+        assert measures(u)["setup_placement_s"] == 120.0
+        assert UNREAD not in m.values() and UNREAD not in measures(u).values(), (m, measures(u))
+        cases += 5
+        for label, mutate, keys in [
+            ("load_s", lambda r: r.pop("load_s"), ("setup_load_s", "setup_placement_s")),
+            ("prologue_s", lambda r: r.pop("prologue_s"), ("setup_placement_s",)),
+            ("the guard", lambda r: r["layer_major"].pop("guard"), ("setup_placement_s", "setup_warmup_s", "guard_peak_vram_gb")),
+            ("step_ms", lambda r: r.pop("step_ms"), ("setup_warmup_s", "s_per_step", "h2d_bytes_per_step")),
+            ("host_ram", lambda r: r.pop("host_ram"), ("host_ram_rss_hwm_gb", "host_ram_ru_maxrss_gb", "host_ram_cgroup_peak_gb")),
+            ("a step's stagings", lambda r: r["hook"]["stage"].pop("33"), ("h2d_bytes_per_step", "h2d_bytes_by_policy")),
+            ("the vram log", lambda r: r.update(smi_peak_used_mib=None), ("smi_peak_used_mib",)),
+            ("the dmon log", lambda r: r.update(dmon_rx=None, dmon_tx=None), ("dmon_rx_mbps", "dmon_tx_mbps")),
+            ("the box facts", lambda r: r.update(card={}), ("pcie_gen_max", "pcie_width_max", "cpu_class")),
+            ("the clock", lambda r: r.update(clock={}), ("sm_busy_median_mhz", "clock_reasons_seen")),
+            ("the profile", lambda r: r.pop("profile"), ("device_ms",)),
+            ("the held-out loss", lambda r: r.pop("heldout_loss"), ("heldout_loss",)),
+            ("peak_vram_gb", lambda r: r.pop("peak_vram_gb"), ("peak_vram_gb",)),
+        ]:
+            r = copy.deepcopy(e)
+            mutate(r)
+            got = measures(r)
+            assert all(got[k] == UNREAD for k in keys), (label, {k: got[k] for k in keys})
+            cases += 1
+        r = copy.deepcopy(u)
+        r["hook"]["fetch"].pop("40")
+        assert measures(r)["h2d_bytes_per_step"] == UNREAD
+        cases += 1
+        dmon = "\n".join(["# gpu sm mem enc dec jpg ofa rxpci txpci", "# Idx % % % % % % MB/s MB/s", " 0 90 40 0 0 0 0 9000 200",
+                          " 0 95 41 0 0 0 0 11000 300", " 0 - - - - - - - -"])
+        assert parse_dmon(dmon) == (10000.0, 250.0), parse_dmon(dmon)
+        assert parse_dmon("") == (None, None) and parse_smi_used("\n".join(["t, 100", "t, 12100", "bad"])) == 12100.0
+        assert parse_smi_used(None) is None
+        cases += 2
         # the full card: E uncapped; UA / UT at fraction 1.0
         f = copy.deepcopy(u)
         f["budget"] = "full"

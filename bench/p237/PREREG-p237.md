@@ -216,9 +216,11 @@ returns early if a layer is already staged).
   calls, and `aten::_grouped_mm` == the torch-decided calls, exactly. F15 v2's own `engagement()` refuses any mixed
   dispatch, so it is not this lane's check; only its counting is used. This bar is REGISTERED here, before data. The
   shakedown's real 4090 record TESTS it (gates are tested on a real record) and never derives it. Disagreement VOIDs
-  the draw. The window is **loop indices 20..22, the same for e4b and Unsloth**:
-  `--profile-warm 20 --profile-steps 3`, steps 21..23 counting from 1, amendment 80's choice (`POS80_PROFILE_WARM=20`).
-  It sits past amendment 79's transient, where a cold Unsloth draw compiled and saved its Mega-cache bundle while
+  the draw. The window is **loop indices 21..23, the same for e4b and Unsloth**:
+  `--profile-warm 21 --profile-steps 3`, steps 22..24 counting from 1. It is amendment 80's window (`POS80_PROFILE_WARM=20`)
+  moved one step later, by ruling before data. Loop index 20 is the step right after the eval at 20: E stages it cold (96,
+  see Engagement) and Unsloth re-arms after an eval-mode forward. Starting at 21 keeps that step out of the profile. The
+  window also sits past amendment 79's transient, where a cold Unsloth draw compiled and saved its Mega-cache bundle while
   a warm one loaded it (memcpy/fill 342 against 109 ms), and it changes nothing either framework does. The choice was made
   before any P237 data. Its 3 profiled steps sit inside the timing median (steps 11..60 counting from 1, TC1's
   `step_ms[10:]`), a known overhead on 3 of 50 steps.
@@ -227,6 +229,18 @@ returns early if a layer is already staged).
 
 **Every knob an arm depends on is set explicitly, both frameworks'.** Each arm's env dump proves no ambient value
 leaked in.
+- **The box environment, one list** (`p237_reduce.ENV_PREFIXES` / `ENV_EXACT` / `ENV_BOX`). A test binds the runner and
+  the reducer to it, with mutants that widen or narrow each side. The list is used in three places:
+  - **The runner's ambient refusal, before STARTED, exit 78.** It refuses any `UNSLOTH_*`, `E4B_*`, `GNF4_*`,
+    `NF4_QLORA_*` or `TC1_*` key already in the box's environment, except the keys the runner sets itself and
+    `E4B_SHA`, the driver's launch commit. An ambient `E4B_TRAIN_DETERMINISTIC` would move e4b's step time, as an
+    ambient Unsloth knob moves Unsloth's.
+  - **`env_box.txt`**, dumped after the exports.
+  - **The reducer's registered set**, which `env_box.txt` must EQUAL at the registered values; else the draws VOID.
+    This set holds the six `UNSLOTH_*` pins, `GNF4_TRAIN_GEMM=auto`, `PYTORCH_CUDA_ALLOC_CONF` and `E4B_SHA`.
+  - The per-process keys (`E4B_OFFLOAD_STATS`, `TC1_STEP_MEM`, `TC1_ARM_HOOK`, `TC1_ARM_HOOK_SHA256`) are set on each
+    process's own line, after the dump, so the registered set holds no `TC1_*` key.
+  - Any other `PYTORCH_*` key, and the image's own environment, goes to `env_image.txt` as information, never a fault.
 - **UA and UT:** `UNSLOTH_MOE_GROUPED_TRITON=auto`, the shipped default, set explicitly (ruled 2026-10-25).
   - Every `UNSLOTH_*` environment read in ANY module of the pinned unsloth_zoo and unsloth wheels must be unset or at
     its registered value. The shared module's `check_env` enforces this by a SOURCE SCAN of every module in both wheels
@@ -294,21 +308,30 @@ shakedown. Each check also has a mutant that removes the engaged path and must V
     it subtracts the annotation row, so on a post-81 profile it would subtract that row a second time (80's
     function refuses such a profile). The F15 v2 cross-check reads kernel-name counts, not `device_ms`, so it is
     unaffected.
-- **Setup time:** load, offload placement (time to the first trainable step), and warm-up (step 0, including E's drift
-  guard), each separately. The warm draws give the setup figures; each primer gives the first-run (cold cache) setup,
-  reported beside them.
+**Every measure below is computed by the reducer per draw** (`p237_reduce.measures`), never assembled by hand. A measure
+whose input is missing reads UNREAD, never 0, and a test removes each input in turn. A measure not computed there is not
+registered.
+- **Setup time:** load, offload placement, and warm-up, each separately. Together they partition the time before the first
+  timed step: `load_s + placement + warm-up == prologue_s + step 0`.
+  - load: `load_s`;
+  - placement: `prologue_s − load_s −` E's guard seconds (eval0 and the harness setup included);
+  - warm-up: step 0 plus E's guard seconds.
+  The warm draws give the setup figures. Each primer gives the first-run (cold cache) setup, reported beside them.
 - **Peak host RAM:** VmHWM, `ru_maxrss` and cgroup `memory.peak` (TC1's `host_ram_report`).
 - **Peak VRAM:** `peak_vram_gb`, the training steps' allocator max on every arm. E's drift-guard call (its first
   `layer_major_step`) holds every micro-batch's graph at once, so its peak is recorded apart as
   `layer_major.guard.peak_vram_gb` and reported beside E's row, never in it.
 - **Host-to-device transfer bytes:** software counts of the bytes each framework enqueues, not PCIe hardware counters.
-  - e4b: `E4B_OFFLOAD_STATS` bytes per policy.
-  - Unsloth: the wrapped `_Block.prefetch`, summing each fetched block's `sizes`.
-  - Cross-check: `nvidia-smi dmon -s ut` PCIe rx/tx, reported beside them, never ruling.
+  - The figure is the median over the timed steps of the train-mode bytes per step.
+  - e4b: the hook's `record_copy` bytes, also totalled per staging tag.
+  - Unsloth: the hook's real fetches, summing each fetched block's `nbytes()`.
+  - Cross-check: `nvidia-smi dmon -s ut` PCIe rx/tx, as the median MB/s over the process, reported beside them, never
+    ruling.
+- **nvidia-smi's peak `memory.used`** per process (MiB), beside `peak_vram_gb`.
 - **The card:**
-  - the busy SM-clock median and the reason bits on every busy sample;
-  - the PCIe generation and width;
-  - a pinned host-to-device ceiling probe.
+  - the busy SM-clock median and the reason bits seen;
+  - the PCIe generation and width (their maxima, from `nvidia-smi`, in `box.json`).
+  A pinned host-to-device ceiling probe was drafted here and is struck before data, by ruling: no decision rule reads it.
 
 ## The host floors (refusals before install, never strikes)
 
@@ -352,15 +375,17 @@ shakedown. Each check also has a mutant that removes the engaged path and must V
   | 41 | the guard fit | harness (the deadline) | does not exclude | stop: the fit needs the maintainer | the boot |
   | 9 | staging, install, pins, release proof, a probe that measured nothing, snapshot, prepare | harness | does not exclude | stop | up to the box's wall |
   | 10 | torch does not import | image | does not exclude | stop | the boot |
-  | 21 | the dataset (amendment 82); also the DRIVER's own start failure, as in TC1's driver (the driver log names which) | harness | does not exclude | stop | up to the install |
+  | 29 | the dataset (amendment 82: never 13, and never 21, which is the driver's own start failure) | harness | does not exclude | stop | up to the install |
   | 27 | the reducer ruled VOID, or wrote nothing | the reading | does not exclude | stop; a retry id only by ruling | the box |
   | 78 | run id, mode, frozen knobs, an ambient `UNSLOTH_*` | harness | does not exclude | stop | the boot |
   | 130 | a signal | - | does not exclude | stop | up to the box's wall |
-  | 20, 22 | the driver's staging or fetch | harness | does not exclude | stop | the boot, or the box |
+  | 20, 21, 22 | the driver's own staging, start or fetch failure | harness | does not exclude | stop | the boot, or the box |
   | 23, 24, 26 | `drive_finish`: no exit file, 0 without this nonce's success marker, an unregistered code | harness | does not exclude | stop | the box |
 
   "Next host" spends the retry id the launch walks on (the run ids are `p237-4090-1`, `-r1`, `-r2`; the shakedown's
   `p237-shake-1`, `-r1`, `-r2`). "Stop" ends the walk for the maintainer. The runner never writes 17.
+  No box code is one the driver exits on its own (`p237_drive.sh`, `bench/common/drive_tail.sh`), except 0 and 78, which
+  mean the same on both sides. A test holds this, with a mutant that puts 21 back (amendment 82's rule).
 
 ## Design
 
@@ -429,12 +454,15 @@ shakedown. Each check also has a mutant that removes the engaged path and must V
 - **Box:** one RTX 4090 at ≤ $0.60/h, guard 6.0 h, download ≤ 100 GB at ≤ $0.011/GB. The worst case is
   6.0 × 0.60 + 100 × 0.011 = **$4.70**.
 - **Shakedown:** one short box, at most **$1.50**, registered and never a reading (`p237_schedule.py --shake`).
-  - E and UA at 12 GiB, 24 steps each, so the profiled window (loop indices 20..22) is inside the run and every
+  - E and UA at 12 GiB, 24 steps each, so the profiled window (loop indices 21..23) is inside the run and every
     engagement check runs on a real record.
   - UT's probes at 12 GiB.
   - UA at the full card, the N_auto = 0 path.
   - Its measured per-process wall becomes `P237_LOAD_S_REGISTERED`, the guard fit's per-process term for the reading,
-    registered by amendment before the reading box.
+    registered by amendment before the reading box. The runner takes it only as whole seconds of at least 300, else 78.
+- **The fetch carries receipts and logs only** (the store's rules). `p237_drive.sh`'s exclude list follows TC1's (the
+  venv, the caches, the adapters, `tp4_alpaca`'s downloaded source text), adds every tensor extension, and caps any one
+  file at 10 MiB. The driver lists what it leaves on the box, and a test runs the list over a stub box tree.
 - **Lane worst:** one reading box and one shakedown, plus one retry id for a box that did not start, at most **$8**,
   inside the $15 lane cap.
 

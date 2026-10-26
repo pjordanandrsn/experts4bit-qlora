@@ -12,8 +12,9 @@
 #   0 a READ (or a finished shakedown); 27 VOID; 13 disk, 14 egress (a MEASURED download under the floor), 18 CUDA unusable / driver /
 #   CPU class / card clock (the launcher's host codes: each is written only on a line stating its host-floor reason); 15 card class /
 #   cc / SMs / VRAM, 16 host RAM (host facts the launcher does not exclude on); 41 the guard fit (before STARTED); 9 staging / install
-#   / pins / release proof / a probe that measured nothing, 10 torch does not import, 21 the dataset (TC1 amendment 82: never 13),
-#   78 run id or frozen knobs, 130 a signal.
+#   / pins / release proof / a probe that measured nothing, 10 torch does not import, 29 the dataset (TC1 amendment 82: never 13,
+#   and never 21, the driver's own start failure), 78 run id, frozen knobs or an ambient knob, 130 a signal. No box code is one the
+#   driver exits on its own (p237_drive.sh, bench/common/drive_tail.sh), except 78, a config refusal on both sides.
 set -uo pipefail
 W=/root/p237; mkdir -p $W/logs $W/loads $W/data; cd $W || exit 78
 say(){ echo "[$(date -u +%FT%TZ)] p237: $*"; }
@@ -35,16 +36,24 @@ MODEL=Qwen/Qwen3-30B-A3B; REVISION=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
 CLOCK_FLOOR=2500; GPU_CLASS=4090; MIN_SMS=128; MIN_VRAM_MIB=23000; MIN_RAM_GIB=128; MIN_DISK_GB=200; MIN_DRIVER=580
 STEPS=60; PRIMER_STEPS=10; PROBE_STEPS=8; SHAKE_STEPS=24; CAP_12G=12
 LOAD_S=${P237_LOAD_S_REGISTERED:-1500}  # the per-process wall the guard fit uses: the shakedown's measured wall, registered before the reading
+case "$LOAD_S" in ''|*[!0-9]*|0*) say "refusing: P237_LOAD_S_REGISTERED '$LOAD_S' is not whole seconds (no leading 0: \$(( )) reads octal)"; finish 78;; esac
+[ "$LOAD_S" -ge 300 ] || { say "refusing: P237_LOAD_S_REGISTERED $LOAD_S s is under the 300 s floor (a guard fit that passes trivially)"; finish 78; }
 INSTALL_S=2700; FETCH_S=3600; RESERVE=900
 [ -z "${P237_MIN_DISK_GB:-}${P237_MIN_RAM_GIB:-}${P237_STEPS:-}${P237_GPU_CLASS:-}${P237_CLOCK_FLOOR:-}" ] || { say 'reading knobs are frozen'; finish 78; }
-# every knob the arms depend on is SET here, explicitly; every other UNSLOTH_* key is refused (check_env reads the env dump)
-for k in $(env | grep -oE '^UNSLOTH_[A-Z0-9_]+' | sort -u); do
+# ---- ambient knobs (both frameworks alike): every knob an arm depends on is SET by this runner, explicitly; any other UNSLOTH_*,
+# E4B_*, GNF4_*, NF4_QLORA_* or TC1_* key already in the box's environment is refused before STARTED (an e4b knob such as
+# E4B_TRAIN_DETERMINISTIC can move e4b's step time as an ambient Unsloth knob can move Unsloth's; a TC1_* key changes the harness).
+# The per-process keys (E4B_OFFLOAD_STATS, TC1_STEP_MEM, TC1_ARM_HOOK, TC1_ARM_HOOK_SHA256) are set on each process's own line.
+# p237_reduce.py's ENV_PREFIXES / ENV_EXACT / ENV_BOX are this list; tests/test_p237.py binds the two.
+for k in $(env | grep -oE '^(UNSLOTH|E4B|GNF4|NF4_QLORA|TC1)_[A-Za-z0-9_]+' | sort -u); do
   case "$k" in UNSLOTH_MOE_GROUPED_TRITON|UNSLOTH_MOE_NF4_FUSED|UNSLOTH_MOE_NF4_AUTO_MAX_ROWS|UNSLOTH_MOE_NF4_AUTOTUNE|UNSLOTH_MOE_FUSED_ROUTER|UNSLOTH_ENABLE_LOGGING) ;;
+    GNF4_TRAIN_GEMM) ;;
+    E4B_SHA) ;;                     # the launch commit the driver hands in (p237_drive.sh), required above
     *) say "refusing: an ambient $k in the box's environment"; finish 78;; esac
 done
+# ---- end ambient knobs
 export UNSLOTH_MOE_GROUPED_TRITON=auto UNSLOTH_MOE_NF4_FUSED=0 UNSLOTH_MOE_NF4_AUTO_MAX_ROWS=128 UNSLOTH_MOE_NF4_AUTOTUNE=0 UNSLOTH_MOE_FUSED_ROUTER=0 UNSLOTH_ENABLE_LOGGING=1
-export GNF4_TRAIN_GEMM=auto                                   # e4b's shipped default, set explicitly (the PREREG's E pin)
-unset E4B_OFFLOAD_STATS E4B_OFFLOAD_ARENA E4B_OFFLOAD_PIN_SLAB E4B_CKPT_OFFLOAD TC1_STEP_MEM TC1_ARM_HOOK TC1_ARM_HOOK_SHA256   # set per process, never inherited
+export GNF4_TRAIN_GEMM=auto
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True HF_HUB_DISABLE_TELEMETRY=1
 : > summary.txt; echo "$P237_RUN_ID" > RUN_ID
 echo "KNOBS e4b=$E4B_VERSION gnf4=$GNF4_VERSION unsloth=$UNSLOTH_VERSION zoo=$ZOO_VERSION torch=$TORCH_WANT mode=$P237_MODE load_s=$LOAD_S" | tee -a summary.txt
@@ -80,6 +89,8 @@ DRIVER=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 |
 case "$DRIVER_MAJOR" in ''|*[!0-9]*) DRIVER_MAJOR=0;; esac
 [ "$DRIVER_MAJOR" -ge "$MIN_DRIVER" ] || { say "REFUSED: driver ${DRIVER:-unknown} < $MIN_DRIVER"; echo "BOX_REFUSED host floor: driver ${DRIVER:-unknown} (the cu130 wheels need $MIN_DRIVER)" | tee -a summary.txt > REFUSAL; finish 18; }
 nvidia-smi --query-gpu=name,memory.total,driver_version,compute_cap,power.limit,clocks.max.sm,pcie.link.gen.max,pcie.link.width.max --format=csv,noheader | tee forensics.txt
+PCIE_GEN=$(nvidia-smi --query-gpu=pcie.link.gen.max --format=csv,noheader,nounits | head -1 | tr -dc 0-9); PCIE_WIDTH=$(nvidia-smi --query-gpu=pcie.link.width.max --format=csv,noheader,nounits | head -1 | tr -dc 0-9)
+env | grep -E '^(PYTORCH_|TORCH_|CUDA_|NV_|NVIDIA_)' | sort > $W/env_image.txt || true   # the image's own environment: information, never a fault
 lscpu | grep -E "Model name|^Vendor ID|^CPU\(s\)" | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "REFUSED: card is '$GPU_NAME', the lane registers the RTX $GPU_CLASS class"; echo "refused: class $GPU_NAME" > REFUSAL; finish 15;; esac
@@ -92,8 +103,8 @@ CARD_GIB=$(python3 $W/p237_host.py cap_gib "$TOTAL_BYTES") || { say "unreadable 
 CPU_NAME=$(lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -1)
 CPU_CLASS=$(python3 $W/p237_host.py cpu "$CPU_NAME"); ccr=$?
 CC=${CUDA_PROBE##*cc=}; CC=${CC%% *}
-printf '{"name": "%s", "cap": [%s, %s], "sm_count": %s, "vram_mib": %s, "total_bytes": %s, "card_gib": %s, "driver": "%s", "cpu": "%s", "cpu_class": "%s"}\n' \
-  "$GPU_NAME" "${CC%%.*}" "${CC##*.}" "$SMS" "$VRAM_MIB" "$TOTAL_BYTES" "$CARD_GIB" "$DRIVER" "$CPU_NAME" "$CPU_CLASS" > $W/box.json
+printf '{"name": "%s", "cap": [%s, %s], "sm_count": %s, "vram_mib": %s, "total_bytes": %s, "card_gib": %s, "driver": "%s", "cpu": "%s", "cpu_class": "%s", "pcie_gen_max": "%s", "pcie_width_max": "%s"}\n' \
+  "$GPU_NAME" "${CC%%.*}" "${CC##*.}" "$SMS" "$VRAM_MIB" "$TOTAL_BYTES" "$CARD_GIB" "$DRIVER" "$CPU_NAME" "$CPU_CLASS" "${PCIE_GEN:-}" "${PCIE_WIDTH:-}" > $W/box.json
 FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB"; echo "BOX_REFUSED disk=${FREE_GB:-?}GB (host floor $MIN_DISK_GB GB)" | tee -a summary.txt > REFUSAL; finish 13; }
 RAM_GIB=$(awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo)
@@ -167,8 +178,8 @@ cat versions.txt | tee -a summary.txt
 $PY $W/p237_reduce.py --selftest | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { say "REDUCER SELF-TEST FAILED"; finish 9; }
 # ---- the data: TC1's registered Alpaca text (a dataset refusal is lane code 21, TC1 amendment 82)
 DS_ALPACA_SHA=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
-(cd $W/data && perl -e 'alarm 900; exec @ARGV' $PY $W/tp4_alpaca.py --out $W/data/ds_alpaca.json > $W/logs/dataset_alpaca.log 2>&1) || { say "DATASET FAIL (alpaca)"; finish 21; }
-[ "$(sha256sum $W/data/ds_alpaca.json | awk '{print $1}')" = "$DS_ALPACA_SHA" ] || { say "DATASET MISMATCH alpaca"; finish 21; }
+(cd $W/data && perl -e 'alarm 900; exec @ARGV' $PY $W/tp4_alpaca.py --out $W/data/ds_alpaca.json > $W/logs/dataset_alpaca.log 2>&1) || { say "DATASET FAIL (alpaca)"; finish 29; }
+[ "$(sha256sum $W/data/ds_alpaca.json | awk '{print $1}')" = "$DS_ALPACA_SHA" ] || { say "DATASET MISMATCH alpaca"; finish 29; }
 # ---- one snapshot download, shared by both frameworks
 AL=$(alarm_for $FETCH_S); say "snapshot $MODEL @$REVISION (alarm $AL)"
 perl -e "alarm $AL; exec @ARGV" $PY -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REVISION'))" > logs/snapshot.log 2>&1 \
@@ -186,7 +197,7 @@ PYTHONPYCACHEPREFIX=$(mktemp -d /tmp/p237-pycache.XXXXXX); export PYTHONPYCACHEP
    "transformers==$TF_VERSION") > $W/release_proof.json 2> logs/release_proof.err
 rp=$?; { echo -n "RELEASE_PROOF rc=$rp "; head -c 300 logs/release_proof.err; echo; } | tee -a summary.txt
 [ "$rp" = 0 ] || { say "RELEASE PROOF FAILED"; finish 9; }
-env | grep -E '^(UNSLOTH_|E4B_|GNF4_|NF4_QLORA_|PYTORCH_|TC1_)' | sort > $W/env_box.txt
+env | grep -E '^(UNSLOTH_|E4B_|GNF4_|NF4_QLORA_|TC1_)|^PYTORCH_CUDA_ALLOC_CONF=' | sort > $W/env_box.txt
 # the hook's pin: the sha256 the staged pin file names for p237_arm.py (tc1_arm.py's load_arm_hook refuses any other bytes, exit 10)
 HOOK_SHA=$(awk '$2 == "p237_arm.py" || $2 == "*p237_arm.py" {print $1}' $W/staged-p237.sha256)
 [ ${#HOOK_SHA} -eq 64 ] || { say "STAGE: staged-p237.sha256 names no p237_arm.py"; finish 9; }
@@ -209,7 +220,7 @@ EXPECT=""
 # run_proc INDEX KIND BUDGET ARM DRAW STEPS [OFFLOAD]: one tc1_arm process; the receipt lands in loads/INDEX/qwen3_<fw>_<tag>.json
 run_proc(){ local idx=$1 kind=$2 budget=$3 arm=$4 draw=$5 s=$6 off=${7:-} tag ee pp env_e AL c0 c1 rc
   tag=p237_${idx}_${kind}_${budget}_${arm}_d${draw}${off:+_n$off}
-  ee=$s; [ "$s" = "$STEPS" ] && ee=20; pp="--profile-steps 0"; [ "$s" -ge 23 ] && pp="--profile-steps 3 --profile-warm 20"
+  ee=$s; [ "$s" = "$STEPS" ] && ee=20; pp="--profile-steps 0"; [ "$s" -ge 24 ] && pp="--profile-steps 3 --profile-warm 21"   # loop steps 21..23: past the post-eval cold step 20
   env_e=""; [ "$arm" = E ] && env_e="E4B_OFFLOAD_STATS=1"
   AL=$(alarm_for $((LOAD_S * 2))); mkdir -p $W/loads/$idx
   say "[$idx] $kind $budget $arm draw $draw steps $s${off:+ offload_layers $off} (alarm $AL)"

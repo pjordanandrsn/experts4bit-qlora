@@ -11,6 +11,7 @@ import importlib
 import importlib.util
 import io
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -96,12 +97,34 @@ def test_host_codes_appear_only_on_a_host_floor_line():
             assert re.search(r"BOX_REFUSED|host floor", ln), f"host code {code} on a line with no host-floor reason: {ln.strip()[:160]}"
 
 
-def test_thirteen_is_the_disk_floor_only_and_the_dataset_is_21():
+def test_thirteen_is_the_disk_floor_only_and_the_dataset_is_29():
     thirteen = [ln for c, ln in _finishes(_run_text()) if c == 13]
     assert len(thirteen) == 1 and "disk" in thirteen[0], thirteen
-    for ln in _run_text().splitlines():
-        if "DATASET" in ln and "finish" in ln:
-            assert "finish 21" in ln, ln                                           # TC1 amendment 82: a dataset refusal is never 13
+    data = [ln for ln in _run_text().splitlines() if "DATASET" in ln and "finish" in ln]
+    assert len(data) == 2 and all("finish 29" in ln for ln in data), data   # TC1 amendment 82: never 13, and never the driver's 21
+
+
+def driver_codes(drive_text, tail_text):
+    """Every literal ``exit N`` the driver can return on its own: p237_drive.sh's lines and the shared tail's."""
+    return {int(c) for t in (drive_text, tail_text) for c in re.findall(r"\bexit (\d+)\b", t)}
+
+
+def code_clashes(run_text, drive_text, tail_text):
+    """Box codes that are also the driver's own exits (amendment 82's rule): only 0 and 78 may be both."""
+    lane = {c for c, _ in _finishes(run_text)} - HOST_CODES
+    listed = {int(x) for x in re.search(r'BOX_CODES="([\d ]+)"', drive_text).group(1).split()}
+    return sorted((lane | listed) & driver_codes(drive_text, tail_text) - {0, 78})
+
+
+def test_no_box_code_is_one_the_driver_exits_on_its_own():
+    tail = (REPO / "bench" / "common" / "drive_tail.sh").read_text(encoding="utf-8")
+    drive = DRIVE.read_text(encoding="utf-8")
+    assert {20, 21, 22, 23, 24, 26, 78} <= driver_codes(drive, tail)               # the reader sees the driver's start-failure 21
+    assert code_clashes(_run_text(), drive, tail) == []
+    run21 = _run_text().replace("finish 29; }", "finish 21; }")                     # MUTANT: 21 put back
+    drive21 = drive.replace('BOX_CODES="9 10 15 16 27 29 41 78 130"', 'BOX_CODES="9 10 15 16 21 27 41 78 130"')
+    assert run21 != _run_text() and drive21 != drive, "the mutant's anchors are stale"
+    assert code_clashes(run21, drive21, tail) == [21]
 
 
 def test_the_driver_passes_exactly_the_runners_lane_codes():
@@ -113,7 +136,7 @@ def test_the_driver_passes_exactly_the_runners_lane_codes():
         assert re.search(rf"\b{c}\b", header), f"code {c} is not in the runner's exit-code table"
 
 
-@pytest.mark.parametrize("rc,success,want", [("0", True, 0), ("0", False, 24), ("21", False, 21), ("13", False, 13),
+@pytest.mark.parametrize("rc,success,want", [("0", True, 0), ("0", False, 24), ("29", False, 29), ("21", False, 26), ("13", False, 13),
                                              ("41", False, 41), ("17", False, 17), ("22", False, 26), ("x", False, 23)])
 def test_the_driver_tail(tmp_path, rc, success, want):
     (tmp_path / "P237_EXIT_CODE.n1").write_text(rc + "\n")
@@ -230,6 +253,19 @@ def _shell_value(name):
     return m.group(1)
 
 
+def _profile_flags():
+    return re.search(r'pp="(--profile-steps 3 --profile-warm \d+)"', _run_text()).group(1)
+
+
+def test_the_profile_window_is_past_the_post_eval_step_and_the_reducer_reads_it():
+    """--profile-warm 21 (the maintainer's call): loop steps 21..23, so the profile never holds step 20, the cold step after the eval at
+    20 (E stages 96, Unsloth re-arms after an eval-mode forward). The reducer's window edges are the same steps."""
+    red = importlib.import_module("p237_reduce")
+    warm = int(re.search(r"--profile-warm (\d+)", _profile_flags()).group(1))
+    assert warm == 21 and red.PROFILED == (warm, warm + 3)
+    assert re.search(r'\[ "\$s" -ge (\d+) \] && pp=', _run_text()).group(1) == str(warm + 3)   # the shakedown's 24 steps hold it
+
+
 def _arm_flags(arm):
     m = re.search(rf"^  {re.escape(arm)}\) echo \"(.*?)\";;", _run_text(), re.M)
     return m.group(1)
@@ -245,11 +281,11 @@ def test_every_runner_argv_parses_with_tc1_arms_own_parser(arm, budget, off):
                                                                                                     " --expect-trainable 123")
     cap = {"12g": "--vram-cap-gib 12", "full": "" if arm == "E" else "--vram-cap-gib 23.98828125"}[budget]
     argv = shlex.split(f"{field} {flags} {cap} {'--unsloth-offload-layers ' + off if off else ''} --steps 60 --eval-every 20 "
-                       f"--profile-steps 3 --profile-warm 20 --tag t --out /tmp/o --adapter-dir /tmp/o/a")
+                       f"{_profile_flags()} --tag t --out /tmp/o --adapter-dir /tmp/o/a")
     a = tc1.build_parser().parse_args(argv)
     assert a.accum == 4 and a.micro_batch == 2 and a.seq == 2048 and a.lr == 2e-4 and a.r == 16 and a.alpha == 16
     assert a.optim == "adamw_8bit" and a.lr_schedule == "linear" and a.warmup_steps == 5 and a.eval_n == 8
-    assert a.adapter_dtype == "fp32" and a.lora_init == "matched:3407" and a.profile_warm == 20 and a.profile_steps == 3
+    assert a.adapter_dtype == "fp32" and a.lora_init == "matched:3407" and a.profile_warm == 21 and a.profile_steps == 3
     if arm == "E":
         assert a.framework == "e4b" and a.layer_major == 1 and int(a.offload) == 1 and a.unsloth_offload_layers is None
     else:
@@ -274,4 +310,157 @@ def test_the_runner_pins_the_reducers_knobs():
 
 def test_the_reducer_selftest():
     red = importlib.import_module("p237_reduce")
-    assert red.selftest() >= 70
+    assert red.selftest() >= 100
+
+
+# -- the box environment: one list for the runner's refusal, its dump and the reducer --------------------------------------------
+def _ambient_block(run=None):
+    run = run or _run_text()
+    return run.split("# ---- ambient knobs", 1)[1].split("\n", 1)[1].split("# ---- end ambient knobs", 1)[0]
+
+
+@pytest.mark.parametrize("key,val,want", [
+    ("E4B_TRAIN_DETERMINISTIC", "1", 78), ("E4B_OFFLOAD_STATS", "1", 78), ("GNF4_ANYTHING", "1", 78), ("NF4_QLORA_ANYTHING", "1", 78),
+    ("UNSLOTH_DISABLE_MOE_TRITON", "1", 78), ("TC1_STEP_MEM", "1", 78), ("TC1_ARM_HOOK", "x:make", 78),
+    ("E4B_SHA", "a" * 40, 0), ("GNF4_TRAIN_GEMM", "auto", 0), ("UNSLOTH_MOE_NF4_FUSED", "0", 0), ("PYTORCH_VERSION", "2.12.1", 0),
+    (None, None, 0),
+])
+def test_the_runners_ambient_block_refuses_every_unregistered_key(key, val, want):
+    """The runner's own marked block, run as written: any UNSLOTH_* / E4B_* / GNF4_* / NF4_QLORA_* / TC1_* key outside the registered
+    set refuses 78 before STARTED (the per-process TC1_* and E4B_OFFLOAD_STATS keys included: they are set on each process's own
+    line, never inherited); E4B_SHA (the driver's) and the image's keys pass."""
+    red = importlib.import_module("p237_reduce")
+    env = {k: v for k, v in os.environ.items() if not re.match(red.ENV_REFUSE_GREP, k)}
+    if key:
+        env[key] = val
+    script = 'say(){ echo "$*"; }\nfinish(){ exit "$1"; }\n' + _ambient_block() + "exit 0\n"
+    r = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+    assert r.returncode == want, (key, r.stdout, r.stderr)
+    if want:
+        assert key in r.stdout
+
+
+def _env_disagreements(run, red):
+    bad = []
+    block = _ambient_block(run)
+    refuse = re.search(r"env \| grep -oE '([^']+)' \| sort -u", block)
+    if not refuse or refuse.group(1) != red.ENV_REFUSE_GREP:
+        bad.append(("refusal grep", refuse and refuse.group(1)))
+    allowed = set()
+    for labels in re.findall(r"^\s*(?:case \"\$k\" in )?([A-Z0-9_|]+)\) ;;", block, re.M):
+        allowed |= set(labels.split("|"))
+    if allowed != set(red.ENV_BOX) - set(red.ENV_EXACT):
+        bad.append(("refusal allowlist", sorted(allowed ^ (set(red.ENV_BOX) - set(red.ENV_EXACT)))))
+    dump = re.search(r"^env \| grep -E '([^']+)' \| sort > \$W/env_box\.txt$", run, re.M)
+    if not dump or dump.group(1) != red.ENV_BOX_GREP:
+        bad.append(("env_box grep", dump and dump.group(1)))
+    exported = {}
+    for line in re.findall(r"^export (.+)$", run, re.M):
+        for kv in line.split("#", 1)[0].split():
+            k, _, v = kv.partition("=")
+            if re.match(red.ENV_BOX_GREP, k + "="):
+                exported[k] = v
+    if exported != {k: v for k, v in red.ENV_BOX.items() if v is not None}:
+        bad.append(("exports", exported))
+    if not all(re.match(red.ENV_BOX_GREP, k + "=") for k in red.ENV_BOX):
+        bad.append(("a registered key the dump would not record", sorted(red.ENV_BOX)))
+    if any(k.startswith("TC1_") for k in red.ENV_BOX):
+        bad.append(("a TC1_* key registered at the dump: they are set per process, after it", sorted(red.ENV_BOX)))
+    return bad
+
+
+def test_one_env_list_binds_the_refusal_the_dump_and_the_reducer(monkeypatch):
+    red = importlib.import_module("p237_reduce")
+    run = _run_text()
+    assert _env_disagreements(run, red) == []
+    mutants = [
+        ("    E4B_SHA) ;;", "    E4B_SHA|E4B_TRAIN_DETERMINISTIC) ;;"),                                # a wider box allowlist
+        ("grep -oE '^(UNSLOTH|E4B|GNF4|NF4_QLORA|TC1)_", "grep -oE '^(UNSLOTH|E4B|GNF4|NF4_QLORA)_"),        # a narrower refusal
+        ("|TC1_)|^PYTORCH_CUDA_ALLOC_CONF=' | sort > $W/env_box.txt", "|TC1_|PYTORCH_)' | sort > $W/env_box.txt"),   # a wider dump
+        ("export GNF4_TRAIN_GEMM=auto\n", "export GNF4_TRAIN_GEMM=auto E4B_TRAIN_DETERMINISTIC=1\n"),          # an extra export
+    ]
+    for old, new in mutants:
+        assert run.count(old) == 1, old
+        assert _env_disagreements(run.replace(old, new), red), f"mutant survives: {new}"
+    monkeypatch.setattr(red, "ENV_BOX", {**red.ENV_BOX, "E4B_TRAIN_DETERMINISTIC": "1"})                 # a wider reducer set
+    assert _env_disagreements(run, red)
+    monkeypatch.setattr(red, "ENV_BOX", {**red.ENV_BOX, "TC1_STEP_MEM": "1"})
+    assert _env_disagreements(run, red)
+
+
+# -- the guard fit's registered wall ------------------------------------------------------------------------------------------------
+def _load_s_block():
+    run = _run_text()
+    return run[run.index("LOAD_S=${P237_LOAD_S_REGISTERED"):run.index("INSTALL_S=")]
+
+
+@pytest.mark.parametrize("val,want", [(None, 0), ("1500", 0), ("300", 0), ("299", 78), ("0300", 78), ("12.5", 78), ("abc", 78), ("", 0)])
+def test_load_s_is_whole_seconds_over_a_floor(val, want):
+    """P237_LOAD_S_REGISTERED: whole seconds, no leading 0 (bash arithmetic reads it as octal), at least 300; else 78. An empty value
+    takes the default, as ${VAR:-1500} does."""
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
+    if val is not None:
+        env["P237_LOAD_S_REGISTERED"] = val
+    script = 'say(){ echo "$*"; }\nfinish(){ exit "$1"; }\n' + _load_s_block() + "exit 0\n"
+    r = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+    assert r.returncode == want, (val, r.stdout)
+
+
+def test_mutant_load_s_without_its_floor_is_caught():
+    block = _load_s_block()
+    floor = next(ln for ln in block.splitlines() if "-ge 300" in ln)
+    script = 'say(){ echo "$*"; }\nfinish(){ exit "$1"; }\n' + block.replace(floor, "") + "exit 0\n"
+    r = subprocess.run(["bash", "-c", script], env={"PATH": "/usr/bin:/bin", "P237_LOAD_S_REGISTERED": "5"}, capture_output=True, text=True)
+    assert r.returncode == 0                                                    # without the floor a 5 s wall passes: the test above binds it
+
+
+# -- the fetch: receipts and logs only ----------------------------------------------------------------------------------------------
+def _rsync_excludes():
+    m = re.search(r"^P237_RSYNC_EXCLUDES=\((.*?)\)$", DRIVE.read_text(encoding="utf-8"), re.M | re.S)
+    return shlex.split(m.group(1))
+
+
+def _stub_box(root: Path):
+    big = b"x" * (11 * 2 ** 20)
+    files = {
+        "summary.txt": b"ok", "box.json": b"{}", "env_box.txt": b"A=1", "logs/load_3.log": b"log", "verdict_p237.json": b"{}",
+        "loads/3/qwen3_e4b_p237_3_draw_12g_E_d1.json": b"{}", "loads/3/qwen3_e4b_p237_3_draw_12g_E_d1_profile.json": b"{}",
+        "loads/gpuclk_3.txt": b"1 2", "loads/dmon_3.txt": b"#", "loads/vram_3.txt": b"t, 1",
+        "venv-unsloth/lib/python3.12/site-packages/torch/lib/libtorch.so": b"so",
+        "data/alpaca_data_cleaned.json": big, "data/ds_alpaca.json": b"[]", "data/tokens_qwen3.json": b"{}",
+        "loads/3/adapters/adapter_model.safetensors": b"t", "loads/4/adapters/x.json": b"{}",
+        "unsloth_compiled_cache/UnslothSFTTrainer.py": b"py", "__pycache__/p237_host.cpython-312.pyc": b"pyc",
+        ".cache/huggingface/hub/x": b"h", "loads/3/stray.pt": b"t", "loads/3/stray.bin": b"t", "logs/huge.log": big,
+    }
+    for rel, data in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_bytes(data)
+
+
+def test_the_fetch_carries_receipts_and_logs_only(tmp_path):
+    """p237_drive.sh's own exclude array over a stub box tree (rsync as the driver runs it, minus ssh): nothing over 10 MiB, no tensor
+    file, no venv or cache directory, no adapters, and every receipt, log and record the reducer reads comes back."""
+    src, dst = tmp_path / "box", tmp_path / "fetched"
+    src.mkdir()
+    dst.mkdir()
+    _stub_box(src)
+    r = subprocess.run(["rsync", "-a", "--no-links", *_rsync_excludes(), f"{src}/", f"{dst}/"], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    got = {p.relative_to(dst).as_posix(): p.stat().st_size for p in dst.rglob("*") if p.is_file()}
+    assert all(size <= 10 * 2 ** 20 for size in got.values()), got
+    assert not [f for f in got if f.endswith((".safetensors", ".pt", ".bin", ".pth"))], got
+    assert not [f for f in got if re.match(r"(venv|\.cache|unsloth_compiled_cache|__pycache__)|.*/adapters/", f)], got
+    for keep in ("summary.txt", "box.json", "env_box.txt", "logs/load_3.log", "verdict_p237.json", "loads/gpuclk_3.txt",
+                 "loads/3/qwen3_e4b_p237_3_draw_12g_E_d1.json", "loads/3/qwen3_e4b_p237_3_draw_12g_E_d1_profile.json",
+                 "loads/dmon_3.txt", "loads/vram_3.txt", "data/ds_alpaca.json"):
+        assert keep in got, keep
+
+
+def test_mutant_a_narrower_fetch_list_is_caught(tmp_path):
+    src, dst = tmp_path / "box", tmp_path / "fetched"
+    src.mkdir()
+    dst.mkdir()
+    _stub_box(src)
+    ex = [a for a in _rsync_excludes() if not a.startswith("--max-size")]          # MUTANT: no size cap
+    subprocess.run(["rsync", "-a", "--no-links", *ex, f"{src}/", f"{dst}/"], check=True)
+    assert (dst / "logs" / "huge.log").stat().st_size > 10 * 2 ** 20                 # the cap is what keeps it on the box
