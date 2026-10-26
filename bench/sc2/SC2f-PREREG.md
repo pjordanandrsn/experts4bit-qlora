@@ -934,3 +934,34 @@ lane reports, and any change is a new amendment ruled on that evidence.
   would fail that check.
 
 **Unchanged:** everything else Amendments 7 to 10 registered.
+
+### Record (2026-10-26): SC2f PARKED — three creates, no proof PROVED
+
+**Status: PARKED on 2026-10-26**, by Amendment 7(b) (three creates and no proof PROVED) and 7(c) (SC2f, SC2h and SC2i park
+together, with no further change to the bar). No arm was read. The deadline (2026-10-28T14:12:34Z) had not passed.
+
+| attempt | machine | listed / enforced | exit | cause | cost |
+|---|---|---|---|---|---|
+| `sc2f-prove-11` | 55337 | 575 / 575 W | **rc 25, VOID** | harness: the run judge looked up the sampler's clock column by the name `clocks.sm`; driver 610.43.02 printed `clocks.current.sm [MHz]` (Amendment 10's record) | $0.319 |
+| `sc2f-prove-12` | 145701 | 575 / 575 W | **rc 13** | harness: the template ordered exactly SC1's 320 GB disk floor, and a host enforcing its quota left 319 GB free (Amendment 11's record) | $0.121 |
+| `sc2f-prove-13` | 34917 | 600 / 600 W | **rc 18, a host fault** | the run judge read Reliability (0x400) on 143 of 143 busy samples, persistent by TC1 amendment 83's rule; the card, power, burn (2,805 MHz) and the proof's driver (PROVED) otherwise passed | $0.305 |
+
+Lane spend: **$0.745** against the registered $14.42 worst. The launcher's receipts carry the generic status
+`HARNESS_ERROR` for every nonzero exit. By this registration, rc 25 and rc 13 are harness faults, and rc 18 is a host fault:
+a record that was read and failed.
+
+Information only, not a verdict: on `sc2f-prove-13`, Reliability was set on all 686 sampler rows, idle ones included, from
+the first. `sc2f-prove-11`'s host ran the same serving load with Reliability on 0 of 81 busy samples (busy median 2,880 MHz).
+So the reading was machine 34917's state, not the workload's (n = 2 hosts; nothing more is claimed).
+
+**The market record (Amendment 7(c)).** `bench/sc2/sc2f-park/screen_reads_after_am10.json` holds the 39 screen reads after
+Amendment 10's committed file, 2026-10-26 09:14Z to 14:47Z, which closes the screen's market record. Rows from screen7 onward
+also carry the GPU rate, the storage rate per GB-month and the disk they were priced at (Amendment 11).
+
+**Root-cause note (the two-strikes rule).** Two of the three attempts were lost to this lane's own faults, not to hosts.
+Both sat in lesson categories already on record before they happened:
+- a gate tested only on hand-written fixtures, never on a real sampler record (rc 25);
+- ordering exactly a runner's disk floor (rc 13; it had already refused sc2j-prove-1 and sc1g-prove-a5-1/-2).
+Neither fault was exercised by a $0 run against real records before the paid run. The simplification is in the tree: the
+positional sampler parse (Amendment 10) and the floor-plus-20 GB CI test (Amendment 11). Added here as the standing step:
+**before a lane's first create, run its full judge chain once at $0 on a real committed record.**

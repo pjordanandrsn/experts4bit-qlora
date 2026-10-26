@@ -226,3 +226,10 @@ formula (download at <= $0.011/GB): a proof, 1.0 h <= $1.25 + about $0.10 = **$1
 $5.63 + about $0.73 = **$6.36** (was $5.46); the lane (two proofs, one reading, one re-run counted as a reading) 2 x $1.35 +
 2 x $6.355 = **$15.41** (was $13.21; the reading enters unrounded, as this file's $13.21 at $1.05 did: 2 x $5.455). Each run is under the standing single-run tier ($15); the lane total is stated, not
 capped, and is above $15 by $0.41. Everything else is unchanged.
+
+### Record (2026-10-26): SC2i PARKED with SC2f
+
+**Status: PARKED on 2026-10-26**, with SC2f, by SC2f Amendment 7(c) (the three lanes park together, with no further change
+to the bar). SC2i launched nothing: it rents after SC2f's and SC2h's boxes, on the host continuity SC2f's proof would have set, and SC2f parked after three
+creates with no proof PROVED (`sc2f-prove-11` VOID rc 25, `-12` rc 13, `-13` rc 18; SC2f-PREREG's record of 2026-10-26).
+SC2i's spend: $0.

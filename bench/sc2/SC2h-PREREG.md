@@ -339,3 +339,10 @@ SC2f Amendment 11 moves the ceiling the three lanes share from $1.05 to **$1.25*
 formula (download at <= $0.011/GB): a proof, 1.0 h <= $1.25 + ~$0.10 = **$1.35** (was $1.15); the reading, 4.0 h <= $5.00 +
 ~$0.73 = **$5.73** (was $4.93); the lane (two proofs, one reading, one re-run counted as a reading) 2 x $1.35 + 2 x $5.73 =
 **$14.16** (was $12.16). Each run is under the standing single-run tier ($15). Everything else is unchanged.
+
+### Record (2026-10-26): SC2h PARKED with SC2f
+
+**Status: PARKED on 2026-10-26**, with SC2f, by SC2f Amendment 7(c) (the three lanes park together, with no further change
+to the bar). SC2h launched nothing: it needs a valid SC2f `on` verdict and SC2f's proved host, and SC2f parked after three
+creates with no proof PROVED (`sc2f-prove-11` VOID rc 25, `-12` rc 13, `-13` rc 18; SC2f-PREREG's record of 2026-10-26).
+SC2h's spend: $0.
