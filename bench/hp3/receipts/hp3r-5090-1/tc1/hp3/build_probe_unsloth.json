@@ -1,0 +1,14 @@
+{
+ "bitsandbytes": "0.50.2",
+ "bnb_lib": "libbitsandbytes_cuda128.so",
+ "bnb_lib_sha256": "d6dd06a7bf8b2ecc43dd7d7dc5b558dc70884fd193252a8597ee065a9c8b0f4e",
+ "cuda": "12.8",
+ "framework": "unsloth",
+ "framework_version": "2026.9.14",
+ "peft": "0.21.2",
+ "python": "3.11.13",
+ "torch": "2.8.0+cu128",
+ "transformers": "5.5.0",
+ "triton": "3.4.0",
+ "unsloth_zoo": "2026.9.9"
+}

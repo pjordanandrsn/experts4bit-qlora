@@ -1,0 +1,3 @@
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+HP3_BUILD_PROBE unsloth: torch 2.8.0+cu128 bnb 0.50.2 lib libbitsandbytes_cuda128.so triton 3.4.0
