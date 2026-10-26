@@ -1,0 +1,17 @@
+{
+ "any_sample_bits_seen": [],
+ "busy_reliability_fraction": 1.0,
+ "busy_reliability_samples": 143,
+ "busy_samples": 143,
+ "busy_sm_median": 2557,
+ "busy_swpowercap_fraction": 0.0,
+ "header_skipped": null,
+ "refusal": "below_floor",
+ "rows": 686,
+ "sm_max": 2917,
+ "unreadable_rows": 0,
+ "verdict": "REFUSE",
+ "why": [
+  "Reliability on 143 of 143 busy samples (>= 95%: persistent)"
+ ]
+}
