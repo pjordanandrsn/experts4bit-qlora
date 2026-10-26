@@ -45,11 +45,12 @@ approves compute; the launcher (``tools/pod-launch.sh``) creates, and applies it
       launcher's ``host_facts.json`` ``gpu_power_limit_w`` must each read 575.0 or 600.0 W AND equal the enforced limit
       the qualify step read on the card (its ``power.json``, SC2f Amendment 10). All three flags are always passed. A
       record READ at another limit, or at one that differs from the qualify reading, is a host fault (rc 18); a record
-      missing, unreadable or without its field is probe_error, a HARNESS fault (rc 25) that voids the run and never
-      excludes the machine.
+      missing, unreadable or without its field is probe_error, a HARNESS fault (rc 25) that voids the run (the create
+      still uses an attempt and the host is not revisited, as ``admit`` reads the store).
   judge-run --sampler sampler.csv [--out FILE]                                       exit 0 PASS, 18 REFUSE, 25 UNREAD
       The controller-side sampler over the whole timed run (``nvidia-smi --query-gpu=timestamp,clocks.sm,
-      clocks_event_reasons.active,power.draw --format=csv -lms 1000``, started on the box before the lane's driver and
+      clocks_event_reasons.active,power.draw --format=csv,noheader,nounits -lms 1000``, read by POSITION, SC2f Amendment 10),
+      started on the box before the lane's driver and
       fetched after it), judged by ``bench/common/card_clock.py``'s own ``passes(..., mode="clock")`` (TC1 amendment 83,
       SC2f Amendment 9) at a floor of 0 MHz (``SERVING_JUDGE_FLOOR_MHZ``): a hardware or thermal slowdown on ANY sample
       (idle ones included) refuses, Reliability refuses only on >= 95 % of the BUSY samples (SM above card_clock's
@@ -59,7 +60,8 @@ approves compute; the launcher (``tools/pod-launch.sh``) creates, and applies it
       Reliability shares are recorded. Fewer than 10 busy samples means the sampler never saw the load: probe_error
       (rc 25). A sampler that READ and failed is below_floor, a host fault
       (rc 18). A missing or unreadable file (no header, fewer than 10 readable rows, or more than 5 % of rows
-      unreadable) is probe_error, a HARNESS fault (rc 25): it voids the run and never excludes the machine.
+      unreadable) is probe_error, a HARNESS fault (rc 25): it voids the run. Every create still uses one of the lane's
+      attempts and the host is not revisited, whatever the exit (``admit``, SC2f Amendment 7).
   --self-test
 
 Exit 17 (power cap) and 18 (host floor) are the launcher's host-limited codes: it records a host fault, never a
@@ -86,6 +88,12 @@ LANE_ORDER = ("sc2f", "sc2h", "sc2i")             # SC2f Amendment 3: the three 
 CLOCK_FLOOR_MHZ = 2700                            # the burn's floor; the recorded-clock rule reads records at the same floor
 RECORD_MIN_BUSY = 10                              # a loaded clock record needs >= 10 busy samples (P238 amendment 2's rule)
 CLOCK_RECORDS = ("card_clock_burn.json", "card_clock.json")   # pre-install burns; with gpuclk_*.txt run logs
+#: SC2f Amendment 10: the run sampler's query, read by POSITION (``--format=csv,noheader,nounits``, as card_clock's burn and TC1's
+#: sampler read theirs). nvidia-smi rewrites queried names in a CSV header (535.154.05, 610.43.02 and 615.71.09 all print
+#: ``clocks.sm`` as ``clocks.current.sm [MHz]``), so no header name is ever looked up.
+SAMPLER_FIELDS = ("timestamp", "clocks.sm", "clocks_event_reasons.active", "power.draw")
+SAMPLER_QUERY = f"nvidia-smi --query-gpu={','.join(SAMPLER_FIELDS)} --format=csv,noheader,nounits -lms 1000"
+SAMPLER_SM_MIN, SAMPLER_SM_MAX = 100, 4000
 SAMPLER_MIN_ROWS = 10
 SAMPLER_MIN_BUSY = 10                             # card_clock.passes' min_busy
 SAMPLER_MAX_BAD = 0.05
@@ -329,7 +337,7 @@ _W = re.compile(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*W\s*$")
 
 def power(csv_text: str) -> dict:
     """PASS, REFUSE (read: an enforced limit outside {575, 600} W, or more than one GPU; a host fault, rc 17) or UNREAD
-    (nothing readable: probe_error, a harness fault, rc 25, never excluding the machine)."""
+    (nothing readable: probe_error, a harness fault, rc 25: the run is void)."""
     rows = [ln for ln in (csv_text or "").strip().splitlines() if ln.strip()]
     if not rows:
         return {"verdict": "UNREAD", "refusal": "probe_error", "why": "no nvidia-smi row", "raw": csv_text}
@@ -398,30 +406,59 @@ def _card_clock():
     return mod
 
 
+_SAMPLER_TS = re.compile(r"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$")
+_SAMPLER_SM = re.compile(r"^(\d+)(?: MHz)?$")
+_SAMPLER_HEX = re.compile(r"^0x[0-9a-fA-F]+$")
+_SAMPLER_W = re.compile(r"^\d+(?:\.\d+)?(?: W)?$")
+
+
+def _sampler_row(line: str):
+    """One sampler row read by POSITION in SAMPLER_QUERY's order (SC2f Amendment 10): ``(sm_mhz, reasons_mask)``, or None
+    when the row fails a sanity check: the column count, the timestamp, the SM column as an integer MHz in
+    [SAMPLER_SM_MIN, SAMPLER_SM_MAX], the reasons column as 0x-hex, the power column as watts. A unit suffix
+    (`` MHz``, `` W``, from a sampler run without ``nounits``) is accepted; a header name never matters."""
+    cells = [c.strip() for c in line.split(",")]
+    if len(cells) != len(SAMPLER_FIELDS):
+        return None
+    ts, sm, reasons, watts = cells
+    m = _SAMPLER_SM.match(sm)
+    if not (_SAMPLER_TS.match(ts) and m and _SAMPLER_HEX.match(reasons) and _SAMPLER_W.match(watts)):
+        return None
+    mhz = int(m.group(1))
+    if not SAMPLER_SM_MIN <= mhz <= SAMPLER_SM_MAX:
+        return None
+    return mhz, int(reasons, 16)
+
+
 def judge_run(text) -> dict:
-    """The controller-side sampler (csv with header) over the whole run, by card_clock's bits: PASS, REFUSE (read,
-    below_floor: a host fault) or UNREAD (probe_error: a harness fault)."""
+    """The controller-side sampler over the whole run, by card_clock's bits: PASS, REFUSE (read, below_floor: a host
+    fault) or UNREAD (probe_error: a harness fault). Rows are read by position (SC2f Amendment 10): a legacy header
+    line is skipped only as the FIRST line and only when it fails the row checks; a non-numeric row anywhere after
+    it is UNREAD outright (a restarted or concatenated sampler), and rows failing a check count against the 5 %
+    unreadable limit (a torn last line)."""
     cc = _card_clock()
     lines = [ln for ln in (text or "").splitlines() if ln.strip()]
-    if not lines or "clocks_event_reasons.active" not in lines[0]:
-        return {"verdict": "UNREAD", "refusal": "probe_error", "why": ["no sampler header"], "rows": 0}
-    head = [h.strip().split(" ")[0] for h in lines[0].split(",")]
-    try:
-        ri, ci = head.index("clocks_event_reasons.active"), head.index("clocks.sm")
-    except ValueError:
-        return {"verdict": "UNREAD", "refusal": "probe_error", "why": [f"sampler header {lines[0][:120]!r}"], "rows": 0}
+    if not lines:
+        return {"verdict": "UNREAD", "refusal": "probe_error", "why": ["no sampler rows"], "rows": 0}
+    header = None
+    if _sampler_row(lines[0]) is None and not any(ch.isdigit() for ch in lines[0].split(",")[0]):
+        header, lines = lines[0], lines[1:]
     masks, bad = [], 0
-    for ln in lines[1:]:
-        cells = [c.strip() for c in ln.split(",")]
-        try:
-            masks.append((int(cells[ci].split()[0]), int(cells[ri], 16)))
-        except (ValueError, IndexError):
+    for ln in lines:
+        r = _sampler_row(ln)
+        if r is not None:
+            masks.append(r)
+        elif not any(ch.isdigit() for ch in ln.split(",")[0]):
+            return {"verdict": "UNREAD", "refusal": "probe_error", "rows": len(lines), "header_skipped": header,
+                    "why": [f"a non-numeric row after the first line: {ln[:120]!r}"]}
+        else:
             bad += 1
     rows = len(masks) + bad
-    rec = {"rows": rows, "unreadable_rows": bad}
+    rec = {"rows": rows, "unreadable_rows": bad, "header_skipped": header}
     if len(masks) < SAMPLER_MIN_ROWS or (rows and bad / rows > SAMPLER_MAX_BAD):
         return dict(rec, verdict="UNREAD", refusal="probe_error",
-                    why=[f"{len(masks)} readable rows of {rows} (need >= {SAMPLER_MIN_ROWS}, <= {SAMPLER_MAX_BAD:.0%} unreadable)"])
+                    why=[f"{len(masks)} readable rows of {rows} (need >= {SAMPLER_MIN_ROWS}, <= {SAMPLER_MAX_BAD:.0%} unreadable; "
+                         f"each row: {len(SAMPLER_FIELDS)} columns in the order {','.join(SAMPLER_FIELDS)})"])
     summ = cc.summarize([(c, 0, 0, m) for c, m in masks])   # card_clock's own summary: its busy samples, counts and any-sample bits
     rec.update(busy_samples=summ["busy_samples"], sm_max=summ["sm_max"], busy_sm_median=summ["sm_median"],   # reported, not ruled
                any_sample_bits_seen=summ["any_sample_bits_seen"], busy_reliability_samples=summ["busy_reliability_samples"],
@@ -442,8 +479,9 @@ def self_test() -> int:
     named = [rd(("52780", "1", 0.9, 400, 575.0), ("145701", "2", 0.95, 400, 575.0))] * 3
     adm = lambda *x, **k: admit(*x, **{"clocks": {}, **k})  # noqa: E731 -- an empty census: nothing recorded
     QP = {"enforced_w": 575.0}                         # the qualify step's power.json on a 575 W card
-    hdr = "timestamp, clocks.sm [MHz], clocks_event_reasons.active, power.draw [W]\n"
-    row = lambda r="0x0000000000000000", mhz=2800: f"2026/10/26 10:00:00.000, {mhz} MHz, {r}, 540.00 W\n"  # noqa: E731
+    hdr = ""                                           # SC2f Amendment 10: the sampler runs noheader,nounits and is read by position
+    row = lambda r="0x0000000000000000", mhz=2800: f"2026/10/26 10:00:00.000, {mhz}, {r}, 540.00\n"  # noqa: E731
+    legacy = "timestamp, clocks.current.sm [MHz], clocks_event_reasons.active, power.draw [W]\n"   # 610.43.02's real header
     cases = [
         ("admit: 52780 first on stable reads", adm([], named, False).get("machine") == "52780"),
         ("admit: 52780 tried -> 145701", adm([a(11, "52780")], named, False).get("machine") == "145701"),
@@ -574,7 +612,20 @@ def self_test() -> int:
          ["verdict"] == "REFUSE"),
         ("run: fewer than 10 busy samples is UNREAD", judge_run(hdr + row(mhz=210) * 40 + row() * 9)["verdict"] == "UNREAD"),
         ("run: a missing file is UNREAD", judge_run(None)["verdict"] == "UNREAD"),
-        ("run: no header is UNREAD", judge_run(row() * 30)["verdict"] == "UNREAD"),
+        ("am10 run: a noheader,nounits sampler passes", judge_run(row() * 30)["verdict"] == "PASS"),
+        ("am10 run: a legacy header line with unit-suffixed rows passes",
+         judge_run(legacy + "2026/10/26 10:00:00.000, 2800 MHz, 0x0000000000000000, 540.00 W\n" * 30)["verdict"] == "PASS"),
+        ("am10 run: the header NAME never matters", judge_run(legacy.replace("clocks.current.sm", "anything.else") + row() * 30)
+         ["verdict"] == "PASS"),
+        ("am10 run: SM and reasons swapped is UNREAD", judge_run("2026/10/26 10:00:00.000, 0x0000000000000000, 2800, 540.00\n" * 30)
+         ["verdict"] == "UNREAD"),
+        ("am10 run: SM and power swapped is UNREAD", judge_run("2026/10/26 10:00:00.000, 540.00, 0x0000000000000000, 2800\n" * 30)
+         ["verdict"] == "UNREAD"),
+        ("am10 run: a short query (3 columns) is UNREAD", judge_run("2026/10/26 10:00:00.000, 2800, 0x0000000000000000\n" * 30)
+         ["verdict"] == "UNREAD"),
+        ("am10 run: a header line after the first is UNREAD", judge_run(row() * 20 + legacy + row() * 20)["verdict"] == "UNREAD"),
+        ("am10 run: an SM reading outside [100, 4000] MHz is unreadable", judge_run(row(mhz=40000) * 30)["verdict"] == "UNREAD"),
+        ("am10 run: a torn last line is tolerated within 5 %", judge_run(row() * 30 + "2026/10/26 10:00:01.000, 28")["verdict"] == "PASS"),
         ("run: 9 rows is UNREAD", judge_run(hdr + row() * 9)["verdict"] == "UNREAD"),
         ("run: >5 % unreadable rows is UNREAD", judge_run(hdr + row() * 18 + "garbage\n" * 2)["verdict"] == "UNREAD"),
     ]

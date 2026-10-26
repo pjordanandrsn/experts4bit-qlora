@@ -8,3 +8,7 @@
 - The floor (2,700 MHz) and the clock mode are unchanged. `bench/sc2/sc2f-am10/` holds the census behind it: over 228
   screen reads, 600 W listings reached an admit point 61 times against 575 W's 7. Pre-data. SC2h and SC2i take it by
   reference.
+- The run sampler runs `--format=csv,noheader,nounits` and `judge-run` reads it by position, with per-column sanity checks
+  (sc2f-prove-11 was void because driver 610.43.02 printed `clocks.sm` as `clocks.current.sm` in a header the judge looked
+  up by name). The qualify fetch excludes the burn's venv and caches. A harness fault voids the run; the create still uses
+  an attempt.

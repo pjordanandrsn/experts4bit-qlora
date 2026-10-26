@@ -2,11 +2,13 @@
 """SC2f Amendment 10, on the CPU: the {575, 600} W class, the recorded-clock rule (``recorded_clocks`` on a planted
 store, and through ``admit``'s CLI), the qualify read and the post-proof records against the qualify reading, the
 wrapper on a stubbed 600 W box, and the amendment's numbers against ``bench/sc2/sc2f-am10/census.json``."""
+import hashlib
 import importlib.util
 import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 
@@ -273,3 +275,98 @@ def test_the_prereg_numbers_are_the_census():
     assert (lve["machines"], lve["agree"], len(lve["differ"])) == (30, 22, 8) and "of 30 machines in both the reads and the store, 22 agree" in AM10_FLAT
     assert sorted(v["enforced"][0] for v in lve["differ"].values() if v["listed"] == [600.0]) == [500.0, 520.0]
     assert C["recorded_clocks"] == {"machines": 48, "pass": 24} and "48 RTX 5090 machines carry a loaded clock record, and 24 pass" in AM10_FLAT
+
+
+# ---- the run sampler is read by POSITION (the sc2f-prove-11 fix)
+FIX10 = REPO / "tests" / "fixtures" / "sc2f_am10"
+REAL_SAMPLER = FIX10 / "sc2f-prove-11_sampler.csv"     # sc2f-prove-11's fetched qualify/box/sampler.csv, driver 610.43.02
+REAL_SAMPLER_SHA256 = "03eb0e7639a4d5275fc94516509c553b0b6cf9986709874413181705b064d5c2"
+REAL_HEADER = "timestamp, clocks.current.sm [MHz], clocks_event_reasons.active, power.draw [W]"
+
+
+def _real():
+    raw = REAL_SAMPLER.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == REAL_SAMPLER_SHA256
+    return raw.decode()
+
+
+def test_the_real_sampler_parses_by_position():
+    """A PARSER test on real bytes, not a verdict: sc2f-prove-11 is VOID (rc 25) as registered."""
+    text = _real()
+    assert text.splitlines()[0] == REAL_HEADER
+    r = Q.judge_run(text)
+    assert r["verdict"] != "UNREAD" and r["rows"] == 476 and r["unreadable_rows"] == 0 and r["header_skipped"] == REAL_HEADER
+
+
+def test_amendment_9s_parser_fails_on_the_real_sampler(tmp_path):
+    """The bug, reproduced: the judge as it ran (e4b 40dc1f43) reads the real header as UNREAD."""
+    old = subprocess.run(["git", "-C", str(REPO), "show", "40dc1f43:bench/sc2/sc2_qualify.py"], capture_output=True, text=True)
+    if old.returncode != 0:
+        pytest.skip("40dc1f43 is not in this clone's history")
+    path = tmp_path / "_am9_qualify.py"
+    path.write_text(old.stdout)
+    m = _load("sc2_qualify_am9", path)
+    m._card_clock = Q._card_clock
+    assert m.judge_run(_real())["verdict"] == "UNREAD"
+
+
+def test_a_renamed_header_still_parses():
+    text = _real().replace("clocks.current.sm [MHz]", "clocks.renamed.again [MHz]", 1)
+    assert Q.judge_run(text)["verdict"] == Q.judge_run(_real())["verdict"] != "UNREAD"
+
+
+@pytest.mark.parametrize("i,j", [(1, 2), (1, 3), (0, 1)])
+def test_two_swapped_columns_are_unread(i, j):
+    lines = _real().splitlines()
+    out = [lines[0]]
+    for ln in lines[1:]:
+        c = [x.strip() for x in ln.split(",")]
+        c[i], c[j] = c[j], c[i]
+        out.append(", ".join(c))
+    assert Q.judge_run("\n".join(out) + "\n")["verdict"] == "UNREAD"
+
+
+def test_the_wrapper_runs_the_registered_query():
+    drive = (SC2 / "sc2_qualify_drive.sh").read_text()
+    assert Q.SAMPLER_QUERY in drive and "--format=csv,noheader,nounits -lms 1000 > sampler.csv" in drive
+    assert Q.SAMPLER_FIELDS == ("timestamp", "clocks.sm", "clocks_event_reasons.active", "power.draw")
+
+
+def test_the_wrapper_text_matches_the_attempt_rule():
+    """A harness fault voids the run; the create still uses an attempt and the host is not revisited (Amendment 7)."""
+    drive = (SC2 / "sc2_qualify_drive.sh").read_text()
+    src = (SC2 / "sc2_qualify.py").read_text()
+    assert "never excludes;" not in drive and "the machine is not excluded" not in drive
+    assert "never excludes the machine" not in src and "never excluding the machine" not in src
+    assert "the create still uses one of the lane's attempts and the host is not revisited" in drive
+
+
+@pytest.mark.skipif(shutil.which("rsync") is None, reason="needs a real rsync")
+def test_the_fetch_never_brings_back_the_burn_venv(tmp_path):
+    """fetch_q through a REAL rsync (the remote mapped to a local box directory): the venv and caches stay behind."""
+    t, b = AM7T._tree(tmp_path), AM7T._stubs(tmp_path, "575.00 W, 575.00 W, 575.00 W", 0, "", AM7T._sampler())
+    q = tmp_path / "box" / "q"
+    for junk in ("venv/lib/python3.12/site-packages/torch/lib/libtorch.so", ".cache/pip/x.whl", "__pycache__/a.pyc"):
+        (q / junk).parent.mkdir(parents=True, exist_ok=True)
+        (q / junk).write_bytes(b"x" * 1024)
+    real = shutil.which("rsync")
+    (b / "rsync").write_text(f'''#!/bin/bash
+args=(); skip=0
+for a in "$@"; do
+  if [ "$skip" = 1 ]; then skip=0; continue; fi
+  case "$a" in -e) skip=1;; root@*:*) args+=("{q}/");; *) args+=("$a");; esac
+done
+exec {real} "${{args[@]}}"
+''')
+    os.chmod(b / "rsync", 0o755)
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "host_facts.json").write_text(json.dumps({"gpu_power_limit_w": 575.0}))
+    env = {"PATH": f"{b}:{os.environ['PATH']}", "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-o X=1",
+           "E4B_RENT_RUN_DIR": str(run), "E4B_RENT_RUN_ID": "sc2f-prove-12", "E4B_RENT_DEADLINE_EPOCH": "9999999999",
+           "E4B_RENT_INSTANCE_ID": "1", "SC1_BOX": "N", "SC1_PROVE": "1", "DRIVE_LOG": str(tmp_path / "drive.log"), "PROOF_W": "575.00"}
+    out = subprocess.run(["bash", str(t / "bench" / "sc2" / "sc2_qualify_drive.sh")], capture_output=True, text=True, env=env)
+    got = run / "qualify" / "box"
+    assert (got / "card_clock.json").exists() and (got / "sampler.csv").exists(), out.stdout + out.stderr
+    assert not (got / "venv").exists() and not (got / ".cache").exists() and not (got / "__pycache__").exists()
+    assert out.returncode == 0, out.stdout + out.stderr

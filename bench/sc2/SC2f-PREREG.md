@@ -800,6 +800,44 @@ machine whose own record already failed the floor.
   equal the enforced limit the qualify step read on the card. `judge-proof` takes the qualify step's `power.json` as
   `--qualify-power`, always passed by `sc2_qualify_drive.sh`. A record read at another limit, or at one other than the
   qualify reading, is a host fault (18). That record, or the qualify `power.json`, missing or unreadable is probe_error (25).
+- **(f) the run sampler is read by position** (a harness fix, after sc2f-prove-11, below). The sampler runs
+  `nvidia-smi --query-gpu=timestamp,clocks.sm,clocks_event_reasons.active,power.draw --format=csv,noheader,nounits -lms 1000`
+  (`SAMPLER_QUERY`), and `judge-run` reads each row by position in that order, as `card_clock.py`'s burn and TC1's sampler
+  already read theirs. No header name is looked up. Each row must have exactly 4 columns; the timestamp must parse; the SM
+  column must be an integer MHz in [100, 4000]; the reasons column must be 0x-hex; the power column must be watts (a unit
+  suffix is accepted). A row that fails counts as unreadable, under the 5 % limit kept for a torn last line. A header line is
+  skipped only as the FIRST line, and only when it fails those checks. A non-numeric row anywhere after it is UNREAD
+  outright. So a renamed header cannot void a healthy run, and a reordered or short query fails loud (rc 25), never a guess.
+  The rule applied to the rows (amendment 83's bits at a 0 MHz floor) is unchanged.
+- **(g) the fetch** (a harness fix): the wrapper's fetch of the qualify records excludes `venv/`, `.cache/`, `pip-cache/` and
+  `__pycache__/`, so the burn's throwaway torch venv never lands in a run directory.
+- **(h) the wrapper's text** now matches Amendment 7's attempt rule. A harness fault (rc 25) voids the run. The launcher records
+  no host fault, but the create still uses one of the lane's attempts, and the host is not revisited. The old text said rc 25
+  "never excludes the machine", which the admission never did.
+
+**sc2f-prove-11** (2026-10-26, machine 55337, listed and enforced 575 W, attempt 1 of 3, $0.319, teardown verified): **VOID,
+rc 25, as registered.** The power read passed (575.0 W), and the burn passed (busy median 2,715 MHz). The proof's driver exited
+0 with its success marker, and the post-proof records passed. The run judge read UNREAD because driver 610.43.02 printed the
+sampler's header as `clocks.current.sm [MHz]`, and Amendment 9's judge looked up the column by the name `clocks.sm`. Its unit
+fixture carried a hand-written header. Read with the column found, the fetched sampler's 476 rows show a busy median of
+2,880 MHz, no slowdown bit on any sample, and Reliability and SwPowerCap on 0 busy samples. **This is information only, not a
+verdict**: re-reading void data with a fix written after seeing it would turn a VOID into a PASS after the fact. The attempt
+stands as used, and 55337 is not revisited (Amendment 7's text). The next attempt gives the reading.
+
+**The header audit** (every header-name read in the SC2 qualify and judge path, against the real nvidia-smi output in the
+store). The store keeps real nvidia-smi CSV headers from 9 runs across drivers 535.154.05, 580.126.18, 595.71.05, 595.91.07,
+610.43.02, 615.71.09 and 615.78.08. Every run that queried `clocks.sm` got the header `clocks.current.sm [MHz]`: 535.154.05,
+610.43.02 (this run) and 615.71.09. The five power probes (580, 595 and 615 drivers) queried `power.limit`,
+`enforced.power.limit`, `power.max_limit` and `clocks.max.sm`, and those names came back unchanged, with a unit suffix.
+So a name-keyed read of `clocks.sm` breaks on every driver on record, and the power names are not moved today. No reader
+below depends on any of them.
+- the run sampler: read by name until (f), and by position from (f);
+- the enforced power read (`power`): `--format=csv,noheader`, read by position, no header;
+- the proof's `forensics.txt` power line: `sc1_run.sh` queries `--format=csv,noheader` and prepends its own label
+  `power.limit,clocks.max.sm`, so the label is fixed text, not an nvidia-smi header;
+- `host_facts.json`: the launcher's host probe queries `--format=csv,noheader,nounits` by position, and the judge reads its
+  own JSON key;
+- the burn (`card_clock.py`): `--format=csv,noheader,nounits` by position, and the wrapper reads its JSON `refusal` field.
 - **Not changed:** 500 W listings are not admitted, and no machine is named as an exception, so one rule holds with no
   special cases. If the 72 h deadline nears its end with no ADMIT, the question returns with the new reads.
 
@@ -822,5 +860,12 @@ SC2h (Amendment 5) and SC2i (Amendment 4) take this with Amendment 7, by referen
   qualify `power.json` is UNREAD; the wrapper passes it.
 - The PREREG numbers are tested against `census.json`, and the market half of `census.json` is re-derived from
   `screen_reads.json` in the test.
+- the run sampler: sc2f-prove-11's REAL `sampler.csv` (by sha) parses by position, with 476 rows and 0 unreadable, and the judge
+  as it ran (e4b `40dc1f43`) reads it UNREAD (the bug, reproduced). A renamed header still parses; two swapped columns
+  (SM/reasons, SM/power, timestamp/SM) are UNREAD, as are a 3-column query, a header after the first line, and an SM reading
+  outside [100, 4000]. A torn last line is tolerated within 5 %;
+- the fetch through a real `rsync`: card_clock.json and sampler.csv come back, and a planted venv, pip cache and bytecode stay
+  behind;
+- the wrapper runs `SAMPLER_QUERY` exactly, and its text no longer says rc 25 never excludes the machine.
 
 **Unchanged:** everything else Amendments 7, 8 and 9 registered.
