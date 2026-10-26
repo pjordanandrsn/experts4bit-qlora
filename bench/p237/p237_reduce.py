@@ -436,6 +436,19 @@ def reduce_budget(rows, budget, n_auto, n_t):
         if arm != "E" and n_auto == 0:
             out["arms"][arm] = {"state": "N_AUTO_ZERO", "draws": len(ds)}
             continue
+        statuses = sorted(str(r.get("status")) for r in ds)
+        if len(ds) == 2 and statuses == ["oom", "oom"]:  # a REPRODUCED OOM is a reading: "does not fit at this budget" (ruled before
+            faults = [check_pins(r) + check_env_box(r) for r in ds]   # data); the stack must still be the registered one
+            out["arms"][arm] = {"state": "VOID" if any(faults) else "OOM", "faults": faults, "draws": ds, "unstable": [],
+                                "words": "does not fit at this budget"}
+            continue
+        if len(ds) == 2 and statuses == ["ok", "oom"]:
+            out["arms"][arm] = {"state": "VOID", "faults": [["one draw OOM and the other not: an unstable memory reading"]],
+                                "draws": ds, "unstable": ["one draw OOM"]}
+            continue
+        if arm == "UT" and not ds and (out["arms"].get("UA") or {}).get("state") == "OOM":
+            out["arms"][arm] = {"state": "NOT_RUN", "draws": 0, "words": "UA did not fit, so N_auto is unread and there is nothing to tune"}
+            continue
         n_want = n_auto if arm == "UA" else n_t
         faults = [draw_faults(r, n_want=n_want) for r in ds]
         valid = len(ds) == 2 and not any(faults)
@@ -831,6 +844,25 @@ def selftest():
         z = reduce_budget([dict(copy.deepcopy(r), budget="full", vram_cap=None) for r in rows if r["arm"] == "E"], "full", 0, None)
         assert z["verdict"] == "READ" and z["arms"]["UA"]["state"] == "N_AUTO_ZERO" and "no offload" in z["words"], z
         cases += 6
+        # OOM on a draw (ruled before data): both draws OOM = a READ outcome "does not fit", out of every ratio, never VOID; one draw
+        # OOM VOIDs the pair; a hook fault (harness_error, exit 10) or any other status stays VOID; the other budget is unchanged
+        oom = lambda r: {k: r[k] for k in ("arm", "draw", "index", "kind", "budget", "framework", "versions", "env_box")} | {"status": "oom"}   # noqa: E731
+        rows_oom = [oom(r) if r["arm"] == "E" else r for r in rows]
+        b = reduce_budget(rows_oom, "12g", 24, 20)
+        assert b["verdict"] == "READ" and b["arms"]["E"]["state"] == "OOM" and b["comparisons"] == [], b
+        assert b["arms"]["UA"]["state"] == "VALID" and b["arms"]["E"]["words"] == "does not fit at this budget"
+        assert reduce_budget([dict(copy.deepcopy(r), budget="full", vram_cap=None) for r in rows if r["arm"] == "E"], "full", 0, None)["verdict"] == "READ"
+        one = [oom(r) if r["arm"] == "E" and r["draw"] == 1 else r for r in rows]
+        assert reduce_budget(one, "12g", 24, 20)["arms"]["E"]["state"] == "VOID"
+        assert reduce_budget(one, "12g", 24, 20)["verdict"] == "VOID"
+        hook = [dict(oom(r), status="harness_error") if r["arm"] == "E" else r for r in rows]
+        assert reduce_budget(hook, "12g", 24, 20)["verdict"] == "VOID"
+        bad_env = [dict(oom(r), env_box=None) if r["arm"] == "E" else r for r in rows]
+        assert reduce_budget(bad_env, "12g", 24, 20)["arms"]["E"]["state"] == "VOID"      # an OOM on an unregistered stack reads nothing
+        ua_oom = [oom(r) if r["arm"] == "UA" else r for r in rows if r["arm"] != "UT"]
+        bu = reduce_budget(ua_oom, "12g", None, None)
+        assert bu["verdict"] == "READ" and bu["arms"]["UA"]["state"] == "OOM" and bu["arms"]["UT"]["state"] == "NOT_RUN", bu
+        cases += 7
     finally:
         C.check_env, C.check_library, C.check_dispatch, C.check_unfused = real
     # the host decisions the runner and this reducer share

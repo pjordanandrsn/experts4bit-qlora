@@ -405,6 +405,14 @@ registered.
 ## The verdict rule (mechanical, per budget)
 
 1. **VOID:** any draw failing engagement, the cap, the clock or the token sha. A VOID arm enters no reading.
+   - **OOM on a draw** (ruled before data; P238's rule, and here it IS the question "does it train at this budget"):
+     - A REPRODUCED OOM, both draws of a (budget, arm) with tc1_arm's `oom` stub (status `oom`, exit 5), is a READ
+       outcome: "does not fit at this budget". It is excluded from every ratio and is never VOID. The pins and the box
+       environment must still be the registered ones, or the pair VOIDs.
+     - An OOM in one draw, with the other `ok`, VOIDs the pair as an unstable memory reading.
+     - A `harness_error`, a hook fault (exit 10) or any other status that is not `ok` stays VOID.
+     - When UA does not fit, N_auto is unread and UT does not run at that budget: UT reads NOT_RUN, never VOID.
+     - The UT probes keep their own rule ("stop at the first OOM"); this rule covers the draws.
 2. **Quality** (TC1's own bar for this recipe, TC1-PREREG.md's verdict column):
    - **COMPARABLE** when |mean held-out at step 60 (U*) − mean held-out at step 60 (E)| ≤ **0.05 nats**, each side the
      mean of its two draws; **QUALITY_FAIL** otherwise.
