@@ -304,7 +304,8 @@ shakedown. Each check also has a mutant that removes the engaged path and must V
   - device time per step, kernels only, by ONE method fixed here: amendment 81's at-source `device_ms` from
     `tc1_arm.py`'s `summarize_profile`, which excludes rows where torch's `is_user_annotation` is true. Every
     profile must carry `device_ms_method == "kernels_only_at_source"` (81's field). A profile without it, or with
-    another value, VOIDs the draw's device time. Amendment 80's by-name method is NOT computed on P237's profiles:
+    another value, VOIDs the DRAW (ruled before data): the profiled window is also the F15 v2 engagement cross-check, so a
+    draw without a valid profile cannot prove engagement, and its wall ratio goes too. Amendment 80's by-name method is NOT computed on P237's profiles:
     it subtracts the annotation row, so on a post-81 profile it would subtract that row a second time (80's
     function refuses such a profile). The F15 v2 cross-check reads kernel-name counts, not `device_ms`, so it is
     unaffected.

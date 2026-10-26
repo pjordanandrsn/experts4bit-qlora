@@ -441,7 +441,11 @@ def compare(u, e):
     if out["quality"] != "COMPARABLE" or u["unstable"] or e["unstable"]:
         return dict(out, ratio=None, why="not COMPARABLE or UNSTABLE: no ratio quoted")
     for name, get in (("wall", s_per_step), ("device", device_ms)):
-        rs = [get(x) / get(y) for x in u["draws"] for y in e["draws"]]
+        xs, ys = [_num(get(x)) for x in u["draws"]], [_num(get(y)) for y in e["draws"]]
+        if not xs or not ys or any(v is None or v <= 0 for v in xs + ys):   # never a ZeroDivisionError that fails the box (27)
+            out[f"{name}_ratio"], out[f"{name}_ratio_range"] = UNREAD, UNREAD
+            continue
+        rs = [x / y for x in xs for y in ys]
         out[f"{name}_ratio"] = round(statistics.median(rs), 4)
         out[f"{name}_ratio_range"] = [round(min(rs), 4), round(max(rs), 4)]
     return out
@@ -881,6 +885,18 @@ def selftest():
         rows2 = copy.deepcopy(rows)
         rows2[3]["heldout_loss"] = 1.40                     # UA's mean moves 0.09 from E's: QUALITY_FAIL, no ratio
         assert reduce_budget(rows2, "12g", 24, 20)["comparisons"][0]["quality"] == "QUALITY_FAIL"
+        # compare(): a ratio whose input is None or 0 reads UNREAD, never a ZeroDivisionError (that would fail the box, 27); the
+        # other ratio is unchanged (a VALID draw has a device_ms by check_steps, so this is defence in depth)
+        ua = {"arm": "UA", "draws": [r for r in rows if r["arm"] == "UA"], "unstable": []}
+        ev = {"draws": [r for r in rows if r["arm"] == "E"], "unstable": []}
+        whole = compare(ua, ev)
+        for bad in (None, 0.0):
+            nodev = copy.deepcopy(ua)
+            nodev["draws"][0]["profile"]["summary"]["device_ms"] = bad
+            c2 = compare(nodev, ev)
+            assert c2["device_ratio"] == UNREAD and c2["device_ratio_range"] == UNREAD, c2
+            assert c2["wall_ratio"] == whole["wall_ratio"] == 1.0 and c2["wall_ratio_range"] == whole["wall_ratio_range"], c2
+            cases += 1
         rows3 = copy.deepcopy(rows)
         rows3[1]["step_ms"] = [3300.0] * STEPS              # E's draws 10 % apart: UNSTABLE, no ratio
         assert reduce_budget(rows3, "12g", 24, 20)["comparisons"][0].get("ratio", 0) is None
