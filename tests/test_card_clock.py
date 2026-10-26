@@ -237,6 +237,31 @@ def test_amendment_83_adds_fields_and_renames_none():
             "any_sample_bits_seen"} <= set(s)
 
 
+@pytest.mark.parametrize("mode", ["clock", "pct_clean"])
+def test_the_burn_line_keeps_summarize_fields_and_names_its_rule_fields_by_mode(tmp_path, monkeypatch, mode):
+    """The burn line, written by main() for a burn over a REAL log's samples (the clean card's; no GPU needed): every summarize() field
+    amendment 80 wrote is kept with the same value; the clock mode REPLACES amendment 80's two rule fields (min_clean,
+    hard_bits_every_sample) with mode / persistent_share / any_sample_bits_every_sample, and pct_clean writes the two as before."""
+    cc = _cc()
+    samples = [r[1:] for r in (cc.parse_gpuclk_line(ln) for ln in CLEAN.read_text().splitlines()) if r is not None]
+    monkeypatch.setattr(cc, "burn", lambda seconds: dict(cc.summarize(samples), burn_seconds=seconds, per_sample=[[s[0], hex(s[3])] for s in samples]))
+    out = tmp_path / "card_clock.json"
+    rc = cc.main(["burn", "--floor", str(FLOOR), "--mode", mode, "--min-clean", "0.95", "--out", str(out)])
+    rec = json.loads(out.read_text())
+    assert rc == 0 and rec["pass"] is True and rec["mode"] == mode
+    kept = ("samples", "busy_samples", "sm_median", "sm_p10", "sm_max", "mem_median", "reasons_seen", "reasons_seen_mask",
+            "busy_clean_fraction", "busy_soft_clean_fraction", "hard_reasons_any_sample")
+    want = cc.summarize_log(str(CLEAN))
+    assert {k: rec[k] for k in kept} == {k: want[k] for k in kept}
+    assert len(rec["per_sample"]) == rec["samples"]
+    if mode == "clock":
+        assert "min_clean" not in rec and "hard_bits_every_sample" not in rec
+        assert rec["persistent_share"] == 0.95 and rec["any_sample_bits_every_sample"] is True
+    else:
+        assert rec["min_clean"] == 0.95 and rec["hard_bits_every_sample"] is True
+        assert "persistent_share" not in rec and "any_sample_bits_every_sample" not in rec
+
+
 def test_the_pct_clean_mode_keeps_amendment_80s_bars_by_name(tmp_path):
     """The clean card with SwPowerCap on every 10th busy sample: pct_clean refuses (90 % clean < 95 %), clock passes."""
     n = {"i": 0}

@@ -4146,10 +4146,15 @@ line. Amendment 80's text above is unchanged. The other host floors stand.
     samples (SM above 1000 MHz). The healthy-clock maximum on record is 81 % and every sub-floor log sits at 100 %, so 95 % lies in that
     gap. Do not set it below about 90 % without a new observation.
   - SwPowerCap 0x4 is **recorded and never refuses**.
-  The burn's JSON adds every sample's (sm, mask) and the busy-sample counts of SwPowerCap and Reliability beside amendment 80's fields,
-  which it keeps with the same names and meanings. So each clause re-derives from the burn itself. `--min-clean` is still accepted and
-  binds only the named `pct_clean` mode.
-- 4. **The card floor on every draw:** the arm's own `gpuclk_<arm>.txt` passes the same `clock` rule. Otherwise that draw is VOID.
+  The burn's JSON keeps every field `summarize()` wrote under amendment 80 (`samples`, `busy_samples`, `sm_median`, `sm_p10`, `sm_max`,
+  `mem_median`, `reasons_seen`, `reasons_seen_mask`, `busy_clean_fraction`, `busy_soft_clean_fraction`, `hard_reasons_any_sample`), with
+  the same names and meanings. It adds the busy-sample counts and fractions of SwPowerCap and Reliability, `any_sample_bits_seen`, and
+  every sample's (sm, mask), so each clause re-derives from the burn itself. On the burn line itself, the `clock` mode REPLACES
+  amendment 80's two rule fields, `min_clean` and `hard_bits_every_sample`, with `mode`, `persistent_share` and
+  `any_sample_bits_every_sample`; the named `pct_clean` mode writes amendment 80's two fields as before. `--min-clean` is still accepted
+  and binds only `pct_clean`.
+
+4. **The card floor on every draw:** the arm's own `gpuclk_<arm>.txt` passes the same `clock` rule. Otherwise that draw is VOID.
 - **The box fact:** one passing CARD_CLOCK burn line at 2700 MHz, mode clock, persistent_share 0.95, with any_sample_bits_every_sample true.
 
 **What the guards are.** The Reliability bar and the any-sample bits are guards that **no record above the floor has ever tripped**.
