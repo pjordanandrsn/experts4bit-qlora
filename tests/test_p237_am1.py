@@ -186,7 +186,7 @@ def test_the_shake_wall_is_the_fit_plus_the_launch_slack():
 
 
 def test_the_amendment_states_the_ruled_numbers():
-    for s in ("min(MemTotal, every cgroup memory limit", "1 TB host held to 64 GiB", "`vast_cpu_class`", "listed `cpu_ram` >= 128 GiB",
+    for s in ("min(MemTotal, every cgroup memory limit", "1 TB host held to 64 GiB", "`p237_host.vast_cpu_class`", "listed `cpu_ram` >= 128 GiB",
               "18,000 s (5.0 h)", "worst USD 4.10", "USD 3.85", "no override", "111 offers", "0 offers",
               "2026-10-28T07:51Z", "The CPU class is unchanged"):
         assert s in AM1, s
