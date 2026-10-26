@@ -124,10 +124,11 @@ PYM
 echo "SINGLE_THREAD ${MOPS:-unreadable} Mops (floor $MIN_MOPS)" | tee -a summary.txt
 python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "${MOPS:-0}" "$MIN_MOPS" 2>/dev/null \
   || { say "REFUSED: single-thread speed ${MOPS:-unreadable} Mops under the floor ($MIN_MOPS)"; echo "refused: single thread ${MOPS:-unreadable}" > REFUSAL; finish 18; }
-# TC1 amendment 80's loaded card clock: a 20 s bf16 burn, busy SM median >= 2700 MHz, no hard reason on any sample, SwPowerCap clear on >= 95 %
-perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $CLOCK_FLOOR --seconds 20 --min-clean 0.95 --out $W/card_clock_burn.json > logs/card_clock_burn.log 2>&1; crc=$?
+# TC1 amendment 83's loaded card clock (clock mode, named): a 20 s bf16 burn, busy SM median >= 2700 MHz, no slowdown bit on any sample,
+# Reliability on < 95 % of busy samples; SwPowerCap recorded only
+perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $CLOCK_FLOOR --seconds 20 --mode clock --out $W/card_clock_burn.json > logs/card_clock_burn.log 2>&1; crc=$?
 { echo -n "CARD_CLOCK rc=$crc "; tail -1 logs/card_clock_burn.log | cut -c1-240; } | tee -a summary.txt
-case "$crc" in 0) ;; 18) say "REFUSED: the card clock is under its floor"; echo "refused: card clock" > REFUSAL; finish 18;; *) say "CARD CLOCK PROBE FAULT rc=$crc"; finish 9;; esac
+case "$crc" in 0) ;; 18) say "REFUSED: the card clock (TC1 amendment 83, clock mode)"; echo "refused: card clock" > REFUSAL; finish 18;; *) say "CARD CLOCK PROBE FAULT rc=$crc"; finish 9;; esac
 # the guard fit: installs + the snapshot fetch + every process this box runs x the registered per-load wall + the op timing, x 1.25
 case "$P238_BOX" in
   shake) N_PROC=7;;                       # the shakedown: draw 1's two op processes + one load per arm at 2k

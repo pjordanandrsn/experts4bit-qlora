@@ -311,6 +311,48 @@ def test_the_reducer_selftest():
     assert R.selftest() >= 37
 
 
+_TC1_RECEIPTS = ROOT / "bench" / "h2h-2026-10-02" / "tc1" / "receipts"
+_CARD = {"name": "NVIDIA GeForce RTX 5090", "cap": [12, 0], "sm_count": 170}
+
+
+@pytest.mark.parametrize("log, faults", [
+    (ROOT / "tests" / "fixtures" / "card_clock" / "axo1767b-5090-1_gpuclk_hp1shake_axolotl.txt", []),
+    (_TC1_RECEIPTS / "tc1-5090-137" / "gpuclk_qwen3pos69_e4b_fused_attn4_m_fd.txt", []),
+    (_TC1_RECEIPTS / "tc1-5090-136" / "gpuclk_qwen3pos68_e4b_fused_attn4_m_pd.txt", ["2377 MHz < floor 2700"]),
+    (_TC1_RECEIPTS / "tc1-5090-pos79-r1" / "tc1" / "gpuclk_qwen3pos79_e4b_fused_attn4_m_fd.txt",
+     ["2400 MHz < floor 2700", "Reliability on 505 of 505"]),
+])
+def test_check_card_judges_real_clock_logs_by_amendment_83s_clock_mode(log, faults):
+    """P238 amendment 1: a load's clock log, summarized by clock_facts, judged by card_clock.passes(mode="clock") itself. The healthy
+    boundary card (SwPowerCap on 19 % of busy samples, Reliability on 81 %) and a clean card pass; the power-capped card refuses on
+    its clock alone; amendment 79's capped card on its clock and persistent Reliability. Real logs from the TC1 record."""
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    clock = R.clock_facts(str(log))
+    assert set(clock) == set(R.CLOCK_KEYS) and clock["busy_samples"] >= 10
+    why = R.check_card({"card": _CARD, "clock": clock})
+    assert len(why) == (1 if faults else 0), why
+    assert all(f in why[0] for f in faults), why
+    assert "SwPowerCap" not in "".join(why)                              # recorded only, never a fault
+
+
+def test_check_card_holds_no_copy_of_the_rule(monkeypatch):
+    """The reducer's card verdict IS card_clock.passes() in clock mode: the mode is named (passes() has no default), and a changed
+    rule in card_clock.py changes the reducer's verdict with no edit here. The old copy's SwPowerCap bar would refuse the boundary card."""
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    import card_clock
+    clock = R.clock_facts(str(ROOT / "tests" / "fixtures" / "card_clock" / "axo1767b-5090-1_gpuclk_hp1shake_axolotl.txt"))
+    assert clock["busy_swpowercap_fraction"] > 0.05 and R.check_card({"card": _CARD, "clock": clock}) == []
+    seen = {}
+
+    def spy(summary, floor_mhz, *a, **kw):
+        seen.update(floor=floor_mhz, args=a, **kw)
+        return False, "spied"
+    monkeypatch.setattr(card_clock, "passes", spy)
+    assert R.check_card({"card": _CARD, "clock": clock}) == ["the card clock: spied"]
+    assert seen == {"floor": 2700, "args": (), "mode": "clock"}
+    assert not hasattr(R, "SWPC_CLEAR")
+
+
 # -- the reducer's POSITIVE Unsloth rows: a real UnslothMoeCounter driven through 60 checkpointed steps on stand-in zoo modules -----
 def _counter_helpers():
     if not (ROOT / "tests" / "test_unsloth_moe_counter.py").exists():
@@ -856,7 +898,8 @@ def _grid(R, monkeypatch, oom=(), **status):
         r["profile"]["summary"]["device_ms"] = 900.0 * SPEED[arm]
         if (point, arm, draw) in oom:                  # a genuine OOM a few steps in: a short step list and a short clock log
             r.update(status="oom", rc=R.OOM_EXIT, phase="train", step_ms=[1000.0] * 3,
-                     clock={"busy_median_mhz": None, "hard_reason_any": None, "swpowercap_clear_frac": None, "busy_samples": 3})
+                     clock={"busy_samples": 3, "sm_median": None, "busy_reliability_samples": None, "any_sample_bits_seen": None,
+                            "busy_swpowercap_fraction": None})
         if f"{point}:{arm}:{draw}" in status:
             st, rc = status[f"{point}:{arm}:{draw}"]
             r.update(status=st, rc=rc, phase="train")
@@ -1221,34 +1264,17 @@ STAGED = ["bench/p238/p238_run.sh", "bench/p238/p238_op.py", "bench/p238/p238_ho
           "bench/tc1/tc1_arm.py", "bench/tc1/f15v2.py", "bench/tc1/release_proof.py", "bench/tp4/tp4_alpaca.py"]
 
 
-#: Shared files a later amendment moves BEFORE P238 re-pins them, read at P238's kit merge (e4b#2135) until P238's own amendment
-#: re-pins: TC1 amendment 83 changes bench/common/card_clock.py, and P238's re-pin follows it (set 2026-10-26). P238's own files
-#: are always read in the live tree. The driver re-checks every staged file against the pin at launch, on the launch checkout.
-P238_KIT_COMMIT = "ab8427f8b6c0747738e44762c67a49d59829c037"
-SHARED_AT_KIT = {"bench/common/card_clock.py"}
-
-
-def _staged_bytes(f):
-    if f not in SHARED_AT_KIT:
-        return (ROOT / f).read_bytes()
-    import subprocess
-    out = subprocess.run(["git", "-C", str(ROOT), "show", f"{P238_KIT_COMMIT}:{f}"], capture_output=True)
-    assert out.returncode == 0, f"cannot read {f} at P238's kit commit {P238_KIT_COMMIT[:8]}: {out.stderr[:200]!r}"
-    return out.stdout
-
-
 def test_the_staged_pin_is_the_repos_bytes_and_the_drivers_list():
-    """staged-p238.sha256 names every file the driver stages (but itself), by the hash of its bytes: P238's own files in this tree,
-    a shared file in SHARED_AT_KIT at P238's kit commit. A kit file changed without re-pinning fails here, before any box (mutant
-    loops on staged files deselect this test, by design)."""
+    """staged-p238.sha256 names every file the driver stages (but itself), by the hash of its bytes in this tree (shared files
+    included: P238's amendment 1 re-pinned card_clock.py at TC1 amendment 83's merge). A kit file changed without re-pinning fails
+    here, before any box (mutant loops on staged files deselect this test, by design)."""
     import hashlib
     import re
     pin = {}
     for line in (ROOT / "bench" / "p238" / "staged-p238.sha256").read_text(encoding="utf-8").splitlines():
         sha, name = line.split()
         pin[name] = sha
-    assert pin == {pathlib.Path(f).name: hashlib.sha256(_staged_bytes(f)).hexdigest() for f in STAGED}
-    assert SHARED_AT_KIT <= set(STAGED)
+    assert pin == {pathlib.Path(f).name: hashlib.sha256((ROOT / f).read_bytes()).hexdigest() for f in STAGED}
     drive = (ROOT / "bench" / "p238" / "p238_drive.sh").read_text(encoding="utf-8")
     staged = set(re.findall(r"(bench/[a-z0-9_/-]+\.(?:sha256|py|sh))\b", drive.split("for f in", 1)[1].split("; do", 1)[0]))
     assert staged == set(STAGED) | {"bench/p238/staged-p238.sha256"}
