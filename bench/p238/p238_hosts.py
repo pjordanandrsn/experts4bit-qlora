@@ -38,6 +38,9 @@ MIN_BUSY = 10
 # the screen's listed-download floor (amendment 3): the box's own snapshot alarm (FETCH_S 2,400 s for ~72 GB) needs ~240 Mbps,
 # so 600 is a 2.5x margin. The screen and any census read THIS constant, as they read recorded_good, so they cannot disagree.
 INET_MIN_MBPS = 600
+# the SHAKEDOWN's declared rate ceiling (amendment 3; the class policy allows an RTX 5090 up to 1.25): worst per shakedown box
+# 5.25 h x 1.25 + 82 GB x 0.02 = USD 8.20, within the USD 15 box rule. The reading's own budget is unchanged here.
+SHAKE_RATE_CAP_USD_H = 1.25
 
 
 def _walk_err(e):
@@ -58,10 +61,15 @@ def _json(path):
 
 
 def _epoch(s):
+    """``YYYY-MM-DDTHH:MM:SS[.fraction]Z`` -> epoch seconds (float); None when missing or unparseable. A receipt without a readable
+    start cannot be ordered, and the caller fails its machine closed rather than guessing which receipt is the latest."""
+    m = re.fullmatch(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?Z", str(s or ""))
+    if not m:
+        return None
     try:
-        return calendar.timegm(time.strptime(str(s)[:20], "%Y-%m-%dT%H:%M:%SZ"))
+        return calendar.timegm(time.strptime(m.group(1), "%Y-%m-%dT%H:%M:%S")) + float(m.group(2) or 0.0)
     except ValueError:
-        return 0
+        return None
 
 
 def _first_line(path):
@@ -146,7 +154,10 @@ def judge_records(rd, files, cc):
             except FileNotFoundError:
                 continue
         if not s or (s.get("busy_samples") or 0) < MIN_BUSY or s.get("sm_median") is None:
-            continue
+            if kind == "burn":                       # a burn's whole job is to load the card: a short one is a gate that did not
+                recs.append((kind, False, f"burn {base} read {(s or {}).get('busy_samples') or 0} busy samples < {MIN_BUSY}: "
+                                          f"UNREAD"))
+            continue                                 # (an idle run log is no evidence either way: skipped)
         ok, why = cc.passes(s, CLOCK_FLOOR_MHZ, mode="clock")
         recs.append((kind, ok, why))
     return recs
@@ -164,7 +175,7 @@ def recorded_good(receipts_root, cc):
                 parts = os.path.join(root, fn).split(os.sep)
                 i = parts.index("receipts")
                 runs.setdefault(os.sep.join(parts[: i + 4]), []).append(os.path.join(root, fn))
-    latest = {}
+    receipts = {}                                    # machine -> [(t, run, verdict)], every receipt with a loaded record
     for rd, files in sorted(runs.items()):
         m, t = _machine(rd)
         if m is None:
@@ -175,17 +186,25 @@ def recorded_good(receipts_root, cc):
         recs = judge_records(rd, files, cc)
         if not recs:
             continue
-        key = (t, os.path.basename(rd))
-        if m in latest and key <= (latest[m]["t"], latest[m]["run"]):
-            continue
         all_pass = all(ok for _, ok, _ in recs)
         burn_pass = any(ok and kind == "burn" for kind, ok, _ in recs)
         power_ok = w is not None and w >= POWER_MIN_W
         why = [w_ for _, ok, w_ in recs if not ok]
         if all_pass and not (power_ok or burn_pass):
             why.append(f"power limit {w} W < {POWER_MIN_W:.0f} W and no passing burn: run logs do not predict the burn")
-        latest[m] = {"good": all_pass and (power_ok or burn_pass), "run": os.path.basename(rd), "t": t, "power_w": w,
-                     "records": [[k, ok] for k, ok, _ in recs], "why": "; ".join(why)[:240]}
+        receipts.setdefault(m, []).append((t, os.path.basename(rd), {
+            "good": all_pass and (power_ok or burn_pass), "run": os.path.basename(rd), "t": t, "power_w": w,
+            "records": [[k, ok] for k, ok, _ in recs], "why": "; ".join(why)[:240]}))
+    latest = {}
+    for m, rs in receipts.items():
+        unordered = sorted(r for t, r, _ in rs if t is None)
+        if unordered:                                # no readable start: which receipt is the latest is unknown, so fail closed
+            v = dict(max(rs, key=lambda x: (x[0] is not None, x[0] or 0.0, x[1]))[2])
+            v.update(good=False, why=f"receipt(s) {', '.join(unordered)} have no readable started_at: the latest receipt is "
+                                     f"unknown")
+            latest[m] = v
+        else:
+            latest[m] = max(rs, key=lambda x: (x[0], x[1]))[2]
     return latest
 
 

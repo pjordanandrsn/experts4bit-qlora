@@ -586,15 +586,20 @@ refusal costs about USD 0.01-0.03 under amendment 2's launch rule.
   - each `run_judge.json`, where a `REFUSE` is a FAILING record whatever the burn read. A power-capped burn masks the Reliability
     reason, and a run judge can still see it (a 600 W card passed its burn and then refused at run time on persistent
     Reliability);
-  - burns and run logs count with >= 10 busy samples;
+  - a burn with fewer than 10 busy samples is a FAILING record (UNREAD): a burn's whole job is to load the card, so a short one is
+    a gate that did not run, and it never lets an older receipt vouch. A run log with fewer than 10 busy samples is no evidence
+    either way and is skipped;
+  - a run judge other than `REFUSE` adds no record (it is not evidence that the card holds the clock);
 - AND that receipt recorded a power limit >= 575 W, OR one of its passing records is itself a burn (the gate's own load; a
   clock-mode pass is necessarily an amendment-83-era record).
-There is still no fallback: a host with no loaded record is never pinned.
+A machine with any receipt that has no readable `started_at` (fractional seconds are read) is NOT recorded-good: its latest receipt
+is unknown, and an older pass must never vouch in its place. A run whose GPU class is not RTX 5090 (or unnamed) is skipped. There
+is still no fallback: a host with no loaded record is never pinned.
 
 **One function.** The rule is `recorded_good` in `bench/p238/p238_hosts.py`. The shakedown screen calls it, from the controller
 checkout at the launch commit, sha256-checked, and so does any census, so the two cannot disagree about a host. It keeps the read
 rule: only a missing file is absent, and any other read error makes the census UNREAD, so nothing is pinned. A record that does not
-parse fails. `tests/test_p238_hosts.py` checks it on store trees built from real records (sha256-pinned fixtures), with the
+parse fails, as does a short burn, and an unordered receipt fails its machine. `tests/test_p238_hosts.py` checks it on store trees built from real records (sha256-pinned fixtures), with the
 no-power-clause rule as a mutant.
 
 **Checked on the real store at $0 before this amendment** (machine ids are kept in the private record):
@@ -604,10 +609,13 @@ no-power-clause rule as a mutant.
 - the two hosts with a passing amendment-83 burn at 575 W read good.
 Of 50 RTX 5090 machines with a loaded record, 14 are recorded-good, all at 575 W or 600 W.
 
-**Price.** P238's declared rate stays USD 1.05/h (the class policy now allows up to 1.25). Three recorded-good hosts were listed
-today, each turned away by the screen. One was under USD 1.05/h but listed 679 Mbps download. Two were above USD 1.05/h and also
-listed under 1,000 Mbps. A higher price would not have admitted any of them. The worst per box stays USD 7.15 (amendment 2's
-launch), within the USD 15 box rule.
+**Price (the shakedown only).** The shakedown's declared rate rises from USD 1.05/h to **USD 1.25/h**, the class policy's RTX 5090
+ceiling. Three recorded-good hosts were listed today, each turned away by the screen: one at USD 0.91/h listing 679 Mbps, two at
+USD 1.07/h and 1.11/h listing 878 and 735 Mbps. Under the 600 Mbps floor below and USD 1.25/h, all three would have been admitted;
+under USD 1.05/h, only the first. The worst per shakedown box becomes 5.25 h x USD 1.25 + 82 GB x USD 0.02 = **USD 8.20**, within
+the USD 15 box rule. The lane's shakedown spend is otherwise bounded as before: amendment 2's refused-spend launch rule (USD 0.25,
+with its stated worst) and at most two STARTED boxes. The reading's budget (its box cap and K split, at USD 1.05/h) is NOT changed
+here. The rate is `SHAKE_RATE_CAP_USD_H` in `bench/p238/p238_hosts.py`, read by the screen.
 
 **The screen's download floor (a separate item; it may be struck without touching the rest).** The screen admits only hosts listing
 >= 1,000 Mbps download, a value inherited from earlier kits and not registered in this PREREG. The box's own bound is the snapshot

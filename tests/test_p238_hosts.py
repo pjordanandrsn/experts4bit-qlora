@@ -58,12 +58,15 @@ def H():
 def _box(store, run, machine, at, power_w=None, burn=None, sc2_burn=None, run_judge=None, log=None, gpu="RTX 5090"):
     """One run directory in a store tree: receipt.json (machine, start), host_facts.json (power), and the records copied byte for
     byte from the fixtures: a P238 burn (p238/card_clock_burn.json), an SC2 burn and run judge (qualify/...), a run log (tc1/)."""
-    rd = store / "receipts" / "experts4bit-qlora" / at[:10] / run
+    rd = store / "receipts" / "experts4bit-qlora" / (at or "2026-10-26")[:10] / run
     rd.mkdir(parents=True)
     env = {"vast_gpu_name": gpu}
     if machine is not None:
         env["vast_machine_id"] = machine
-    (rd / "receipt.json").write_text(json.dumps({"environment": env, "started_at": at}))
+    receipt = {"environment": env}
+    if at is not None:                                                   # at=None: a receipt with no started_at
+        receipt["started_at"] = at
+    (rd / "receipt.json").write_text(json.dumps(receipt))
     if power_w is not None:
         (rd / "host_facts.json").write_text(json.dumps({"gpu_power_limit_w": power_w}))
     if burn is not None:
@@ -134,6 +137,44 @@ def test_the_latest_receipt_decides_both_ways(tmp_path, H, cc):
     assert (out["mB"]["good"], out["mB"]["run"]) == (True, "new-good")
 
 
+@pytest.mark.parametrize("newest_at, want_good", [
+    (None, False),                          # no started_at: the latest receipt is unknown, so fail closed
+    ("2026-10-26T19:50:41.123Z", False),    # fractional seconds parse: the newest (failing) receipt decides
+    ("2026-10-26T19:50:41Z", False),        # well-formed: the newest (failing) receipt decides
+])
+def test_an_unordered_or_fractional_newest_receipt_never_lets_an_older_pass_vouch(tmp_path, H, cc, newest_at, want_good):
+    """The newest receipt holds the failing r3 burn and an older one a passing am83 burn, same machine at 575 W. Before this fix a
+    missing or fractional time sorted as the oldest, so the older pass vouched (absence permitting admission)."""
+    _box(tmp_path, "older-pass", "mT", "2026-10-25T00:00:00Z", power_w=575.0, sc2_burn=AM83_575_PASS)
+    _box(tmp_path, "newest-fail", "mT", newest_at, power_w=575.0, burn=AM83_475)
+    v = H.recorded_good(str(tmp_path / "receipts"), cc)["mT"]
+    assert v["good"] is want_good
+    if newest_at is None:
+        assert "no readable started_at" in v["why"]
+    else:
+        assert v["run"] == "newest-fail"
+
+
+def test_a_fractional_newest_pass_still_decides(tmp_path, H, cc):
+    _box(tmp_path, "older-fail", "mF", "2026-10-25T00:00:00Z", power_w=575.0, burn=AM83_475)
+    _box(tmp_path, "newest-pass", "mF", "2026-10-26T09:44:50.5Z", power_w=575.0, sc2_burn=AM83_575_PASS)
+    v = H.recorded_good(str(tmp_path / "receipts"), cc)["mF"]
+    assert (v["good"], v["run"]) == (True, "newest-pass")
+
+
+def test_a_short_burn_is_a_gate_that_did_not_run(tmp_path, H, cc):
+    """The newest box's burn ended early (under 10 busy samples): a FAILING record, never skipped, so an older passing receipt
+    cannot vouch. A short or idle run LOG stays no evidence either way."""
+    short = json.loads(AM83_575_PASS.read_text())
+    short["busy_samples"] = 4
+    sp = tmp_path / "short_burn.json"
+    sp.write_text(json.dumps(short))
+    _box(tmp_path, "older-pass", "mS", "2026-10-25T00:00:00Z", power_w=575.0, sc2_burn=AM83_575_PASS)
+    _box(tmp_path, "newest-short", "mS", "2026-10-26T00:00:00Z", power_w=575.0, sc2_burn=sp)
+    v = H.recorded_good(str(tmp_path / "receipts"), cc)["mS"]
+    assert (v["good"], v["run"]) == (False, "newest-short") and "4 busy samples < 10" in v["why"]
+
+
 def test_unattributed_other_class_and_unparseable(tmp_path, H, cc):
     _box(tmp_path, "no-machine", None, "2026-10-26T00:00:00Z", power_w=600.0, log=TRAIN_LOG)
     _box(tmp_path, "a-4090", "m4090", "2026-10-26T00:00:00Z", power_w=450.0, log=TRAIN_LOG, gpu="RTX 4090")
@@ -161,7 +202,8 @@ def test_the_shared_constants_are_the_registered_ones(H):
     listed-download floor are the values PREREG-p238.md amendment 3 registers, and the download floor keeps its margin over the
     box's own snapshot alarm (FETCH_S in p238_run.sh, for the ~72 GB snapshot)."""
     import re
-    assert (H.CLOCK_FLOOR_MHZ, H.POWER_MIN_W, H.MIN_BUSY, H.INET_MIN_MBPS) == (2700, 575.0, 10, 600)
+    assert (H.CLOCK_FLOOR_MHZ, H.POWER_MIN_W, H.MIN_BUSY, H.INET_MIN_MBPS, H.SHAKE_RATE_CAP_USD_H) == (2700, 575.0, 10, 600, 1.25)
+    assert round(5.25 * H.SHAKE_RATE_CAP_USD_H + 82 * 0.02, 2) == 8.20 <= 15.0       # the stated worst per shakedown box
     prereg = (REPO / "bench" / "p238" / "PREREG-p238.md").read_text(encoding="utf-8")
     a3 = prereg[prereg.index("## Amendment 3 "):]
     assert "lowers the screen floor to 600" in a3 and ">= 575 W" in a3
