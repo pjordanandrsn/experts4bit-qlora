@@ -309,7 +309,7 @@ fi
   say "lane did not finish (no TP_DONE for this run)"; exit 23; }
 # The box's own exit code, by the shared rule (bench/common/drive_tail.sh, e4b#2141): 0 only with this nonce's success marker (else
 # 24); 23 for a missing or unreadable exit file; the launcher's host codes (13 14 17 18) and TC1's registered box codes (tc1_run.sh's
-# finish: 9 12 15 19 78 130) passed through; anything else 26, never acted on.
+# finish: 9 12 15 19 29 78 130) passed through; anything else 26, never acted on.
 say "box $TC1_BOX fetched: its exit code goes to the launcher by drive_tail"
 . "$REPO/bench/common/drive_tail.sh"
-drive_finish "$RUN_DIR/tc1" "$NONCE" TC1 "9 12 15 19 78 130"
+drive_finish "$RUN_DIR/tc1" "$NONCE" TC1 "9 12 15 19 29 78 130"

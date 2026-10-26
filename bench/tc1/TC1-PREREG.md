@@ -4070,3 +4070,39 @@ docs/COMPARATORS.md, docs/FAMILIES.md and llms-full.txt are regenerated.
 4. **The fetch imports no links.**
 
 **Budget.** $0.
+
+### Amendment 82 (2026-10-25T22:00Z, code amended 2026-10-26, $0, no box): a dataset refusal is TC1 lane code 29, never the launcher's disk code 13 (one fixed rule)
+
+**Why.** The launcher excludes a rented machine when the driver exits one of its host codes: 13 (disk), 14 (egress), 17 (power cap),
+18 (host floor). It reads 13 as free space on `/root` under the checkpoint floor. `tc1_run.sh` also finished 13 in three other places:
+- the alpaca dataset fetch failing (line 790);
+- the alpaca dataset's sha256 not matching its pin (792);
+- the clinical dataset's sha256 not matching its pin (798).
+None of them is a host property. A sha mismatch at a pinned revision is upstream or build state, so on 13 every host would be excluded in
+turn while the same mismatch repeated. A plain fetch failure, even at the 900 s alarm, is not a measured host property either. The
+registered egress code is 14, which carries a measured pull rate under the floor, and a lane that wants egress evidence measures the rate
+and uses 14. The TC1 harness extension (e4b#2146) moved `tc1_drive.sh` onto `bench/common/drive_tail.sh`, which passes host codes through
+as the old tail did. That surfaced this, and the maintainer ruled (a): remap.
+
+**The rule:**
+1. The three sites finish **29**, a TC1 lane code with a DATASET reason. The disk floor (line 363, `BOX_REFUSED disk=`) stays 13.
+   - The ruling first named 21. That was corrected before merge: `tc1_drive.sh` itself exits 21 on a start failure (line 154), as do
+     158 drivers under `bench/`. So "command exited 21" would have meant either the driver's start failure or the box's dataset
+     refusal. That is the ambiguity `drive_tail.sh` keeps out for 23, 24 and 26.
+   - 29 is free in `tc1_run.sh`, `tc1_drive.sh` and `bench/common`. Elsewhere it has only three lane-local uses (P146, P149, P223),
+     none a cross-lane convention.
+2. `tc1_drive.sh`'s `drive_finish` lane list gains 29: `9 12 15 19 29 78 130`. Without it, `drive_finish` would turn 29 into 26.
+3. `tests/test_tc1_exit_codes.py` reads `tc1_run.sh`'s own text and holds three rules:
+   - every literal `finish N` is a host code on a line stating a host-floor reason (`BOX_REFUSED`, `host floor`, `host-limited`), or one
+     of TC1's lane codes (0 9 12 15 19 29 78 130);
+   - 13 appears exactly once, at the disk floor;
+   - the driver's lane list equals the script's non-zero lane codes;
+   - no lane code is a code the driver exits on its own (every literal `exit N` in `tc1_drive.sh` and `bench/common/drive_tail.sh`),
+     except 0 and 78, which mean the same on both sides (success, and a config refusal).
+   A mutant of each rule is caught: the old dataset 13, a host code with no reason, an unregistered code, 29 missing from the list, and
+   21 put back (it collides with the driver's start failure).
+
+**Scope.** No reading changes: these are refusals before any arm runs. TC1 boxes from here on, P237's and P238's included, run under this
+rule. Earlier receipts keep the codes they recorded.
+
+**Budget.** $0.
