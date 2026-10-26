@@ -165,8 +165,8 @@ def scan_file(path):
     if path.name.endswith(".gz"):
         try:
             found += scan(gzip.decompress(data))
-        except OSError:
-            pass
+        except (OSError, EOFError):
+            found["a .gz that does not decompress"] += 1   # its contents cannot be checked: a finding, never a pass
     return found
 
 
@@ -213,8 +213,10 @@ def test_no_identifier_outside_the_holds():
             continue
         try:
             hits = scan_file(ROOT / fx)
-        except OSError:
-            continue
+        except FileNotFoundError:
+            continue                                        # tracked but not in this checkout
+        except OSError as e:                                # unreadable: the scan cannot vouch for it
+            hits = collections.Counter({f"unreadable ({type(e).__name__})": 1})
         for why, n in hits.items():
             found[(fx, why)] = n
     allowed = {k: n for k, (n, _) in ALLOWED.items()}

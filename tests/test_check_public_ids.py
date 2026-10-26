@@ -6,6 +6,7 @@ so this file names none. The mutants the redaction review asked for: a UUID insi
 "Vast box <n>", an id wrapped onto the next line, and a UUID cut to its prefix. Each must be refused."""
 import gzip
 import hashlib
+import os
 import pathlib
 import shutil
 import subprocess
@@ -70,6 +71,23 @@ def test_a_uuid_inside_a_nul_byte_file_is_refused(repo):
 def test_a_uuid_inside_a_gzip_member_is_refused(repo):
     _add(repo, "bench/steps.jsonl.gz", gzip.compress(('{"uuid": "%s"}\n' % UUID).encode(), mtime=0))
     assert _run(repo, "--tree").returncode == 1
+
+
+def test_a_gz_that_does_not_decompress_is_refused(repo):
+    _add(repo, "bench/steps.jsonl.gz", gzip.compress(b"clean")[:12])   # truncated: gzip raises EOFError
+    r = _run(repo, "--tree")
+    assert r.returncode == 1 and "does not decompress" in r.stdout
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="root reads a mode-000 file anyway")
+def test_an_unreadable_file_is_refused_not_skipped(repo):
+    _add(repo, "bench/locked.json", '{"clean": true}')
+    (repo / "bench" / "locked.json").chmod(0)
+    try:
+        r = _run(repo, "--tree")
+    finally:
+        (repo / "bench" / "locked.json").chmod(0o644)
+    assert r.returncode == 1 and "bench/locked.json: unreadable" in r.stdout
 
 
 def test_the_canary_uuid_stays_allowed(repo):

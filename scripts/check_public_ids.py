@@ -90,7 +90,10 @@ def tree():
             continue
         try:
             b = open(path, "rb").read()
-        except OSError:
+        except FileNotFoundError:
+            continue          # tracked but not in this checkout: absent, so nothing of it is published from here
+        except OSError as e:  # any other error means the guard cannot say what the file holds: refuse, never skip
+            bad.append(f"{path}: unreadable ({type(e).__name__}), so not checked")
             continue
         if path in ex:
             if not held(path, b, ex):
@@ -100,8 +103,8 @@ def tree():
         if path.endswith(".gz"):
             try:
                 blobs.append(gzip.decompress(b))
-            except OSError:
-                pass
+            except (OSError, EOFError) as e:
+                bad.append(f"{path}: a .gz that does not decompress ({type(e).__name__}), so its contents are not checked")
         for x in blobs:
             for m in UUID.finditer(x):
                 if (m.group(1) or m.group(2)).lower() != ZERO:
