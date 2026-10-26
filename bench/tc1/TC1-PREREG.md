@@ -4137,8 +4137,9 @@ amendment 80's bytes; `bench/tc1/am83_scan.py` and its counts-only output `bench
 
 **The rule.** This supersedes amendment 80's host-floor bullet on the card's loaded SM clock, its validity item 4 and its box-fact burn
 line. Amendment 80's text above is unchanged. The other host floors stand.
-- **The card's loaded SM clock**: `bench/common/card_clock.py` (sha256 `60cc881011a01bdc2056e31de732692ce6e6b9950c865fd32d2e317fcb6d7edf`), in its `clock`
-  mode, the default. It runs the same 20 s bf16 matmul burn, sampled by nvidia-smi, and it passes when all three hold:
+- **The card's loaded SM clock**: `bench/common/card_clock.py` (sha256 `14494c6d045f5840457fb26477c83435f17ecfdf35438a0cfcbd703d6547eba8`), in its `clock`
+  mode. The CLI's `--mode` defaults to `clock`, visible in each call line. `passes()` takes `mode` keyword-only with no
+  default, so a Python caller names its rule and a call written for amendment 80 raises TypeError instead of changing meaning. It runs the same 20 s bf16 matmul burn, sampled by nvidia-smi, and it passes when all three hold:
   - the busy SM median is >= 2700 MHz;
   - no slowdown bit is set on **any** sample: HwSlowdown 0x8, SwThermalSlowdown 0x20, HwThermalSlowdown 0x40, HwPowerBrakeSlowdown 0x80,
     or BoardLimit 0x200;

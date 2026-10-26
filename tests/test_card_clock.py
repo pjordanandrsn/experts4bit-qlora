@@ -84,7 +84,7 @@ def test_shake_r1_record_mutant_restore_95_bar_fails_r1():
     refuses, saying so (its share is anywhere in 1/72..72/72: assuming a pass would be the trap amendment 83 fixes)."""
     cc, s = _cc(), json.loads(SHAKE_R1.read_text())
     assert (s["sm_median"], s["busy_samples"], s["busy_soft_clean_fraction"], s["reasons_seen_mask"]) == (2827.0, 72, 0.0139, "0x404")
-    ok, why = cc.passes(s, FLOOR, burn=True)
+    ok, why = cc.passes(s, FLOOR, burn=True, mode="clock")
     assert not ok
     assert "MHz < floor" not in why                                     # the clock clause passes
     assert "SwPowerCap" not in why                                      # SwPowerCap is recorded, never refuses
@@ -106,7 +106,7 @@ def test_the_capped_card_refuses():
     s = cc.summarize_log(str(CAPPED))
     assert (s["sm_median"], s["sm_max"], s["reasons_seen"], s["busy_clean_fraction"]) == (2400, 2415, ["Reliability"], 0.0)
     assert (s["busy_reliability_samples"], s["busy_samples"]) == (505, 505)
-    ok, why = cc.passes(s, FLOOR)
+    ok, why = cc.passes(s, FLOOR, mode="clock")
     assert not ok and "2400 MHz < floor" in why and "Reliability on 505 of 505" in why
 
 
@@ -114,7 +114,7 @@ def test_the_power_capped_card_refuses_on_its_clock():
     cc = _cc()
     s = cc.summarize_log(str(POWER_CAPPED))
     assert s["reasons_seen"] == ["SwPowerCap"] and s["sm_max"] <= 2400
-    ok, why = cc.passes(s, FLOOR)
+    ok, why = cc.passes(s, FLOOR, mode="clock")
     assert not ok and "2377 MHz < floor" in why and "SwPowerCap" not in why
 
 
@@ -122,7 +122,7 @@ def test_the_clean_card_passes():
     cc = _cc()
     s = cc.summarize_log(str(CLEAN))
     assert (s["sm_median"], s["reasons_seen"], s["busy_clean_fraction"]) == (2895, [], 1.0)
-    assert cc.passes(s, FLOOR) == (True, "") and cc.passes(s, FLOOR, 0.95, mode="pct_clean") == (True, "")
+    assert cc.passes(s, FLOOR, mode="clock") == (True, "") and cc.passes(s, FLOOR, 0.95, mode="pct_clean") == (True, "")
 
 
 def test_the_boundary_card_passes_the_healthiest_clock_with_the_highest_reliability_share():
@@ -131,7 +131,7 @@ def test_the_boundary_card_passes_the_healthiest_clock_with_the_highest_reliabil
     cc = _cc()
     s = cc.summarize_log(str(BOUNDARY))
     assert (s["sm_median"], s["busy_reliability_samples"], s["busy_samples"], s["busy_swpowercap_fraction"]) == (3007.0, 237, 294, 0.1939)
-    assert cc.passes(s, FLOOR) == (True, "")
+    assert cc.passes(s, FLOOR, mode="clock") == (True, "")
     assert cc.passes(s, FLOOR, 0.95, mode="pct_clean")[0] is False      # amendment 80's per-draw bar refused this healthy card
 
 
@@ -156,7 +156,7 @@ def test_mutant_pos79_with_its_clock_lifted_still_refuses_on_persistent_reliabil
     _rewrite(CAPPED, out, lambda ln, r: _lift(ln, r) if r[1] > 1000 else ln)
     s = _cc().summarize_log(str(out))
     assert s["sm_median"] == 2895 and s["busy_reliability_samples"] == s["busy_samples"] == 505
-    ok, why = _cc().passes(s, FLOOR)
+    ok, why = _cc().passes(s, FLOOR, mode="clock")
     assert not ok and "MHz < floor" not in why and "Reliability on 505 of 505" in why
 
 
@@ -185,24 +185,24 @@ def test_the_persistence_bar_is_95_percent_of_busy_samples_inclusive(tmp_path):
     for keep, at, below in ((500, 475, 474), (505, 480, 479)):
         hi, lo = _persistent_pair(tmp_path, keep, at), _persistent_pair(tmp_path, keep, below)
         assert (hi["busy_samples"], hi["busy_reliability_samples"], lo["busy_reliability_samples"]) == (keep, at, below)
-        assert _cc().passes(hi, FLOOR)[0] is False and _cc().passes(lo, FLOOR) == (True, ""), keep
+        assert _cc().passes(hi, FLOOR, mode="clock")[0] is False and _cc().passes(lo, FLOOR, mode="clock") == (True, ""), keep
     hi = _persistent_pair(tmp_path, 500, 475)
     gt = _mutant("if rel * 100 >= round(PERSISTENT_SHARE * 100) * n:", "if rel * 100 > round(PERSISTENT_SHARE * 100) * n:")
-    assert gt.passes(hi, FLOOR)[0] is True                              # the off-by-one mutant would pass exactly 95 %: caught above
+    assert gt.passes(hi, FLOOR, mode="clock")[0] is True                              # the off-by-one mutant would pass exactly 95 %: caught above
 
 
 def test_mutant_drop_the_clock_floor_passes_the_power_capped_card():
     """The required mutant: with the clock clause removed, tc1-5090-136 (2377 MHz, no Reliability) would pass. The real rule refuses it."""
     m = _mutant('            why.append(f"busy SM median {summary[\'sm_median\']} MHz < floor {floor_mhz}")', "            pass")
     s = m.summarize_log(str(POWER_CAPPED))
-    assert m.passes(s, FLOOR) == (True, "") and _cc().passes(s, FLOOR)[0] is False
+    assert m.passes(s, FLOOR, mode="clock") == (True, "") and _cc().passes(s, FLOOR, mode="clock")[0] is False
 
 
 def test_mutant_swpowercap_refusing_again_fails_the_healthy_boundary_card():
     """Put SwPowerCap back among the any-sample bits: the healthy 475 W card (SwPowerCap on 19 % of its busy samples) would refuse."""
     m = _mutant("ANY_SAMPLE_BITS = 0x8 | 0x20 | 0x40 | 0x80 | 0x200", "ANY_SAMPLE_BITS = 0x4 | 0x8 | 0x20 | 0x40 | 0x80 | 0x200")
     s = m.summarize_log(str(BOUNDARY))
-    assert m.passes(s, FLOOR)[0] is False and _cc().passes(_cc().summarize_log(str(BOUNDARY)), FLOOR) == (True, "")
+    assert m.passes(s, FLOOR, mode="clock")[0] is False and _cc().passes(_cc().summarize_log(str(BOUNDARY)), FLOOR, mode="clock") == (True, "")
 
 
 def test_a_slowdown_bit_refuses_on_a_single_sample(tmp_path):
@@ -216,7 +216,7 @@ def test_a_slowdown_bit_refuses_on_a_single_sample(tmp_path):
         return ln
     out = tmp_path / "gpuclk_hw.txt"
     _rewrite(CLEAN, out, one)
-    ok, why = _cc().passes(_cc().summarize_log(str(out)), FLOOR)
+    ok, why = _cc().passes(_cc().summarize_log(str(out)), FLOOR, mode="clock")
     assert not ok and "HwSlowdown" in why
 
 
@@ -277,7 +277,7 @@ def test_the_pct_clean_mode_keeps_amendment_80s_bars_by_name(tmp_path):
     s = _cc().summarize_log(str(out))
     ok, why = _cc().passes(s, FLOOR, 0.95, mode="pct_clean")
     assert not ok and "SwPowerCap" in why
-    assert _cc().passes(s, FLOOR) == (True, "")
+    assert _cc().passes(s, FLOOR, mode="clock") == (True, "")
     with pytest.raises(ValueError):
         _cc().passes(s, FLOOR, mode="lenient")
 
@@ -291,7 +291,7 @@ def test_mutant_a_clean_card_clocked_down_refuses(tmp_path):
     _rewrite(CLEAN, out, scale)
     s = _cc().summarize_log(str(out))
     assert s["busy_clean_fraction"] == 1.0 and s["sm_median"] < FLOOR
-    assert not _cc().passes(s, FLOOR)[0]
+    assert not _cc().passes(s, FLOOR, mode="clock")[0]
 
 
 def test_an_unread_card_never_passes():
@@ -299,6 +299,18 @@ def test_an_unread_card_never_passes():
     for mode in ("clock", "pct_clean"):
         assert cc.passes(cc.summarize([]), FLOOR, 0.95, mode=mode)[0] is False
         assert cc.passes(cc.summarize([(2900, 13801, 50, 0)] * 5), FLOOR, 0.95, mode=mode)[0] is False     # under 10 busy samples
+
+
+def test_a_caller_that_names_no_mode_fails_loudly():
+    """An amendment 80-style call (floor and min_clean, no mode) raises TypeError rather than silently taking either rule; mode is
+    keyword-only, so it cannot ride in positionally either. The mutant that gives mode a default again accepts the old call."""
+    cc, s = _cc(), _cc().summarize_log(str(CLEAN))
+    with pytest.raises(TypeError):
+        cc.passes(s, FLOOR, 0.95)
+    with pytest.raises(TypeError):
+        cc.passes(s, FLOOR, 0.95, 10, False, "clock")
+    m = _mutant("burn: bool = False, *, mode: str):", 'burn: bool = False, *, mode: str = "clock"):')
+    assert m.passes(s, FLOOR, 0.95) == (True, "")
 
 
 def test_the_check_log_cli_exit_codes():

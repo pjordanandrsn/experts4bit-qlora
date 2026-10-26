@@ -151,9 +151,11 @@ def summarize_log(path: str, busy_mhz: int = BUSY_MHZ) -> dict:
     return summarize([r[1:] for r in rows], busy_mhz)
 
 
-def passes(summary: dict, floor_mhz: float, min_clean: float = 0.95, min_busy: int = 10, burn: bool = False, mode: str = "clock"):
-    """(ok, why): the busy SM median is >= ``floor_mhz`` (at least ``min_busy`` busy samples, else unread), and then by ``mode``:
-    - ``clock`` (TC1 amendment 83, the default; the burn and a training run's log alike, so ``burn`` does not change it): no
+def passes(summary: dict, floor_mhz: float, min_clean: float = 0.95, min_busy: int = 10, burn: bool = False, *, mode: str):
+    """(ok, why): the busy SM median is >= ``floor_mhz`` (at least ``min_busy`` busy samples, else unread), and then by ``mode``.
+    ``mode`` is keyword-only with NO default: a caller names its rule, so an amendment 80-style call that names none raises TypeError
+    instead of silently changing meaning (the CLI's --mode defaults to ``clock``, visible in its call line).
+    - ``clock`` (TC1 amendment 83; the burn and a training run's log alike, so ``burn`` does not change it): no
       ANY_SAMPLE bit on any sample, and Reliability on fewer than PERSISTENT_SHARE of the busy samples (compared as counts). SwPowerCap
       never refuses. A summary without amendment 83's counts (one written before it) reads that clause UNREAD and refuses: fail closed.
     - ``pct_clean`` (amendment 80's bars, by name): on a run's log (``burn`` False) every refusing bit clear on >= ``min_clean`` of

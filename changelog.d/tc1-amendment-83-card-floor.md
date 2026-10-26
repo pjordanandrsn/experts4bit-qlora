@@ -5,5 +5,6 @@ against the lane's floor, no slowdown bit on any sample, and Reliability refused
 and never refuses. A $0 scan of the store's 737 per-second training clock logs (`bench/tc1/am83_scan.py`, counts in
 `bench/tc1/am83_scan.json`) showed SwPowerCap on more than 5 % of busy samples in 117 of 422 healthy-clock RTX 5090 logs, and the first
 healthy card ever burned (a stock 575 W card at 2,827 MHz) refused on it. Amendment 80's bars stay available as the named `pct_clean`
-mode, and the burn's JSON now records every sample. TC1's pos80 kit re-pins `card_clock.py` here; P238 and P237 re-pin in their own
+mode, and the burn's JSON now records every sample. `passes()` takes `mode` keyword-only with no default (the CLI defaults
+to `clock`). TC1's pos80 kit re-pins `card_clock.py` here; P238 and P237 re-pin in their own
 changes. No reading changes: no pos80 box has run.
