@@ -352,9 +352,9 @@ case " $FAMILIES " in *" qwen3pos80 "*)
   echo "SINGLE_THREAD ${MOPS:-unreadable} Mops (median of 5; floor $POS77_MIN_MOPS; amendment 80)" | tee -a summary.txt
   python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "${MOPS:-0}" "$POS77_MIN_MOPS" 2>/dev/null \
     || { say "BOX REFUSED: single-thread speed ${MOPS:-unreadable} Mops is under the floor ($POS77_MIN_MOPS) (host floor)"; echo "BOX_REFUSED single_thread_mops=${MOPS:-unreadable} floor=$POS77_MIN_MOPS (amendment 80)" >> summary.txt; finish 18; }
-  perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $POS80_CLOCK_FLOOR --seconds 20 --min-clean 0.95 --out $W/card_clock_burn.json > logs/card_clock_burn.log 2>&1; crc=$?
+  perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $POS80_CLOCK_FLOOR --seconds 20 --mode clock --min-clean 0.95 --out $W/card_clock_burn.json > logs/card_clock_burn.log 2>&1; crc=$?
   grep "^CARD_CLOCK " logs/card_clock_burn.log | tail -1 | tee -a summary.txt
-  [ $crc -eq 0 ] || { say "BOX REFUSED: the card's loaded SM clock fails amendment 80's floor ($POS80_CLOCK_FLOOR MHz, no hard slowdown or cap reason, SwPowerCap on <= 5 %): $(tail -1 logs/card_clock_burn.log | cut -c1-300) (host floor)"; echo "BOX_REFUSED card_clock rc=$crc floor=$POS80_CLOCK_FLOOR (amendment 80)" >> summary.txt; finish 18; };;
+  [ $crc -eq 0 ] || { say "BOX REFUSED: the card's loaded SM clock fails amendment 83's floor ($POS80_CLOCK_FLOOR MHz, no slowdown bit on any sample, Reliability on < 95 % of busy samples): $(tail -1 logs/card_clock_burn.log | cut -c1-300) (host floor)"; echo "BOX_REFUSED card_clock rc=$crc floor=$POS80_CLOCK_FLOOR (amendment 83)" >> summary.txt; finish 18; };;
 esac
 # P48 run 1 (2026-09-19) drew a host whose container overlay was 32 GB and died ENOSPC mid-fetch; box B fetches ~120 GB of
 # checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.
@@ -787,15 +787,15 @@ case " $FAMILIES " in *" qwen3hp3 "*|*" qwen3hp3shake "*)
 esac
 # ---------------------------------------------------------------- the fixed texts: Alpaca (field recipe) + clinical (the anchor pair only)
 say "dataset alpaca (tp4_alpaca.py: unsloth/alpaca-cleaned @ pinned revision, seed 3407, 1200/48)"
-(cd $W/data && perl -e 'alarm 900; exec @ARGV' $PY_E4B $W/tp4_alpaca.py --out $W/data/ds_alpaca.json > $W/logs/dataset_alpaca.log 2>&1) || { tail -3 logs/dataset_alpaca.log; say "DATASET FAIL (alpaca)"; finish 13; }
+(cd $W/data && perl -e 'alarm 900; exec @ARGV' $PY_E4B $W/tp4_alpaca.py --out $W/data/ds_alpaca.json > $W/logs/dataset_alpaca.log 2>&1) || { tail -3 logs/dataset_alpaca.log; say "DATASET FAIL (alpaca)"; finish 29; }
 tail -1 logs/dataset_alpaca.log
-GOT=$(sha256sum $W/data/ds_alpaca.json | awk '{print $1}'); [ "$GOT" = "$DS_ALPACA_SHA" ] || { say "DATASET MISMATCH alpaca: $GOT != $DS_ALPACA_SHA"; finish 13; }
+GOT=$(sha256sum $W/data/ds_alpaca.json | awk '{print $1}'); [ "$GOT" = "$DS_ALPACA_SHA" ] || { say "DATASET MISMATCH alpaca: $GOT != $DS_ALPACA_SHA"; finish 29; }
 echo "DATASET alpaca sha=$DS_ALPACA_SHA" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)      # TC1b: the anchor pair's text, built and sha-verified exactly as tp4_run.sh does it (ds_manifest.json's clinical sha)
   say "dataset clinical (n9_datasets.py, sha-verified against ds_manifest.json) for the anchor pair"
   (cd $W/data && $PY_E4B $W/n9_datasets.py $W/data > $W/logs/dataset_clinical.log 2>&1); tail -1 logs/dataset_clinical.log
   CLIN_SHA=$($PY_E4B -c "import json; print(json.load(open('$W/ds_manifest.json'))['clinical']['sha256'])")
-  GOT=$(sha256sum $W/data/ds_clinical.json | awk '{print $1}'); [ "$GOT" = "$CLIN_SHA" ] || { say "DATASET MISMATCH clinical: $GOT != $CLIN_SHA"; finish 13; }
+  GOT=$(sha256sum $W/data/ds_clinical.json | awk '{print $1}'); [ "$GOT" = "$CLIN_SHA" ] || { say "DATASET MISMATCH clinical: $GOT != $CLIN_SHA"; finish 29; }
   echo "DATASET clinical sha=$CLIN_SHA" | tee -a summary.txt;;
 esac
 # ---------------------------------------------------------------- helpers

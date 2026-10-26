@@ -1,0 +1,28 @@
+{
+ "samples": 72,
+ "busy_samples": 72,
+ "sm_median": 2827.0,
+ "sm_p10": 2820,
+ "sm_max": 2880,
+ "mem_median": 13801.0,
+ "reasons_seen": [
+  "SwPowerCap",
+  "Reliability"
+ ],
+ "reasons_seen_mask": "0x404",
+ "busy_clean_fraction": 0.0,
+ "busy_soft_clean_fraction": 0.0139,
+ "hard_reasons_any_sample": [
+  "Reliability"
+ ],
+ "burn_seconds": 20.0,
+ "matmul_n": 8192,
+ "dtype": "bfloat16",
+ "sample_period_s": 0.25,
+ "floor_mhz": 2700.0,
+ "min_clean": 0.95,
+ "hard_bits_every_sample": true,
+ "pass": false,
+ "why": "a hard slowdown or cap reason was set during the burn: ['Reliability']; SwPowerCap on 98.6% of busy samples (clean 1.4% < 95%)",
+ "refusal": "below_floor"
+}

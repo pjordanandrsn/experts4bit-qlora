@@ -7,19 +7,30 @@ the 1st percentile of TC1's 76 RTX 5090 boxes. Device time doesn't travel betwee
 device time across boxes, or reads a ratio on one box and quotes it as the release's, screens the card first. ONE implementation:
 TC1 amendment 80 calls it with the RTX 5090's floor, and other lanes call it with their own registered floor and calibration.
 
+THE RULE (TC1 amendment 83, the ``clock`` mode, the default for the burn and for a training run's log). The CLOCK binds:
+    - the busy SM median is >= the lane's floor (busy = SM above BUSY_MHZ; at least ``min_busy`` busy samples, else unread);
+    - no ANY_SAMPLE bit (HwSlowdown, SwThermalSlowdown, HwThermalSlowdown, HwPowerBrakeSlowdown, BoardLimit) on ANY sample;
+    - Reliability (0x400) on fewer than PERSISTENT_SHARE (95 %) of the BUSY samples (the denominator: busy samples, SM > BUSY_MHZ);
+    - SwPowerCap is RECORDED (its share of busy samples) and never refuses.
+    Why (amendment 83's $0 store scan, 737 training clock logs): a power-bound load holds a healthy card at its limit, so SwPowerCap
+    was over 5 % of busy samples on 117 of 422 healthy-clock RTX 5090 logs and does not separate cards; the clock does. Reliability
+    on a healthy clock reached at most 81 % (one 475 W card alternating it with SwPowerCap), and every sub-floor Reliability log sat
+    at 100 %. The Reliability bar and the any-sample bits are GUARDS that no record above the floor has ever tripped: every
+    persistent-Reliability log was also sub-floor, and no log carried an any-sample bit.
+The ``pct_clean`` mode keeps amendment 80's bars by NAME, for a lane that registers them explicitly (never the default): on a run's log
+every refusing bit clear on >= ``min_clean`` of busy samples; at the burn no HARD bit on any sample and SwPowerCap clear on >= ``min_clean``.
+
 Two uses:
-    python3 card_clock.py burn --floor MHZ [--seconds 20] [--min-clean 0.95] [--out card_clock.json]
+    python3 card_clock.py burn --floor MHZ [--seconds 20] [--mode clock|pct_clean] [--min-clean 0.95] [--out card_clock.json]
         A bf16 matmul burn on the current CUDA device, sampled by nvidia-smi (clocks.sm, clocks.mem, temperature.gpu,
-        clocks_event_reasons.active: the fields TC1's per-second sampler logs, tc1_run.sh:725). It passes when all three hold:
-        - the busy SM median is >= MHZ;
-        - no HARD reason (every refusing bit but SwPowerCap) is set on ANY sample;
-        - SwPowerCap is clear on at least --min-clean of the busy samples. A healthy 575 W card may touch it briefly under a
-          full-power burn, so it is held to a fraction, not to every sample.
+        clocks_event_reasons.active: the fields TC1's per-second sampler logs, tc1_run.sh:725), judged by ``passes`` in --mode
+        (``clock`` by default). --min-clean is accepted in either mode and binds only ``pct_clean``. The JSON records the mode, the
+        shares and every sample's (sm, mask), so a later reader re-derives each clause from the burn itself.
         It exits 0 on a pass and 18 otherwise (TC1's host-floor code: the launcher excludes the machine on its next draw). A probe
         that can't read the card refuses too: an unscreened card is never passed. The JSON's ``refusal`` says which it was:
         ``below_floor`` (read, and failed) or ``probe_error`` (not read: no torch, no CUDA, no nvidia-smi).
         One GPU: the burn runs on cuda:0 and samples ``nvidia-smi -i 0``. A multi-GPU lane screens each card itself.
-    python3 card_clock.py check-log GPUCLK_TXT --floor MHZ [--min-clean 0.95]
+    python3 card_clock.py check-log GPUCLK_TXT --floor MHZ [--mode clock|pct_clean] [--min-clean 0.95]
         The same test on a run's ``gpuclk_<arm>.txt``. It prints the summary as JSON and exits 0 on a pass, 1 otherwise. A reducer
         imports ``summarize_log`` and ``passes`` instead.
 
@@ -50,12 +61,19 @@ REASON_BITS = {
     0x0000000000000200: "BoardLimit",
     0x0000000000000400: "Reliability",
 }
-#: The bits that refuse a card (TC1 amendment 80): every slowdown and cap. GpuIdle, ApplicationsClocksSetting, SyncBoost and
-#: DisplayClockSetting do not. At the burn, SwPowerCap (SOFT_BITS) is held to a fraction of busy samples and the rest (HARD_BITS) to
-#: every sample. On a run's log, all of them are held to a fraction of busy samples.
+#: Amendment 80's bits, kept by name for the ``pct_clean`` mode and for the lanes that import them (SC2f's judge-run): every slowdown
+#: and cap. GpuIdle, ApplicationsClocksSetting, SyncBoost and DisplayClockSetting do not count. At amendment 80's burn, SwPowerCap
+#: (SOFT_BITS) is held to a fraction of busy samples and the rest (HARD_BITS) to every sample; on a run's log, all to a fraction.
 REFUSE_BITS = 0x4 | 0x8 | 0x20 | 0x40 | 0x80 | 0x200 | 0x400
 SOFT_BITS = 0x4
 HARD_BITS = REFUSE_BITS & ~SOFT_BITS
+#: TC1 amendment 83's ``clock`` mode (the default): the clock binds; these refuse on ANY sample (no record above the floor has ever
+#: carried one); Reliability refuses when PERSISTENT, on >= PERSISTENT_SHARE of the busy samples; SwPowerCap is recorded only.
+ANY_SAMPLE_BITS = 0x8 | 0x20 | 0x40 | 0x80 | 0x200
+PERSISTENT_BITS = 0x400
+RECORDED_BITS = 0x4
+PERSISTENT_SHARE = 0.95
+MODES = ("clock", "pct_clean")
 #: A sample counts as busy above this SM clock: the idle clock on these cards reads 180-405 MHz.
 BUSY_MHZ = 1000
 HOST_FLOOR_RC = 18
@@ -97,7 +115,9 @@ def parse_gpuclk_line(line: str):
 
 
 def summarize(samples, busy_mhz: int = BUSY_MHZ) -> dict:
-    """The busy samples' SM median, p10 and max, the reason bits seen, and the share of busy samples with no refusing bit."""
+    """The busy samples' SM median, p10 and max, the reason bits seen, the share of busy samples with no refusing bit (amendment 80's
+    fields, unchanged), and amendment 83's: the busy-sample shares of SwPowerCap and of Reliability (denominator: busy samples, SM >
+    ``busy_mhz``) and the any-sample bits seen on any sample."""
     busy = [s for s in samples if s[0] > busy_mhz]
     sm = sorted(s[0] for s in busy)
     seen = 0
@@ -105,9 +125,12 @@ def summarize(samples, busy_mhz: int = BUSY_MHZ) -> dict:
         seen |= s[3]
     clean = sum(1 for s in busy if not s[3] & REFUSE_BITS)
     soft_clean = sum(1 for s in busy if not s[3] & SOFT_BITS)
-    hard_seen = 0
+    hard_seen = any_seen = 0
     for s in samples:
         hard_seen |= s[3] & HARD_BITS
+        any_seen |= s[3] & ANY_SAMPLE_BITS
+    swpc = sum(1 for s in busy if s[3] & RECORDED_BITS)                 # the counts: passes() compares them, never a rounded share
+    rel = sum(1 for s in busy if s[3] & PERSISTENT_BITS)
     return {
         "samples": len(samples), "busy_samples": len(busy),
         "sm_median": statistics.median(sm) if sm else None, "sm_p10": sm[len(sm) // 10] if sm else None, "sm_max": sm[-1] if sm else None,
@@ -116,6 +139,10 @@ def summarize(samples, busy_mhz: int = BUSY_MHZ) -> dict:
         "busy_clean_fraction": round(clean / len(busy), 4) if busy else None,
         "busy_soft_clean_fraction": round(soft_clean / len(busy), 4) if busy else None,
         "hard_reasons_any_sample": decode(hard_seen),
+        "busy_swpowercap_samples": swpc, "busy_reliability_samples": rel,
+        "busy_swpowercap_fraction": round(swpc / len(busy), 4) if busy else None,
+        "busy_reliability_fraction": round(rel / len(busy), 4) if busy else None,
+        "any_sample_bits_seen": decode(any_seen),
     }
 
 
@@ -124,17 +151,34 @@ def summarize_log(path: str, busy_mhz: int = BUSY_MHZ) -> dict:
     return summarize([r[1:] for r in rows], busy_mhz)
 
 
-def passes(summary: dict, floor_mhz: float, min_clean: float, min_busy: int = 10, burn: bool = False):
-    """(ok, why): the busy SM median is >= ``floor_mhz``, and then, depending on the mode:
-    - a run's log (``burn`` False): every refusing bit is clear on >= ``min_clean`` of the busy samples;
-    - the burn (``burn`` True): no HARD bit is set on any sample, and SwPowerCap is clear on >= ``min_clean`` of the busy samples."""
+def passes(summary: dict, floor_mhz: float, min_clean: float = 0.95, min_busy: int = 10, burn: bool = False, *, mode: str):
+    """(ok, why): the busy SM median is >= ``floor_mhz`` (at least ``min_busy`` busy samples, else unread), and then by ``mode``.
+    ``mode`` is keyword-only with NO default: a caller names its rule, so an amendment 80-style call that names none raises TypeError
+    instead of silently changing meaning (the CLI's --mode defaults to ``clock``, visible in its call line).
+    - ``clock`` (TC1 amendment 83; the burn and a training run's log alike, so ``burn`` does not change it): no
+      ANY_SAMPLE bit on any sample, and Reliability on fewer than PERSISTENT_SHARE of the busy samples (compared as counts). SwPowerCap
+      never refuses. A summary without amendment 83's counts (one written before it) reads that clause UNREAD and refuses: fail closed.
+    - ``pct_clean`` (amendment 80's bars, by name): on a run's log (``burn`` False) every refusing bit clear on >= ``min_clean`` of
+      the busy samples; at the burn (``burn`` True) no HARD bit on any sample and SwPowerCap clear on >= ``min_clean``."""
+    if mode not in MODES:
+        raise ValueError(f"mode {mode!r} is not one of {MODES}")
     why = []
     if (summary.get("busy_samples") or 0) < min_busy:
         why.append(f"{summary.get('busy_samples') or 0} busy samples < {min_busy} (the card was not read under load)")
     else:
         if summary["sm_median"] < floor_mhz:
             why.append(f"busy SM median {summary['sm_median']} MHz < floor {floor_mhz}")
-        if burn:
+        if mode == "clock":
+            n, rel, anyb = summary["busy_samples"], summary.get("busy_reliability_samples"), summary.get("any_sample_bits_seen")
+            if rel is None or anyb is None:
+                why.append("legacy burn summary: no per-sample Reliability share (written before amendment 83), so that clause is "
+                           "UNREAD, not measured persistent")
+            else:
+                if anyb:
+                    why.append(f"a slowdown reason was set on a sample: {anyb}")
+                if rel * 100 >= round(PERSISTENT_SHARE * 100) * n:          # integers: no float edge at exactly 95 %
+                    why.append(f"Reliability on {rel} of {n} busy samples (>= {PERSISTENT_SHARE:.0%}: persistent)")
+        elif burn:
             if summary["hard_reasons_any_sample"]:
                 why.append(f"a hard slowdown or cap reason was set during the burn: {summary['hard_reasons_any_sample']}")
             if summary["busy_soft_clean_fraction"] < min_clean:
@@ -178,7 +222,8 @@ def burn(seconds: float = 20.0, n: int = 8192, period: float = 0.25) -> dict:
     stop.set()
     t.join(timeout=15)
     out = summarize(samples)
-    out.update({"burn_seconds": seconds, "matmul_n": n, "dtype": "bfloat16", "sample_period_s": period})
+    out.update({"burn_seconds": seconds, "matmul_n": n, "dtype": "bfloat16", "sample_period_s": period,
+                "per_sample": [[s[0], hex(s[3])] for s in samples]})   # amendment 83: every (sm, mask), so each clause re-derives
     return out
 
 
@@ -188,29 +233,36 @@ def main(argv=None) -> int:
     b = sub.add_parser("burn")
     b.add_argument("--floor", type=float, required=True)
     b.add_argument("--seconds", type=float, default=20.0)
-    b.add_argument("--min-clean", type=float, default=0.95)
+    b.add_argument("--mode", choices=MODES, default="clock")
+    b.add_argument("--min-clean", type=float, default=0.95, help="binds only --mode pct_clean (accepted in either mode)")
     b.add_argument("--out", default=None)
     c = sub.add_parser("check-log")
     c.add_argument("path")
     c.add_argument("--floor", type=float, required=True)
-    c.add_argument("--min-clean", type=float, default=0.95)
+    c.add_argument("--mode", choices=MODES, default="clock")
+    c.add_argument("--min-clean", type=float, default=0.95, help="binds only --mode pct_clean (accepted in either mode)")
     a = ap.parse_args(argv)
     if a.cmd == "burn":
         try:
             summ = burn(a.seconds)
         except Exception as e:                           # no torch, no CUDA, no nvidia-smi: the card is unscreened, so it refuses
             summ = {"error": f"{type(e).__name__}: {e}"}
-        ok, why = passes(summ, a.floor, a.min_clean, burn=True) if "error" not in summ else (False, summ["error"])
-        summ.update({"floor_mhz": a.floor, "min_clean": a.min_clean, "hard_bits_every_sample": True, "pass": ok, "why": why,
+        ok, why = passes(summ, a.floor, a.min_clean, burn=True, mode=a.mode) if "error" not in summ else (False, summ["error"])
+        summ.update({"floor_mhz": a.floor, "mode": a.mode, "pass": ok, "why": why,
                      "refusal": None if ok else ("probe_error" if "error" in summ else "below_floor")})
+        if a.mode == "clock":                            # the clock mode's line: the persistence share binds; min_clean does not
+            summ.update({"persistent_share": PERSISTENT_SHARE, "any_sample_bits_every_sample": True})
+        else:                                            # amendment 80's line, unchanged, for a lane that registers pct_clean
+            summ.update({"min_clean": a.min_clean, "hard_bits_every_sample": True})
         if a.out:
             with open(a.out, "w") as f:
                 json.dump(summ, f, indent=1)
         print("CARD_CLOCK " + json.dumps(summ, sort_keys=True))
         return 0 if ok else HOST_FLOOR_RC
     summ = summarize_log(a.path)
-    ok, why = passes(summ, a.floor, a.min_clean)
-    summ.update({"floor_mhz": a.floor, "min_clean": a.min_clean, "pass": ok, "why": why})
+    ok, why = passes(summ, a.floor, a.min_clean, mode=a.mode)
+    summ.update({"floor_mhz": a.floor, "mode": a.mode, "pass": ok, "why": why})
+    summ.update({"persistent_share": PERSISTENT_SHARE} if a.mode == "clock" else {"min_clean": a.min_clean})
     print(json.dumps(summ, sort_keys=True))
     return 0 if ok else 1
 

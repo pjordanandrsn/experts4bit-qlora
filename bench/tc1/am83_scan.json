@@ -1,0 +1,203 @@
+{
+ "card_clock_sha256": "1dae29569b776f7ce4595e07b1582011ed8ed1b7068b07ce7cb484aa8ed266ac",
+ "serving": {
+  "busy_power_draw_median_w": 74.74,
+  "busy_rows": 51,
+  "busy_rows_ge_2700": 19,
+  "ge_2700_with_other_hard": 0,
+  "ge_2700_with_reliability": 1,
+  "ge_2700_with_swpowercap": 1,
+  "per_second_logs_with_reasons": 0,
+  "phase_snapshot_files": 14,
+  "snapshot_rows": 60
+ },
+ "source": "the private receipt store's per-second clock logs, card_clock.py at the bytes given",
+ "training": {
+  "groups": {
+   "RTX 4090 | busy median >= 2500": {
+    "busy_samples": 2146,
+    "logs": 10,
+    "logs_other_hard_any": 0,
+    "logs_reliability_over_half": 0,
+    "logs_swpowercap_over_5pct": 1,
+    "logs_with_any_reliability": 0,
+    "other_hard_bits_seen": [],
+    "reliability_share_where_set": null,
+    "runs": 7,
+    "sm_median": {
+     "max": 2745.0,
+     "median": 2520,
+     "min": 2520,
+     "n": 10,
+     "p10": 2520,
+     "p90": 2655
+    },
+    "swpowercap_share": {
+     "max": 0.1224,
+     "median": 0.0,
+     "min": 0.0,
+     "n": 10,
+     "p10": 0.0,
+     "p90": 0.0256
+    }
+   },
+   "RTX 5090 | busy median < 2700": {
+    "busy_samples": 50182,
+    "logs": 182,
+    "logs_other_hard_any": 0,
+    "logs_reliability_over_half": 6,
+    "logs_swpowercap_over_5pct": 51,
+    "logs_with_any_reliability": 6,
+    "other_hard_bits_seen": [],
+    "reliability_share_where_set": {
+     "max": 1.0,
+     "median": 1.0,
+     "min": 1.0,
+     "n": 6,
+     "p10": 1.0,
+     "p90": 1.0
+    },
+    "runs": 40,
+    "sm_median": {
+     "max": 2692,
+     "median": 2505,
+     "min": 1477,
+     "n": 182,
+     "p10": 2400,
+     "p90": 2647.0
+    },
+    "swpowercap_share": {
+     "max": 0.754,
+     "median": 0.0,
+     "min": 0.0,
+     "n": 182,
+     "p10": 0.0,
+     "p90": 0.4161
+    }
+   },
+   "RTX 5090 | busy median >= 2700": {
+    "busy_samples": 179249,
+    "logs": 422,
+    "logs_other_hard_any": 0,
+    "logs_reliability_over_half": 2,
+    "logs_swpowercap_over_5pct": 117,
+    "logs_with_any_reliability": 3,
+    "other_hard_bits_seen": [],
+    "reliability_share_where_set": {
+     "max": 0.8061,
+     "median": 0.7257,
+     "min": 0.3714,
+     "n": 3,
+     "p10": 0.3714,
+     "p90": 0.8061
+    },
+    "runs": 76,
+    "sm_median": {
+     "max": 3045,
+     "median": 2872,
+     "min": 2700,
+     "n": 422,
+     "p10": 2790,
+     "p90": 2977
+    },
+    "swpowercap_share": {
+     "max": 0.8355,
+     "median": 0.0028,
+     "min": 0.0,
+     "n": 422,
+     "p10": 0.0,
+     "p90": 0.4615
+    }
+   },
+   "RTX 5090 | busy median >= 2700 | < 575 W": {
+    "busy_samples": 50323,
+    "logs": 129,
+    "logs_other_hard_any": 0,
+    "logs_reliability_over_half": 2,
+    "logs_swpowercap_over_5pct": 64,
+    "logs_with_any_reliability": 3,
+    "other_hard_bits_seen": [],
+    "reliability_share_where_set": {
+     "max": 0.8061,
+     "median": 0.7257,
+     "min": 0.3714,
+     "n": 3,
+     "p10": 0.3714,
+     "p90": 0.8061
+    },
+    "runs": 24,
+    "sm_median": {
+     "max": 3045,
+     "median": 2835.0,
+     "min": 2707.0,
+     "n": 129,
+     "p10": 2752.0,
+     "p90": 2902
+    },
+    "swpowercap_share": {
+     "max": 0.8355,
+     "median": 0.0498,
+     "min": 0.0,
+     "n": 129,
+     "p10": 0.0,
+     "p90": 0.7162
+    }
+   },
+   "RTX 5090 | busy median >= 2700 | >= 575 W": {
+    "busy_samples": 128926,
+    "logs": 293,
+    "logs_other_hard_any": 0,
+    "logs_reliability_over_half": 0,
+    "logs_swpowercap_over_5pct": 53,
+    "logs_with_any_reliability": 0,
+    "other_hard_bits_seen": [],
+    "reliability_share_where_set": null,
+    "runs": 52,
+    "sm_median": {
+     "max": 3037,
+     "median": 2895,
+     "min": 2700,
+     "n": 293,
+     "p10": 2835.0,
+     "p90": 2985
+    },
+    "swpowercap_share": {
+     "max": 0.6383,
+     "median": 0.0,
+     "min": 0.0,
+     "n": 293,
+     "p10": 0.0,
+     "p90": 0.2937
+    }
+   },
+   "unknown | no registered floor": {
+    "busy_samples": 28668,
+    "logs": 123,
+    "logs_other_hard_any": 0,
+    "logs_reliability_over_half": 0,
+    "logs_swpowercap_over_5pct": 58,
+    "logs_with_any_reliability": 0,
+    "other_hard_bits_seen": [],
+    "reliability_share_where_set": null,
+    "runs": 25,
+    "sm_median": {
+     "max": 2040,
+     "median": 1785.0,
+     "min": 1200,
+     "n": 123,
+     "p10": 1200.0,
+     "p90": 1785
+    },
+    "swpowercap_share": {
+     "max": 0.7303,
+     "median": 0.03,
+     "min": 0.0,
+     "n": 123,
+     "p10": 0.0,
+     "p90": 0.4528
+    }
+   }
+  },
+  "logs_read": 737
+ }
+}

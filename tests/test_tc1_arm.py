@@ -423,8 +423,9 @@ def test_tc1_drive_stages_the_clinical_builder_and_manifest_for_tc1b():
     # the clinical build + sha check are tp4_run.sh's lines, gated on the qwen3curve token
     for line in ("(cd $W/data && $PY_E4B $W/n9_datasets.py $W/data > $W/logs/dataset_clinical.log 2>&1); tail -1 logs/dataset_clinical.log",
                  "CLIN_SHA=$($PY_E4B -c \"import json; print(json.load(open('$W/ds_manifest.json'))['clinical']['sha256'])\")",
-                 "GOT=$(sha256sum $W/data/ds_clinical.json | awk '{print $1}'); [ \"$GOT\" = \"$CLIN_SHA\" ] || { say \"DATASET MISMATCH clinical: $GOT != $CLIN_SHA\"; finish 13; }"):
-        assert line in run and line in tp4, line
+                 "GOT=$(sha256sum $W/data/ds_clinical.json | awk '{print $1}'); [ \"$GOT\" = \"$CLIN_SHA\" ] || { say \"DATASET MISMATCH clinical: $GOT != $CLIN_SHA\"; finish 29; }"):
+        # TC1 amendment 82: TC1 finishes 29 on the mismatch where tp4 (another lane) keeps 13; the lines are otherwise tp4's, byte for byte
+        assert line in run and re.sub(r"finish \d+", "finish N", line) in re.sub(r"finish \d+", "finish N", tp4), line
     gate = run[run.index('case " $FAMILIES " in *" qwen3curve "*)      # TC1b: the anchor pair'):]
     assert gate.index("n9_datasets.py $W/data") < gate.index("esac")
 

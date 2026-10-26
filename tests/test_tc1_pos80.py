@@ -27,6 +27,7 @@ RUN = (TC1 / "tc1_run.sh").read_text()
 DRIVE = (TC1 / "tc1_drive.sh").read_text()
 PREREG = (TC1 / "TC1-PREREG.md").read_text()
 A80 = PREREG[PREREG.index("### Amendment 80 "):]
+A83 = PREREG[PREREG.index("### Amendment 83 "):]   # supersedes amendment 80's card-floor lines
 TEMPLATE = json.loads((TC1 / "pos80_manifest_template.json").read_text())
 RECEIPTS = REPO / "bench" / "h2h-2026-10-02" / "tc1" / "receipts"
 P69 = RECEIPTS / "tc1-5090-137"
@@ -93,12 +94,15 @@ def test_the_pins_agree_across_the_kit_the_reducer_the_template_and_the_registra
 def test_the_registrations_burn_and_draw_numbers_are_the_codes():
     """The PREREG is the contract: its box-fact burn line, its host-floor text and its per-draw rule carry the reducer's and the box's own
     numbers, so text and code cannot drift (a stale min_clean 1.0 survived one review)."""
-    m = re.search(r"one passing CARD_CLOCK burn line at (\d+) MHz, min_clean ([0-9.]+), with hard_bits_every_sample true", A80)
-    assert m, "the box-fact burn line"
-    assert (int(m.group(1)), float(m.group(2))) == (RED.POS80_CLOCK_FLOOR, RED.POS80_BURN_MIN_CLEAN)
-    assert float(re.search(r"--min-clean ([0-9.]+)", _cut(r"card_clock\.py burn .*?\n")).group(1)) == RED.POS80_BURN_MIN_CLEAN
-    assert f"SwPowerCap 0x4 is clear on **>= {round(RED.POS80_BURN_MIN_CLEAN * 100)} %** of busy samples" in A80       # the host-floor text
-    assert f">= {int(RED.POS80_DRAW_MIN_CLEAN * 100)} % of busy samples" in A80                      # the per-draw floor
+    m = re.search(r"one passing CARD_CLOCK burn line at (\d+) MHz, mode (\w+), persistent_share ([0-9.]+), with "
+                  r"any_sample_bits_every_sample true", A83)
+    assert m, "amendment 83's box-fact burn line"
+    assert (int(m.group(1)), m.group(2), float(m.group(3))) == (RED.POS80_CLOCK_FLOOR, RED.POS80_CARD_MODE, RED.POS80_PERSISTENT_SHARE)
+    assert RED.POS80_PERSISTENT_SHARE == CC.PERSISTENT_SHARE and RED.POS80_CARD_MODE in CC.MODES
+    assert re.search(r"--mode (\w+)", _cut(r"card_clock\.py burn .*?\n")).group(1) == RED.POS80_CARD_MODE
+    assert f"Reliability 0x400 on **>= {round(RED.POS80_PERSISTENT_SHARE * 100)} %** of busy samples" in A83     # the host-floor text
+    assert "SwPowerCap 0x4 is **recorded and never refuses**" in A83
+    assert "4. **The card floor on every draw:**" in A83                                               # the per-draw rule moved too
     for stale in ("min_clean 1.0", "20..22", "steps 3..5", "profile_warm 3"):
         assert stale not in A80, stale
 
@@ -182,7 +186,7 @@ def _floors(tmp: Path, mops="20.00", burn_rc=0):
 def test_the_host_floors_pass_a_fast_host_and_a_clean_card(tmp_path):
     p, summary, args = _floors(tmp_path)
     assert "PASSED" in p.stdout and p.returncode == 0, p.stdout + p.stderr
-    assert "--floor 2700 --seconds 20 --min-clean 0.95" in args and "CARD_CLOCK" in summary and "SINGLE_THREAD 20.00" in summary
+    assert "--floor 2700 --seconds 20 --mode clock --min-clean 0.95" in args and "CARD_CLOCK" in summary and "SINGLE_THREAD 20.00" in summary
 
 
 def test_a_capped_card_refuses_with_the_host_floor_code_before_any_install(tmp_path):
@@ -431,7 +435,8 @@ def _run_dir(tmp: Path, clocks: str = "clean", pins: bool = True, burn: bool = T
     hs = RED.POS80_HELPER_SHA256
     summary += (f"\nPOS80_PINS e4b 0.58.1 @{E4B} gnf4 0.51.0 @{GNF4} unsloth 2026.10.8 unsloth_zoo 2026.10.8 release_proof {hs['release_proof']} "
                 f"card_clock {hs['card_clock']} f15v2 {hs['f15v2']}\nPOS80_ARM_ENV e4b=[] extra=[]\nSINGLE_THREAD 18.20 Mops (median of 5; floor 15; amendment 80)\n"
-                + ("CARD_CLOCK " + json.dumps({"pass": True, "floor_mhz": 2700, "min_clean": 0.95, "hard_bits_every_sample": True, "sm_median": 2895}) + "\n" if burn else "")
+                + ("CARD_CLOCK " + json.dumps({"pass": True, "floor_mhz": 2700, "mode": "clock", "persistent_share": 0.95,
+                                              "any_sample_bits_every_sample": True, "sm_median": 2895}) + "\n" if burn else "")
                 + "RELEASE_PROOF fastcheck OK experts4bit-qlora==0.58.1 grouped-nf4-gemm==0.51.0 unsloth==2026.10.8 unsloth_zoo==2026.10.8 pycache_prefix /tmp/tc1-pycache-zzz999\n"
                 f"RELEASE_PROOF binding OK experts4bit-qlora==0.58.1 grouped-nf4-gemm==0.51.0 unsloth==2026.10.8 unsloth_zoo==2026.10.8 pycache_prefix {pfx}\n"
                 "POS80_KNOB_ENV E4B_SHA GNF4_SHA\n")

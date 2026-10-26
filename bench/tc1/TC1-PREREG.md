@@ -4070,3 +4070,118 @@ docs/COMPARATORS.md, docs/FAMILIES.md and llms-full.txt are regenerated.
 4. **The fetch imports no links.**
 
 **Budget.** $0.
+
+### Amendment 82 (2026-10-25T22:00Z, code amended 2026-10-26, $0, no box): a dataset refusal is TC1 lane code 29, never the launcher's disk code 13 (one fixed rule)
+
+**Why.** The launcher excludes a rented machine when the driver exits one of its host codes: 13 (disk), 14 (egress), 17 (power cap),
+18 (host floor). It reads 13 as free space on `/root` under the checkpoint floor. `tc1_run.sh` also finished 13 in three other places:
+- the alpaca dataset fetch failing (line 790);
+- the alpaca dataset's sha256 not matching its pin (792);
+- the clinical dataset's sha256 not matching its pin (798).
+None of them is a host property. A sha mismatch at a pinned revision is upstream or build state, so on 13 every host would be excluded in
+turn while the same mismatch repeated. A plain fetch failure, even at the 900 s alarm, is not a measured host property either. The
+registered egress code is 14, which carries a measured pull rate under the floor, and a lane that wants egress evidence measures the rate
+and uses 14. The TC1 harness extension (e4b#2146) moved `tc1_drive.sh` onto `bench/common/drive_tail.sh`, which passes host codes through
+as the old tail did. That surfaced this, and the maintainer ruled (a): remap.
+
+**The rule:**
+1. The three sites finish **29**, a TC1 lane code with a DATASET reason. The disk floor (line 363, `BOX_REFUSED disk=`) stays 13.
+   - The ruling first named 21. That was corrected before merge: `tc1_drive.sh` itself exits 21 on a start failure (line 154), as do
+     158 drivers under `bench/`. So "command exited 21" would have meant either the driver's start failure or the box's dataset
+     refusal. That is the ambiguity `drive_tail.sh` keeps out for 23, 24 and 26.
+   - 29 is free in `tc1_run.sh`, `tc1_drive.sh` and `bench/common`. Elsewhere it has only three lane-local uses (P146, P149, P223),
+     none a cross-lane convention.
+2. `tc1_drive.sh`'s `drive_finish` lane list gains 29: `9 12 15 19 29 78 130`. Without it, `drive_finish` would turn 29 into 26.
+3. `tests/test_tc1_exit_codes.py` reads `tc1_run.sh`'s own text and holds three rules:
+   - every literal `finish N` is a host code on a line stating a host-floor reason (`BOX_REFUSED`, `host floor`, `host-limited`), or one
+     of TC1's lane codes (0 9 12 15 19 29 78 130);
+   - 13 appears exactly once, at the disk floor;
+   - the driver's lane list equals the script's non-zero lane codes;
+   - no lane code is a code the driver exits on its own (every literal `exit N` in `tc1_drive.sh` and `bench/common/drive_tail.sh`),
+     except 0 and 78, which mean the same on both sides (success, and a config refusal).
+   A mutant of each rule is caught: the old dataset 13, a host code with no reason, an unregistered code, 29 missing from the list, and
+   21 put back (it collides with the driver's start failure).
+
+**Scope.** No reading changes: these are refusals before any arm runs. TC1 boxes from here on, P237's and P238's included, run under this
+rule. Earlier receipts keep the codes they recorded.
+
+**Budget.** $0.
+
+### Amendment 83 (2026-10-26T03:30Z, $0, no box): the card floor's clock binds; SwPowerCap is recorded, and Reliability refuses only when persistent (one fixed rule)
+
+**Why.** The store holds exactly two `card_clock.py` burns, both P238's shakedown (2026-10-26):
+- `p238-shake-1`, a card at a 430 W limit: busy median 2,493.5 MHz, SwPowerCap on 100 % of busy samples. It refused, rightly.
+- `p238-shake-r1`, a stock 575 W card: busy median **2,827 MHz**, above the 2,700 floor. It refused on the bits alone: SwPowerCap on
+  98.6 % of its busy samples, and Reliability (0x400) set on one sample.
+
+Amendment 80's burn rule held SwPowerCap to 95 % of busy samples and Reliability to every sample. Neither bar was ever tested on a real
+burn: its "brief power cap" test sprinkled SwPowerCap at 1-in-33 into a training log. A sustained 8192^2 bf16 matmul is power-bound, so a
+healthy card sits at its limit with SwPowerCap set. The first healthy card burned failed the bar, and the clock, not the bits, is what
+separates the two cards.
+
+**The evidence** (a $0 scan of every per-second clock log in the private receipt store, read by `card_clock.py`'s own parser at
+amendment 80's bytes; `bench/tc1/am83_scan.py` and its counts-only output `bench/tc1/am83_scan.json`; no run, machine or GPU id):
+- **RTX 5090, busy median >= 2,700 MHz (a healthy clock):** 422 training logs from 76 runs (179,249 busy samples).
+  - SwPowerCap was on more than 5 % of busy samples in **117 of 422** logs (28 %): 53 of 293 at a 575 W limit, 64 of 129 below it.
+    The per-log maximum was 83.5 %. Amendment 80's per-draw bar would have VOIDed 28 % of healthy training logs.
+  - Reliability was set in 3 logs, at **37 %, 73 % and 81 %** of busy samples. All three are one 475 W card at 2,827-3,045 MHz whose
+    busy samples alternate Reliability and SwPowerCap. On it, Reliability behaves as a power-limit reason, not as a slow card.
+  - Any other slowdown bit (HwSlowdown, SwThermalSlowdown, HwThermalSlowdown, HwPowerBrakeSlowdown, BoardLimit): **0 logs**.
+- **RTX 5090, busy median < 2,700 MHz:** 182 logs from 40 runs. Reliability was set in 6 logs, **every one at 100 %** of busy samples
+  (amendment 79's box at a flat 2,400 MHz, and the same 475 W card's two sub-floor logs). SwPowerCap was over 5 % in 51 logs, so it does
+  not separate either side.
+- **RTX 4090, busy median >= 2,500 MHz:** 10 logs from 7 runs. SwPowerCap at most 12 % (1 log over 5 %); no Reliability. These are too
+  few to calibrate a 4090: each lane registers its own floor per card class.
+- **Serving:** the store holds no per-second log with reason bits. The SC1 sampler records none. The only serving reasons are 14 phase
+  start/end snapshot files (51 busy rows, a median draw of 75 W), too few to set a bar.
+
+**The rule.** This supersedes amendment 80's host-floor bullet on the card's loaded SM clock, its validity item 4 and its box-fact burn
+line. Amendment 80's text above is unchanged. The other host floors stand.
+- **The card's loaded SM clock**: `bench/common/card_clock.py` (sha256 `14494c6d045f5840457fb26477c83435f17ecfdf35438a0cfcbd703d6547eba8`), in its `clock`
+  mode. The CLI's `--mode` defaults to `clock`, visible in each call line. `passes()` takes `mode` keyword-only with no
+  default, so a Python caller names its rule and a call written for amendment 80 raises TypeError instead of changing meaning. It runs the same 20 s bf16 matmul burn, sampled by nvidia-smi, and it passes when all three hold:
+  - the busy SM median is >= 2700 MHz;
+  - no slowdown bit is set on **any** sample: HwSlowdown 0x8, SwThermalSlowdown 0x20, HwThermalSlowdown 0x40, HwPowerBrakeSlowdown 0x80,
+    or BoardLimit 0x200;
+  - Reliability 0x400 on **>= 95 %** of busy samples refuses: it is persistent. The share is counted, and its denominator is the busy
+    samples (SM above 1000 MHz). The healthy-clock maximum on record is 81 % and every sub-floor log sits at 100 %, so 95 % lies in that
+    gap. Do not set it below about 90 % without a new observation.
+  - SwPowerCap 0x4 is **recorded and never refuses**.
+  The burn's JSON keeps every field `summarize()` wrote under amendment 80 (`samples`, `busy_samples`, `sm_median`, `sm_p10`, `sm_max`,
+  `mem_median`, `reasons_seen`, `reasons_seen_mask`, `busy_clean_fraction`, `busy_soft_clean_fraction`, `hard_reasons_any_sample`), with
+  the same names and meanings. It adds the busy-sample counts and fractions of SwPowerCap and Reliability, `any_sample_bits_seen`, and
+  every sample's (sm, mask), so each clause re-derives from the burn itself. On the burn line itself, the `clock` mode REPLACES
+  amendment 80's two rule fields, `min_clean` and `hard_bits_every_sample`, with `mode`, `persistent_share` and
+  `any_sample_bits_every_sample`; the named `pct_clean` mode writes amendment 80's two fields as before. `--min-clean` is still accepted
+  and binds only `pct_clean`.
+
+4. **The card floor on every draw:** the arm's own `gpuclk_<arm>.txt` passes the same `clock` rule. Otherwise that draw is VOID.
+- **The box fact:** one passing CARD_CLOCK burn line at 2700 MHz, mode clock, persistent_share 0.95, with any_sample_bits_every_sample true.
+
+**What the guards are.** The Reliability bar and the any-sample bits are guards that **no record above the floor has ever tripped**.
+Every persistent-Reliability log on record is also sub-floor, so the clock already refuses all of them, and no log carried an any-sample
+bit. They stay because a future card above the floor with persistent Reliability, or a thermal slowdown, should not pass silently. They
+do not separate any card on record.
+
+**A burn summary written before this amendment** (both of P238's) holds no per-sample Reliability share. In the `clock` mode that clause
+reads UNREAD and the summary refuses, saying so: `p238-shake-r1`'s share lies anywhere from 1/72 to 72/72, and none is assumed.
+`tests/test_card_clock.py` asserts each clause of both records separately. The boundary is proven on real per-second bytes: the 475 W
+card's 81 % log passes; amendment 79's log with its clock lifted above the floor refuses at 100 %; and a 474/475-of-500 pair cut from
+that log passes at 94.8 % and refuses at exactly 95 %, so `>` for `>=` is caught. The synthetic SwPowerCap-sprinkle cases are removed.
+
+**Amendment 80's bars by name.** `card_clock.py`'s `pct_clean` mode keeps them unchanged, for a lane that registers them explicitly. It is
+never the default. `REFUSE_BITS`, `SOFT_BITS`, `HARD_BITS` and `BUSY_MHZ` keep their values, since SC2f's judge-run reads them. SC2f, SC2h
+and SC2i's serving bars are their own lanes' to re-register from the serving evidence above (SC2f Amendment 9).
+
+**The re-pins.** Every kit that stages `card_clock.py` moves to these bytes before it launches:
+- TC1's pos80 kit, here: `tc1_reduce.py`'s `POS80_HELPER_SHA256` and its per-draw and burn-line reads, `tc1_run.sh`'s burn call
+  (`--mode clock`), and the manifest template's guard;
+- P238, by its own amendment;
+- P237, in its kit;
+- G3's closed check needs nothing: its pin test reads the kit's merge (e4b#2151).
+Every launch gated by the card floor was held until its kit re-pins.
+
+**Scope.** No reading changes. Only amendment 80's pos80 reducer applied the old bars, and no pos80 box has run: the store's only burns are
+P238's two shakedown refusals, which are host refusals with no strike. TC1 boxes from here on run under this rule.
+
+**Budget.** $0.
