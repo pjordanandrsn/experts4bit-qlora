@@ -18,16 +18,16 @@ say(){ echo "[$(date -u +%FT%TZ)] p238: $*"; }
 NONCE=${P238_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/P238_RUN_NONCE.tmp && mv $W/P238_RUN_NONCE.tmp $W/P238_RUN_NONCE
 finish(){ local rc=$1; printf '%s\n' "$rc" > P238_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > P238_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
 trap 'finish 130' INT TERM
-for v in P238_RUN_ID P238_DRAWS P238_DEADLINE_EPOCH E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
-# ---- the run id and the draws it may run (the driver derives DRAWS from the id; a mismatch is refused, never trusted)
+for v in P238_RUN_ID P238_BOX P238_DEADLINE_EPOCH E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
+# ---- the run id and the box it runs (the driver derives BOX from the id; a mismatch is refused, never trusted): a whole reading
+# runs every process (all); box i of a K-box split runs its whole (draw, point) blocks (K-i, p238_schedule.blocks); the shakedown
 case "$P238_RUN_ID" in
-  p238-shake-1|p238-shake-r[12]) WANT_DRAWS=shake;;
-  p238-5090-[12]|p238-5090-r[1-3]) WANT_DRAWS=1,2;;
-  p238-5090-[12]a) WANT_DRAWS=1;;
-  p238-5090-[12]b) WANT_DRAWS=2;;
+  p238-shake-1|p238-shake-r[12]) WANT_BOX=shake;;
+  p238-5090-[12]|p238-5090-r[1-3]) WANT_BOX=all;;
+  p238-5090-[12]-2-[12]|p238-5090-[12]-4-[1-4]|p238-5090-[12]-8-[1-8]) WANT_BOX=${P238_RUN_ID#p238-5090-[12]-};;
   *) say "unregistered run ID: $P238_RUN_ID"; finish 78;;
 esac
-[ "$P238_DRAWS" = "$WANT_DRAWS" ] || { say "refusing: draws $P238_DRAWS are not $P238_RUN_ID's ($WANT_DRAWS)"; finish 78; }
+[ "$P238_BOX" = "$WANT_BOX" ] || { say "refusing: box $P238_BOX is not $P238_RUN_ID's ($WANT_BOX)"; finish 78; }
 # ---- the pins: constants, refused if overridden
 E4B_VERSION=0.58.1; GNF4_VERSION=0.51.0; UNSLOTH_VERSION=2026.10.8; ZOO_VERSION=2026.10.8; PEFT_VERSION=0.21.2; BNB_VERSION=0.50.2
 NVML_VERSION=13.615.71              # nvidia-ml-py: the energy counter (p238_op.py) and card_clock's reason bits
@@ -52,7 +52,7 @@ done
 export UNSLOTH_MOE_NF4_AUTO_MAX_ROWS=128 UNSLOTH_MOE_NF4_AUTOTUNE=0 UNSLOTH_MOE_GROUPED_TRITON=auto UNSLOTH_MOE_FUSED_ROUTER=0 UNSLOTH_ENABLE_LOGGING=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True HF_HUB_DISABLE_TELEMETRY=1
 : > summary.txt; echo "$P238_RUN_ID" > RUN_ID
-echo "KNOBS e4b=$E4B_VERSION gnf4=$GNF4_VERSION unsloth=$UNSLOTH_VERSION zoo=$ZOO_VERSION peft=$PEFT_VERSION bnb=$BNB_VERSION torch=$TORCH_WANT draws=$P238_DRAWS load_s=$LOAD_S" | tee -a summary.txt
+echo "KNOBS e4b=$E4B_VERSION gnf4=$GNF4_VERSION unsloth=$UNSLOTH_VERSION zoo=$ZOO_VERSION peft=$PEFT_VERSION bnb=$BNB_VERSION torch=$TORCH_WANT box=$P238_BOX load_s=$LOAD_S" | tee -a summary.txt
 # ---- staged pieces, byte-for-byte
 STAGED="p238_run.sh p238_op.py p238_hook.py p238_bytes.py p238_reduce.py p238_schedule.py staged-p238.sha256 unsloth_moe_counter.py
         card_clock.py tc1_arm.py f15v2.py release_proof.py tp4_alpaca.py"
@@ -129,10 +129,9 @@ perl -e 'alarm 120; exec @ARGV' python3 $W/card_clock.py burn --floor $CLOCK_FLO
 { echo -n "CARD_CLOCK rc=$crc "; tail -1 logs/card_clock_burn.log | cut -c1-240; } | tee -a summary.txt
 case "$crc" in 0) ;; 18) say "REFUSED: the card clock is under its floor"; echo "refused: card clock" > REFUSAL; finish 18;; *) say "CARD CLOCK PROBE FAULT rc=$crc"; finish 9;; esac
 # the guard fit: installs + the snapshot fetch + every process this box runs x the registered per-load wall + the op timing, x 1.25
-case "$P238_DRAWS" in
-  1,2) N_PROC=$(python3 $W/p238_schedule.py | wc -l);;
-  1|2) N_PROC=$(python3 $W/p238_schedule.py --draw "$P238_DRAWS" | wc -l);;
+case "$P238_BOX" in
   shake) N_PROC=7;;                       # the shakedown: draw 1's two op processes + one load per arm at 2k
+  *) N_PROC=$(python3 $W/p238_schedule.py --box "$P238_BOX" | wc -l);;
 esac
 FIT=$((INSTALL_S + FETCH_S + N_PROC * LOAD_S + OP_TIMING_S + RESERVE)); FIT_NEED=$((FIT * 125 / 100)); LEFT=$((P238_DEADLINE_EPOCH - $(date +%s)))
 [ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x 125%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
@@ -223,15 +222,15 @@ arm_flags(){ case "$1" in
 point_flags(){ case "$1" in
   2k) echo "--micro-batch 1 --tokens $W/data/tokens_packed.json";;  4k) echo "--micro-batch 2 --tokens $W/data/tokens_packed.json";;
   8k) echo "--micro-batch 4 --tokens $W/data/tokens_packed.json";;  field) echo "--micro-batch 2 --tokens $W/data/tokens_field.json";; esac; }
-DRAW_ARGS=""; case "$P238_DRAWS" in 1) DRAW_ARGS="--draw 1";; 2) DRAW_ARGS="--draw 2";; shake) DRAW_ARGS="--draw 1";; esac
-python3 $W/p238_schedule.py $DRAW_ARGS > $W/schedule.txt
+BOX_ARGS="--box $P238_BOX"; [ "$P238_BOX" = shake ] && BOX_ARGS="--draw 1"
+python3 $W/p238_schedule.py $BOX_ARGS > $W/schedule.txt
 while read -r idx kind draw point who pos; do
-  if [ "$P238_DRAWS" = shake ]; then case "$kind:$point" in op:*|step:2k) ;; *) continue;; esac; fi
+  if [ "$P238_BOX" = shake ]; then case "$kind:$point" in op:*|step:2k) ;; *) continue;; esac; fi
   AL=$(alarm_for $((LOAD_S * 2)))
   if [ "$kind" = op ]; then
     say "[$idx] op $who draw $draw (alarm $AL)"
     (cd $W && PYTHONPATH=$W perl -e "alarm $AL; exec @ARGV" $PY $W/p238_op.py --framework $who --draw $draw --out $W/ops/op_${idx}_$who.json \
-       $( [ "$P238_DRAWS" = shake ] && echo "--rows 64" )) > logs/op_$idx.log 2>&1
+       $( [ "$P238_BOX" = shake ] && echo "--rows 64" )) > logs/op_$idx.log 2>&1
     echo "PROC $idx op $who draw=$draw rc=$?" | tee -a summary.txt
   else
     say "[$idx] step $who $point draw $draw pos $pos (alarm $AL)"
@@ -248,11 +247,11 @@ while read -r idx kind draw point who pos; do
   fi
 done < $W/schedule.txt
 # ---- the rule
-# a half of a split (draws 1 or 2) reduces its own faults only (HALF_OK, never read alone; the controller merges the two halves),
-# the shakedown likewise (SHAKE_OK, never read); a one-box reading must cover the whole schedule
-case "$P238_DRAWS" in 1|2) MODE=half;; shake) MODE=shake;; *) MODE=read;; esac
+# a box of a split (K-i) reduces its own faults only (PART_OK, never read alone; the controller merges the K boxes), the
+# shakedown likewise (SHAKE_OK, never read); a one-box reading must cover the whole schedule
+case "$P238_BOX" in all) MODE=read;; shake) MODE=shake;; *) MODE=part;; esac
 say "reduce"; $PY $W/p238_reduce.py --work $W --mode $MODE --out $W/verdict_p238.json 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s "$W/verdict_p238.json" ] || { say "REDUCER FAILED: no reading"; finish 27; }
 V=$($PY -c "import json; print(json.load(open('$W/verdict_p238.json'))['verdict'])")
-[ "$P238_DRAWS" = shake ] && { say "shakedown: $V (never read)"; finish 0; }
-case "$V:$P238_DRAWS" in READ:1,2|HALF_OK:1|HALF_OK:2) finish 0;; *) say "P238 $V (draws $P238_DRAWS) -- no reading"; finish 27;; esac
+[ "$P238_BOX" = shake ] && { say "shakedown: $V (never read)"; finish 0; }
+case "$V:$P238_BOX" in READ:all|PART_OK:[248]-[1-8]) finish 0;; *) say "P238 $V (box $P238_BOX) -- no reading"; finish 27;; esac

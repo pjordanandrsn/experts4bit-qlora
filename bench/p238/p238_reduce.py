@@ -490,7 +490,7 @@ def readings(out_rows, raw):
     Quality (the PREREG's bars, per draw: within a framework 1e-3 / 0.01, across 0.01 / 0.05): a miss reads QUALITY_FAIL with the
     ratio beside it, never hidden, and not quoted. Stability (each arm's two draws within 5 % e4b / 10 % Unsloth on wall and device
     time): a miss lists the arm in ``unstable`` and keeps the pair out of the headline. UA against U0 carries the quality bars only
-    (its ratio is not a registered reading). Each pair also reports its per-draw wall ratio (a split reading's per-half ratio)."""
+    (its ratio is not a registered reading). Each pair also reports its per-draw wall ratio (a split reading holds each draw on its own boxes)."""
     by = {}
     for o in out_rows:
         by.setdefault((o["point"], o["arm"]), []).append(o)
@@ -562,7 +562,7 @@ def reduce(rows, op_rows, partial=None):
     for o in out["rows"]:
         groups.setdefault((o["point"], o["arm"]), []).append(o)
     for (point, arm), g in groups.items():
-        if partial:                                      # a half (or the shakedown) holds one draw: no reproduce rule here
+        if partial:                                      # a part of a split (or the shakedown) holds one draw: no reproduce here
             break
         if any(o["verdict"] == "OOM" for o in g) and not (len(g) >= 2 and all(o["verdict"] == "OOM" for o in g)):
             for o in g:
@@ -706,10 +706,10 @@ def normalize_op(work, sched):
             "premise_table": _int_keys(facts.get("premise_table")), "adapters": facts.get("adapters")}
 
 
-def _schedule():
+def _sched():
     sys.path.insert(0, HERE)
     import p238_schedule
-    return p238_schedule.schedule()
+    return p238_schedule
 
 
 def rental_machine(work):
@@ -731,7 +731,7 @@ def load_box(work):
     want = None
     if os.path.isfile(sched_txt):
         want = {int(line.split()[0]) for line in open(sched_txt, encoding="utf-8") if line.strip()}
-    sched = [r for r in _schedule() if want is None or r["index"] in want]
+    sched = [r for r in _sched().schedule() if want is None or r["index"] in want]
     box = _json(os.path.join(work, "box.json")) or {}
     proof = release_proof_ok(os.path.join(work, "release_proof.json"))
     env_box = env_file(os.path.join(work, "env_box.txt"))
@@ -742,65 +742,76 @@ def load_box(work):
             "machine": rental_machine(work), "image_env": env_file(os.path.join(work, "env_image.txt"))}
 
 
-MODES = {"read": None, "half": "HALF_OK", "shake": "SHAKE_OK"}
+MODES = {"read": None, "part": "PART_OK", "shake": "SHAKE_OK"}
 
 
-def reduce_boxes(boxes, mode="read", full=None):
-    """``mode``: "read" (the reading: one box covering the whole schedule, or the two halves of a SPLIT), "half" (one half on its
-    own box: that half's own faults only, verdict HALF_OK, never read alone) or "shake" (the shakedown's reduced schedule: its
-    faults only, SHAKE_OK, never read). A read covers the 44-process schedule exactly once, no gap and no index twice, over draws
-    1 and 2: a lone half is no reading. A split: each half is reduced alone first (its own release proof, env_box, card and
-    clocks are on its rows), one draw each; then the pair checks, the OOM reproduce rule and the readings run on the merged rows.
-    ``cross_host`` is set exactly when the halves' machines differ (the stability band is then a cross-host band); a half
-    without its rental record's machine VOIDs the merge (the band cannot be placed). Image env is information."""
-    full = {r["index"] for r in _schedule()} if full is None else set(full)
-    why, info, cross = [], [], False
+def _block_of(want):
+    """"K-i" when ``want`` is exactly box i of a K-box split (K > 1, p238_schedule.blocks), else None."""
+    sch = _sched()
+    for k in sch.SPLITS[1:]:
+        for i, b in enumerate(sch.blocks(k), 1):
+            if want == set(b):
+                return f"{k}-{i}"
+    return None
+
+
+def reduce_boxes(boxes, mode="read"):
+    """``mode``: "read" (the reading: one box, or the K boxes of a split), "part" (one box of a split, on that box: its own faults
+    only, verdict PART_OK, never read alone) or "shake" (the shakedown's reduced schedule: its faults only, SHAKE_OK, never read).
+    A read covers the 44-process schedule exactly once, no gap and no index twice, in K = 1, 2, 4 or 8 boxes, each box exactly one
+    of p238_schedule.blocks(K) (whole (draw, point) blocks, never split by arm): a lone part is no reading. A split: each box is
+    reduced alone first (its own release proof, env_box, card and clocks are on its rows); then the pair checks, the OOM reproduce
+    rule and the readings run on the merged rows. ``cross_host`` is set exactly when the boxes' machines differ (the stability band
+    is then a cross-host band); a box without its rental record's machine VOIDs the merge (the band cannot be placed). Image env is
+    information."""
+    sch = _sched()
+    full = {r["index"] for r in sch.schedule()}
+    why, info, cross, k = [], [], False, len(boxes)
     if mode not in MODES:
         why.append(f"mode {mode!r}")
-    if mode == "half" and (len(boxes) != 1 or len(boxes[0]["draws"]) != 1):
-        why.append(f"a half is one box of one draw ({len(boxes)} box(es), draws {[b['draws'] for b in boxes]})")
-    if mode != "read" and len(boxes) != 1:
-        why.append(f"a {mode} is one box, not {len(boxes)}")
-    if len(boxes) > 2 or not boxes:
-        why.append(f"{len(boxes)} boxes: one box, or the two halves of a split")
-    if mode == "read" and len(boxes) == 1:
-        want = boxes[0]["want"]
-        if want is None or want != full or boxes[0]["draws"] != [1, 2]:
-            why.append(f"one box must cover the whole schedule over draws 1 and 2 (draws {boxes[0]['draws']}, "
-                       f"{'no schedule.txt' if want is None else f'{len(want & full)} of {len(full)} indices'})")
-    if len(boxes) == 2:
-        a, b = boxes
-        if a["want"] is None or b["want"] is None:
-            why.append("a half without its schedule.txt")
+    if not boxes or (mode != "read" and k != 1):
+        why.append(f"{k} box(es): a {mode} is one box")
+    if mode == "part" and k == 1 and (boxes[0]["want"] is None or _block_of(boxes[0]["want"]) is None):
+        why.append("a part is box i of a K-box split: whole (draw, point) blocks (p238_schedule.blocks)")
+    if mode == "read" and boxes:
+        if k not in sch.SPLITS:
+            why.append(f"{k} boxes: a reading is {', '.join(map(str, sch.SPLITS))} boxes")
+        elif any(b["want"] is None for b in boxes):
+            why.append("a box without its schedule.txt")
         else:
-            both, gap = sorted(a["want"] & b["want"]), sorted(full - (a["want"] | b["want"]))
-            extra = sorted((a["want"] | b["want"]) - full)
-            if both:
-                why.append(f"indices {both[:6]} in both halves")
+            seen = [i for b in boxes for i in b["want"]]
+            dup = sorted({i for i in seen if seen.count(i) > 1})
+            gap, extra = sorted(full - set(seen)), sorted(set(seen) - full)
+            if dup:
+                why.append(f"indices {dup[:6]} in two boxes")
             if gap:
-                why.append(f"indices {gap[:6]} in neither half")
+                why.append(f"indices {gap[:6]} in no box")
             if extra:
                 why.append(f"indices {extra[:6]} not in the schedule")
-        if len(a["draws"]) != 1 or len(b["draws"]) != 1 or a["draws"] == b["draws"]:
-            why.append(f"the halves' draws {a['draws']} / {b['draws']} are not draw 1 and draw 2")
-        if a["machine"] is None or b["machine"] is None:
-            why.append("a half without its rental record's machine (cross_host cannot be set)")
-        cross = a["machine"] is not None and b["machine"] is not None and a["machine"] != b["machine"]
-        for x in boxes:
-            info.append({"draws": x["draws"], "n_rows": len(x["rows"]), "n_op_rows": len(x["ops"]),
-                         "half_verdict": reduce(x["rows"], x["ops"], partial="HALF_OK")["verdict"]})
+            if not (dup or gap or extra) and sorted(sorted(b["want"]) for b in boxes) != sorted(sch.blocks(k)):
+                why.append(f"the {k} boxes are not the whole (draw, point) blocks of a {k}-box split")
+        if k > 1:
+            machines = [b["machine"] for b in boxes]
+            if None in machines:
+                why.append("a box without its rental record's machine (cross_host cannot be set)")
+            else:
+                cross = len(set(machines)) > 1
+            for x in boxes:
+                info.append({"block": _block_of(x["want"]) if x["want"] is not None else None, "draws": x["draws"],
+                             "n_rows": len(x["rows"]), "n_op_rows": len(x["ops"]),
+                             "part_verdict": reduce(x["rows"], x["ops"], partial="PART_OK")["verdict"]})
     out = reduce([r for x in boxes for r in x["rows"]], [o for x in boxes for o in x["ops"]], partial=MODES.get(mode))
-    out["boxes"], out["merge_why"], out["split"] = info, why, len(boxes) == 2
+    out["boxes"], out["merge_why"], out["k"] = info, why, k if mode == "read" else None
     out["cross_host"] = cross
     out["stability_scope"] = "cross_host" if cross else "within_host"
-    out["image_env"] = boxes[0]["image_env"] if len(boxes) == 1 else [x["image_env"] for x in boxes]   # information only
+    out["image_env"] = boxes[0]["image_env"] if k == 1 else [x["image_env"] for x in boxes]   # information only
     if why:
         out["verdict"] = "VOID"
     return out
 
 
 def reduce_work(works, mode="read"):
-    """``works``: one run directory, or the two fetched halves of a split reading (draw 1's box, draw 2's box)."""
+    """``works``: one run directory, or the K fetched boxes of a split reading."""
     works = [works] if isinstance(works, str) else list(works)
     return reduce_boxes([load_box(w) for w in works], mode=mode)
 
@@ -958,10 +969,10 @@ def main(argv=None):
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true")
-    ap.add_argument("--work", nargs="+", help="a box's run directory (/root/p238 on the box, or a fetched copy), or the two "
-                    "fetched halves of a split reading (draw 1's, then draw 2's)")
+    ap.add_argument("--work", nargs="+", help="a box's run directory (/root/p238 on the box, or a fetched copy), or the K "
+                    "fetched boxes of a split reading")
     ap.add_argument("--mode", choices=sorted(MODES), default="read",
-                    help="read (the reading), half (one half of a split, on its box: HALF_OK), shake (the shakedown: SHAKE_OK)")
+                    help="read (the reading), part (one box of a split, on that box: PART_OK), shake (the shakedown: SHAKE_OK)")
     ap.add_argument("--out", help="where the verdict JSON goes")
     a = ap.parse_args(argv)
     if a.selftest:

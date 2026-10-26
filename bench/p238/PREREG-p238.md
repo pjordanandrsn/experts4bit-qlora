@@ -308,7 +308,7 @@ UNSTABLE and kept out of the headline (TC1's rule). The reducer reports, per poi
 QUALITY_FAIL with the ratio beside it, not quoted; UA against U0 carries the within-framework bars without a registered ratio), the
 arms that are UNSTABLE, whether the pair is headline-eligible, and each draw's own wall ratio.
 
-**The box's verdict** (the merged halves' for a split) is READ only when every op row READs and every step row READs or is a
+**The box's verdict** (the merged K boxes' for a split) is READ only when every op row READs and every step row READs or is a
 reproduced OOM; each VOID row is reported with its faults, and a VOID row is never dropped to rescue the rest (the runner exits 27).
 
 **Reported, never a bar:** per row the ratio medians and draw bands; per load the order position, global index, load wall and the
@@ -360,21 +360,32 @@ attention-only training (except the stated e4b property), other ranks, other mod
   a real record, one op cell per framework (each in its own op process) and one load per arm at the 2k point. It is never read.
   It measures the per-load wall, from which the reading's guard is fit. If either framework cannot train the model: STOP and report.
 - **Then the reading:** `p238-5090-1`, its one rerun `p238-5090-2`; retry ids `p238-5090-r1` to `r3` for a box that does not start.
-  - **The split rule:** the reading's fit is 44 x the shakedown's measured per-load wall (40 step loads and 4 op processes) plus the op timing, plus a 25 % headroom.
-    If that exceeds the 8 h guard, or its worst cost exceeds USD 15, the reading is SPLIT across two boxes **by draw, never by arm**
-    (`p238-5090-1a` draw 1 with its two op processes, `p238-5090-1b` draw 2 with its two; the rerun likewise `p238-5090-2a` / `2b`), the card floor checked on each box. The split is decided
-    from the shakedown's receipt and stated before the reading launches. **The machine:** `1b` runs on the SAME machine as `1a`
-    (pinned to `1a`'s machine), so a split differs from one box only by the re-rent and the stability band stays within one
-    host. Only if that machine cannot be rented within 24 h of `1a`'s receipt may `1b` run on another machine of the registered
-    class, each half passing its own card floor; that reading is labelled `cross_host`: its 5 % / 10 % stability band is reported
-    as a CROSS-HOST band (conservative: it can only flag more pairs UNSTABLE), its ratios stay within one host (each half holds
-    both arms of its draw), and each half's per-draw ratio is reported beside the headline. **The reduction:** a half box reduces
-    its own faults only (its release proof, `env_box.txt`, card, clocks and rows; `--half`) and exits 0 with HALF_OK, or 27 on
-    a fault; a HALF_OK is never a strike. The reading is the controller's merge of the two fetched halves (`--work 1a 1b`): their
-    indices cover the 44-process schedule exactly once (no gap, no index twice), one draw each, and the pair checks, the OOM
-    reproduce rule and the readings run on the merged rows. Each half's machine comes from the controller's store-only rental
-    record beside it and only sets `cross_host` (a half without one VOIDs the merge); the verdict and any public text carry
-    `cross_host` yes / no and never a machine, instance or GPU id.
+  - **The box cap** is min(the rental policy's per-run wallclock maximum, 18 h, which the launcher refuses above; the hours the
+    USD 15 run-worst buys at the box's rate after its downloads, 12.7 h at USD 1.05/h): one registered constant
+    (`p238_schedule.py`, pinned by the kit test). A box whose guard exceeds the policy's 6 h default runs under the per-run
+    override, which the policy allows only when the box's worst is at most USD 15.
+  - **The split rule:** a box's fit is its process count x the shakedown's measured per-load wall, plus installs, the snapshot
+    fetch, the op timing and the reserve, x 1.25 (the runner's guard fit). The reading runs in the fewest K of 1, 2, 4 or 8
+    boxes whose largest box fits the box cap (K = 1 whenever one box fits), decided from the shakedown's receipt
+    (`p238_schedule.py --plan <its measured wall>`: K, or `NO_FIT`, and then the reading does not launch) and stated before the
+    reading launches. The K boxes are whole (draw, point) blocks, **by draw and point group, never by arm**
+    (`p238_schedule.blocks`): K = 2 is draw 1 and draw 2; K = 4 cuts each draw's points, in that draw's run order, into two
+    groups of two; K = 8 runs each (draw, point) alone. Every box holds all 5 arms of its points, so every ratio is within one
+    box; a draw's two op processes ride in its first box. Box i of K runs as `p238-5090-<R>-<K>-<i>` (R = 1 the reading, 2 the
+    rerun), the card floor checked on each box.
+  - **The machine:** every box of a split runs on box 1's machine (pinned to it), so a split differs from one box only by the
+    re-rents and the stability band stays within one host. Only if that machine cannot be rented within 24 h of the previous
+    box's receipt may a later box run on another machine of the registered class, each box passing its own card floor; that
+    reading is labelled `cross_host`: its 5 % / 10 % stability band is reported as a CROSS-HOST band (conservative: it can only
+    flag more pairs UNSTABLE), its ratios stay within one host (each box holds both arms of its points), and each draw's own
+    ratio is reported beside the headline.
+  - **The reduction:** a box of a split reduces its own faults only (its release proof, `env_box.txt`, card, clocks and rows;
+    `--mode part`) and exits 0 with PART_OK, or 27 on a fault; a PART_OK is never a strike. The reading is the controller's
+    merge of the K fetched boxes (`--work <box 1> ... <box K>`): each is exactly one of the K blocks, together they cover the
+    44-process schedule exactly once (no gap, no index twice), and the pair checks, the OOM reproduce rule and the readings run
+    on the merged rows. Each box's machine comes from the controller's store-only rental record beside it and only sets
+    `cross_host` (a box without one VOIDs the merge); the verdict and any public text carry `cross_host` yes / no and never a
+    machine, instance or GPU id.
 - A box is started at its `STARTED` marker (after the refusals and the pre-install fit). Two strikes end the lane. The runner's exit
   codes follow P236's table (13, 15, 16, 18 host refusals before `STARTED`; 41 fit; 9, 10, 78, 130 halts; 27 VOID). 78 includes an
   ambient knob: any `UNSLOTH_*`, `E4B_*`, `GNF4_*` or `NF4_QLORA_*` key already set on the box, other than the five Unsloth pins the
@@ -400,12 +411,21 @@ attention-only training (except the stated e4b property), other ranks, other mod
 - **One RTX 5090 per box** (Vast verified/secure, cc 12.0, >= 160 SMs, VRAM >= 30,000 MiB; host RAM and disk at TC1 amendment 80's
   Qwen3.6 floors), at most **USD 1.05/h** (the program's 5090 policy rate on 2026-10-23), downloads at most USD 0.02/GB (about 72 GB of model plus
   about 10 GB of installs per box).
-- **Shakedown:** about 1.5 h; worst 2 h x USD 1.05 + 82 GB x USD 0.02 = **USD 3.74**.
-- **Reading:** estimated 44 loads x about 8 minutes + the op timing (about 0.5 h) = about 6.4 h; worst at the 8 h guard
-  8 x USD 1.05 + USD 1.64 = **USD 10.04** on one box, or about USD 6 per box when split. Fit from the shakedown, as above.
+- **Shakedown:** about 1.5 h; its guard is its own fit (7 processes at the registered default 900 s: 4.9 h, under the policy's
+  6 h default); worst 4.9 h x USD 1.05 + 82 GB x USD 0.02 = **USD 6.78**.
+- **Per box:** every box's guard is at most the box cap, so every box's worst (its guard x USD 1.05 + USD 1.64 of downloads) is at
+  most **USD 15**. That is the per-box rule; a split READING is K boxes and may exceed USD 15 in total.
+- **Reading, as a function of K** (estimated 44 loads x about 8 minutes + the op timing, about 6.4 h of work): its worst is the
+  sum of its K boxes' worsts, at most K x USD 15. At 480 s a load, K = 1: one box of 10.0 h, **USD 12.18**. At 900 s, K = 2: two
+  boxes of 9.6 h, USD 11.70 each, **USD 23.40**. At 1,500 s, K = 4: the largest box 9.0 h; at 3,000 s, K = 8. Fit from the
+  shakedown, as above.
 - **Retries:** a box that does not start costs at most its boot slack, about USD 0.25.
-- **Lane worst:** USD 3.74 + 2 x USD 10.04 (a reading and its rerun) + 3 x USD 0.25 = **USD 24.57** over four runs; every run is under
-  USD 15. Expected: about USD 11.
+- **Lane worst:** the shakedown + 2 readings (a reading and its rerun) + 3 retries = USD 6.78 + 2 x (the reading's worst) +
+  USD 0.75: **USD 31.89** at K = 1 (480 s), **USD 54.33** at K = 2 (900 s), at most USD 6.78 + 2 x K x USD 15 + USD 0.75 in
+  general. Expected at K = 1: about USD 20.
+- **The daily rail** (USD 100/day across the program) is the one a split can bind: the K boxes run one after another on one
+  machine and can span two calendar days, and they share each day with every other lane's boxes. Every P238 box is disclosed
+  at create and at teardown, as every rental is.
 
 ## Launch
 

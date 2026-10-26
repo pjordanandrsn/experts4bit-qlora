@@ -16,6 +16,11 @@ POINTS = ("2k", "4k", "8k", "field")
 ARMS = ("E_F", "E_A", "U0", "U1", "UA")
 FRAMEWORK = {"E_F": "e4b", "E_A": "e4b", "U0": "unsloth", "U1": "unsloth", "UA": "unsloth"}
 OPS = {1: ("e4b", "unsloth"), 2: ("unsloth", "e4b")}
+# The box cap (PREREG "The split rule"): min(the rental policy's per-run wallclock maximum, which the launcher refuses above, and
+# the hours the USD 15 run-worst buys at the box's rate after the downloads). ONE registered constant, pinned by the kit test.
+POLICY_MAX_WALLCLOCK_H = 18                          # the policy's per-run override maximum (a run without one keeps the 6 h default)
+RUN_WORST_USD, USD_PER_H_MAX, DOWNLOAD_USD = 15.0, 1.05, 1.64
+INSTALL_S, FETCH_S, OP_TIMING_S, RESERVE_S, HEADROOM_PCT = 2700, 2400, 1800, 900, 125   # the runner's guard fit (the kit test binds them)
 
 
 def schedule():
@@ -34,12 +39,73 @@ def schedule():
     return out
 
 
+def fit_s(n_proc, load_s):
+    """The runner's guard fit for a box of ``n_proc`` processes at ``load_s`` s each: installs + the snapshot fetch + the processes
+    + the op timing + the reserve, x 1.25 (integer, as the runner's shell arithmetic)."""
+    return (INSTALL_S + FETCH_S + n_proc * load_s + OP_TIMING_S + RESERVE_S) * HEADROOM_PCT // 100
+
+
+def box_cap_s(usd_per_h=USD_PER_H_MAX):
+    return int(min(POLICY_MAX_WALLCLOCK_H, (RUN_WORST_USD - DOWNLOAD_USD) / usd_per_h) * 3600)
+
+
+SPLITS = (1, 2, 4, 8)                                # K boxes: whole; by draw; each draw in 2 point groups; each (draw, point) alone
+
+
+def blocks(k):
+    """The K boxes of a split reading, box 1..K, each the sorted global indices it runs: whole (draw, point) blocks, never split by
+    arm (every box holds all 5 arms of its points, so every ratio stays within one box). K = 1 is the whole schedule; otherwise each
+    draw's points, in that draw's run order, are cut into K/2 contiguous groups, and a draw's two op processes ride in its first box."""
+    s = schedule()
+    if k == 1:
+        return [[r["index"] for r in s]]
+    if k not in SPLITS:
+        raise ValueError(f"K {k} is not one of {SPLITS}")
+    g, out = k // 2, []
+    for d in (1, 2):
+        order = list(POINTS if d == 1 else reversed(POINTS))
+        size = len(order) // g
+        for j in range(g):
+            grp = set(order[j * size:(j + 1) * size])
+            out.append([r["index"] for r in s if r["draw"] == d and ((r["kind"] == "op" and j == 0) or r["point"] in grp)])
+    return out
+
+
+def box_rows(spec):
+    """``spec``: "all" (the whole schedule) or "K-i" (box i of a K-box split) -> its rows in run order; ValueError otherwise."""
+    if spec == "all":
+        return schedule()
+    k, _, i = spec.partition("-")
+    if not (k.isdigit() and i.isdigit()) or int(k) not in SPLITS[1:] or not 1 <= int(i) <= int(k):
+        raise ValueError(f"box {spec!r}: 'all', or K-i with K in {SPLITS[1:]} and 1 <= i <= K")
+    want = set(blocks(int(k))[int(i) - 1])
+    return [r for r in schedule() if r["index"] in want]
+
+
+def plan(load_s, usd_per_h=USD_PER_H_MAX):
+    """The reading's box count, from the shakedown's measured per-load wall, decided before the reading launches: the fewest K
+    whose largest box fits the box cap (K = 1 whenever the cap allows), else None (no registered split fits: no reading launches)."""
+    cap = box_cap_s(usd_per_h)
+    for k in SPLITS:
+        if max(fit_s(len(b), load_s) for b in blocks(k)) <= cap:
+            return k
+    return None
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    draw = int(argv[argv.index("--draw") + 1]) if "--draw" in argv else None
-    for r in schedule():
-        if draw is None or r["draw"] == draw:
-            print(r["index"], r["kind"], r["draw"], r["point"] or "-", r["arm"] or r["framework"], r["position"] if r["position"] is not None else "-")
+    if "--plan" in argv:                                 # --plan LOAD_S [USD_PER_H] -> K, or NO_FIT
+        rest = argv[argv.index("--plan") + 1:]
+        k = plan(int(rest[0]), float(rest[1]) if len(rest) > 1 else USD_PER_H_MAX)
+        print("NO_FIT" if k is None else k)
+        return 0
+    if "--box" in argv:
+        rows = box_rows(argv[argv.index("--box") + 1])
+    else:
+        draw = int(argv[argv.index("--draw") + 1]) if "--draw" in argv else None
+        rows = [r for r in schedule() if draw is None or r["draw"] == draw]
+    for r in rows:
+        print(r["index"], r["kind"], r["draw"], r["point"] or "-", r["arm"] or r["framework"], r["position"] if r["position"] is not None else "-")
     return 0
 
 

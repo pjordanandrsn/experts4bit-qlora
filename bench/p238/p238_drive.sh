@@ -2,7 +2,7 @@
 # P238's CONTROLLER side (bench/p238/PREREG-p238.md): P236's driver (bench/p236/p236_drive.sh) by named edits -- this lane's run
 # ids (the shakedown, the reading and its rerun, each optionally split by DRAW into an a/b box pair, and the retry ids), its staged
 # files (its own kit plus the shared helpers it imports: the Unsloth counter, the card floor, tc1_arm, F15 v2, the release proof),
-# and the draws a box runs (P238_DRAWS). The fetch imports no links (rsync --no-links, bench/common rule 8). It stages the
+# and the box it runs (P238_BOX: all, K-i or shake). The fetch imports no links (rsync --no-links, bench/common rule 8). It stages the
 # hash-pinned files to the rented box, starts p238_run.sh, polls its TP_DONE marker with a heartbeat line, and fetches the run
 # directory back. It does not create, destroy, or approve compute: pod-launch, which calls it, holds the provider key.
 #   E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH
@@ -19,13 +19,12 @@ if [ -n "${P238_DRIVE_TAIL_DIR:-}" ]; then finish "$P238_DRIVE_TAIL_DIR" "${P238
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set"; exit 78; }
 done
-# The registered ids: a whole box runs both draws; an "a" box runs draw 1 and a "b" box draw 2 (the split rule, by draw, never by
-# arm). The shakedown runs its own reduced schedule (P238_DRAWS=shake).
+# The registered ids: a whole reading runs every process (BOX=all); p238-5090-<R>-<K>-<i> runs box i of a K-box split, its whole
+# (draw, point) blocks (BOX=K-i; p238_schedule.blocks: by draw and point group, never by arm). The shakedown: BOX=shake.
 case "$E4B_RENT_RUN_ID" in
-  p238-shake-1|p238-shake-r[12])          DRAWS=shake;;
-  p238-5090-[12]|p238-5090-r[1-3])        DRAWS=1,2;;
-  p238-5090-[12]a)                        DRAWS=1;;
-  p238-5090-[12]b)                        DRAWS=2;;
+  p238-shake-1|p238-shake-r[12])          BOX=shake;;
+  p238-5090-[12]|p238-5090-r[1-3])        BOX=all;;
+  p238-5090-[12]-2-[12]|p238-5090-[12]-4-[1-4]|p238-5090-[12]-8-[1-8]) BOX=${E4B_RENT_RUN_ID#p238-5090-[12]-};;
   *) say "refusing unregistered run ID: $E4B_RENT_RUN_ID"; exit 78;;
 esac
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
@@ -46,13 +45,13 @@ SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAlive
 W=/root/p238
 NONCE=$(python3 -c "import secrets; print(secrets.token_hex(8))")
 if [ "${P238_DRIVE_DRYRUN:-0}" = "1" ]; then
-  echo "DRYRUN stage $(ls "$STAGE" | wc -l | tr -d ' ') files -> root@$HOST:$W ; run p238_run.sh draws $DRAWS ; poll TP_DONE until $DEADLINE ; fetch -> $RUN_DIR/p238"
+  echo "DRYRUN stage $(ls "$STAGE" | wc -l | tr -d ' ') files -> root@$HOST:$W ; run p238_run.sh box $BOX ; poll TP_DONE until $DEADLINE ; fetch -> $RUN_DIR/p238"
   exit 0
 fi
-say "run $E4B_RENT_RUN_ID (draws $DRAWS) -> $HOST:$PORT; deadline $DEADLINE; e4b $E4B_SHA"
+say "run $E4B_RENT_RUN_ID (box $BOX) -> $HOST:$PORT; deadline $DEADLINE; e4b $E4B_SHA"
 $SSH "test ! -e $W && mkdir -p $W" || { say "stage failed: remote dir exists or ssh refused"; exit 20; }
 scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT "$STAGE"/* "root@$HOST:$W/" || { say "stage failed: scp"; exit 20; }
-$SSH "cd $W && P238_RUN_ID=$E4B_RENT_RUN_ID P238_DRAWS=$DRAWS P238_DEADLINE_EPOCH=$DEADLINE P238_RUN_NONCE=$NONCE E4B_SHA=$E4B_SHA \
+$SSH "cd $W && P238_RUN_ID=$E4B_RENT_RUN_ID P238_BOX=$BOX P238_DEADLINE_EPOCH=$DEADLINE P238_RUN_NONCE=$NONCE E4B_SHA=$E4B_SHA \
   nohup bash p238_run.sh > outer.log 2>&1 < /dev/null & echo started" || { say "start failed"; exit 21; }
 while :; do
   now=$(date +%s)

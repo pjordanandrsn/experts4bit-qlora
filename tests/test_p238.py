@@ -434,7 +434,7 @@ def test_the_driver_parses_and_refuses_unregistered_ids(tmp_path):
     assert subprocess.run(["bash", "-n", str(drive)]).returncode == 0
     env = {**os.environ, "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-q", "E4B_RENT_RUN_DIR": str(tmp_path),
            "E4B_RENT_DEADLINE_EPOCH": "1"}
-    for rid in ("p238-5090-3", "p238-shake-2", "p238-5090-1c", "p236-5090-1", ""):
+    for rid in ("p238-5090-3", "p238-shake-2", "p238-5090-1c", "p236-5090-1", "", "p238-5090-1a", "p238-5090-1-4-5"):
         r = subprocess.run(["bash", str(drive)], env={**env, "E4B_RENT_RUN_ID": rid}, capture_output=True, text=True)
         assert r.returncode == 78, (rid, r.stdout, r.stderr)
 
@@ -528,10 +528,10 @@ def _work_dir(tmp_path):
 
 def test_reduce_work_reads_a_box_directory_end_to_end(tmp_path):
     R, w = _work_dir(tmp_path)
-    out = R.reduce_work(str(w), mode="half")
-    assert out["verdict"] == "HALF_OK", out                      # a draw-1 box directory: one half, never read alone
+    out = R.reduce_work(str(w), mode="shake")
+    assert out["verdict"] == "SHAKE_OK", out                     # a partial box directory: its own faults, never read
     assert (out["n_rows"], out["n_op_rows"], out["n_void"]) == (1, 1, 0)
-    assert R.reduce_work(str(w))["verdict"] == "VOID"             # read as the reading, a half is no reading
+    assert R.reduce_work(str(w))["verdict"] == "VOID"             # read as the reading, a partial box is no reading
 
 
 @pytest.mark.parametrize("remove", ["loads/3/qwen3_5_e4b_p238_3_E_F_2k.json", "loads/3/qwen3_5_e4b_p238_3_E_F_2k_profile.json",
@@ -539,7 +539,7 @@ def test_reduce_work_reads_a_box_directory_end_to_end(tmp_path):
 def test_reduce_work_voids_when_any_file_is_missing(tmp_path, remove):
     R, w = _work_dir(tmp_path)
     (w / remove).unlink()
-    out = R.reduce_work(str(w), mode="half")
+    out = R.reduce_work(str(w), mode="shake")
     assert out["verdict"] == "VOID" and out["n_void"] >= 1
 
 
@@ -566,12 +566,12 @@ def test_an_env_box_with_an_extra_key_voids_and_an_image_key_is_information(tmp_
     from the image lands in env_image.txt as information and never VOIDs."""
     R, w = _work_dir(tmp_path)
     _write(w / "env_image.txt", "PYTORCH_VERSION=2.12.1\nNV_CUDA_LIB_VERSION=13.0.1\n")
-    out = R.reduce_work(str(w), mode="half")
-    assert out["verdict"] == "HALF_OK" and out["image_env"]["PYTORCH_VERSION"] == "2.12.1", out
+    out = R.reduce_work(str(w), mode="shake")
+    assert out["verdict"] == "SHAKE_OK" and out["image_env"]["PYTORCH_VERSION"] == "2.12.1", out
     body = (w / "env_box.txt").read_text(encoding="utf-8")
     for extra in ("E4B_TRAIN_DETERMINISTIC=1\n", "PYTORCH_VERSION=2.12.1\n", "not an env line\n"):
         (w / "env_box.txt").write_text(body + extra, encoding="utf-8")
-        out = R.reduce_work(str(w), mode="half")
+        out = R.reduce_work(str(w), mode="shake")
         assert out["verdict"] == "VOID" and any("unregistered" in y for r in out["rows"] for y in r["why"]), (extra, out["rows"])
 
 
@@ -845,21 +845,21 @@ def _grid(R, monkeypatch, oom=(), **status):
     import copy
     monkeypatch.setattr(R, "row_faults", lambda r, t, c: R.check_present(r))
     e, _, _ = R._good_rows()
-    rows, idx = [], 0
-    for draw in (1, 2):
-        for point in R.POINT_TOKENS:
-            for arm in R.ARMS:
-                idx += 1
-                r = copy.deepcopy(e)
-                r.update(index=idx, draw=draw, point=point, arm=arm, framework=R.ARMS[arm], step_ms=[1000.0 * SPEED[arm]] * R.STEPS,
-                         rc=0, phase=None, peak_vram_gb=20.0 + idx / 100)
-                r["profile"]["summary"]["device_ms"] = 900.0 * SPEED[arm]
-                if (point, arm, draw) in oom:
-                    r.update(status="oom", rc=R.OOM_EXIT, phase="train", step_ms=[1000.0] * 3)
-                if f"{point}:{arm}:{draw}" in status:
-                    st, rc = status[f"{point}:{arm}:{draw}"]
-                    r.update(status=st, rc=rc, phase="train")
-                rows.append(r)
+    rows = []
+    for s in R._sched().schedule():                    # the schedule's own indices, so boxes are its real blocks
+        if s["kind"] != "step":
+            continue
+        idx, draw, point, arm = s["index"], s["draw"], s["point"], s["arm"]
+        r = copy.deepcopy(e)
+        r.update(index=idx, draw=draw, point=point, arm=arm, framework=R.ARMS[arm], step_ms=[1000.0 * SPEED[arm]] * R.STEPS,
+                 rc=0, phase=None, peak_vram_gb=20.0 + idx / 100)
+        r["profile"]["summary"]["device_ms"] = 900.0 * SPEED[arm]
+        if (point, arm, draw) in oom:
+            r.update(status="oom", rc=R.OOM_EXIT, phase="train", step_ms=[1000.0] * 3)
+        if f"{point}:{arm}:{draw}" in status:
+            st, rc = status[f"{point}:{arm}:{draw}"]
+            r.update(status=st, rc=rc, phase="train")
+        rows.append(r)
     return rows
 
 
@@ -942,69 +942,139 @@ def test_the_runners_proc_lines_carry_each_loads_exit(tmp_path):
     assert R.proc_rcs(str(tmp_path / "missing.txt")) == {}
 
 
-def _box(rows, draws, machine="m-1"):
-    return {"want": {r["index"] for r in rows}, "draws": draws, "rows": rows, "ops": [], "machine": machine, "image_env": None}
+def _ops(R, monkeypatch):
+    """The schedule's op processes as op rows whose checks pass (op_faults, the premise and the census narrowed), so the box tests
+    read the merge rules alone."""
+    monkeypatch.setattr(R, "op_faults", lambda rec: [])
+    monkeypatch.setattr(R, "check_premise", lambda o, t: [])
+    monkeypatch.setattr(R, "check_census", lambda o, c: [])
+    return [{"index": s["index"], "framework": s["framework"], "draw": s["draw"], "record": {}}
+            for s in R._sched().schedule() if s["kind"] == "op"]
 
 
-def _halves(R, monkeypatch, oom=(), machines=("m-1", "m-1")):
-    rows = _grid(R, monkeypatch, oom)
-    d1, d2 = [r for r in rows if r["draw"] == 1], [r for r in rows if r["draw"] == 2]
-    return rows, _box(d1, [1], machines[0]), _box(d2, [2], machines[1]), {r["index"] for r in rows}
+def _parts(R, monkeypatch, k, oom=(), machines=None):
+    """The K boxes of a reading (p238_schedule.blocks(K); K = 1 is one box), each its block's step rows and op rows."""
+    rows, ops = _grid(R, monkeypatch, oom), _ops(R, monkeypatch)
+    out = []
+    for i, b in enumerate(R._sched().blocks(k)):
+        want = set(b)
+        rs, os_ = [r for r in rows if r["index"] in want], [o for o in ops if o["index"] in want]
+        out.append({"want": want, "draws": sorted({x["draw"] for x in rs + os_}), "rows": rs, "ops": os_,
+                    "machine": (machines or ["m-1"] * k)[i], "image_env": None})
+    return out
 
 
-def test_a_split_reproduces_the_one_box_verdict_on_the_same_rows(monkeypatch):
+def test_the_blocks_cover_the_schedule_once_by_draw_and_point_never_by_arm():
+    S = _load("p238_schedule", "bench/p238/p238_schedule.py")
+    sched = {r["index"]: r for r in S.schedule()}
+    for k in S.SPLITS:
+        b = S.blocks(k)
+        assert len(b) == k and sorted(i for x in b for i in x) == sorted(sched)
+        if k == 1:
+            continue
+        firsts = {}
+        for n, x in enumerate(b):
+            rows = [sched[i] for i in x]
+            assert len({r["draw"] for r in rows}) == 1                                  # one draw per box
+            for p in {r["point"] for r in rows if r["kind"] == "step"}:                 # every arm of every point it holds
+                assert sorted(r["arm"] for r in rows if r["point"] == p) == sorted(S.ARMS)
+            firsts.setdefault(rows[0]["draw"], n)
+            assert any(r["kind"] == "op" for r in rows) == (firsts[rows[0]["draw"]] == n)   # a draw's ops ride in its first box
+        for i in range(1, k + 1):
+            assert [r["index"] for r in S.box_rows(f"{k}-{i}")] == b[i - 1]
+    assert [r["index"] for r in S.box_rows("all")] == sorted(sched)
+    for bad in ("2-3", "4-0", "3-1", "16-1", "1-1", "x", "2-", "all2"):
+        with pytest.raises(ValueError):
+            S.box_rows(bad)
+
+
+def test_the_plan_picks_the_fewest_k_under_the_box_cap():
+    """The box cap: min(the policy's per-run wallclock maximum, 18 h; the hours USD 15 buys at USD 1.05/h after USD 1.64 of
+    downloads) -- one constant, pinned here. The plan is the fewest K whose largest box fits it; K = 1 whenever one box fits."""
+    import re
+    import subprocess
+    import sys as _sys
+    S = _load("p238_schedule", "bench/p238/p238_schedule.py")
+    assert (S.POLICY_MAX_WALLCLOCK_H, S.RUN_WORST_USD, S.USD_PER_H_MAX, S.DOWNLOAD_USD) == (18, 15.0, 1.05, 1.64)
+    assert S.box_cap_s() == int(min(18, (15.0 - 1.64) / 1.05) * 3600)
+    run = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
+    m = re.search(r"^INSTALL_S=(\d+); FETCH_S=(\d+); OP_TIMING_S=(\d+); RESERVE=(\d+)$", run, re.M)
+    assert tuple(map(int, m.groups())) == (S.INSTALL_S, S.FETCH_S, S.OP_TIMING_S, S.RESERVE_S)
+    assert "FIT_NEED=$((FIT * 125 / 100))" in run and S.HEADROOM_PCT == 125
+    for load_s, k in ((200, 1), (480, 1), (600, 1), (700, 2), (900, 2), (1500, 4), (3000, 8), (5000, None)):
+        assert S.plan(load_s) == k, (load_s, S.plan(load_s))
+        fits = [max(S.fit_s(len(b), load_s) for b in S.blocks(x)) <= S.box_cap_s() for x in S.SPLITS]
+        assert k == next((x for x, f in zip(S.SPLITS, fits) if f), None)            # the fewest K that fits
+    out = subprocess.run([_sys.executable, str(ROOT / "bench" / "p238" / "p238_schedule.py"), "--plan", "900"], capture_output=True, text=True)
+    assert out.stdout.strip() == "2"
+    out = subprocess.run([_sys.executable, str(ROOT / "bench" / "p238" / "p238_schedule.py"), "--plan", "5000"], capture_output=True, text=True)
+    assert out.stdout.strip() == "NO_FIT"
+
+
+@pytest.mark.parametrize("k", [2, 4, 8])
+def test_a_split_reproduces_the_one_box_verdict_on_the_same_rows(monkeypatch, k):
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
-    rows, a, b, full = _halves(R, monkeypatch)
-    one = R.reduce_boxes([_box(rows, [1, 2])], full=full)
-    split = R.reduce_boxes([a, b], full=full)
-    assert one["verdict"] == split["verdict"] == "READ" and one["readings"] == split["readings"]
-    assert split["split"] and not one["split"] and [x["half_verdict"] for x in split["boxes"]] == ["HALF_OK", "HALF_OK"]
-    assert R.reduce_boxes([a], mode="half", full=full)["verdict"] == "HALF_OK"
+    one = R.reduce_boxes(_parts(R, monkeypatch, 1))
+    split = R.reduce_boxes(_parts(R, monkeypatch, k))
+    assert one["verdict"] == split["verdict"] == "READ" and one["readings"] == split["readings"], split["merge_why"]
+    assert split["k"] == k and [x["part_verdict"] for x in split["boxes"]] == ["PART_OK"] * k
+    assert [x["block"] for x in split["boxes"]] == [f"{k}-{i}" for i in range(1, k + 1)]
+    for p in _parts(R, monkeypatch, k):
+        assert R.reduce_boxes([p], mode="part")["verdict"] == "PART_OK"
 
 
-def test_a_half_alone_or_missing_is_no_reading(monkeypatch):
+def test_a_part_alone_or_missing_is_no_reading(monkeypatch):
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
-    rows, a, b, full = _halves(R, monkeypatch)
-    for boxes in ([a], [b]):
-        out = R.reduce_boxes(boxes, full=full)
-        assert out["verdict"] == "VOID" and "cover the whole schedule" in out["merge_why"][0], out["merge_why"]
-    assert R.reduce_boxes([a, b, a], full=full)["verdict"] == "VOID"
-    assert R.reduce_boxes([a, b], mode="half", full=full)["verdict"] == "VOID"      # a half is one box
-    a["want"] = None
-    assert "without its schedule.txt" in " ".join(R.reduce_boxes([a, b], full=full)["merge_why"])
+    parts = _parts(R, monkeypatch, 4)
+    out = R.reduce_boxes(parts[:3])
+    assert out["verdict"] == "VOID" and "a reading is 1, 2, 4, 8 boxes" in out["merge_why"][0], out["merge_why"]
+    two = _parts(R, monkeypatch, 2)
+    out = R.reduce_boxes(two[:1])
+    assert out["verdict"] == "VOID" and any("in no box" in w for w in out["merge_why"]), out["merge_why"]
+    out = R.reduce_boxes(parts[:2])                                                    # two of four: a 2-box reading's shape, not its blocks
+    assert out["verdict"] == "VOID" and any("in no box" in w for w in out["merge_why"]), out["merge_why"]
+    assert R.reduce_boxes(two, mode="part")["verdict"] == "VOID"                       # a part is one box
+    whole = _parts(R, monkeypatch, 1)[0]
+    assert R.reduce_boxes([whole], mode="part")["verdict"] == "VOID"                   # the whole schedule is no part
+    two[0]["want"] = None
+    assert "without its schedule.txt" in " ".join(R.reduce_boxes(two)["merge_why"])
 
 
-def test_an_index_in_both_halves_or_in_neither_reads_void(monkeypatch):
+def test_an_index_in_two_boxes_or_in_none_or_not_whole_blocks_reads_void(monkeypatch):
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
-    rows, a, b, full = _halves(R, monkeypatch)
-    dup = dict(b, want=b["want"] | {min(a["want"])})
-    assert any("in both halves" in w for w in R.reduce_boxes([a, dup], full=full)["merge_why"])
-    gap = dict(b, want=b["want"] - {max(b["want"])})
-    assert any("in neither half" in w for w in R.reduce_boxes([a, gap], full=full)["merge_why"])
-    same = dict(b, draws=[1])
-    assert any("not draw 1 and draw 2" in w for w in R.reduce_boxes([a, same], full=full)["merge_why"])
+    parts = _parts(R, monkeypatch, 4)
+    dup = [dict(p) for p in parts]
+    dup[1]["want"] = dup[1]["want"] | {min(dup[0]["want"])}
+    assert any("in two boxes" in w for w in R.reduce_boxes(dup)["merge_why"])
+    gap = [dict(p) for p in parts]
+    gap[3]["want"] = gap[3]["want"] - {max(gap[3]["want"])}
+    assert any("in no box" in w for w in R.reduce_boxes(gap)["merge_why"])
+    swap = [dict(p) for p in parts]                                                    # every index once, but a point cut across boxes
+    a, b = max(swap[0]["want"]), min(swap[1]["want"])
+    swap[0]["want"], swap[1]["want"] = (swap[0]["want"] - {a}) | {b}, (swap[1]["want"] - {b}) | {a}
+    assert any("not the whole (draw, point) blocks" in w for w in R.reduce_boxes(swap)["merge_why"])
 
 
-def test_an_oom_in_draw_1_on_box_a_and_draw_2_on_box_b_reproduces(monkeypatch):
+@pytest.mark.parametrize("k", [2, 8])
+def test_an_oom_in_draw_1_on_one_box_and_draw_2_on_another_reproduces(monkeypatch, k):
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
-    _, a, b, full = _halves(R, monkeypatch, {("8k", "U1", 1), ("8k", "U1", 2)})
-    assert R.reduce_boxes([a], mode="half", full=full)["verdict"] == "HALF_OK"    # the half waits for the merge
-    out = R.reduce_boxes([a, b], full=full)
+    parts = _parts(R, monkeypatch, k, {("8k", "U1", 1), ("8k", "U1", 2)})
+    holders = [p for p in parts if any(r["status"] == "oom" for r in p["rows"])]
+    assert len(holders) == 2 and all(R.reduce_boxes([p], mode="part")["verdict"] == "PART_OK" for p in holders)   # waits for the merge
+    out = R.reduce_boxes(parts)
     assert out["verdict"] == "READ" and out["n_oom"] == 2 and out["readings"]["8k:E_F/U1"]["status"] == "OOM_DIFFERENCE"
-    _, a, b, full = _halves(R, monkeypatch, {("8k", "U1", 1)})                     # draw 1 only: not reproduced
-    assert R.reduce_boxes([a, b], full=full)["verdict"] == "VOID"
+    assert R.reduce_boxes(_parts(R, monkeypatch, k, {("8k", "U1", 1)}))["verdict"] == "VOID"   # draw 1 only: not reproduced
 
 
-@pytest.mark.parametrize("machines,cross", [(("m-1", "m-1"), False), (("m-1", "m-2"), True), ((None, "m-1"), None),
-                                            (("m-1", None), None)])
-def test_cross_host_is_set_exactly_when_the_halves_machines_differ(monkeypatch, machines, cross):
-    """And the verdict never names a machine: the ids are compared only (store-only), the verdict carries cross_host alone. A half
+@pytest.mark.parametrize("machines,cross", [(("m-1",) * 4, False), (("m-1", "m-1", "m-2", "m-1"), True),
+                                            (("m-1", None, "m-1", "m-1"), None), ((None,) * 4, None)])
+def test_cross_host_is_set_exactly_when_the_boxes_machines_differ(monkeypatch, machines, cross):
+    """And the verdict never names a machine: the ids are compared only (store-only), the verdict carries cross_host alone. A box
     without its rental record's machine VOIDs the merge (the band cannot be placed)."""
     import json
     import re
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
-    _, a, b, full = _halves(R, monkeypatch, machines=machines)
-    out = R.reduce_boxes([a, b], full=full)
+    out = R.reduce_boxes(_parts(R, monkeypatch, 4, machines=list(machines)))
     if cross is None:
         assert out["verdict"] == "VOID" and any("rental record" in w for w in out["merge_why"])
     else:
@@ -1055,20 +1125,54 @@ def test_quality_and_stability_are_read_per_pair(monkeypatch):
     assert rd["2k:UA/U0"]["ratio_registered"] is False and rd["2k:E_F/U1"]["ratio_registered"] is True
 
 
-@pytest.mark.parametrize("v,draws,want", [("HALF_OK", "1", 0), ("HALF_OK", "2", 0), ("VOID", "1", 27), ("READ", "1", 27),
-                                          ("HALF_OK", "1,2", 27), ("READ", "1,2", 0), ("VOID", "1,2", 27)])
-def test_the_runners_finish_reads_a_half_as_half_ok_and_a_reading_as_read(v, draws, want):
-    """A clean half box finishes 0 (HALF_OK, never a strike), a faulted half 27; a one-box reading finishes 0 only on READ. The
-    runner's own lines, as written; and the mode it passes the reducer per draws."""
+@pytest.mark.parametrize("v,box,want", [("READ", "all", 0), ("PART_OK", "2-1", 0), ("PART_OK", "4-3", 0), ("PART_OK", "8-8", 0),
+                                         ("VOID", "2-2", 27), ("READ", "2-1", 27), ("PART_OK", "all", 27), ("VOID", "all", 27),
+                                         ("SHAKE_OK", "all", 27)])
+def test_the_runners_finish_reads_a_part_as_part_ok_and_a_reading_as_read(v, box, want):
+    """A clean box of a split finishes 0 (PART_OK, never a strike), a faulted one 27; a one-box reading finishes 0 only on READ.
+    The runner's own lines, as written; and the mode it passes the reducer per box."""
     import subprocess
     run = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
-    fin = next(line for line in run.splitlines() if line.startswith('case "$V:$P238_DRAWS" in'))
-    mode = next(line for line in run.splitlines() if line.startswith('case "$P238_DRAWS" in 1|2) MODE=half'))
+    fin = next(line for line in run.splitlines() if line.startswith('case "$V:$P238_BOX" in'))
+    mode = next(line for line in run.splitlines() if line.startswith('case "$P238_BOX" in all) MODE=read'))
     pre = 'say(){ :; }\nfinish(){ exit "$1"; }\n'
-    r = subprocess.run(["bash", "-c", pre + f"V={v}; P238_DRAWS={draws}\n" + fin + "\n"], capture_output=True, text=True)
-    assert r.returncode == want, (v, draws, r.stderr)
-    m = subprocess.run(["bash", "-c", f"P238_DRAWS={draws}\n" + mode + '\necho "$MODE"\n'], capture_output=True, text=True)
-    assert m.stdout.strip() == {"1": "half", "2": "half", "1,2": "read"}[draws]
+    r = subprocess.run(["bash", "-c", pre + f"V={v}; P238_BOX={box}\n" + fin + "\n"], capture_output=True, text=True)
+    assert r.returncode == want, (v, box, r.stderr)
+    for b, m in (("all", "read"), ("2-1", "part"), ("8-8", "part"), ("shake", "shake")):
+        out = subprocess.run(["bash", "-c", f"P238_BOX={b}\n" + mode + '\necho "$MODE"\n'], capture_output=True, text=True)
+        assert out.stdout.strip() == m, (b, out.stdout)
+
+
+def _id_block(text, var):
+    lines = text.splitlines()
+    i = next(n for n, line in enumerate(lines) if line.startswith(f'case "${var}" in'))
+    j = next(n for n in range(i, len(lines)) if lines[n].strip() == "esac")
+    return "\n".join(lines[i:j + 1])
+
+
+VALID_IDS = ["p238-shake-1", "p238-shake-r2", "p238-5090-1", "p238-5090-2", "p238-5090-r1", "p238-5090-r3", "p238-5090-1-2-1",
+             "p238-5090-1-2-2", "p238-5090-2-4-4", "p238-5090-1-4-1", "p238-5090-1-8-8", "p238-5090-2-8-1"]
+BAD_IDS = ["p238-5090-1a", "p238-5090-1b", "p238-5090-1-2-3", "p238-5090-1-4-5", "p238-5090-1-3-1", "p238-5090-3-2-1",
+           "p238-5090-1-8-9", "p238-5090-1-16-1", "p238-5090-1-2-1x", "p238-5090-1-1-1", "p238-shake-3", ""]
+
+
+def test_the_runner_and_the_driver_map_every_id_to_the_same_box():
+    """The driver derives P238_BOX from the run id and the runner refuses a mismatch: both case blocks, run as written, take the
+    same ids to the same box and refuse the same others (78); every split box id names a real block of the schedule."""
+    import subprocess
+    S = _load("p238_schedule", "bench/p238/p238_schedule.py")
+    run = _id_block((ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8"), "P238_RUN_ID")
+    drv = _id_block((ROOT / "bench" / "p238" / "p238_drive.sh").read_text(encoding="utf-8"), "E4B_RENT_RUN_ID")
+    pre = 'say(){ :; }\nfinish(){ exit "$1"; }\n'
+    for rid in VALID_IDS + BAD_IDS:
+        a = subprocess.run(["bash", "-c", pre + f"P238_RUN_ID='{rid}'\n" + run + '\necho "$WANT_BOX"\n'], capture_output=True, text=True)
+        b = subprocess.run(["bash", "-c", pre + f"E4B_RENT_RUN_ID='{rid}'\n" + drv + '\necho "$BOX"\n'], capture_output=True, text=True)
+        if rid in BAD_IDS:
+            assert a.returncode == b.returncode == 78, (rid, a.returncode, b.returncode)
+            continue
+        assert a.returncode == b.returncode == 0 and a.stdout == b.stdout, (rid, a.stdout, b.stdout)
+        box = a.stdout.strip()
+        assert box in ("all", "shake") or S.box_rows(box), (rid, box)
 
 
 def test_the_runner_passes_eval_every_steps():
