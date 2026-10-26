@@ -532,7 +532,8 @@ after these readings would fit the rule to the market.
   listed at the create filters.
 - **The retry rule.** The fixed retry list becomes one rule: retry ids `p238-shake-r3` to `p238-shake-r5`, each launched only after
   the previous shakedown box ended rc 18 (a host floor) before STARTED. The summed cost of every P238 shakedown box that ended that
-  way, the three above included, is capped at USD 0.25. At either limit (r5 spent, or the cap reached) the lane stops and reports,
+  way, the three above included, is held to USD 0.25 by the launch rule below. At either limit (r5 spent, or the launch rule
+  refusing the next box) the lane stops and reports,
   and nothing launches until the maintainer rules. A box that STARTED is read under the existing stop rule, unchanged.
 - **How the cap is enforced, and its stated worst.** The cap is a launch rule: a shakedown launches only while the refused spend
   plus an allowance of USD 0.05 (twice the largest refused box on record, USD 0.025) stays within USD 0.25, and every such box's
