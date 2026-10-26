@@ -417,14 +417,18 @@ def energy(row):
     spans = []
     for a, b in ENERGY_SPANS:
         ea, eb, ta, tb = by_i[a].get("energy_mj"), by_i[b].get("energy_mj"), by_i[a].get("t"), by_i[b].get("t")
-        if None in (ea, eb, ta, tb) or eb < ea:
+        if None in (ea, eb, ta, tb):                # a backwards counter is the pair check's (every included pair)
             out["why"] = f"span {a}..{b}: energy {ea}->{eb} mJ, t {ta}->{tb}"
             return out
         for i in range(a, b):
             t0, t1 = by_i[i].get("t"), by_i[i + 1].get("t")
+            e0, e1 = by_i[i].get("energy_mj"), by_i[i + 1].get("energy_mj")
             ms = step_ms[i] if i < len(step_ms) else None
             if None in (t0, t1, ms):
                 out["why"] = f"edges {i}..{i + 1}: no wall or no step time"
+                return out
+            if None in (e0, e1) or e1 < e0:      # a counter reset inside a span understates it even when the span ends higher
+                out["why"] = f"edges {i}..{i + 1}: the energy counter went {e0}->{e1} mJ"
                 return out
             gap = (t1 - t0) - ms / 1e3
             if gap > max(GAP_FLOOR_S, GAP_FRAC * ms / 1e3):

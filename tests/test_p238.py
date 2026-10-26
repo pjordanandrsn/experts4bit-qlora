@@ -815,6 +815,24 @@ def test_the_fetch_brings_the_evidence_and_no_tensors_venv_or_bulk(tmp_path):
     assert not any(p.stat().st_size > 10 * 1024 * 1024 for p in out.rglob("*") if p.is_file())
 
 
+@pytest.mark.parametrize("reset_at,span_end_lower", [(15, True), (40, True), (15, False), (40, False)])
+def test_a_counter_that_goes_backwards_in_a_span_reads_unread(reset_at, span_end_lower):
+    """An NVML / driver reset inside a span: the counter drops at edge ``reset_at``. Whether the span then ends below its start
+    (eb < ea) or above it (a reset early in a long span), the energy reads UNREAD, never a negative or understated J/step."""
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    e = _energy_row(R)
+    drop = 10 ** 12 if span_end_lower else 1_000_000                 # far below the start, or just one step's worth less
+    for edge in e["hook"]["edges"]:
+        if edge["i"] >= reset_at:
+            edge["energy_mj"] -= drop
+    end = 20 if reset_at < 20 else 59
+    start = 10 if reset_at < 20 else 23
+    by_i = {x["i"]: x for x in e["hook"]["edges"]}
+    assert (by_i[end]["energy_mj"] < by_i[start]["energy_mj"]) is span_end_lower
+    out = R.energy(e)
+    assert out["status"] == "UNREAD" and out["j_per_step"] is None, (reset_at, out)
+
+
 def test_the_runner_passes_eval_every_steps():
     """E1(a): tc1_arm's default --eval-every is 20; the runner's TC1_FLAGS must pass --eval-every $STEPS (one eval, after the
     last step), and STEPS is 60, the reducer's."""
