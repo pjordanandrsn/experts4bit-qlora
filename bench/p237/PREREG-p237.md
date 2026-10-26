@@ -455,7 +455,9 @@ registered.
    pass.
 7. A $0 CPU check of the new code, then a short GPU shakedown (registered, never a reading).
 8. The driver dry run, the $0 validate, and the maintainer's Approved.
-9. The box, the maintainer's re-derivation, and the results PR.
+9. The box, the maintainer's re-derivation, and the results PR. **The reading box is on HOLD** until its fitted guard
+   is under the cap in force (see Runs and budget). The owner's decision on the policy's wall clock is pending, and the
+   shakedown may run before it.
 
 ## Runs and budget
 
