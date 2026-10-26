@@ -22,8 +22,8 @@ import sys
 HOST_FLOOR = 18
 # The guard fit (the maintainer's ruling before data; the runner's 41 check and the PREREG's guard and cost lines are this, and
 # tests/test_p237.py ties the three): guard = (INSTALL + FETCH + N_PROC x LOAD_S + RESERVE) x 1.25, against a cap of
-# min(the run-worst USD 15 at the box rate, the per-run wall-clock override's 18 h). adertha's GLOBAL compute policy keeps
-# teardown.max_wallclock_h at 6 (adertha/compute/policy.json; rent.py's check_wallclock); the owner approved (2026-10-26) a PER-RUN
+# min(the run-worst USD 15 at the box rate, the per-run wall-clock override's 18 h). The rental policy's GLOBAL cap keeps
+# teardown.max_wallclock_h at 6 (the launcher refuses any longer launch); the owner approved (2026-10-26) a PER-RUN
 # override up to 18 h, allowed only when the run's worst at its guard is <= USD 15. Both are registered here as constants, pinned by
 # the test, and move only with that policy (the owner's call). A box longer than 6 h launches only once the override is in the policy.
 INSTALL_S, FETCH_S, RESERVE_S, FIT_MARGIN_PCT = 2700, 3600, 900, 125
