@@ -39,9 +39,9 @@ E5, RY, C14, CU = "epyc-zen5", "ryzen-7000-9000-desktop", "core-13-14-desktop", 
     ("AMD Ryzen 9 7900X 12-Core Processor", RY), ("AMD Ryzen 9 7950X 16-Core Processor", RY), ("AMD Ryzen 9 7950X3D 16-Core Processor", RY),
     ("AMD Ryzen 9 9900X 12-Core Processor", RY), ("AMD Ryzen 9 9900X3D 12-Core Processor", RY), ("AMD Ryzen 9 9950X 16-Core Processor", RY),
     ("AMD Ryzen 9 9950X3D 16-Core Processor", RY),
-    ("13th Gen Core™ i5-13600K", C14), ("13th Gen Core™ i9-13900F", C14), ("Core™ i5-14400F", C14), ("Core™ i5-14500", C14),
-    ("Core™ i9-14900K", C14),
-    ("Core™ Ultra 9 285K", CU), ("Core™ Ultra 7 270K Plus", CU),
+    ("13th Gen Core\u2122 i5-13600K", C14), ("13th Gen Core\u2122 i9-13900F", C14), ("Core\u2122 i5-14400F", C14), ("Core\u2122 i5-14500", C14),
+    ("Core\u2122 i9-14900K", C14),
+    ("Core\u2122 Ultra 9 285K", CU), ("Core\u2122 Ultra 7 270K Plus", CU),
     # EPYC Zen 4 (9xx4, the F and X parts included), Zen 2/3, and the cloud-named EPYCs: refused
     ("AMD EPYC 9174F 16-Core Processor", None), ("AMD EPYC 9354P 32-Core Emb Processor", None), ("AMD EPYC 9374F 32-Core Processor", None),
     ("AMD EPYC 9554 64-Core Processor", None), ("AMD EPYC 9654 96-Core Processor", None), ("AMD EPYC 9654 96-Core Emb Processor", None),
@@ -55,9 +55,9 @@ E5, RY, C14, CU = "epyc-zen5", "ryzen-7000-9000-desktop", "core-13-14-desktop", 
     ("AMD Ryzen Threadripper 9980X 64-Cores", None), ("AMD Ryzen Threadripper PRO 7975WX 32-Cores", None),
     ("AMD Ryzen Threadripper PRO 5995WX 64-Cores", None),
     # older Core and every Xeon: refused
-    ("Core™ i7-5820K ", None), ("Core™ i7-7700 ", None), ("Core™ i9-9900K ", None), ("Core™ i9-10940X ", None),
-    ("Core™ i9-10980XE ", None), ("Xeon® Gold 6338 ", None), ("Xeon® Platinum 8481C", None), ("XEON® GOLD 6548Y+", None),
-    ("Xeon® 6521P", None), ("Xeon® E5-2695 v4 ", None), ("", None), (None, None),
+    ("Core\u2122 i7-5820K ", None), ("Core\u2122 i7-7700 ", None), ("Core\u2122 i9-9900K ", None), ("Core\u2122 i9-10940X ", None),
+    ("Core\u2122 i9-10980XE ", None), ("Xeon\u00ae Gold 6338 ", None), ("Xeon\u00ae Platinum 8481C", None), ("XEON\u00ae GOLD 6548Y+", None),
+    ("Xeon\u00ae 6521P", None), ("Xeon\u00ae E5-2695 v4 ", None), ("", None), (None, None),
 ])
 def test_the_screen_maps_vast_names_onto_the_registered_class(name, cls):
     assert host.vast_cpu_class(name) == cls
@@ -76,7 +76,7 @@ def test_the_screen_rule_is_the_runners_and_the_runners_is_unchanged():
         (C14, r"\bCore\(TM\) i[3579]-1[34]\d\d\d(K|KF|KS|F)?(\s|$)"),
         (CU, r"\bCore\(TM\) Ultra [579] 2\d\d(K|KF|F)?(\s|$)"),
     ]
-    assert host.cpu_class("Core™ i9-14900K") is None          # the lscpu reading never saw Vast's mark: why the mapping exists
+    assert host.cpu_class("Core\u2122 i9-14900K") is None          # the lscpu reading never saw Vast's mark: why the mapping exists
     assert host.cpu_class("13th Gen Intel(R) Core(TM) i9-13900K") == C14
 
 
