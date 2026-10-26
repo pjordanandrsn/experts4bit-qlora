@@ -22,7 +22,7 @@ done
 # The registered ids: a whole reading runs every process (BOX=all); p238-5090-<R>-<K>-<i> runs box i of a K-box split, its whole
 # (draw, point) blocks (BOX=K-i; p238_schedule.blocks: by draw and point group, never by arm). The shakedown: BOX=shake.
 case "$E4B_RENT_RUN_ID" in
-  p238-shake-1|p238-shake-r[12])          BOX=shake;;
+  p238-shake-1|p238-shake-r[1-5])        BOX=shake;;
   p238-5090-[12]|p238-5090-r[1-3])        BOX=all;;
   p238-5090-[12]-2-[12]|p238-5090-[12]-4-[1-4]|p238-5090-[12]-8-[1-8]) BOX=${E4B_RENT_RUN_ID#p238-5090-[12]-};;
   *) say "refusing unregistered run ID: $E4B_RENT_RUN_ID"; exit 78;;

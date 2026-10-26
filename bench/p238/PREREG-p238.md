@@ -498,3 +498,42 @@ points, schedule, readings, predictions, budget and run ids stand. No P238 load 
   two cases that must stay clean (SwPowerCap on every busy sample, Reliability at 94.5 %).
 - **The shakedown.** p238-shake-r2 re-burns under this rule on the re-cut kit; shake-r1's stored burn summary predates amendment 83
   and is not re-read as a pass.
+
+## Amendment 2 (2026-10-26): the shakedown host rule after three host-floor refusals
+
+This supersedes the shakedown retry ids in "Run ids, order and the stop" (`p238-shake-r1`, `p238-shake-r2`) and amendment 1's
+"The shakedown" bullet, whose texts are unchanged above. Nothing else changes: the floor, the arms, points, schedule, readings,
+predictions, budget and the reading's ids stand. No P238 load has run, so no reading moves.
+
+**The root cause, from the receipts.** All three shakedown boxes refused at the card floor before STARTED, each in about a minute
+(USD 0.050 in all):
+- `p238-shake-1`: a card capped at 430 W, busy median 2,493.5 MHz;
+- `p238-shake-r1`: a stock 575 W card at 2,827 MHz, refused only by amendment 80's burn bar, which amendment 83 superseded;
+- `p238-shake-r2`: a card capped at 500 W, busy median 2,647 MHz under amendment 83's clock mode (SwPowerCap on every busy sample,
+  Reliability on none, no slowdown bit).
+
+The cause is the market: RTX 5090 hosts are often power-capped below the card's stock 575 W, and a host with no recorded clock is a
+lottery against the 2,700 MHz floor. The floor and amendment 83 worked as designed, and **the floor does not move**: changing it
+after these readings would fit the rule to the market.
+
+**The simplification (a replacement, not a guard on top).**
+- **The host rule.** The shakedown pins only a **recorded-good host**: an RTX 5090 machine whose latest receipt with a loaded clock
+  record (a run's per-second clock log, or a pre-install burn, each with >= 10 busy samples, summarized by `card_clock.py`) shows a
+  busy SM median >= 2,700 MHz at a recorded power limit >= 575 W. A host with no clock or power record is a fallback only when no
+  recorded-good host is listed. A host whose record shows a power limit under 575 W, or a busy median under the floor, is never
+  pinned. This replaces the screen's rank-first ordering (recorded >= 575 W hosts first, then measured-fast CPU families) and its
+  separate power pre-screen. Every other screen filter (price, disk, RAM, driver, single-thread loop, pin walk) is unchanged.
+  When this amendment was written, the private receipt store recorded 19 such machines (and 16 more with a busy median above the
+  floor but a power limit under 575 W, which the rule excludes); none of the 19 was listed at the create filters.
+- **The retry rule.** The fixed retry list becomes one rule: retry ids `p238-shake-r3` to `p238-shake-r5`, each launched only after
+  the previous shakedown box ended rc 18 (a host floor) before STARTED. The summed cost of every P238 shakedown box that ended that
+  way, the three above included, is capped at USD 0.25. At either limit (r5 spent, or the cap reached) the lane stops and reports,
+  and nothing launches until the maintainer rules. A box that STARTED is read under the existing stop rule, unchanged.
+- **The runner and driver** accept `p238-shake-r1` to `p238-shake-r5` as shakedown ids (`p238_run.sh`, `p238_drive.sh`);
+  `staged-p238.sha256` moves for `p238_run.sh`.
+
+**The re-cut kit.** The launch kit moves to a new directory cut from amendment 1's by a generator with counted edits. Its residual
+check greps the whole cut tree, not the diff, for the old kit directory as a path component in every form (`~/`, `$HOME/`,
+`Path.home() /`, `os.path.join`), and every hit is substituted or on a named allow-list (receipt and bench paths). The grep output
+is posted with the kit diff. Amendment 1's kit missed `Path.home() / "p238"` in its screen: a missed substitution leaves no diff
+line, so diff review alone could not see it.

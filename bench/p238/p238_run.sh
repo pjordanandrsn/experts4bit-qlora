@@ -22,7 +22,7 @@ for v in P238_RUN_ID P238_BOX P238_DEADLINE_EPOCH E4B_SHA; do [ -n "${!v:-}" ] |
 # ---- the run id and the box it runs (the driver derives BOX from the id; a mismatch is refused, never trusted): a whole reading
 # runs every process (all); box i of a K-box split runs its whole (draw, point) blocks (K-i, p238_schedule.blocks); the shakedown
 case "$P238_RUN_ID" in
-  p238-shake-1|p238-shake-r[12]) WANT_BOX=shake;;
+  p238-shake-1|p238-shake-r[1-5]) WANT_BOX=shake;;
   p238-5090-[12]|p238-5090-r[1-3]) WANT_BOX=all;;
   p238-5090-[12]-2-[12]|p238-5090-[12]-4-[1-4]|p238-5090-[12]-8-[1-8]) WANT_BOX=${P238_RUN_ID#p238-5090-[12]-};;
   *) say "unregistered run ID: $P238_RUN_ID"; finish 78;;
