@@ -1,0 +1,113 @@
+{
+ "attempts": [
+  {
+   "created": true,
+   "machine": "55337",
+   "n": 11,
+   "proved": false,
+   "run_id": "sc2f-prove-11"
+  }
+ ],
+ "by_terms": {
+  "1.05@320": {
+   "admit_reads": 59,
+   "machines": {
+    "131173": 6,
+    "152587": 6,
+    "153193": 1,
+    "154850": 19,
+    "35052": 10,
+    "35963": 13,
+    "6619": 4
+   }
+  },
+  "1.25@320": {
+   "admit_reads": 85,
+   "machines": {
+    "131173": 6,
+    "152440": 3,
+    "152587": 6,
+    "152938": 24,
+    "153193": 1,
+    "154850": 16,
+    "35052": 10,
+    "35963": 13,
+    "36206": 2,
+    "6619": 4
+   }
+  },
+  "1.25@340": {
+   "admit_reads": 85,
+   "machines": {
+    "131173": 6,
+    "152440": 3,
+    "152587": 6,
+    "152938": 24,
+    "153193": 1,
+    "154850": 16,
+    "35052": 10,
+    "35963": 13,
+    "36206": 2,
+    "6619": 4
+   }
+  }
+ },
+ "clock_ok": {
+  "114069": true,
+  "114283": true,
+  "130223": true,
+  "13549": false,
+  "137401": false,
+  "13828": false,
+  "138418": true,
+  "138786": false,
+  "139369": true,
+  "140093": false,
+  "142284": true,
+  "143500": false,
+  "145701": true,
+  "150147": false,
+  "150333": true,
+  "150337": false,
+  "150527": false,
+  "150670": true,
+  "150700": false,
+  "151350": false,
+  "151831": false,
+  "151972": false,
+  "152169": true,
+  "152323": true,
+  "152440": true,
+  "153193": true,
+  "153506": true,
+  "18967": false,
+  "19317": false,
+  "24815": false,
+  "26157": true,
+  "27708": true,
+  "32658": false,
+  "34018": false,
+  "36204": false,
+  "36544": true,
+  "36546": true,
+  "38531": false,
+  "41531": false,
+  "45379": true,
+  "45501": true,
+  "45511": true,
+  "46427": false,
+  "55337": true,
+  "55583": true,
+  "55913": true,
+  "56838": false,
+  "94700": true,
+  "96642": false
+ },
+ "offer_rows": {
+  "320_to_340_gb": 54,
+  "total": 2602
+ },
+ "prices_note": "usd_h is each read's all-in hourly priced at 320 GB; the 340 GB rows drop offers listing under 340 GB and add no storage uplift",
+ "reads": 228,
+ "reads_file": "bench/sc2/sc2f-am10/screen_reads.json"
+}

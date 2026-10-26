@@ -869,3 +869,68 @@ SC2h (Amendment 5) and SC2i (Amendment 4) take this with Amendment 7, by referen
 - the wrapper runs `SAMPLER_QUERY` exactly, and its text no longer says rc 25 never excludes the machine.
 
 **Unchanged:** everything else Amendments 7, 8 and 9 registered.
+
+### Amendment 11 (registered before any SC2f reading): the price ceiling is $1.25 an hour, for SC2f, SC2h and SC2i, and the launch orders 340 GB of disk
+
+**Why.** The screen's admissions are price-bound: at 11:26Z on 2026-10-26 no 575 or 600 W offer sat under $1.05. This is
+pre-data. Attempt 1 (`sc2f-prove-11`) was VOID (rc 25), and no arm has been read.
+
+**The change.** `CEILING_USD_H` (the launcher's all-in hourly at 320 GB, the stability rule's price bound) moves from $1.05
+to **$1.25**. It is one ceiling for the three lanes, as Amendment 3 set. It is a budget parameter, not a gate: the
+{575, 600} W class, the 2,700 MHz floor, the recorded-clock rule, the 3 attempts (1 used) and the deadline
+(2026-10-28T14:12:34Z) do not change. The launch template's `usd_per_hour` and `est_usd` move with it.
+
+**The disk** (after sc2f-prove-12, below). The launch orders **340 GB** (`vast_disk_gb`), and the admission requires offers
+listing **>= 340 GB** (`MIN_DISK_GB`). That is SC1's own floor (`sc1_run.sh`: 320 GB FREE) plus 20 GB for the image and a
+margin. SC1's floor does not move, so no staged byte and no kit-hold entry changes. The repo now owns both numbers in
+`bench/sc2/sc2f_launch.json` (`vast_disk_gb` 340, `usd_per_hour` 1.25). A CI test reads SC1's floor from `sc1_run.sh` and
+asserts that the ordered disk and the admission minimum are each >= that floor + 20 GB, and that `usd_per_hour` equals
+`CEILING_USD_H`. The re-cut builder copies both fields from that file at the launch commit, never as literals, and asserts
+they match. A later floor change therefore fails CI instead of a rented box. The screen's market read takes `MIN_DISK_GB` and
+`CEILING_USD_H` from the launch tree's `sc2_qualify.py`, and records the per-GB storage rate from now on.
+
+**Which reads it admits** (`bench/sc2/sc2f-am11/ceiling_replay.json`). Replayed read by read over the 228 committed screen
+reads (`bench/sc2/sc2f-am10/screen_reads.json`), with attempt 2 not yet in them, attempt 1 counted, 55337 not revisited, and
+the recorded-clock census as committed in that file (49 machines, 25 pass):
+- at $1.05 and 320 GB, **59** reads ADMIT (7 machines);
+- at $1.25 and 340 GB, **85** reads ADMIT (10 machines): 152938 (24 reads), 152440 (3, a recorded pass) and 36206 (2) join.
+  The 340 GB floor drops no admitted offer on these reads; 54 of the 2,602 offer rows list 320-340 GB.
+The replay's prices are each read's all-in hourly priced at 320 GB. An offer at 340 GB costs its extra 20 GB of storage
+more; the replay drops offers listing under 340 GB and adds no storage uplift.
+
+**Worst cases, old -> new**, each by its own file's formula (guard hours x ceiling plus downloads). The ceiling caps the
+all-in hourly, storage at 340 GB included, so the 340 GB order moves none of them:
+- **SC2f** (Amendment 7's formula, with the burn's torch): a proof $1.18 -> **$1.38**; the reading $4.44 -> **$5.14**; the lane
+  (3 proofs, the reading and one re-run) $12.42 -> **$14.42**.
+- **SC2h** (SC2h-PREREG's formula: two proofs, one reading, one re-run counted as a reading): a proof $1.15 -> **$1.35**; the
+  reading (4.0 h) $4.93 -> **$5.73**; the lane $12.16 -> **$14.16**.
+- **SC2i** (SC2i-PREREG's formula, as SC2h's): a proof $1.15 -> **$1.35**; the reading (4.5 h) $5.46 -> **$6.36**; the lane
+  $13.21 -> **$15.41** (that file sums the reading unrounded, $6.355).
+
+**Every run stays at or under $15**: the largest is SC2i's reading, at $6.36. The $15 bar is per run, and a lane total is
+stated, not capped. SC2i's lane total is above $15, by $0.41. Counted with the 3 proof attempts that SC2h Amendment 5 and
+SC2i Amendment 4 register, plus the burn (about $0.03 each), the two lane totals would be $15.66 and $16.91 (SC2i's reading unrounded, as its own formula sums it). No guard is
+trimmed.
+
+SC2h (Amendment 6) and SC2i (Amendment 5) record their own restated worsts and take this ceiling and disk by reference.
+
+**sc2f-prove-12** (2026-10-26, machine 145701, enforced 575 W, attempt 2 of 3, $0.121, teardown verified): **HARNESS_ERROR,
+rc 13.** The power read passed (575.0 W), the burn passed (busy median 2,707 MHz, 64 busy samples, no bit), and the post-proof
+records matched the qualify reading. `sc1_run.sh` refused one second in: 319 GB free plus 0 GB staged, against its 320 GB
+floor. The template ordered exactly 320 GB, and this host enforced the quota (a 320 GB overlay with 1.1 GB used by the
+image). Attempt 1's host had not enforced it (642 GB free). "Order exactly the floor" has failed on four runs:
+sc2j-prove-1, sc1g-prove-a5-1, sc1g-prove-a5-2 and this one. The positional run sampler read real `noheader` output here for
+the first time (157 rows, 0 unreadable); it read UNREAD only because the lane never loaded the card, and the driver's own rc
+13 governs. This is the second consecutive HARNESS_ERROR, so the lane stopped (Shakedown, proof and budget: two consecutive
+HARNESS_ERROR runs). This amendment is its root-cause note, and the disk test above is its simplification. Attempts stand as
+registered: 2 of 3 used, and 55337 and 145701 are not revisited. Attempt 3 is the last. If it voids on a harness fault, the
+lane reports, and any change is a new amendment ruled on that evidence.
+
+**Evidence.** `bench/sc2/sc2_qualify.py --self-test` and `tests/test_sc2f_am11.py`:
+- an offer at $1.25 admits and one at $1.26 does not;
+- the replay counts at each term set are re-derived from the committed reads and census snapshot;
+- the worst-case arithmetic is recomputed from each formula;
+- SC1's floor, read from `sc1_run.sh`, plus 20 GB is <= both the ordered disk and `MIN_DISK_GB`, and a floor of 330 GB
+  would fail that check.
+
+**Unchanged:** everything else Amendments 7 to 10 registered.

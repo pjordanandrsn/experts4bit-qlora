@@ -1,0 +1,5 @@
+{
+ "_comment": "SC2f Amendment 11: the launch parameters the repo owns. The re-cut builder copies these two fields into the launch template from this file at the launch commit and asserts they match; tests/test_sc2f_am11.py checks them against SC1's disk floor (bench/sc1/sc1_run.sh) and sc2_qualify's constants.",
+ "vast_disk_gb": 340,
+ "usd_per_hour": 1.25
+}

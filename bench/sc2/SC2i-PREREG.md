@@ -218,3 +218,11 @@ grouped-nf4-gemm 0.51.0. SC2i reads no other lane's verdict, but the three lanes
   The lane order, SC2f then SC2h then SC2i, is unchanged.
 
 **Unchanged:** everything else this lane registered; every constant, threshold and cost not named above.
+
+### Amendment 5 (registered before any SC2i run): the price ceiling is $1.25 an hour (SC2f Amendment 11)
+
+SC2f Amendment 11 moves the ceiling the three lanes share from $1.05 to **$1.25** an hour. Restated by this file's own
+formula (download at <= $0.011/GB): a proof, 1.0 h <= $1.25 + about $0.10 = **$1.35** (was $1.15); the reading, 4.5 h <=
+$5.63 + about $0.73 = **$6.36** (was $5.46); the lane (two proofs, one reading, one re-run counted as a reading) 2 x $1.35 +
+2 x $6.355 = **$15.41** (was $13.21; the reading enters unrounded, as this file's $13.21 at $1.05 did: 2 x $5.455). Each run is under the standing single-run tier ($15); the lane total is stated, not
+capped, and is above $15 by $0.41. Everything else is unchanged.
