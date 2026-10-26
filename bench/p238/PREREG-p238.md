@@ -615,7 +615,10 @@ USD 1.07/h and 1.11/h listing 878 and 735 Mbps. Under the 600 Mbps floor below a
 under USD 1.05/h, only the first. The worst per shakedown box becomes 5.25 h x USD 1.25 + 82 GB x USD 0.02 = **USD 8.20**, within
 the USD 15 box rule. The lane's shakedown spend is otherwise bounded as before: amendment 2's refused-spend launch rule (USD 0.25,
 with its stated worst) and at most two STARTED boxes. The reading's budget (its box cap and K split, at USD 1.05/h) is NOT changed
-here. The rate is `SHAKE_RATE_CAP_USD_H` in `bench/p238/p238_hosts.py`, read by the screen.
+here. The rate is `SHAKE_RATE_CAP_USD_H` in `bench/p238/p238_hosts.py`, read by the screen. Amendment 2's stated worst for ONE
+refused box rises with the rate: the same launcher start limits plus the runner's probes and burn alarm (about 1,020 s) cost about
+USD 0.35 at USD 1.25/h, against about USD 0.30 at USD 1.05/h. So the refused spend can end at most one such box, about USD 0.35,
+above the USD 0.25 launch rule. The launch rule itself (the spent sum plus the USD 0.05 allowance within USD 0.25) is unchanged.
 
 **The screen's download floor (a separate item; it may be struck without touching the rest).** The screen admits only hosts listing
 >= 1,000 Mbps download, a value inherited from earlier kits and not registered in this PREREG. The box's own bound is the snapshot
