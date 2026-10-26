@@ -853,7 +853,8 @@ def selftest():
         assert b["arms"]["UA"]["state"] == "VALID" and b["arms"]["E"]["words"] == "does not fit at this budget"
         assert reduce_budget([dict(copy.deepcopy(r), budget="full", vram_cap=None) for r in rows if r["arm"] == "E"], "full", 0, None)["verdict"] == "READ"
         one = [oom(r) if r["arm"] == "E" and r["draw"] == 1 else r for r in rows]
-        assert reduce_budget(one, "12g", 24, 20)["arms"]["E"]["state"] == "VOID"
+        e_one = reduce_budget(one, "12g", 24, 20)["arms"]["E"]
+        assert e_one["state"] == "VOID" and any("unstable memory reading" in w for f in e_one["faults"] for w in f), e_one["faults"]
         assert reduce_budget(one, "12g", 24, 20)["verdict"] == "VOID"
         hook = [dict(oom(r), status="harness_error") if r["arm"] == "E" else r for r in rows]
         assert reduce_budget(hook, "12g", 24, 20)["verdict"] == "VOID"
