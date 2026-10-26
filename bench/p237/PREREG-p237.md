@@ -419,8 +419,10 @@ registered.
    - Each comparison is also reported against **0.01**, amendment 69's same-stack bar, so this lane reads beside it.
    - Layer-major's gradients are not bitwise equal to the stock loop's, so a small held-out move on E is expected and
      recorded.
-3. **Speed:** per comparison U*/E, the ratio of median wall seconds per step (the verdict) and of device time (reported
-   beside it). Each is the median over draws, with the interval over the cross-draw ratios.
+3. **Speed:** per comparison U*/E, two figures, each computed one way (`p237_reduce.compare`):
+   - **the wall ratio (the verdict):** the median of the four cross-draw ratios U_i / E_j (i, j = draws 1, 2) of each
+     draw's median wall seconds per step (steps 11..60), reported with their range (min, max);
+   - **the device ratio, reported beside it:** the same from each draw's profiled `device_ms`.
    - Offload is host-bound by nature, so device time alone would hide the cost a user pays.
    - A ratio is quoted only when both arms are VALID and COMPARABLE, and neither is UNSTABLE (draws more than 5 % apart).
 4. **Also reported per arm:** setup time, peak host RAM, transfer bytes per step, and peak VRAM.
