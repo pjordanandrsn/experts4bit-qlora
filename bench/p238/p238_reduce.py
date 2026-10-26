@@ -62,6 +62,7 @@ ACROSS_STEP0, ACROSS_HELD = 0.01, 0.05               # TC1-PREREG.md:63 (step 0)
 STABLE = {"e4b": 0.05, "unsloth": 0.10}
 OOM_EXIT = 5                                         # tc1_arm's exit for its OOM stub (classify_load_exception, the train loop)
 READ_PAIRS = (("E_F", "U1"), ("E_A", "UA"), ("U1", "U0"), ("E_F", "U0"), ("E_A", "E_F"))   # the headline two first (PREREG)
+QUALITY_ONLY_PAIRS = (("UA", "U0"),)                 # registered within-framework quality bars, no registered ratio
 
 
 # -- row checks ----------------------------------------------------------------------------------------------------------------------
@@ -485,13 +486,17 @@ def readings(out_rows, raw):
     """The PREREG's readings per step point and pair (the headline E_F/U1 and E_A/UA first): a ratio of the two arms' mean wall
     s/step and mean device time over the draws (a/b, < 1 means a is faster) when both arms READ; BOTH_OOM when every draw of both
     arms OOMs (that point leaves the step read); OOM_DIFFERENCE when one arm's draws all OOM and the other's all READ (the READ
-    memory difference, with the fitting arm's peak VRAM); VOID when any draw is VOID. An OOM row is never in a speed ratio."""
+    memory difference, with the fitting arm's peak VRAM); VOID when any draw is VOID. An OOM row is never in a speed ratio.
+    Quality (the PREREG's bars, per draw: within a framework 1e-3 / 0.01, across 0.01 / 0.05): a miss reads QUALITY_FAIL with the
+    ratio beside it, never hidden, and not quoted. Stability (each arm's two draws within 5 % e4b / 10 % Unsloth on wall and device
+    time): a miss lists the arm in ``unstable`` and keeps the pair out of the headline. UA against U0 carries the quality bars only
+    (its ratio is not a registered reading). Each pair also reports its per-draw wall ratio (a split reading's per-half ratio)."""
     by = {}
     for o in out_rows:
         by.setdefault((o["point"], o["arm"]), []).append(o)
     res = {}
     for point in POINT_TOKENS:
-        for a, b in READ_PAIRS:
+        for a, b in READ_PAIRS + QUALITY_ONLY_PAIRS:
             ga, gb = by.get((point, a), []), by.get((point, b), [])
             va, vb = {o["verdict"] for o in ga}, {o["verdict"] for o in gb}
             r = {"point": point, "a": a, "b": b, "headline": (a, b) in READ_PAIRS[:2]}
@@ -508,15 +513,32 @@ def readings(out_rows, raw):
             elif va == vb == {"READ"}:
                 dev = lambda g: _mean(((raw[o["index"]].get("profile") or {}).get("summary") or {}).get("device_ms") for o in g)  # noqa: E731
                 wa, wb, da, db = _mean(o["s_per_step"] for o in ga), _mean(o["s_per_step"] for o in gb), dev(ga), dev(gb)
-                r.update(status="RATIO", wall_ratio=round(wa / wb, 4) if wa and wb else None,
-                         device_ratio=round(da / db, 4) if da and db else None)
+                ra, rb = {o["draw"]: raw[o["index"]] for o in ga}, {o["draw"]: raw[o["index"]] for o in gb}
+                qual = [] if set(ra) == set(rb) else [f"draws {sorted(ra)} against {sorted(rb)}"]
+                for d in sorted(set(ra) & set(rb)):
+                    ok, why = quality(ra[d], rb[d])
+                    if not ok:
+                        qual.append(f"draw {d}: {why}")
+                unstable = []
+                for arm, dd in ((a, ra), (b, rb)):
+                    ok, why = stable(*[dd[k] for k in sorted(dd)]) if len(dd) == 2 else (False, f"{len(dd)} draw(s)")
+                    if not ok:
+                        unstable.append(f"{arm}: {why}")
+                per_draw = {}
+                for d in sorted(set(ra) & set(rb)):
+                    x, y = s_per_step(ra[d]), s_per_step(rb[d])
+                    per_draw[str(d)] = round(x / y, 4) if x and y else None
+                r.update(status="QUALITY_FAIL" if qual else "RATIO", wall_ratio=round(wa / wb, 4) if wa and wb else None,
+                         device_ratio=round(da / db, 4) if da and db else None, per_draw_wall_ratio=per_draw, quality_why=qual,
+                         quoted=not qual, unstable=unstable, headline_eligible=r["headline"] and not qual and not unstable)
             else:
                 r["status"] = "VOID"
+            r["ratio_registered"] = (a, b) in READ_PAIRS
             res[f"{point}:{a}/{b}"] = r
     return res
 
 
-def reduce(rows, op_rows):
+def reduce(rows, op_rows, partial=None):
     """The verdict per row, the reference tables, the readings, and the box verdict. The reference premise table and census are
     the first OP row's (an op process loads exactly as a step load does); every other table must equal them. A step row is READ,
     OOM (tc1_arm's OOM stub on the registered box) or VOID; an OOM must REPRODUCE: every draw of that (point, arm) OOMs, else
@@ -540,14 +562,16 @@ def reduce(rows, op_rows):
     for o in out["rows"]:
         groups.setdefault((o["point"], o["arm"]), []).append(o)
     for (point, arm), g in groups.items():
+        if partial:                                      # a half (or the shakedown) holds one draw: no reproduce rule here
+            break
         if any(o["verdict"] == "OOM" for o in g) and not (len(g) >= 2 and all(o["verdict"] == "OOM" for o in g)):
             for o in g:
                 if o["verdict"] != "VOID":
                     o["verdict"] = "VOID"
                     o["why"] = o["why"] + [f"{arm} at {point}: an OOM that did not reproduce over its {len(g)} draw(s)"]
-    out["readings"] = readings(out["rows"], {r.get("index"): r for r in rows})
+    out["readings"] = None if partial else readings(out["rows"], {r.get("index"): r for r in rows})
     bad = [o for o in out["op_rows"] if o["verdict"] != "READ"] + [o for o in out["rows"] if o["verdict"] not in ("READ", "OOM")]
-    out["verdict"] = "READ" if (out["rows"] or out["op_rows"]) and not bad else "VOID"
+    out["verdict"] = (partial or "READ") if (out["rows"] or out["op_rows"]) and not bad else "VOID"
     out["n_rows"], out["n_op_rows"], out["n_void"] = len(out["rows"]), len(out["op_rows"]), len(bad)
     out["n_oom"] = sum(o["verdict"] == "OOM" for o in out["rows"])
     return out
@@ -682,25 +706,103 @@ def normalize_op(work, sched):
             "premise_table": _int_keys(facts.get("premise_table")), "adapters": facts.get("adapters")}
 
 
-def reduce_work(work):
-    """The box: the schedule it ran, every row and op row, the readings and the verdict (reduce's: READ only when every op row
-    READs and every step row READs or is a reproduced OOM; each fault is reported on its row, a VOID row never dropped)."""
+def _schedule():
     sys.path.insert(0, HERE)
     import p238_schedule
+    return p238_schedule.schedule()
+
+
+def rental_machine(work):
+    """The machine a fetched box ran on, from the controller's rental record beside it (``<run dir>/receipt.json``,
+    ``environment.vast_machine_id``, as tc1_reduce reads it); None on the box itself, which never knows it. The id is compared
+    only: it never enters the verdict (store-only), which carries the ``cross_host`` flag alone."""
+    rec = _json(os.path.join(work, os.pardir, "receipt.json"))
+    try:
+        mach = (rec.get("environment") or {}).get("vast_machine_id")
+    except AttributeError:
+        return None
+    return str(mach) if mach not in (None, "") else None
+
+
+def load_box(work):
+    """One box's run directory -> its schedule (schedule.txt), its step and op rows on its OWN box facts (box.json, the release
+    proof, env_box.txt, the runner's PROC exits, each load's clock), its machine and its image env."""
     sched_txt = os.path.join(work, "schedule.txt")
     want = None
     if os.path.isfile(sched_txt):
         want = {int(line.split()[0]) for line in open(sched_txt, encoding="utf-8") if line.strip()}
-    sched = [r for r in p238_schedule.schedule() if want is None or r["index"] in want]
+    sched = [r for r in _schedule() if want is None or r["index"] in want]
     box = _json(os.path.join(work, "box.json")) or {}
     proof = release_proof_ok(os.path.join(work, "release_proof.json"))
     env_box = env_file(os.path.join(work, "env_box.txt"))
     rcs = proc_rcs(os.path.join(work, "summary.txt"))
-    rows = [normalize_load(work, r, box, proof, env_box, rcs.get(r["index"])) for r in sched if r["kind"] == "step"]
-    ops = [normalize_op(work, r) for r in sched if r["kind"] == "op"]
-    out = reduce(rows, ops)
-    out["image_env"] = env_file(os.path.join(work, "env_image.txt"))      # information only: never a fault
+    return {"want": want, "draws": sorted({r["draw"] for r in sched}),
+            "rows": [normalize_load(work, r, box, proof, env_box, rcs.get(r["index"])) for r in sched if r["kind"] == "step"],
+            "ops": [normalize_op(work, r) for r in sched if r["kind"] == "op"],
+            "machine": rental_machine(work), "image_env": env_file(os.path.join(work, "env_image.txt"))}
+
+
+MODES = {"read": None, "half": "HALF_OK", "shake": "SHAKE_OK"}
+
+
+def reduce_boxes(boxes, mode="read", full=None):
+    """``mode``: "read" (the reading: one box covering the whole schedule, or the two halves of a SPLIT), "half" (one half on its
+    own box: that half's own faults only, verdict HALF_OK, never read alone) or "shake" (the shakedown's reduced schedule: its
+    faults only, SHAKE_OK, never read). A read covers the 44-process schedule exactly once, no gap and no index twice, over draws
+    1 and 2: a lone half is no reading. A split: each half is reduced alone first (its own release proof, env_box, card and
+    clocks are on its rows), one draw each; then the pair checks, the OOM reproduce rule and the readings run on the merged rows.
+    ``cross_host`` is set exactly when the halves' machines differ (the stability band is then a cross-host band); a half
+    without its rental record's machine VOIDs the merge (the band cannot be placed). Image env is information."""
+    full = {r["index"] for r in _schedule()} if full is None else set(full)
+    why, info, cross = [], [], False
+    if mode not in MODES:
+        why.append(f"mode {mode!r}")
+    if mode == "half" and (len(boxes) != 1 or len(boxes[0]["draws"]) != 1):
+        why.append(f"a half is one box of one draw ({len(boxes)} box(es), draws {[b['draws'] for b in boxes]})")
+    if mode != "read" and len(boxes) != 1:
+        why.append(f"a {mode} is one box, not {len(boxes)}")
+    if len(boxes) > 2 or not boxes:
+        why.append(f"{len(boxes)} boxes: one box, or the two halves of a split")
+    if mode == "read" and len(boxes) == 1:
+        want = boxes[0]["want"]
+        if want is None or want != full or boxes[0]["draws"] != [1, 2]:
+            why.append(f"one box must cover the whole schedule over draws 1 and 2 (draws {boxes[0]['draws']}, "
+                       f"{'no schedule.txt' if want is None else f'{len(want & full)} of {len(full)} indices'})")
+    if len(boxes) == 2:
+        a, b = boxes
+        if a["want"] is None or b["want"] is None:
+            why.append("a half without its schedule.txt")
+        else:
+            both, gap = sorted(a["want"] & b["want"]), sorted(full - (a["want"] | b["want"]))
+            extra = sorted((a["want"] | b["want"]) - full)
+            if both:
+                why.append(f"indices {both[:6]} in both halves")
+            if gap:
+                why.append(f"indices {gap[:6]} in neither half")
+            if extra:
+                why.append(f"indices {extra[:6]} not in the schedule")
+        if len(a["draws"]) != 1 or len(b["draws"]) != 1 or a["draws"] == b["draws"]:
+            why.append(f"the halves' draws {a['draws']} / {b['draws']} are not draw 1 and draw 2")
+        if a["machine"] is None or b["machine"] is None:
+            why.append("a half without its rental record's machine (cross_host cannot be set)")
+        cross = a["machine"] is not None and b["machine"] is not None and a["machine"] != b["machine"]
+        for x in boxes:
+            info.append({"draws": x["draws"], "n_rows": len(x["rows"]), "n_op_rows": len(x["ops"]),
+                         "half_verdict": reduce(x["rows"], x["ops"], partial="HALF_OK")["verdict"]})
+    out = reduce([r for x in boxes for r in x["rows"]], [o for x in boxes for o in x["ops"]], partial=MODES.get(mode))
+    out["boxes"], out["merge_why"], out["split"] = info, why, len(boxes) == 2
+    out["cross_host"] = cross
+    out["stability_scope"] = "cross_host" if cross else "within_host"
+    out["image_env"] = boxes[0]["image_env"] if len(boxes) == 1 else [x["image_env"] for x in boxes]   # information only
+    if why:
+        out["verdict"] = "VOID"
     return out
+
+
+def reduce_work(works, mode="read"):
+    """``works``: one run directory, or the two fetched halves of a split reading (draw 1's box, draw 2's box)."""
+    works = [works] if isinstance(works, str) else list(works)
+    return reduce_boxes([load_box(w) for w in works], mode=mode)
 
 
 # -- the self-test ---------------------------------------------------------------------------------------------------------------
@@ -856,7 +958,10 @@ def main(argv=None):
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true")
-    ap.add_argument("--work", help="a box's run directory (/root/p238 on the box, or a fetched copy)")
+    ap.add_argument("--work", nargs="+", help="a box's run directory (/root/p238 on the box, or a fetched copy), or the two "
+                    "fetched halves of a split reading (draw 1's, then draw 2's)")
+    ap.add_argument("--mode", choices=sorted(MODES), default="read",
+                    help="read (the reading), half (one half of a split, on its box: HALF_OK), shake (the shakedown: SHAKE_OK)")
     ap.add_argument("--out", help="where the verdict JSON goes")
     a = ap.parse_args(argv)
     if a.selftest:
@@ -864,7 +969,7 @@ def main(argv=None):
         return 0
     if not a.work or not a.out:
         ap.error("--work and --out, or --selftest")
-    out = reduce_work(a.work)
+    out = reduce_work(a.work, mode=a.mode)
     data = (json.dumps(out, indent=1, sort_keys=True, default=str) + "\n").encode()
     with open(a.out, "wb") as f:
         f.write(data)

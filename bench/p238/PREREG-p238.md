@@ -304,10 +304,12 @@ fault.
   READ rows whose quality holds.
 
 **Stability:** the two draws of a (point, arm) within 5 % (e4b) or 10 % (Unsloth) on wall and device time, else the pair is flagged
-UNSTABLE and kept out of the headline (TC1's rule).
+UNSTABLE and kept out of the headline (TC1's rule). The reducer reports, per point and pair, the quality bars per draw (a miss reads
+QUALITY_FAIL with the ratio beside it, not quoted; UA against U0 carries the within-framework bars without a registered ratio), the
+arms that are UNSTABLE, whether the pair is headline-eligible, and each draw's own wall ratio.
 
-**The box's verdict** is READ only when every step row and every op row READs; each VOID row is reported with its faults, and a
-VOID row is never dropped to rescue the rest (the runner exits 27).
+**The box's verdict** (the merged halves' for a split) is READ only when every op row READs and every step row READs or is a
+reproduced OOM; each VOID row is reported with its faults, and a VOID row is never dropped to rescue the rest (the runner exits 27).
 
 **Reported, never a bar:** per row the ratio medians and draw bands; per load the order position, global index, load wall and the
 Unsloth Mega-cache line; the E_A route counts; op-level bit identity; the energy cross-check.
@@ -361,7 +363,18 @@ attention-only training (except the stated e4b property), other ranks, other mod
   - **The split rule:** the reading's fit is 44 x the shakedown's measured per-load wall (40 step loads and 4 op processes) plus the op timing, plus a 25 % headroom.
     If that exceeds the 8 h guard, or its worst cost exceeds USD 15, the reading is SPLIT across two boxes **by draw, never by arm**
     (`p238-5090-1a` draw 1 with its two op processes, `p238-5090-1b` draw 2 with its two; the rerun likewise `p238-5090-2a` / `2b`), the card floor checked on each box. The split is decided
-    from the shakedown's receipt and stated before the reading launches.
+    from the shakedown's receipt and stated before the reading launches. **The machine:** `1b` runs on the SAME machine as `1a`
+    (pinned to `1a`'s machine), so a split differs from one box only by the re-rent and the stability band stays within one
+    host. Only if that machine cannot be rented within 24 h of `1a`'s receipt may `1b` run on another machine of the registered
+    class, each half passing its own card floor; that reading is labelled `cross_host`: its 5 % / 10 % stability band is reported
+    as a CROSS-HOST band (conservative: it can only flag more pairs UNSTABLE), its ratios stay within one host (each half holds
+    both arms of its draw), and each half's per-draw ratio is reported beside the headline. **The reduction:** a half box reduces
+    its own faults only (its release proof, `env_box.txt`, card, clocks and rows; `--half`) and exits 0 with HALF_OK, or 27 on
+    a fault; a HALF_OK is never a strike. The reading is the controller's merge of the two fetched halves (`--work 1a 1b`): their
+    indices cover the 44-process schedule exactly once (no gap, no index twice), one draw each, and the pair checks, the OOM
+    reproduce rule and the readings run on the merged rows. Each half's machine comes from the controller's store-only rental
+    record beside it and only sets `cross_host` (a half without one VOIDs the merge); the verdict and any public text carry
+    `cross_host` yes / no and never a machine, instance or GPU id.
 - A box is started at its `STARTED` marker (after the refusals and the pre-install fit). Two strikes end the lane. The runner's exit
   codes follow P236's table (13, 15, 16, 18 host refusals before `STARTED`; 41 fit; 9, 10, 78, 130 halts; 27 VOID). 78 includes an
   ambient knob: any `UNSLOTH_*`, `E4B_*`, `GNF4_*` or `NF4_QLORA_*` key already set on the box, other than the five Unsloth pins the

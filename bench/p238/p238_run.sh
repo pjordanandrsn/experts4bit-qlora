@@ -248,8 +248,11 @@ while read -r idx kind draw point who pos; do
   fi
 done < $W/schedule.txt
 # ---- the rule
-say "reduce"; $PY $W/p238_reduce.py --work $W --out $W/verdict_p238.json 2>&1 | tee -a summary.txt
+# a half of a split (draws 1 or 2) reduces its own faults only (HALF_OK, never read alone; the controller merges the two halves),
+# the shakedown likewise (SHAKE_OK, never read); a one-box reading must cover the whole schedule
+case "$P238_DRAWS" in 1|2) MODE=half;; shake) MODE=shake;; *) MODE=read;; esac
+say "reduce"; $PY $W/p238_reduce.py --work $W --mode $MODE --out $W/verdict_p238.json 2>&1 | tee -a summary.txt
 [ "${PIPESTATUS[0]}" = 0 ] && [ -s "$W/verdict_p238.json" ] || { say "REDUCER FAILED: no reading"; finish 27; }
 V=$($PY -c "import json; print(json.load(open('$W/verdict_p238.json'))['verdict'])")
 [ "$P238_DRAWS" = shake ] && { say "shakedown: $V (never read)"; finish 0; }
-case "$V" in READ) finish 0;; *) say "P238 $V -- no reading"; finish 27;; esac
+case "$V:$P238_DRAWS" in READ:1,2|HALF_OK:1|HALF_OK:2) finish 0;; *) say "P238 $V (draws $P238_DRAWS) -- no reading"; finish 27;; esac

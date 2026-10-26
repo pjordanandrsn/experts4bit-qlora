@@ -528,9 +528,10 @@ def _work_dir(tmp_path):
 
 def test_reduce_work_reads_a_box_directory_end_to_end(tmp_path):
     R, w = _work_dir(tmp_path)
-    out = R.reduce_work(str(w))
-    assert out["verdict"] == "READ", out
+    out = R.reduce_work(str(w), mode="half")
+    assert out["verdict"] == "HALF_OK", out                      # a draw-1 box directory: one half, never read alone
     assert (out["n_rows"], out["n_op_rows"], out["n_void"]) == (1, 1, 0)
+    assert R.reduce_work(str(w))["verdict"] == "VOID"             # read as the reading, a half is no reading
 
 
 @pytest.mark.parametrize("remove", ["loads/3/qwen3_5_e4b_p238_3_E_F_2k.json", "loads/3/qwen3_5_e4b_p238_3_E_F_2k_profile.json",
@@ -538,7 +539,7 @@ def test_reduce_work_reads_a_box_directory_end_to_end(tmp_path):
 def test_reduce_work_voids_when_any_file_is_missing(tmp_path, remove):
     R, w = _work_dir(tmp_path)
     (w / remove).unlink()
-    out = R.reduce_work(str(w))
+    out = R.reduce_work(str(w), mode="half")
     assert out["verdict"] == "VOID" and out["n_void"] >= 1
 
 
@@ -565,12 +566,12 @@ def test_an_env_box_with_an_extra_key_voids_and_an_image_key_is_information(tmp_
     from the image lands in env_image.txt as information and never VOIDs."""
     R, w = _work_dir(tmp_path)
     _write(w / "env_image.txt", "PYTORCH_VERSION=2.12.1\nNV_CUDA_LIB_VERSION=13.0.1\n")
-    out = R.reduce_work(str(w))
-    assert out["verdict"] == "READ" and out["image_env"]["PYTORCH_VERSION"] == "2.12.1", out
+    out = R.reduce_work(str(w), mode="half")
+    assert out["verdict"] == "HALF_OK" and out["image_env"]["PYTORCH_VERSION"] == "2.12.1", out
     body = (w / "env_box.txt").read_text(encoding="utf-8")
     for extra in ("E4B_TRAIN_DETERMINISTIC=1\n", "PYTORCH_VERSION=2.12.1\n", "not an env line\n"):
         (w / "env_box.txt").write_text(body + extra, encoding="utf-8")
-        out = R.reduce_work(str(w))
+        out = R.reduce_work(str(w), mode="half")
         assert out["verdict"] == "VOID" and any("unregistered" in y for r in out["rows"] for y in r["why"]), (extra, out["rows"])
 
 
@@ -939,6 +940,135 @@ def test_the_runners_proc_lines_carry_each_loads_exit(tmp_path):
                                           "pos=0 rc=0\nPROC 5 step E_F 2k draw=1 pos=0 rc=x\n", encoding="utf-8")
     assert R.proc_rcs(str(tmp_path / "summary.txt")) == {3: 5, 4: 0}
     assert R.proc_rcs(str(tmp_path / "missing.txt")) == {}
+
+
+def _box(rows, draws, machine="m-1"):
+    return {"want": {r["index"] for r in rows}, "draws": draws, "rows": rows, "ops": [], "machine": machine, "image_env": None}
+
+
+def _halves(R, monkeypatch, oom=(), machines=("m-1", "m-1")):
+    rows = _grid(R, monkeypatch, oom)
+    d1, d2 = [r for r in rows if r["draw"] == 1], [r for r in rows if r["draw"] == 2]
+    return rows, _box(d1, [1], machines[0]), _box(d2, [2], machines[1]), {r["index"] for r in rows}
+
+
+def test_a_split_reproduces_the_one_box_verdict_on_the_same_rows(monkeypatch):
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    rows, a, b, full = _halves(R, monkeypatch)
+    one = R.reduce_boxes([_box(rows, [1, 2])], full=full)
+    split = R.reduce_boxes([a, b], full=full)
+    assert one["verdict"] == split["verdict"] == "READ" and one["readings"] == split["readings"]
+    assert split["split"] and not one["split"] and [x["half_verdict"] for x in split["boxes"]] == ["HALF_OK", "HALF_OK"]
+    assert R.reduce_boxes([a], mode="half", full=full)["verdict"] == "HALF_OK"
+
+
+def test_a_half_alone_or_missing_is_no_reading(monkeypatch):
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    rows, a, b, full = _halves(R, monkeypatch)
+    for boxes in ([a], [b]):
+        out = R.reduce_boxes(boxes, full=full)
+        assert out["verdict"] == "VOID" and "cover the whole schedule" in out["merge_why"][0], out["merge_why"]
+    assert R.reduce_boxes([a, b, a], full=full)["verdict"] == "VOID"
+    assert R.reduce_boxes([a, b], mode="half", full=full)["verdict"] == "VOID"      # a half is one box
+    a["want"] = None
+    assert "without its schedule.txt" in " ".join(R.reduce_boxes([a, b], full=full)["merge_why"])
+
+
+def test_an_index_in_both_halves_or_in_neither_reads_void(monkeypatch):
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    rows, a, b, full = _halves(R, monkeypatch)
+    dup = dict(b, want=b["want"] | {min(a["want"])})
+    assert any("in both halves" in w for w in R.reduce_boxes([a, dup], full=full)["merge_why"])
+    gap = dict(b, want=b["want"] - {max(b["want"])})
+    assert any("in neither half" in w for w in R.reduce_boxes([a, gap], full=full)["merge_why"])
+    same = dict(b, draws=[1])
+    assert any("not draw 1 and draw 2" in w for w in R.reduce_boxes([a, same], full=full)["merge_why"])
+
+
+def test_an_oom_in_draw_1_on_box_a_and_draw_2_on_box_b_reproduces(monkeypatch):
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    _, a, b, full = _halves(R, monkeypatch, {("8k", "U1", 1), ("8k", "U1", 2)})
+    assert R.reduce_boxes([a], mode="half", full=full)["verdict"] == "HALF_OK"    # the half waits for the merge
+    out = R.reduce_boxes([a, b], full=full)
+    assert out["verdict"] == "READ" and out["n_oom"] == 2 and out["readings"]["8k:E_F/U1"]["status"] == "OOM_DIFFERENCE"
+    _, a, b, full = _halves(R, monkeypatch, {("8k", "U1", 1)})                     # draw 1 only: not reproduced
+    assert R.reduce_boxes([a, b], full=full)["verdict"] == "VOID"
+
+
+@pytest.mark.parametrize("machines,cross", [(("m-1", "m-1"), False), (("m-1", "m-2"), True), ((None, "m-1"), None),
+                                            (("m-1", None), None)])
+def test_cross_host_is_set_exactly_when_the_halves_machines_differ(monkeypatch, machines, cross):
+    """And the verdict never names a machine: the ids are compared only (store-only), the verdict carries cross_host alone. A half
+    without its rental record's machine VOIDs the merge (the band cannot be placed)."""
+    import json
+    import re
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    _, a, b, full = _halves(R, monkeypatch, machines=machines)
+    out = R.reduce_boxes([a, b], full=full)
+    if cross is None:
+        assert out["verdict"] == "VOID" and any("rental record" in w for w in out["merge_why"])
+    else:
+        assert out["verdict"] == "READ" and out["cross_host"] is cross
+        assert out["stability_scope"] == ("cross_host" if cross else "within_host")
+    text = json.dumps(out, default=str)
+    assert "m-1" not in text and "m-2" not in text
+
+    def keys(x):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                yield str(k)
+                yield from keys(v)
+        elif isinstance(x, list):
+            for v in x:
+                yield from keys(v)
+    assert not [k for k in keys(out) if re.search(r"machine|instance|uuid|host_id|offer", k, re.I)]
+
+
+def test_the_rental_machine_is_read_from_the_controllers_receipt_beside_the_box(tmp_path):
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    w = tmp_path / "run" / "p238"
+    w.mkdir(parents=True)
+    assert R.rental_machine(str(w)) is None                                         # on the box: never known
+    _write(tmp_path / "run" / "receipt.json", {"environment": {"vast_machine_id": 1234}})
+    assert R.rental_machine(str(w)) == "1234"
+    _write(tmp_path / "run" / "receipt.json", {"environment": {"vast_machine_id": ""}})
+    assert R.rental_machine(str(w)) is None
+
+
+def test_quality_and_stability_are_read_per_pair(monkeypatch):
+    """QUALITY_FAIL (a cross-framework held-out gap over 0.05 in one draw) keeps the ratio beside it, never quoted; an UNSTABLE arm
+    (draws more than 10 % apart for Unsloth) keeps the pair out of the headline; UA against U0 carries the quality bars only."""
+    R = _load("p238_reduce", "bench/p238/p238_reduce.py")
+    rows = _grid(R, monkeypatch)
+    for r in rows:
+        if (r["point"], r["arm"], r["draw"]) == ("2k", "U1", 1):
+            r["heldout_loss"] = 1.6
+        if (r["point"], r["arm"], r["draw"]) == ("4k", "U1", 2):
+            r["step_ms"] = [1000.0 * SPEED["U1"] * 1.2] * R.STEPS
+    rd = R.reduce(rows, [])["readings"]
+    q = rd["2k:E_F/U1"]
+    assert q["status"] == "QUALITY_FAIL" and not q["quoted"] and q["wall_ratio"] and "draw 1" in q["quality_why"][0]
+    assert not q["headline_eligible"] and rd["2k:E_A/UA"]["headline_eligible"]
+    s = rd["4k:E_F/U1"]
+    assert s["status"] == "RATIO" and s["quoted"] and s["unstable"] and s["unstable"][0].startswith("U1") and not s["headline_eligible"]
+    assert set(s["per_draw_wall_ratio"]) == {"1", "2"} and s["per_draw_wall_ratio"]["1"] != s["per_draw_wall_ratio"]["2"]
+    assert rd["2k:UA/U0"]["ratio_registered"] is False and rd["2k:E_F/U1"]["ratio_registered"] is True
+
+
+@pytest.mark.parametrize("v,draws,want", [("HALF_OK", "1", 0), ("HALF_OK", "2", 0), ("VOID", "1", 27), ("READ", "1", 27),
+                                          ("HALF_OK", "1,2", 27), ("READ", "1,2", 0), ("VOID", "1,2", 27)])
+def test_the_runners_finish_reads_a_half_as_half_ok_and_a_reading_as_read(v, draws, want):
+    """A clean half box finishes 0 (HALF_OK, never a strike), a faulted half 27; a one-box reading finishes 0 only on READ. The
+    runner's own lines, as written; and the mode it passes the reducer per draws."""
+    import subprocess
+    run = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
+    fin = next(line for line in run.splitlines() if line.startswith('case "$V:$P238_DRAWS" in'))
+    mode = next(line for line in run.splitlines() if line.startswith('case "$P238_DRAWS" in 1|2) MODE=half'))
+    pre = 'say(){ :; }\nfinish(){ exit "$1"; }\n'
+    r = subprocess.run(["bash", "-c", pre + f"V={v}; P238_DRAWS={draws}\n" + fin + "\n"], capture_output=True, text=True)
+    assert r.returncode == want, (v, draws, r.stderr)
+    m = subprocess.run(["bash", "-c", f"P238_DRAWS={draws}\n" + mode + '\necho "$MODE"\n'], capture_output=True, text=True)
+    assert m.stdout.strip() == {"1": "half", "2": "half", "1,2": "read"}[draws]
 
 
 def test_the_runner_passes_eval_every_steps():
