@@ -101,3 +101,22 @@ It is still never a reading. No UUID, serial, PCI address, board id or product n
 
 **Applies to** every probe launched from a commit that contains this amendment. A probe launched before it records
 the facts above this section only, and its receipt's commit says which.
+
+## Amendment 2: the drive's exit uses the shared tail (2026-10-26, before any probe ran)
+
+**Why.** e4b#2141's cross-lane test requires every driver to hand the launcher the box's own exit code and never
+report a success the box did not record. The drive above read no exit file, so the test could not drive it.
+
+**What changes.** The drive now writes ssh's exit code (the box script's own, or ssh's when the connection fails) to
+`hostprobe/HOSTPROBE_EXIT_CODE.<run id>`, and `hostprobe/HOSTPROBE_SUCCESS.<run id>` when the facts line came back.
+It then exits through `drive_finish` (`bench/common/drive_tail.sh`):
+- 0 when the box exited 0 and the facts line came back, as before;
+- 22 when no facts line came back, as before;
+- the host codes 13, 14, 17 and 18 unchanged (the box script never exits with them);
+- 26 when a facts line came back but the box's exit was not 0: a timed-out or broken ssh after the line was printed.
+  The facts are still saved. This was 0 before.
+
+**Unchanged.** Run ids, scope, the box script, the facts, the guard, the rate cap, the image, the download and the
+$0.20 worst case. It is still never a reading.
+
+**Applies to** every probe launched from a commit that contains this amendment. No probe has run.
