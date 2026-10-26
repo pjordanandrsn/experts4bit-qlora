@@ -97,7 +97,7 @@ SCREEN_MIN_LISTED_RAM_GIB = 128                        # Vast's listed cpu_ram (
 def vast_cpu_class(name):
     """The registered class of a Vast offer's ``cpu_name``. Vast writes "Core™ i9-14900K" and "Xeon® Gold 6338" where lscpu writes
     "Intel(R) Core(TM) i9-14900K", so the two marks are spelled as lscpu spells them and CPU_CLASSES decide, unchanged."""
-    return cpu_class(str(name or "").replace("™", "(TM)").replace("®", "(R)"))
+    return cpu_class(str(name or "").replace("\u2122", "(TM)").replace("\u00ae", "(R)"))
 
 
 def vast_ram_gib(cpu_ram_mb):
