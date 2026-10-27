@@ -1,0 +1,56 @@
+{
+ "reducer": "bench/hp3/hp3_reduce.py g1",
+ "scope": "parity of the exported adapters under one evaluator on byte-identical bases",
+ "labels": "(R) the registered fallback: e4b K00 vs Unsloth 2026.9.14 (HP1/HP2's version) on torch 2.8.0+cu128 (HPN's build); axolotl waits for an amendment; (iii) the build is torch 2.8.0+cu128 with Unsloth's own bitsandbytes resolve: no HP3 (R) number is compared with an HP2 or HPN number",
+ "rows": 300,
+ "row_tol": 1e-05,
+ "reference": "e4b",
+ "frameworks": {
+  "e4b": {
+   "g1": "PASS",
+   "reason": "the reference base"
+  },
+  "unsloth": {
+   "same_digest": true,
+   "max_row_diff": 0.0,
+   "rows_equal": true,
+   "same_row_mean": true,
+   "g1": "PASS",
+   "reason": "digest equal to e4b's; every zero-adapter row within 1e-05; row means equal"
+  }
+ },
+ "per_framework": {
+  "e4b": {
+   "b": 0.000798,
+   "sd": 0.028801,
+   "mean_abs_gap": 0.020696,
+   "max_abs_gap": 0.1047,
+   "digest": "65b6083d6158cfca3834a0f3b5e56f4828b033fbe6abf01fa9aa6d8eb58e9dca",
+   "zero_row_mean": 1.944704
+  },
+  "unsloth": {
+   "b": 0.002375,
+   "sd": 0.030557,
+   "mean_abs_gap": 0.021808,
+   "max_abs_gap": 0.13675,
+   "digest": "65b6083d6158cfca3834a0f3b5e56f4828b033fbe6abf01fa9aa6d8eb58e9dca",
+   "zero_row_mean": 1.944704
+  }
+ },
+ "delta0_reported": {
+  "e4b-unsloth": {
+   "delta0": -0.001577,
+   "se": 0.001533,
+   "term": "in-loop (the two frameworks' training forwards at step 0)"
+  }
+ },
+ "home_field": {
+  "closest": "e4b",
+  "basis": "smallest |b_f|: the framework whose training forward the evaluator sits closest to"
+ },
+ "roundtrip_zero_centred_tol": 0.01,
+ "readable_pairs": [
+  "e4b-unsloth"
+ ],
+ "verdict": "PASS"
+}

@@ -1,0 +1,17 @@
+{
+ "n": 0,
+ "seeds": [],
+ "basis": "timing",
+ "seed1_wall_s": 4814,
+ "left_s": 9972,
+ "frameworks": 2,
+ "need_s": {
+  "5": 23756,
+  "4": 18222,
+  "3": 12688
+ },
+ "eval_s_per_run": 360,
+ "reserve_s": 900,
+ "written_at_utc": "2026-10-25T01:20:15Z",
+ "reason": "host-limited: fewer than 3 seeds fit at seed 3410's wall time 4814 s"
+}

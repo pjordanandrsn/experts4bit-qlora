@@ -1,0 +1,1 @@
+HP3_BUILD_PROBE e4b: torch 2.8.0+cu128 bnb 0.50.2 lib libbitsandbytes_cuda128.so triton 3.4.0
