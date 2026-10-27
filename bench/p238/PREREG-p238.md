@@ -549,3 +549,86 @@ check greps the whole cut tree, not the diff, for the old kit directory as a pat
 `Path.home() /`, `os.path.join`), and every hit is substituted or on a named allow-list (receipt and bench paths). The grep output
 is posted with the kit diff. Amendment 1's kit missed `Path.home() / "p238"` in its screen: a missed substitution leaves no diff
 line, so diff review alone could not see it.
+
+## Amendment 3 (2026-10-26): the host rule on the gate's own load
+
+This supersedes amendment 2's "The host rule" bullet, whose text is unchanged above. Amendment 2's retry rule, launch rule and
+stated worst stand. Nothing else changes; no P238 arm has been read.
+
+**The root cause, in one line.** Amendment 2's admission proxy was validated on the wrong load: it counted a training run's clock
+log as evidence that a card would pass the gate, but the gate is a 20 s full-power bf16 matmul burn, which is power-bound. A
+training log on a power-capped card overstates its burn clock. `p238-shake-r3` drew such a host: a card capped at 475 W whose
+training logs read 2,752-2,827 MHz, and whose burn read 2,587 MHz, under the floor. Three of the four shakedown creates were lost to
+power-capped cards (`p238-shake-1`, `-r2`, `-r3`). Refused spend so far is USD 0.066.
+
+**The evidence: every RTX 5090 card_clock burn in the private receipt store (n = 7).**
+
+| Enforced power limit | Busy SM median | Clock-mode verdict |
+|---|---|---|
+| 430 W | 2,493.5 MHz | fail (floor) |
+| 475 W | 2,587 MHz | fail (floor) |
+| 500 W | 2,647 MHz | fail (floor) |
+| 575 W | 2,707 MHz | pass, +7 MHz |
+| 575 W | 2,715 MHz | pass, +15 MHz |
+| 575 W | 2,827 MHz | a pre-amendment-83 record: re-judged, it reads UNREAD (below) |
+| 600 W | 2,805 MHz | pass |
+
+The split is exact at 575 W: 3 of 3 below fail, 4 of 4 at or above clear the floor. At 575 W the burn sits AT the floor (+7 and +15
+MHz), so ">= 575 W" is **necessary, not sufficient**: some 575 W hosts will still fail the burn, which remains the gate. Each such
+refusal costs about USD 0.01-0.03 under amendment 2's launch rule.
+
+**The host rule.** A machine is **recorded-good** when, in its LATEST receipt that holds any loaded record:
+- every loaded record passes. The records are:
+  - each `card_clock*.json` burn (this lane's `card_clock_burn.json`, and the `qualify/box/card_clock.json` the serving lanes
+    write), **re-judged** by `card_clock.passes(summary, 2700, mode="clock")` from its summary, never through its stored `pass`
+    field. A burn written before TC1 amendment 83 has no Reliability count, so it re-judges UNREAD and cannot vouch for a host;
+  - each `gpuclk_*.txt` run clock log, judged the same way;
+  - each `run_judge.json`, where a `REFUSE` is a FAILING record whatever the burn read. A power-capped burn masks the Reliability
+    reason, and a run judge can still see it (a 600 W card passed its burn and then refused at run time on persistent
+    Reliability);
+  - a burn with fewer than 10 busy samples is a FAILING record (UNREAD): a burn's whole job is to load the card, so a short one is
+    a gate that did not run, and it never lets an older receipt vouch. A run log with fewer than 10 busy samples is no evidence
+    either way and is skipped;
+  - a run judge other than `REFUSE` adds no record (it is not evidence that the card holds the clock);
+- AND that receipt recorded a power limit >= 575 W, OR one of its passing records is itself a burn (the gate's own load; a
+  clock-mode pass is necessarily an amendment-83-era record).
+A machine with any receipt that has no readable `started_at` (fractional seconds are read) is NOT recorded-good: its latest receipt
+is unknown, and an older pass must never vouch in its place. A run whose GPU class is not RTX 5090 (or unnamed) is skipped. There
+is still no fallback: a host with no loaded record is never pinned.
+
+**One function.** The rule is `recorded_good` in `bench/p238/p238_hosts.py`. The shakedown screen calls it, from the controller
+checkout at the launch commit, sha256-checked, and so does any census, so the two cannot disagree about a host. It keeps the read
+rule: only a missing file is absent, and any other read error makes the census UNREAD, so nothing is pinned. A record that does not
+parse fails, as does a short burn, and an unordered receipt fails its machine. `tests/test_p238_hosts.py` checks it on store trees built from real records (sha256-pinned fixtures), with the
+no-power-clause rule as a mutant.
+
+**Checked on the real store at $0 before this amendment** (machine ids are kept in the private record):
+- the r3 host reads not-good (its own burn: 475 W, 2,587 MHz);
+- the host whose 600 W burn passed but whose run judge refused reads not-good;
+- r1's host reads not-good (its pre-amendment-83 burn re-judges UNREAD);
+- the two hosts with a passing amendment-83 burn at 575 W read good.
+Of 50 RTX 5090 machines with a loaded record, 14 are recorded-good, all at 575 W or 600 W.
+
+**Price (the shakedown only).** The shakedown's declared rate rises from USD 1.05/h to **USD 1.25/h**, the class policy's RTX 5090
+ceiling. Three recorded-good hosts were listed today, each turned away by the screen: one at USD 0.91/h listing 679 Mbps, two at
+USD 1.07/h and 1.11/h listing 878 and 735 Mbps. Under the 600 Mbps floor below and USD 1.25/h, all three would have been admitted;
+under USD 1.05/h, only the first. The worst per shakedown box becomes 5.25 h x USD 1.25 + 82 GB x USD 0.02 = **USD 8.20**, within
+the USD 15 box rule. The lane's shakedown spend is otherwise bounded as before: amendment 2's refused-spend launch rule (USD 0.25,
+with its stated worst) and at most two STARTED boxes. The reading's budget (its box cap and K split, at USD 1.05/h) is NOT changed
+here. The rate is `SHAKE_RATE_CAP_USD_H` in `bench/p238/p238_hosts.py`, read by the screen. Amendment 2's stated worst for ONE
+refused box rises with the rate: the same launcher start limits plus the runner's probes and burn alarm (about 1,020 s) cost about
+USD 0.35 at USD 1.25/h, against about USD 0.30 at USD 1.05/h. So the refused spend can end at most one such box, about USD 0.35,
+above the USD 0.25 launch rule. The launch rule itself (the spent sum plus the USD 0.05 allowance within USD 0.25) is unchanged.
+
+**The screen's download floor (a separate item; it may be struck without touching the rest).** The screen admits only hosts listing
+>= 1,000 Mbps download, a value inherited from earlier kits and not registered in this PREREG. The box's own bound is the snapshot
+alarm, `FETCH_S` = 2,400 s for about 72 GB, which needs about 240 Mbps sustained. This amendment lowers the screen floor to 600
+Mbps, a 2.5x margin over that need. The runner's alarm still binds on the box: a slow fetch ends the box before any load, and that
+costs no load data. It is the filter that turned away the recorded-good host above. The floor is `INET_MIN_MBPS` in
+`bench/p238/p238_hosts.py`, which the screen and any census read, as they read `recorded_good`, so neither can disagree with the
+other about it.
+
+**The re-cut kit.** The kit re-cut follows amendment 2's form (a new read-only directory, a generator with counted edits, the
+whole-tree residual grep, the template's guards checked at the launch commit). Its screen replaces its inline census with a call to
+`p238_hosts.recorded_good`. A whole-kit grep for every copy of the old rule must find none. Then a $0 validate, and a fresh Approved
+for `p238-shake-r4`.
