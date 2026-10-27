@@ -134,13 +134,6 @@
    "sha256": "740f4cad48a173204f1e766ea0abb797fd49cee5531922b4fcbd25741e635447",
    "status": "closed lane: results merged (bench/ho3/RESULTS-ho3.md)"
   },
-  "bench/hostprobe/hostprobe_drive.sh": {
-   "fails": [
-    "undrivable: no fetched exit file"
-   ],
-   "sha256": "c4dd145924a2859c0b5fc33961608cf811de5ce415f5a77acf36b7cd5fc74c6b",
-   "status": "live: fix due in the lane's next PR"
-  },
   "bench/i8dense/i8_drive.sh": {
    "fails": [
     "(b) rc 0 without the success marker exits 0"

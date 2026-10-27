@@ -112,6 +112,31 @@ def test_no_facts_line_is_rc_22_and_writes_no_facts(tmp_path):
     assert r.returncode == 22 and not (tmp_path / "run/hostprobe/facts.json").exists()
 
 
+# Amendment 2: the drive exits through bench/common/drive_tail.sh, with ssh's exit code and the facts line as the box's
+# records (tests/test_drive_tail_codes.py drives the same tail on synthetic directories).
+def test_the_drive_records_the_boxs_exit_and_success_marker(tmp_path):
+    r = _drive(tmp_path, "hostprobe-11541-1", ssh_body="exec python3 -")
+    out = tmp_path / "run/hostprobe"
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (out / "HOSTPROBE_EXIT_CODE.hostprobe-11541-1").read_text() == "0\n"
+    assert (out / "HOSTPROBE_SUCCESS.hostprobe-11541-1").exists()
+
+
+@pytest.mark.parametrize("code,want", [(5, 26), (255, 26), (17, 17)])
+def test_a_facts_line_with_a_nonzero_exit_is_not_a_success(tmp_path, code, want):
+    r = _drive(tmp_path, "hostprobe-11541-1", ssh_body=f"python3 -; exit {code}")
+    out = tmp_path / "run/hostprobe"
+    assert r.returncode == want, r.stdout + r.stderr
+    assert "measured_at" in json.loads((out / "facts.json").read_text())       # the facts are still saved
+    assert (out / "HOSTPROBE_EXIT_CODE.hostprobe-11541-1").read_text() == f"{code}\n"
+
+
+def test_no_facts_line_with_a_zero_exit_stays_22_without_a_marker(tmp_path):
+    r = _drive(tmp_path, "hostprobe-11541-1", ssh_body="cat >/dev/null; exit 0")
+    assert r.returncode == 22
+    assert not (tmp_path / "run/hostprobe/HOSTPROBE_SUCCESS.hostprobe-11541-1").exists()
+
+
 def test_a_kernel_without_thp_reads_absent_and_a_failed_read_is_left_out(tmp_path):
     root = _box(tmp_path / "a")
     import shutil
