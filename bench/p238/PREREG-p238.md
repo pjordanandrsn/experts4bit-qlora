@@ -633,7 +633,7 @@ whole-tree residual grep, the template's guards checked at the launch commit). I
 `p238_hosts.recorded_good`. A whole-kit grep for every copy of the old rule must find none. Then a $0 validate, and a fresh Approved
 for `p238-shake-r4`.
 
-**Erratum (2026-10-27).** The Price paragraph's "all three would have been admitted" held on the rate and the download floor
-only. The screen's full judge, run at $0 with the re-cut kit's own code, admits none of the three hosts named there: each fails
+**Erratum (2026-10-27).** The Price paragraph's "all three would have been admitted" held on the rate and the 600 Mbps floor
+only. The screen's full judge, run at $0 with the re-cut kit's own code, admits none of the three hosts listed there: each fails
 another of the screen's clauses (the registry download-speed tie-breaker floor, the last host outcome, or the listing's
 reliability). No rule changes.
