@@ -49,7 +49,7 @@ def _experts():
     return lora.eval()
 
 
-def _write_adapter(root, tensors, *, revision=REV, extra=None):
+def _write_adapter(root, tensors, *, revision=REV, extra=None, alpha=ALPHA):
     """An adapter directory in the shape Loggetta's ``--adapter-out`` writes (``backend-adapter/1``)."""
     root.mkdir(parents=True, exist_ok=True)
     st.save_file(tensors, str(root / "adapter.safetensors"))
@@ -57,7 +57,7 @@ def _write_adapter(root, tensors, *, revision=REV, extra=None):
     manifest = {"schema": "backend-adapter/1", "backend": "experts4bit", "weights": "adapter.safetensors",
                 "files": {"adapter.safetensors": {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}},
                 "tensors": {k: {"shape": list(v.shape), "dtype": str(v.dtype)} for k, v in tensors.items()},
-                "setup": {"r": R, "alpha": ALPHA}, "model": {"model": "org/tiny-moe"}}
+                "setup": {"r": R, "alpha": alpha}, "model": {"model": "org/tiny-moe"}}
     if revision:
         manifest["resolved_model_revision"] = revision
     manifest.update(extra or {})
@@ -261,6 +261,12 @@ def test_refuses_an_adapter_with_no_lora_tensors(tmp_path):
 @pytest.mark.parametrize("applied", [2.0, {"attention": ALPHA / R, "experts": True}, {"experts": "2.0"}])
 def test_refuses_a_malformed_scale_record(exported, tmp_path, applied):
     assert "lora_scale_applied" in _refusal(tmp_path, exported[1], extra={"lora_scale_applied": applied})
+
+
+def test_refuses_a_bool_scale_even_where_it_equals_alpha_over_r(exported, tmp_path):
+    """alpha == r makes the scale 1.0, which ``True`` equals numerically: only the type check can refuse it."""
+    reason = _refusal(tmp_path, exported[1], alpha=R, extra={"lora_scale_applied": {"experts": True}})
+    assert "lora_scale_applied.experts True" in reason
 
 
 def test_a_scope_recorded_as_none_holds_no_modules_and_exports(exported, tmp_path):
