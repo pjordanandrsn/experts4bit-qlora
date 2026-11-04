@@ -137,9 +137,10 @@ def _gemma4_pre(mod, rows):
 def _out_positions(out):
     """(first, weights, index) positions in a router's output tuple. The
     index is the only integer tensor; the weights are the float tensor
-    that shares its shape; ``first`` is the remaining slot. GraniteMoe
-    returns (index, weights, logits); every other family (first, weights,
-    index)."""
+    that shares its shape; ``first`` is the remaining slot. Other families
+    return (first, weights, index). GraniteMoe returned (index, weights,
+    logits) through transformers 5.20 and returns (logits, weights, index)
+    from 5.21; positions come from dtype and shape, so both orders resolve."""
     if not isinstance(out, tuple) or len(out) != 3 or not all(torch.is_tensor(t) for t in out):
         return None
     ipos = [i for i, t in enumerate(out) if not t.is_floating_point()]
