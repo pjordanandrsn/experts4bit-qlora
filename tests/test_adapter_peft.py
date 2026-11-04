@@ -29,7 +29,9 @@ st = _need("safetensors.torch")
 E, H, INTER, R, ALPHA = 4, 128, 64, 2, 4
 REV = "c" * 40
 STACK = "model.layers.0.mlp.experts"
-ATTN = "model.layers.0.self_attn.q_proj"
+ATTN_LAYER = "model.layers.0.self_attn"
+#: projection -> output width (k and v narrower, as under grouped-query attention)
+ATTN_OUT = {"q_proj": H, "k_proj": 64, "v_proj": 64}
 
 
 def _experts():
@@ -67,8 +69,9 @@ def _trained_tensors(lora):
     g = torch.Generator().manual_seed(1)
     t = {f"{STACK}.{n}": getattr(lora, n).detach().clone()
          for n in ("gate_up_lora_A", "gate_up_lora_B", "down_lora_A", "down_lora_B")}
-    t[f"{ATTN}.lora_A"] = torch.randn(R, H, generator=g)
-    t[f"{ATTN}.lora_B"] = torch.randn(H, R, generator=g)
+    for proj, out in ATTN_OUT.items():
+        t[f"{ATTN_LAYER}.{proj}.lora_A"] = torch.randn(R, H, generator=g)
+        t[f"{ATTN_LAYER}.{proj}.lora_B"] = torch.randn(out, R, generator=g)
     return t
 
 
@@ -124,16 +127,24 @@ def test_the_keys_shapes_values_and_config_are_the_trained_adapters(exported):
     want = {f"{p}{STACK}.gate_up_proj.lora_A.weight": f"{STACK}.gate_up_lora_A",
             f"{p}{STACK}.gate_up_proj.lora_B.weight": f"{STACK}.gate_up_lora_B",
             f"{p}{STACK}.down_proj.lora_A.weight": f"{STACK}.down_lora_A",
-            f"{p}{STACK}.down_proj.lora_B.weight": f"{STACK}.down_lora_B",
-            f"{p}{ATTN}.lora_A.weight": f"{ATTN}.lora_A", f"{p}{ATTN}.lora_B.weight": f"{ATTN}.lora_B"}
+            f"{p}{STACK}.down_proj.lora_B.weight": f"{STACK}.down_lora_B"}
+    for proj in ATTN_OUT:
+        for ab in "AB":
+            want[f"{p}{ATTN_LAYER}.{proj}.lora_{ab}.weight"] = f"{ATTN_LAYER}.{proj}.lora_{ab}"
     assert set(peft) == set(want)
     for key, src in want.items():
         assert peft[key].dtype == tensors[src].dtype and torch.equal(peft[key], tensors[src]), key
     assert list(peft[f"{p}{STACK}.gate_up_proj.lora_A.weight"].shape) == [E, R, H]      # never pre-repeated to 2r
     assert config["r"] == R and config["lora_alpha"] == ALPHA and config["revision"] == REV
     assert config["base_model_name_or_path"] == "org/tiny-moe" and config["peft_type"] == "LORA"
-    assert config["use_rslora"] is False and config["target_modules"] == ["down_proj", "gate_up_proj", "q_proj"]
-    assert record["expert_stacks"] == 1 and record["attention_modules"] == 1 and record["scale"] == ALPHA / R
+    assert config["use_rslora"] is False
+    assert config["target_modules"] == ["down_proj", "gate_up_proj", "k_proj", "q_proj", "v_proj"]
+    assert record["expert_stacks"] == 1 and record["attention_modules"] == 3 and record["scale"] == ALPHA / R
+    root = exported[5]
+    assert record["peft_weights_sha256"] == hashlib.sha256((root / "out" / "adapter_model.safetensors").read_bytes()
+                                                           ).hexdigest()
+    assert record["source_adapter_sha256"] == hashlib.sha256((root / "adapter" / "adapter.safetensors").read_bytes()
+                                                             ).hexdigest()
 
 
 def test_sglang_reads_the_expert_stacks_as_per_expert_never_shared_outer(exported):
@@ -213,6 +224,50 @@ def test_refuses_a_non_gated_stack(exported, tmp_path):
 def test_refuses_a_one_expert_stack_sglang_would_read_as_shared_outer(exported, tmp_path):
     t = {k: (v[:1].contiguous() if ".experts." in k else v) for k, v in exported[1].items()}
     assert "shared-outer" in _refusal(tmp_path, t)
+
+
+def test_refuses_a_stack_whose_factors_disagree_on_the_rank(exported, tmp_path):
+    t = dict(exported[1])
+    t[f"{STACK}.down_lora_A"] = torch.zeros(E, R + 1, INTER)
+    t[f"{STACK}.down_lora_B"] = torch.zeros(E, H, R + 1)
+    assert f"of rank {R}" in _refusal(tmp_path, t)
+
+
+def test_refuses_a_stack_whose_down_output_is_not_its_hidden_size(exported, tmp_path):
+    t = dict(exported[1])
+    t[f"{STACK}.down_lora_B"] = torch.zeros(E, 2 * H, R)
+    assert f"of rank {R}" in _refusal(tmp_path, t)
+
+
+@pytest.mark.parametrize("drop", [("v_proj",), ("q_proj",), ("q_proj", "v_proj")])
+def test_refuses_an_attention_layer_without_both_q_and_v(exported, tmp_path, drop):
+    """SGLang reads v whenever q is present and stacks nothing for a layer without q (srt/lora/lora.py:281-306)."""
+    t = {k: v for k, v in exported[1].items() if not any(f".{d}." in k for d in drop)}
+    assert "needs q and v together" in _refusal(tmp_path, t)
+
+
+def test_exports_q_and_v_without_k(exported, tmp_path):
+    """SGLang zero-fills a missing k (srt/lora/lora.py:289-294), so q + v alone is servable."""
+    from experts4bit_qlora.adapter_peft import export_peft
+    t = {k: v for k, v in exported[1].items() if ".k_proj." not in k}
+    record = export_peft(_write_adapter(tmp_path / "adapter", t), tmp_path / "out")
+    assert record["attention_modules"] == 2
+
+
+def test_refuses_an_adapter_with_no_lora_tensors(tmp_path):
+    assert "no LoRA tensors" in _refusal(tmp_path, {})
+
+
+@pytest.mark.parametrize("applied", [2.0, {"attention": ALPHA / R, "experts": True}, {"experts": "2.0"}])
+def test_refuses_a_malformed_scale_record(exported, tmp_path, applied):
+    assert "lora_scale_applied" in _refusal(tmp_path, exported[1], extra={"lora_scale_applied": applied})
+
+
+def test_a_scope_recorded_as_none_holds_no_modules_and_exports(exported, tmp_path):
+    from experts4bit_qlora.adapter_peft import export_peft
+    root = _write_adapter(tmp_path / "adapter", exported[1], extra={"lora_scale_applied": {"attention": None,
+                                                                                         "experts": ALPHA / R}})
+    assert export_peft(root, tmp_path / "out")["expert_stacks"] == 1
 
 
 def test_refuses_tensors_that_are_neither_attention_nor_expert_lora(exported, tmp_path):

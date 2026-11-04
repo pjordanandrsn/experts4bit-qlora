@@ -288,6 +288,8 @@ tensors are copied, never recomputed or cast. SGLang references are at its tag `
 - a non-gated expert stack: SGLang gives it a single-slot buffer, which the export does not map;
 - a one-expert stack. SGLang reads a first dimension of 1 as its shared-outer form, a different parameterization in
   which gate_up's `A` and down's `B` are shared by every expert.
+- an attention layer whose q/k/v LoRA lacks q or v. SGLang stacks q, k and v and reads v whenever q is present,
+  zero-filling only a missing k. It stacks nothing for a layer without q (`srt/lora/lora.py:281-306`).
 - a `lora_scale_applied` that is not `alpha / r`;
 - an output path that is not a new or empty directory.
 
@@ -299,10 +301,16 @@ tensors are copied, never recomputed or cast. SGLang references are at its tag `
   dropped.
 - This checks the export against SGLang's documented layout, not against SGLang running. Serving parity is UNREAD.
 
-**Exactness is the base's.**
+**On SGLang, the served function is never bit-exact; how close it gets depends on the base.**
 - SGLang serves an unquantized base or one of its own quantized formats (FP8, compressed-tensors, ModelOpt NVFP4 through
   Marlin), never NF4. So §3's expert rows apply.
-- The export is exact only on a served base equal to training's `Q_train(W)`. On SGLang that means a bf16 checkpoint of
-  training's own dequantized experts, up to the dequant rounding path. On any other base it is bounded-loss.
+- On a served base equal to training's `Q_train(W)`, the served function is the trained one up to two things: the
+  rounding of the factors into SGLang's serving-dtype LoRA buffers (`srt/lora/mem_pool.py:633-709`), and kernel
+  arithmetic. On SGLang that base is a bf16 checkpoint of training's own dequantized experts, up to the dequant rounding
+  path.
+- On any other base it is bounded-loss.
+- SGLang's MoE LoRA refuses expert biases, clamped or alpha-scaled SwiGLU, and any activation but SiLU and ReLU2
+  (`srt/lora/moe/runner.py:239-258`). So a gpt-oss or DeepSeek-V4 export does not load there. The manifest records no
+  architecture, so the export cannot refuse those itself.
 - On an RTX 5090 or 4090, routed MoE LoRA runs with `--lora-backend triton_v2 --moe-runner-backend lora_triton`
   (`srt/lora/layers.py:1089-1094`). SGLang's CuTeDSL MoE LoRA kernels are built for sm90 and sm100 only.

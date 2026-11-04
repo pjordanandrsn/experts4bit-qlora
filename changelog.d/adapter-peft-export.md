@@ -9,10 +9,13 @@ that SGLang v0.5.23's MoE LoRA loader reads, plus a provenance record. Nothing i
   - an unverified directory, or no base revision;
   - unknown tensors, or an incomplete stack;
   - a non-gated stack, or a one-expert stack (SGLang would read that as its shared-outer form);
+  - an attention layer without both q and v (SGLang stacks q, k and v);
   - a recorded scale other than alpha/r;
   - an output path that is not empty.
 - **Tested on the CPU against the trained forward:** the parity test recomputes `ExpertsLoRA`'s output from the exported
   files in SGLang's documented layout. Gate/up swapped, experts permuted, alpha doubled and the down delta dropped each
   fail it.
-- **Not read:** serving parity on SGLang itself. The export is exact only on a served base equal to training's
-  dequantized NF4 experts (docs/ADAPTER_PORTABILITY.md §7).
+- **Not read:** serving parity on SGLang itself. On a served base equal to training's dequantized NF4 experts, the
+  served function is the trained one up to serving-dtype rounding of the factors and kernel arithmetic. On any
+  other base it is bounded-loss. gpt-oss and DeepSeek-V4 exports do not load, because SGLang refuses their experts
+  (docs/ADAPTER_PORTABILITY.md §7).

@@ -16,9 +16,10 @@ The tensors are copied, never recomputed or cast:
 * **Scale.** ``lora_alpha`` and ``r`` are the manifest setup's. Training applied ``alpha / r`` to both scopes, and SGLang
   applies ``lora_alpha / r`` to every module, so a ``/2`` manifest whose recorded applied scale differs is refused.
 
-What this does NOT give is exactness. SGLang serves an unquantized base or one of its own quantized formats, never NF4.
-The served function equals the trained one only where the served base equals training's ``Q_train(W)``
-(ADAPTER_PORTABILITY §3). On any other base it is bounded-loss, and no served parity has been read yet.
+What this does NOT give is exactness. SGLang serves an unquantized base or one of its own quantized formats, never NF4,
+and it copies the factors into LoRA buffers of its serving dtype (``srt/lora/mem_pool.py:633-709``). On a served base
+equal to training's ``Q_train(W)`` the served function is the trained one up to that rounding and to kernel arithmetic.
+On any other base it is bounded-loss (ADAPTER_PORTABILITY §3), and no served parity has been read yet.
 
 Usage: ``python -m experts4bit_qlora.adapter_peft ADAPTER_DIR OUT_DIR``. Any refusal exits 2 and names its reason.
 """
@@ -79,6 +80,21 @@ def _expert_stacks(ad) -> dict:
     return stacks
 
 
+def _check_attention_sets(ad) -> None:
+    """SGLang stacks q, k and v into ``qkv_proj``. It reads ``v`` whenever ``q`` is present and zero-fills only a missing
+    ``k``, and it stacks nothing for a layer without ``q`` (``srt/lora/lora.py:281-306``). So a layer whose q/k/v LoRA
+    lacks q or v would crash at load or lose its k/v deltas. Refused instead."""
+    layers: dict = {}
+    for module in ad.attention:
+        parent, _, leaf = module.rpartition(".")
+        if leaf in ("q_proj", "k_proj", "v_proj"):
+            layers.setdefault(parent, set()).add(leaf)
+    for parent, leaves in sorted(layers.items()):
+        if not {"q_proj", "v_proj"} <= leaves:
+            raise ExportRefused(f"{parent}: attention LoRA on {sorted(leaves)}; SGLang stacks q, k and v and needs q and "
+                                f"v together (k may be absent)")
+
+
 def _check_applied_scale(ad) -> None:
     """A ``/2`` manifest records the scale the modules held. SGLang applies one ``lora_alpha / r``, so they must agree."""
     applied = ad.manifest.get("lora_scale_applied")
@@ -109,6 +125,7 @@ def export_peft(adapter_dir, out_dir) -> dict:
     if ad.other_tensors:
         raise ExportRefused(f"tensors that are neither attention nor expert LoRA: {list(ad.other_tensors)}")
     stacks = _expert_stacks(ad)
+    _check_attention_sets(ad)
     _check_applied_scale(ad)
     if not stacks and not ad.attention:
         raise ExportRefused("the adapter holds no LoRA tensors")
@@ -141,8 +158,9 @@ def export_peft(adapter_dir, out_dir) -> dict:
         "source_adapter_sha256": ad.adapter_id, "source_manifest_sha256": ad.manifest_sha256,
         "source_schema": ad.manifest.get("schema"), "expert_absmax": ad.manifest.get("expert_absmax"),
         "expert_stacks": len(stacks), "attention_modules": len(ad.attention), "scale": ad.scale,
-        "exactness": "exact only on a served base equal to training's Q_train(W); bounded-loss on any other base; no "
-                     "served parity has been read (docs/ADAPTER_PORTABILITY.md section 7)",
+        "exactness": "on a served base equal to training's Q_train(W), the trained function up to serving-dtype rounding "
+                     "of the factors and kernel arithmetic; bounded-loss on any other base; no served parity has been "
+                     "read (docs/ADAPTER_PORTABILITY.md section 7)",
     }
     out.mkdir(parents=True, exist_ok=True)
     save_file(tensors, str(out / PEFT_WEIGHTS), metadata={"format": "pt"})
