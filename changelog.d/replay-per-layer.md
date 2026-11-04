@@ -9,6 +9,8 @@
     request has already resolved are never evicted.
 - It reports hits, misses and page-ins per layer and in total, with per-token rates. Page-ins can exceed misses:
   ColdTier's code protects only the rows a request has resolved so far, so a request can evict a row it has not yet
-  reached.
+  reached. Which rows that hits depends on entry order. The traces store each routed set sorted, so router order is
+  not recoverable, and lfu_protect's page-ins above misses are an ascending-order figure. Any quote of them must say
+  so.
 - `tests/test_replay_per_layer.py` has 22 CPU tests on hand-computed traces, including the wave case and the
   protection case. A K below the router's top_k is refused. No hit rate is published here.

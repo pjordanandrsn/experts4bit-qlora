@@ -26,6 +26,9 @@ rules, each class citing the code it re-states:
   lru          the vLLM expert pager's VRAM tier: starts empty, LRU;
   lfu_protect  e4b's ColdTier: LFU, an LRU tie-break, the current request's resolved rows never evicted.
 Reported per layer and in total, on the same warm scored window: hits, misses and page-ins, with per-token rates.
+A #1469 trace stores each routed set sorted, so entries arrive in ascending expert id, not router order. That only
+breaks slot ties for the two LRU rules, but lfu_protect's page-ins above misses depend on it: they are an
+ascending-order figure, and anything quoting them must say so.
 
 A training trace is refused unless it is complete: its capture verdict is OK, and every step holds exactly --expect-mb
 micro-batches, each with every layer in both passes, and every forward routes as its recompute (re-checked here from
@@ -475,7 +478,9 @@ PER_LAYER_POLICIES = {"lru_seeded": SeededLRU, "lru": PagerLRU, "lfu_protect": C
 def decode_requests(path: str):
     """(meta, [(step, layer, routed experts)]) from a #1469 decode trace, in execution order: per decoded token, layers
     0 .. L-1. The trace stores each layer's routed set sorted, so the router's score order is not recoverable: entry
-    order (which only decides slot ties) is ascending expert id."""
+    order is ascending expert id. For lru_seeded and lru the order only decides slot ties. For lfu_protect it also
+    decides which resident rows a miss may evict before the request reaches them, so its page-ins above misses are an
+    ascending-order figure, not what ColdTier sees under router order."""
     with open(path) as f:
         rows = [json.loads(line) for line in f]
     meta = rows[0].get("meta", {})
@@ -485,7 +490,7 @@ def decode_requests(path: str):
 
 
 def _tally(c: list, tokens: int) -> dict:
-    requests, routed, hits, misses, page_ins = c
+    requests, routed, hits, misses, page_ins = c    # routed = DISTINCT routed experts (a B=1 request is a set)
     return {"requests": requests, "routed": routed, "hits": hits, "misses": misses, "page_ins": page_ins,
             "hit_rate": hits / routed if routed else None,
             "per_token": {"hits": hits / tokens, "misses": misses / tokens, "page_ins": page_ins / tokens}
