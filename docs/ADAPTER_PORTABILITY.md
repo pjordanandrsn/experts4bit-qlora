@@ -260,3 +260,49 @@ module, it compares each fingerprint the manifest records with the served base's
 
 A v1 manifest records no fingerprint: its expert base stays unverified, refusal 9, with the same named opt-in as before.
 An `attn_4bit` adapter stays refused, refusal 8.
+
+## 7. Exporting to the PEFT layout (SGLang)
+
+`python -m experts4bit_qlora.adapter_peft ADAPTER_DIR OUT_DIR` writes a verified adapter directory as a PEFT LoRA
+directory (`adapter_model.safetensors`, `adapter_config.json`) that SGLang's MoE LoRA loader reads. It also writes
+`e4b_export.json`, the provenance: the source adapter and manifest sha256, the expert absmax form and the scale. The
+tensors are copied, never recomputed or cast. SGLang references are at its tag `v0.5.23`.
+
+| e4b tensor | PEFT key (same shape) | how SGLang reads it |
+|---|---|---|
+| `<stack>.gate_up_lora_A` `[E, r, hidden]` | `base_model.model.<stack>.gate_up_proj.lora_A.weight` | a 3-D gate_up `lora_A` whose first dimension is E is per-expert (`srt/lora/lora_manager.py:764-798`); a stacked gate_up `lora_A` is repeated to `2r` (`srt/lora/lora.py:490-498`) |
+| `<stack>.gate_up_lora_B` `[E, 2·intermediate, r]` | `...gate_up_proj.lora_B.weight` | kept as stacked, gate rows first, as training's `proj.chunk(2)` splits them |
+| `<stack>.down_lora_{A,B}` `[E, r, intermediate]`, `[E, hidden, r]` | `...down_proj.lora_{A,B}.weight` | per-expert |
+| `<proj>.lora_{A,B}` (attention) | `base_model.model.<proj>.lora_{A,B}.weight` | SGLang stacks q, k and v into `qkv_proj` |
+
+`adapter_config.json` carries:
+- the setup's `r` and `lora_alpha`. SGLang applies `lora_alpha / r` to every module, as training did.
+- `use_rslora: false`;
+- the base model id and `resolved_model_revision`.
+
+**Refused, naming the reason (exit 2):**
+- a directory that does not verify (refusal 7);
+- no `resolved_model_revision`;
+- tensors that are neither attention nor expert LoRA;
+- an incomplete or inconsistently shaped expert stack;
+- a non-gated expert stack: SGLang gives it a single-slot buffer, which the export does not map;
+- a one-expert stack. SGLang reads a first dimension of 1 as its shared-outer form, a different parameterization in
+  which gate_up's `A` and down's `B` are shared by every expert.
+- a `lora_scale_applied` that is not `alpha / r`;
+- an output path that is not a new or empty directory.
+
+**What is tested, and what is not.**
+- `tests/test_adapter_peft.py` runs `ExpertsLoRA`'s own forward on an NF4 stack quantized on the CPU. It then
+  recomputes that forward from the exported files, laid out the way SGLang's loader lays them out, on the same
+  dequantized base. The two agree to fp32 rounding.
+- Each wrong layout fails that comparison: gate and up swapped, experts permuted, alpha doubled, the down delta
+  dropped.
+- This checks the export against SGLang's documented layout, not against SGLang running. Serving parity is UNREAD.
+
+**Exactness is the base's.**
+- SGLang serves an unquantized base or one of its own quantized formats (FP8, compressed-tensors, ModelOpt NVFP4 through
+  Marlin), never NF4. So §3's expert rows apply.
+- The export is exact only on a served base equal to training's `Q_train(W)`. On SGLang that means a bf16 checkpoint of
+  training's own dequantized experts, up to the dequant rounding path. On any other base it is bounded-loss.
+- On an RTX 5090 or 4090, routed MoE LoRA runs with `--lora-backend triton_v2 --moe-runner-backend lora_triton`
+  (`srt/lora/layers.py:1089-1094`). SGLang's CuTeDSL MoE LoRA kernels are built for sm90 and sm100 only.
