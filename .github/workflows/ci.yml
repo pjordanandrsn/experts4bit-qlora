@@ -109,9 +109,23 @@ jobs:
       - name: DQ11 draft box dry run (mandatory CPU, no science or optional skips)
         run: pytest tests/test_dq11_draft.py -q
       - name: DQ11 science instrument contract (mandatory CPU fixtures, no optional skips)
+        # The sealed DQ11 instrument is tested in its registered torch (2.12.1; DQ11-PREREG.md, bench/dq11/requirements.lock),
+        # in its own venv; the rest of CI stays on current unpinned torch. Newer torch is outside its registration: from
+        # 2.15 torch renames its context-decorator wrappers' code, which the seal refuses as designed. The verifier change
+        # for torch >= 2.15 is prepared for DQ11's next amendment.
+        # The CPU wheel stands in for the registered +cu130 one: torch/utils/_contextlib.py (sha256 f22c21a0...) and
+        # torch/autograd/grad_mode.py (462fb709...) are byte-identical in torch 2.12.1+cpu and 2.12.1+cu130 (cp311).
+        # numpy, safetensors and bitsandbytes are the lock's versions; the package goes in without its dependencies.
         run: |
           ruff check bench/dq11 tests/test_dq11_science.py tests/test_dq11_a2000_initial_quality.py
-          pytest tests/test_dq11_science.py tests/test_dq11_a2000_initial_quality.py -q
+          python -m venv "$RUNNER_TEMP/dq11-venv"
+          DQ11_PY="$RUNNER_TEMP/dq11-venv/bin/python"
+          "$DQ11_PY" -m pip install --upgrade pip
+          "$DQ11_PY" -m pip install "torch==2.12.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+          "$DQ11_PY" -m pip install "numpy==2.4.6" "safetensors==0.8.0" "bitsandbytes==0.50.2" "pytest==9.2.0"
+          "$DQ11_PY" -m pip install --no-deps -e .
+          "$DQ11_PY" -c "import torch; assert torch.__version__ == '2.12.1+cpu', torch.__version__"
+          "$DQ11_PY" -m pytest tests/test_dq11_science.py tests/test_dq11_a2000_initial_quality.py -q
       - name: P136 registration contract (CPU only; no GPU or rental)
         run: |
           ruff check bench/p136
@@ -152,7 +166,8 @@ jobs:
           ruff check bench/smt-fuse tests/test_smt_fuse_staged_pin.py
           python bench/smt-fuse/smt_fuse_box.py --self-test
       - name: Test
-        run: pytest tests/ -q
+        # The two DQ11 science files ran above in their registered torch; here they would run outside it.
+        run: pytest tests/ -q --ignore=tests/test_dq11_science.py --ignore=tests/test_dq11_a2000_initial_quality.py
       - name: fixed attention split, the kernel itself (Triton's CPU interpreter; must RUN, never skip)
         # tests/test_attn_split_fixed.py's interpreter row check is the only machine-checked evidence that a fixed
         # split count (E4B_ATTN_SPLIT_FIXED) keeps one sequence's attention bitwise the same in a batch of 2 and of 16.
