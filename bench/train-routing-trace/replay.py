@@ -20,6 +20,13 @@ Policies (each at every budget):
 Every policy is scored on the same window (the steps after the fit window); the dynamic policies run through the fit
 window first, so they are scored warm.
 
+Per-layer budgets (--per-layer-k, decode traces only): K slots in EACH layer, one tier per layer, under three shipped
+rules, each class citing the code it re-states:
+  lru_seeded   SGLang paged experts: slots seeded with experts 0..K-1, LRU, its wave rule for a step larger than K;
+  lru          the vLLM expert pager's VRAM tier: starts empty, LRU;
+  lfu_protect  e4b's ColdTier: LFU, an LRU tie-break, the current request's resolved rows never evicted.
+Reported per layer and in total, on the same warm scored window: hits, misses and page-ins, with per-token rates.
+
 A training trace is refused unless it is complete: its capture verdict is OK, and every step holds exactly --expect-mb
 micro-batches, each with every layer in both passes, and every forward routes as its recompute (re-checked here from
 the file, not trusted from the meta). A capture that ended early (an OOM in a later step) can be scored on its first N
@@ -32,6 +39,7 @@ the forward set for the recompute and the dgrad, so within-step reuse stays and 
 
     python replay.py --trace trace.npz --expect-mb 8 --fit-steps 5 --out replay.json
     python replay.py --decode qwen3_prose.jsonl --fit-steps 128 --out decode.json
+    python replay.py --decode qwen3_prose.jsonl --fit-steps 128 --per-layer-k 8,32,64 --out per_layer.json
 """
 from __future__ import annotations
 
@@ -294,6 +302,238 @@ def replay(seq, fit_steps: int, row_bytes: int, budgets=BUDGETS, policies=POLICI
     return out
 
 
+# -- per-layer budgets: three shipped residency rules, K slots in EACH layer -------------------------------------
+# One tier per layer, keyed by expert id. Each class re-states one implementation, cited at the commit read:
+#   SGLang v0.5.23 (297e54f), PE/ = python/sglang/srt/layers/moe/paged_experts/;
+#   vllm-expert-pager e9264fda (tag 0.1.1), src/vllm_expert_pager/;
+#   grouped-nf4-gemm 6928361, kernel/nvme_residency.py (e4b's ColdTier).
+# A request is one layer's routed entries for one decode step. Each returns (hits, misses, page_ins):
+#   hits      routed experts resident when the request starts; misses = distinct routed - hits;
+#   page_ins  rows loaded while serving it. It can exceed misses: a rule may evict a row the same request still needs
+#             before reaching it (lfu_protect protects only the rows the request has already resolved).
+class RequestRefused(ValueError):
+    """A request the modelled implementation refuses, or serves on a path this replay does not model."""
+
+
+class SeededLRU:
+    """`lru_seeded`, SGLang paged experts: K slots, seeded with experts 0..K-1 (PE/residency.py:23-30, 62-71), LRU.
+
+    A request whose routed ENTRIES fit the K slots is decided as the device kernel decides it: the default path with
+    CUDA graphs on (PE/method.py:177-190, 204-212, 278; kernels/jit/csrc/moe/paged_experts.cuh:26-89). A step clock
+    advances; every resident expert of the step is stamped with it; then, in entry order, each missing expert takes the
+    least recently used slot not stamped this step, the lowest slot on ties.
+
+    A larger request is planned on the host (PE/executor.py:46-66): the device state loads as an LRU order sorted by
+    (last use, slot) (PE/residency.py:77-82); the distinct experts (sorted, torch.unique) split into waves of at most K
+    with the residents first (residency.py:49-59); each wave is placed by LRUPolicy.place, its residents refreshed
+    before its misses evict (residency.py:32-46); the order is stored back as the newest last uses
+    (residency.py:84-99)."""
+
+    def __init__(self, k: int):
+        self.k = k
+        self.slot_expert = list(range(k))
+        self.expert_slot = {e: e for e in range(k)}
+        self.lastuse = [0] * k
+        self.step = 0
+
+    def request(self, entries):
+        distinct = sorted(set(entries))
+        hits = sum(e in self.expert_slot for e in distinct)
+        loads = self._device(entries) if len(entries) <= self.k else self._waves(distinct)
+        return hits, len(distinct) - hits, loads
+
+    def _device(self, entries) -> int:
+        self.step += 1
+        now = self.step
+        for e in entries:
+            if e in self.expert_slot:
+                self.lastuse[self.expert_slot[e]] = now
+        loads = 0
+        for e in entries:
+            if e in self.expert_slot:
+                continue
+            free = [(self.lastuse[s], s) for s in range(self.k) if self.lastuse[s] != now]
+            if not free:                          # unreachable while entries <= K (paged_experts.cuh:53-54)
+                continue
+            victim = min(free)[1]
+            del self.expert_slot[self.slot_expert[victim]]
+            self.slot_expert[victim] = e
+            self.expert_slot[e] = victim
+            self.lastuse[victim] = now
+            loads += 1
+        return loads
+
+    def _waves(self, distinct) -> int:
+        order = sorted(range(self.k), key=lambda s: (self.lastuse[s], s))
+        resident = OrderedDict((self.slot_expert[s], s) for s in order)
+        ordered = [e for e in distinct if e in resident] + [e for e in distinct if e not in resident]
+        loads = 0
+        for wave in [ordered[i:i + self.k] for i in range(0, len(ordered), self.k)]:
+            for e in wave:
+                if e in resident:
+                    resident.move_to_end(e)
+            for e in wave:
+                if e not in resident:
+                    _, slot = resident.popitem(last=False)
+                    resident[e] = slot
+                    loads += 1
+        base = self.step
+        for rank, (e, s) in enumerate(resident.items(), start=1):
+            self.slot_expert[s] = e
+            self.lastuse[s] = base + rank
+        self.expert_slot = {e: s for s, e in enumerate(self.slot_expert)}
+        self.step = base + self.k
+        return loads
+
+
+class PagerLRU:
+    """`lru`, the vLLM expert pager's VRAM tier: one ExpertTable per layer (table.py:19-128; the decode kernel matches
+    it, acquire.py:3-6, 25-99). It starts empty (table.py:36-44). Hits keep their slots. The misses, in ascending expert
+    id (the cumsum rank, table.py:109), take the slots in ascending (last use, slot) order with every slot holding a hit
+    pushed to the end (table.py:99-110); every needed slot is stamped with the step (table.py:118-120). A request with
+    more routed entries than K is not the decode path (acquire.py:3, 172-173) and is refused."""
+
+    def __init__(self, k: int):
+        self.k = k
+        self.slot_of: dict = {}
+        self.expert_in = [-1] * k
+        self.last_used = [0] * k
+        self.step = 1
+
+    def request(self, entries):
+        if len(entries) > self.k:
+            raise RequestRefused(f"{len(entries)} routed entries > K={self.k}: the pager's prefill path, not modelled")
+        need = sorted(set(entries))
+        hit = [e for e in need if e in self.slot_of]
+        miss = [e for e in need if e not in self.slot_of]
+        used = {self.slot_of[e] for e in hit}
+        order = sorted(range(self.k), key=lambda s: (s in used, self.last_used[s], s))
+        for e, victim in zip(miss, order):
+            old = self.expert_in[victim]
+            if old >= 0:
+                del self.slot_of[old]
+            self.slot_of[e] = victim
+            self.expert_in[victim] = e
+        for e in need:
+            self.last_used[self.slot_of[e]] = self.step
+        self.step += 1
+        return len(hit), len(miss), len(miss)
+
+
+class ColdTierLFU:
+    """`lfu_protect`, e4b's ColdTier (nvme_residency.py:23-31): LFU, an LRU tie-break, the current request protected.
+
+    Per request (one demand `ensure`, no prefetcher): a request clock; every routed pick adds to its expert's
+    frequency, kept over the whole history, and is stamped with the clock BEFORE any slot is chosen (:452-456); the
+    previous request's window is released (:457-460). The unique experts resolve in request order (:436-437,
+    :464-475). A miss takes a free slot, the free list popping the highest slot first (:147, :654-655), else the
+    victim: the lowest (frequency, last use, slot) among the slots the request has not resolved yet (:294-328, its
+    heap twin :330-391, called at :657). So protection covers the rows the request has resolved so far, and a resident
+    row it has not reached yet is a candidate. A request with more unique rows than K is refused (:438-441)."""
+
+    def __init__(self, k: int):
+        self.k = k
+        self.key_of: list = [None] * k
+        self.slot_of: dict = {}
+        self.free = list(range(k))
+        self.freq: dict = defaultdict(int)
+        self.last: dict = {}
+        self.clock = 0
+
+    def request(self, entries):
+        uniq = list(dict.fromkeys(entries))
+        if len(uniq) > self.k:
+            raise RequestRefused(f"{len(uniq)} unique rows > K={self.k}: ColdTier refuses the request")
+        hits = sum(e in self.slot_of for e in uniq)
+        self.clock += 1
+        for e in entries:
+            self.freq[e] += 1
+            self.last[e] = self.clock
+        own: set = set()
+        loads = 0
+        for e in uniq:
+            slot = self.slot_of.get(e)
+            if slot is None:
+                slot = self.free.pop() if self.free else self._victim(own)
+                old = self.key_of[slot]
+                if old is not None:
+                    del self.slot_of[old]
+                self.key_of[slot] = e
+                self.slot_of[e] = slot
+                loads += 1
+            own.add(slot)
+        return hits, len(uniq) - hits, loads
+
+    def _victim(self, own: set) -> int:
+        cands = [(self.freq[e], self.last[e], s) for s, e in enumerate(self.key_of) if s not in own]
+        return min(cands)[2]
+
+
+PER_LAYER_POLICIES = {"lru_seeded": SeededLRU, "lru": PagerLRU, "lfu_protect": ColdTierLFU}
+
+
+def decode_requests(path: str):
+    """(meta, [(step, layer, routed experts)]) from a #1469 decode trace, in execution order: per decoded token, layers
+    0 .. L-1. The trace stores each layer's routed set sorted, so the router's score order is not recoverable: entry
+    order (which only decides slot ties) is ascending expert id."""
+    with open(path) as f:
+        rows = [json.loads(line) for line in f]
+    meta = rows[0].get("meta", {})
+    reqs = [(int(r["step"]), int(layer), sorted(int(e) for e in r["routed"][layer]))
+            for r in rows[1:] for layer in sorted(r["routed"], key=int)]
+    return meta, reqs
+
+
+def _tally(c: list, tokens: int) -> dict:
+    requests, routed, hits, misses, page_ins = c
+    return {"requests": requests, "routed": routed, "hits": hits, "misses": misses, "page_ins": page_ins,
+            "hit_rate": hits / routed if routed else None,
+            "per_token": {"hits": hits / tokens, "misses": misses / tokens, "page_ins": page_ins / tokens}
+            if tokens else None}
+
+
+def simulate_per_layer(requests, k: int, policy: str, fit_steps: int) -> dict:
+    """One `policy` tier of K slots per layer, run over every request (warm through the fit window) and tallied on
+    steps >= fit_steps: per layer and in total, with per-token rates (a token = one decode step)."""
+    make = PER_LAYER_POLICIES[policy]
+    tiers: dict = {}
+    counts: dict = defaultdict(lambda: [0, 0, 0, 0, 0])
+    tokens: set = set()
+    for step, layer, entries in requests:
+        if layer not in tiers:
+            tiers[layer] = make(k)
+        hits, misses, page_ins = tiers[layer].request(entries)
+        if step >= fit_steps:
+            tokens.add(step)
+            c = counts[layer]
+            c[0] += 1
+            c[1] += hits + misses
+            c[2] += hits
+            c[3] += misses
+            c[4] += page_ins
+    total = [sum(c[i] for c in counts.values()) for i in range(5)]
+    return {"tokens": len(tokens), "total": _tally(total, len(tokens)),
+            "layers": {layer: _tally(counts[layer], len(tokens)) for layer in sorted(counts)}}
+
+
+def replay_per_layer(requests, ks, fit_steps: int, row_bytes: int, top_k: int,
+                     policies=tuple(PER_LAYER_POLICIES)) -> dict:
+    """Every policy at every per-layer K. A K below the router's top_k is refused up front: SGLang refuses it at load
+    (PE/method.py:336-339), and the pager and ColdTier refuse a B=1 decode request larger than K."""
+    low = [k for k in ks if k < top_k]
+    if low:
+        raise RequestRefused(f"per-layer K {low} < top_k={top_k}")
+    out = {"row_bytes": row_bytes, "layout": LAYOUT, "fit_steps": fit_steps, "top_k": top_k, "cells": []}
+    for k in ks:
+        for pol in policies:
+            res = simulate_per_layer(requests, k, pol, fit_steps)
+            per_tok = res["total"]["per_token"]
+            res.update({"k": k, "policy": pol,
+                        "page_in_bytes_per_token": per_tok["page_ins"] * row_bytes if per_tok else None})
+            out["cells"].append(res)
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     src = ap.add_mutually_exclusive_group(required=True)
@@ -309,8 +549,26 @@ def main(argv=None) -> int:
     ap.add_argument("--hidden", type=int, default=2048)
     ap.add_argument("--moe-intermediate", type=int, default=768)
     ap.add_argument("--n-experts", type=int, default=128)
+    ap.add_argument("--per-layer-k", default=None,
+                    help="comma-separated K slots PER LAYER: replay a decode trace through lru_seeded, lru and "
+                         "lfu_protect instead of the global budgets")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
+    if a.per_layer_k is not None:
+        if not a.decode:
+            ap.error("--per-layer-k applies to a decode trace only")
+        meta, reqs = decode_requests(a.decode)
+        if "top_k" not in meta:
+            ap.error("--per-layer-k needs the trace meta's top_k")
+        ks = [int(k) for k in a.per_layer_k.split(",")]
+        res = replay_per_layer(reqs, ks, a.fit_steps, expert_row_bytes(a.hidden, a.moe_intermediate),
+                               int(meta["top_k"]))
+        res["source"] = a.decode
+        with open(a.out, "w") as f:
+            json.dump(res, f, indent=1)
+        print(json.dumps({f"{c['policy']}@K{c['k']}": round(c["total"]["hit_rate"], 4) for c in res["cells"]
+                          if c["total"]["hit_rate"] is not None}))
+        return 0
     if a.trace:
         if a.expect_mb is None:
             ap.error("--expect-mb is required with --trace")
