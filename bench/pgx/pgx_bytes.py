@@ -2,6 +2,7 @@
 
     python bench/pgx/pgx_bytes.py --fetch --out bench/pgx/bytes_per_expert.json   # header-only range reads (~50 MB)
     python bench/pgx/pgx_bytes.py --table bench/pgx/bytes_per_expert.json         # print the registered K table
+    python bench/pgx/pgx_bytes.py --local bf16=DIR fp8=DIR int4=DIR --out box.json  # the box: the fetched snapshots
 
 Each shard's header is read with two HTTP range requests (the 8-byte length, then the JSON header); no tensor data
 is fetched. A routed expert's bytes are the sum over its ``mlp.experts.<e>.*`` tensors of dtype size times shape, so
@@ -18,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import struct
 import sys
@@ -91,6 +93,20 @@ def fetch(repo: str, rev: str) -> dict:
     return out
 
 
+def local(snapshot: str) -> dict:
+    """Every shard header of a fetched snapshot directory, read as ``fetch`` reads them remotely (the box's own copy)."""
+    out = {}
+    for s in sorted(n for n in os.listdir(snapshot) if n.endswith(".safetensors")):
+        with open(os.path.join(snapshot, s), "rb") as f:
+            n = struct.unpack("<Q", f.read(8))[0]
+            if n > 100_000_000:
+                raise SystemExit(f"{s}: header length {n} is not a safetensors header")
+            out[s] = json.loads(f.read(n))
+    if not out:
+        raise SystemExit(f"{snapshot}: no .safetensors shards")
+    return out
+
+
 def record_from(headers_by_fmt: dict) -> dict:
     rec = {}
     for fmt, (repo, rev) in CHECKPOINTS.items():
@@ -111,11 +127,18 @@ def record_from(headers_by_fmt: dict) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fetch", action="store_true")
+    ap.add_argument("--local", nargs=3, metavar="FMT=DIR", help="bf16=DIR fp8=DIR int4=DIR: the box's fetched snapshots")
     ap.add_argument("--out")
     ap.add_argument("--table")
     a = ap.parse_args(argv)
-    if a.fetch:
-        rec = record_from({fmt: fetch(*rv) for fmt, rv in CHECKPOINTS.items()})
+    if a.fetch or a.local:
+        if a.local:
+            dirs = dict(x.split("=", 1) for x in a.local)
+            if set(dirs) != set(CHECKPOINTS):
+                ap.error(f"--local names {sorted(dirs)}, need {sorted(CHECKPOINTS)}")
+            rec = record_from({fmt: local(dirs[fmt]) for fmt in CHECKPOINTS})
+        else:
+            rec = record_from({fmt: fetch(*rv) for fmt, rv in CHECKPOINTS.items()})
         with open(a.out, "w", encoding="utf-8") as f:
             json.dump(rec, f, indent=1, sort_keys=True)
             f.write("\n")

@@ -17,6 +17,7 @@ Stdlib only (placement.py is stdlib); runs on any CPU.
 from __future__ import annotations
 
 import argparse
+import importlib
 import importlib.util
 import json
 import os
@@ -30,6 +31,10 @@ DRAM_GIB = 16.0
 
 
 def placement_module():
+    """The solver module: the repo's own file beside this kit, or, staged flat on the box (no repo layout), the
+    installed package's, which the tripwire has checked is the launch commit's."""
+    if not os.path.exists(_PLACEMENT):
+        return importlib.import_module("experts4bit_qlora.engines.placement")
     spec = importlib.util.spec_from_file_location("pgx_placement", _PLACEMENT)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
