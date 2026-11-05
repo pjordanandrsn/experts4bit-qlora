@@ -242,7 +242,7 @@ sets it (above), bf16 autocast, the same packed batches in the same order for ev
   time (which excludes evals) by more than max(0.2 s, 0.2 x the step): non-step work in a span can make the energy UNREAD, never
   move it;
   cross-check as at op level, over the same two spans;
-- **loss:** step-0 loss, every step's training loss, held-out loss after step 60 (`--eval-n 48`).
+- **loss:** step-0 loss, every step's training loss, held-out loss after step 60 (`--eval-n 36`, amendment 4; it was 48).
 
 ## Engagement (every arm, every load; each fails closed)
 
@@ -637,3 +637,39 @@ for `p238-shake-r4`.
 only. The screen's full judge, run at $0 with the re-cut kit's own code, admits none of the three hosts listed there: each fails
 another of the screen's clauses (the registry download-speed tie-breaker floor, the last host outcome, or the listing's
 reliability). No rule changes.
+
+## Amendment 4 (2026-11-05): the held-out count fits the packed pool
+
+This changes `--eval-n` (the loss line under "The step points", and `p238_run.sh`) and how the stop rule reads one box.
+Nothing else changes: the arms, points, schedule, bars, readings, predictions, budget, the host rule and the retry ids stand.
+
+**The defect, from the receipt.** `p238-shake-r4` was the first P238 box past the card floor: an RTX 5090 at 3,105 MHz
+whose card burn, CUDA probe, single-thread loop (17.08 Mops) and tripwire all passed. It ended rc 9 at PREPARE, before
+any arm loaded: `PACK SHORT: 591 train rows (need 240) / 39 held-out rows (need 48) of 2048 tokens`. The host did not
+cause it. The registered arithmetic did:
+- TC1's packed held-out pool is 400 examples (`PACK_EVAL_POOL`, `bench/tc1/tc1_arm.py`) of about 196.5 Qwen tokens each.
+  That is about 78.6k tokens, which packs to about 38 rows of 2,048.
+- This page registered 48 rows, which need 98.3k tokens.
+
+Every host would fail the same way. The $0 path stubbed PREPARE, although PREPARE needs no GPU.
+
+**The change.**
+- `--eval-n 36`. The pinned tokenizer and data pack exactly 39 held-out rows (the box's own count), so 36 leaves three
+  rows of margin.
+- TC1's pool size does not move: other lanes' registrations read it.
+- The held-out bars (0.01 within a framework, 0.05 across frameworks) compare arms on the same rows, so they are
+  unchanged. Each arm's held-out mean is now over 36 rows instead of 48.
+- Before the next box, PREPARE runs at $0 on a CPU with the pinned tokenizer and data, and it must pack at least 36
+  held-out rows.
+
+**The box that STARTED.** `p238-shake-r4` wrote STARTED, so the stop rule would read it. It is not a reading: it ended
+at PREPARE before any load, so no P238 number exists.
+- It is recorded as a harness failure on the defect this amendment fixes, and it consumes its id.
+- The lane resumes at `p238-shake-r5`, launched only from a kit cut at this amendment's merge, with a fresh approval.
+- The launch kit's stop check admits r5 after r4 only for this record: a STARTED box whose receipt ends at PREPARE with
+  no load log. Any other STARTED box is read as before, and a second PREPARE failure stops the lane.
+
+**Cost.** `p238-shake-r4` cost USD 0.80, compute and download to PREPARE. It does not count toward amendment 2's
+refused-spend cap, which covers boxes refused before STARTED; it is recorded beside it. The box worst stays USD 8.20.
+
+`staged-p238.sha256` moves for `p238_run.sh`.
