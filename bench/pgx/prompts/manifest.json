@@ -1,0 +1,102 @@
+{
+ "fetched_sha256": {
+  "code/Lib/argparse.py": "3f9d1478513251602ca62b935f9f8c8513ac8ec9508a827b29d1aedaac19ffe5",
+  "code/Lib/collections/__init__.py": "2347f647577b6c11b82fc48fa4a1744f7af1af87f15942f92b7cc4410f0a817b",
+  "code/Lib/dataclasses.py": "18b8b97f6c43ece379793745dfd505ed713a4c86bc6babdcdec593101b5f4399",
+  "code/Lib/difflib.py": "0fc85357cdf45c242079be40245466b7b014b6f5f35064eec3d1b951e00d31ca",
+  "code/Lib/enum.py": "749f34920d33edc8c929116c900bec347b3cecc45f655ec9ba07977cd53b14d9",
+  "code/Lib/functools.py": "7aa8725afbe9b9fc47a825b4e7c0330fa374432f481d7be8202b96f56eeac9a0",
+  "code/Lib/inspect.py": "5ad68f75310423ad9f36b4d4bb14a22ebfefae7be01716a099bb0dcbcc740537",
+  "code/Lib/pathlib/_local.py": "0530b4186ec5845e000bedf5817ff1ac970b9a39a6891ba6789a1776abdea42b",
+  "code/Lib/textwrap.py": "26836f5c17cdb4ffdeaff1a5146ed61a262aa410bdf3ad204e2bd0792f010d5e",
+  "code/Lib/typing.py": "0254b0ad1a5052b258721fd43394906db6297e0205fb8debffe85fceeeb60189",
+  "dialogue/data/test_sft-00000-of-00001-f7dfac4afe5b93f4.parquet": "c18fd6e77395577652bdefbc5a87044ea799e989451ecfca5c6cf977ae5c6f70",
+  "math/algebra/test-00000-of-00001.parquet": "0e04a850dac9cfc758eac0c80afd2d0cc65e29ea72f916c8ac1045b12af937f5",
+  "math/counting_and_probability/test-00000-of-00001.parquet": "c324818949c75a6227c0328a8499d58023cbbf6757cfc1736f5ab24cc8d87966",
+  "math/geometry/test-00000-of-00001.parquet": "98720f3a8134ad9784fd8951195245264495df03ffc5c9485a9a54ff5ae2431a",
+  "math/intermediate_algebra/test-00000-of-00001.parquet": "e859f72486c951c2017da880541ca729940eaa986b0364eb23e238983df9bfeb",
+  "math/number_theory/test-00000-of-00001.parquet": "ba156c9c9fa2040836ba12135fd964e6e67d6bccd8c469ec4a3ad941f8f6fbe9",
+  "math/prealgebra/test-00000-of-00001.parquet": "301e5d8ade5c7b5038032532e498bdc9dca799e7f1061a63f2e7d980803240cc",
+  "math/precalculus/test-00000-of-00001.parquet": "da37474ba3761ae5727af3844a7ba963a735bd6a14c65e6137593669a4fe3b9c",
+  "prose/wikitext-2-raw-v1/test-00000-of-00001.parquet": "5f1bea067869d04849c0f975a2b29c4ff47d867f484f5010ea5e861eab246d91"
+ },
+ "sets": {
+  "shift": {
+   "kinds": [
+    "math",
+    "prose"
+   ],
+   "n": 8,
+   "prompts_sha": "c4477b9ad77d5c02a2a30eade3ea1021e04e21299f9c43ce4bed31717403a295"
+  },
+  "warm_c1": {
+   "kinds": [
+    "code",
+    "dialogue"
+   ],
+   "n": 8,
+   "prompts_sha": "d45648005719bb7ff6979e814f0c9cde5824e85d12b60f5d1cd0e107b838f554"
+  },
+  "warm_c4": {
+   "kinds": [
+    "code",
+    "dialogue"
+   ],
+   "n": 16,
+   "prompts_sha": "37589f7c124653b62f321a6641d76ab5162840d25e618321f574025704b11b12"
+  }
+ },
+ "sources": {
+  "code": {
+   "files": [
+    "Lib/argparse.py",
+    "Lib/dataclasses.py",
+    "Lib/functools.py",
+    "Lib/inspect.py",
+    "Lib/typing.py",
+    "Lib/collections/__init__.py",
+    "Lib/pathlib/_local.py",
+    "Lib/enum.py",
+    "Lib/textwrap.py",
+    "Lib/difflib.py"
+   ],
+   "license": "PSF-2.0",
+   "repo": "python/cpython",
+   "revision": "8183fa5e3f78ca6ab862de7fb8b14f3d929421e0",
+   "tag": "v3.13.9"
+  },
+  "dialogue": {
+   "files": [
+    "data/test_sft-00000-of-00001-f7dfac4afe5b93f4.parquet"
+   ],
+   "license": "MIT",
+   "repo": "HuggingFaceH4/ultrachat_200k",
+   "revision": "8049631c405ae6576f93f445c6b8166f76f5505a"
+  },
+  "math": {
+   "files": [
+    "algebra/test-00000-of-00001.parquet",
+    "counting_and_probability/test-00000-of-00001.parquet",
+    "geometry/test-00000-of-00001.parquet",
+    "intermediate_algebra/test-00000-of-00001.parquet",
+    "number_theory/test-00000-of-00001.parquet",
+    "prealgebra/test-00000-of-00001.parquet",
+    "precalculus/test-00000-of-00001.parquet"
+   ],
+   "license": "MIT",
+   "repo": "EleutherAI/hendrycks_math",
+   "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3"
+  },
+  "prose": {
+   "files": [
+    "wikitext-2-raw-v1/test-00000-of-00001.parquet"
+   ],
+   "license": "CC-BY-SA-3.0 / GFDL",
+   "repo": "Salesforce/wikitext",
+   "revision": "b08601e04326c79dfdd32d625aee71d232d685c3"
+  }
+ },
+ "stride": 8192,
+ "tokenizer_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+ "window": 1024
+}
