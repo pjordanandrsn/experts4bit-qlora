@@ -28,6 +28,8 @@ CONTROLS = (("E-hyb-u", 8, ("P1", "P2", "P3", "P4")), ("E-allvram-g", "all", ("P
 STABLE = 1.03                      # max/min over the three draws (P235's self-pair rule, applied to three)
 SHARE = 0.5                        # an attribution branch is named at >= 50 % of the gap
 TOKEN_RULED = {"S8", "V8", "E-hyb", "E-hyb-u", "E-allvram-g", "E-allvram-e"}   # P2 vs P1 identity rules; S4 reported
+# the registered prompt set of each pass: P1/P2 are the 8-request c1 warm set, P3 the 16-request c4 warm set
+PASS_SET = {"P1": "warm_c1", "P2": "warm_c1", "P3": "warm_c4", "P4": "shift"}
 
 
 def registered_passes(budget) -> tuple:
@@ -84,7 +86,7 @@ def pass_faults(rec, want_sha: str) -> list:
 
 
 def reduce(dirs, reg: dict) -> dict:
-    """reg: {"profile_sha", "budget_bytes": {"4": int, ...}, "sets": {"warm": sha, "shift": sha}}."""
+    """reg: {"profile_sha", "budget_bytes": {"4": int, ...}, "sets": {"warm_c1", "warm_c4", "shift": sha}}."""
     rows, lifetimes = {}, {}
     for d in dirs:
         for arm in sorted(os.listdir(d)):
@@ -106,7 +108,7 @@ def reduce(dirs, reg: dict) -> dict:
         else:
             faults += lifetime_faults(L["lt"], reg)
             rec = _load(os.path.join(L["dir"], f"{p}.json"))
-            faults += pass_faults(rec, reg["sets"]["shift" if p == "P4" else "warm"])
+            faults += pass_faults(rec, reg["sets"][PASS_SET[p]])
             lt_dram = (L["lt"].get("dram_tier_s_per_token") or {}).get(p)
         rows[(arm, bud, dr, p)] = {"faults": faults, "rec": rec, "lt_dram": lt_dram}
     # token invariance within a lifetime: P2 must reproduce P1's greedy text, request by request

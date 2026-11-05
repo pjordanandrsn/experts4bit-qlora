@@ -91,14 +91,14 @@ def test_pct_is_nearest_rank():
 
 # --------------------------------------------------------------- the reducer ----------------------------------------
 REG = {"profile_sha": "f" * 64, "budget_bytes": {"4": 4_000_000_000, "8": 8_000_000_000, "12": 12_000_000_000},
-       "sets": {"warm": "w" * 64, "shift": "s" * 64}}
+       "sets": {"warm_c1": "w" * 64, "warm_c4": "v" * 64, "shift": "s" * 64}}
 TPOT = {"S4": 0.020, "S8": 0.025, "V8": 0.026, "E-hyb": 0.040, "E-hyb-u": 0.060, "E-allvram-g": 0.010,
         "E-allvram-e": 0.030}
 
 
 def _rec(arm, p, draw, tpot=None, texts=None):
     t = tpot if tpot is not None else TPOT[arm] * (1 + 0.005 * (draw - 2))
-    return {"faults": 0, "prompts_sha": REG["sets"]["shift" if p == "P4" else "warm"], "tpot_p50": t,
+    return {"faults": 0, "prompts_sha": REG["sets"][red.PASS_SET[p]], "tpot_p50": t,
             "tpot_p99": t * 1.2, "ttft_p50": 0.1, "ttft_p99": 0.2, "out_tok_s": 1 / t,
             "requests": [{"id": f"r{i}", "text_sha": (texts or {}).get(i, f"{arm}-{i}")} for i in range(4)]}
 
@@ -143,6 +143,16 @@ def test_a_clean_schedule_reads(tmp_path):
     assert a["branches"] == ["capture-legal hybrid tier", "lean prefill / GPU paging",
                              "a better profile (placement quality)"]
     assert "placement" not in {(x["budget"], x["pass"]): x for x in v["attribution"]}[(4, "P2")]["shares"]
+
+
+def test_each_pass_is_checked_against_its_own_set(tmp_path):
+    """P3 runs the 16-request c4 set: a P3 record carrying the c1 set's sha is the wrong set, and VOIDs that pass."""
+    def edit(a, b, d, p, lt, r):
+        if (a, b, d, p) == ("S8", 12, 2, "P3"):
+            r["prompts_sha"] = REG["sets"]["warm_c1"]
+    v = red.reduce([_work(tmp_path, edit)], REG)
+    assert v["cells"]["S8|12|P3"]["state"] == "VOID" and v["cells"]["S8|12|P2"]["state"] == "READ"
+    assert v["cells"]["S8|8|P3"]["state"] == "READ"
 
 
 @pytest.mark.parametrize("name, edit, void_key", [
