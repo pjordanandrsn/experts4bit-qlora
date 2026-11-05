@@ -7,7 +7,9 @@ on the box's calib.json, and Q7 moves to 0.2; revision 3 at 05:49Z: the CPU is a
 E-hyb's hit rate is reporting only; revision 4 at 15:00Z, in-tree: Z3 measured the checkpoints' bytes per expert, so
 S4's K is 33/67/101 (was 34/68/102 from an inferred ~2.45 MB) and its predictions are recomputed at that K; the FP8
 revision is pinned; the c1 and c4 warm passes carry separate prompt sets; revision 5 at 15:34Z: the scored prompt
-sets are built from the four sources the maintainer approved, and their shas are registered below). The lane number is
+sets are built from the four sources the maintainer approved, and their shas are registered below; revision 6 at
+15:45Z on the registration review: Q3 argues from the profile placement, E-hyb's token invariance is reported and not
+ruled, and Q2 excepts S8's c4 cell at 4 GB). The lane number is
 claimed at merge;
 `PGX` is the lane's working name, not a reservation. Under the 2026-11-04 paging-baselines ruling (B): E-hyb is e4b's
 stage-1 entry, and E-pipe is never a matched arm.
@@ -164,7 +166,11 @@ handicap (the maintainer's ruling on revision 0). The profile is `bench/pgx/fit_
 
 **Token invariance (reported per arm; it rules only where stated):**
 - P2 against P1 within one lifetime: same prompts, different cache state, so the greedy tokens must be identical for
-  S8, V8 and E-hyb. A difference VOIDs that lifetime's passes and is reported as a paging finding.
+  S8 and V8 and the two all-VRAM controls (GPU-only, deterministic kernels). A difference VOIDs that lifetime's passes
+  and is reported as a paging finding.
+- E-hyb and E-hyb-u P2 against P1 is REPORTED, never ruled. The rule exists to show that paging does not change
+  outputs, and they page nothing: the placement is static, and the DRAM tier is multithreaded host arithmetic, so a
+  difference there would be CPU nondeterminism, not paging.
 - Across budgets within an arm: S8 and V8 should be token-identical (Triton). A difference is reported as a finding.
   E-hyb across budgets is NOT expected to be bitwise (the DRAM tier's host arithmetic differs; P233 saw 7/10 prompts
   match), so it is reported, never ruled.
@@ -251,11 +257,11 @@ sorted, so its page-ins above misses depend on that order) and, since grouped-nf
 | # | prediction |
 |---|---|
 | Q1 | at every budget, S4's hit rate > S8's ≈ V8's (int4's K is about twice FP8's) |
-| Q2 | S8 and V8 hit rates agree within 0.01 at every cell (both are LRU at the same K; only tie-breaks differ) |
-| Q3 | E-hyb's c1 warm ITL is longer than S4's at 4 GB and 8 GB (at the index proxy, about 75 % and 50 % of its routed experts are computed on the host CPU) |
+| Q2 | S8 and V8 hit rates agree within 0.01 at every cell except S8's c4 cell at 4 GB, where S8 plans on the host in waves and the pager does not (Q5) (both are LRU at the same K; only tie-breaks differ) |
+| Q3 | E-hyb's c1 warm ITL is longer than S4's at 4 GB and 8 GB (by the $0 placement preview over the 60-496 GB/s CPU rows, about 42-48 % of the profile's routed mass is computed on the host CPU tier at 4 GB and 17-29 % at 8 GB, where S4's LRU holds about 0.72-0.83 and 0.93-0.99 of routed experts in VRAM) |
 | Q4 | E-hyb's eager tax (E-allvram-e minus E-allvram-g) is a visible share of its ITL at 12 GB (P66: 8.05 against 1.184 ms/token fixed tax) |
 | Q5 | S8's c4 cell at 4 GB runs eager and on the host wave path, and its ITL lead over V8 at that cell shrinks or reverses |
-| Q6 | P2 against P1 is token-identical for S8, V8 and E-hyb on every lifetime |
+| Q6 | P2 against P1 is token-identical for S8, V8 and E-hyb on every lifetime (ruled for S8 and V8; reported for E-hyb) |
 | Q7 | E-hyb's VRAM hit rate at 8 GB is at least 0.2 above E-hyb-u's, and its c1 warm ITL is shorter (the $0 preview gives +0.22 to +0.33 over the CPU range above) |
 
 Cross-engine speed order at each cell is NOT predicted, only reported.

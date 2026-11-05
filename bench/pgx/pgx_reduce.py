@@ -27,7 +27,10 @@ CONTROLS = (("E-hyb-u", 8, ("P1", "P2", "P3", "P4")), ("E-allvram-g", "all", ("P
             ("E-allvram-e", "all", ("P1", "P2", "P3")))
 STABLE = 1.03                      # max/min over the three draws (P235's self-pair rule, applied to three)
 SHARE = 0.5                        # an attribution branch is named at >= 50 % of the gap
-TOKEN_RULED = {"S8", "V8", "E-hyb", "E-hyb-u", "E-allvram-g", "E-allvram-e"}   # P2 vs P1 identity rules; S4 reported
+# P2 vs P1 identity rules only where paging could change the output on deterministic GPU kernels. S4 (Marlin
+# atomics) is reported; E-hyb and E-hyb-u page nothing (static placement) and compute their DRAM tier in
+# multithreaded host arithmetic, so a difference there is CPU nondeterminism, reported, never a VOID.
+TOKEN_RULED = {"S8", "V8", "E-allvram-g", "E-allvram-e"}
 # the registered prompt set of each pass: P1/P2 are the 8-request c1 warm set, P3 the 16-request c4 warm set
 PASS_SET = {"P1": "warm_c1", "P2": "warm_c1", "P3": "warm_c4", "P4": "shift"}
 

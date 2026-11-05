@@ -182,7 +182,7 @@ def test_each_registered_fault_voids_its_lifetime(tmp_path, name, edit, void_key
     assert [tuple(x) for x in v["void_lifetimes"]] == [void_key], name
 
 
-def test_token_invariance_rules_for_triton_and_e4b_and_reports_for_marlin(tmp_path):
+def test_token_invariance_rules_for_triton_and_reports_for_marlin(tmp_path):
     def edit(a, b, d, p, lt, r):
         if (b, d, p) == (8, 1, "P2") and a in ("S8", "S4"):
             r["requests"][0]["text_sha"] = "different"
@@ -190,6 +190,18 @@ def test_token_invariance_rules_for_triton_and_e4b_and_reports_for_marlin(tmp_pa
     assert [tuple(x) for x in v["void_lifetimes"]] == [("S8", 8, 1)]
     kinds = {(f["kind"], f["arm"], f["rules"]) for f in v["findings"]}
     assert ("token_invariance", "S4", False) in kinds and ("token_invariance", "S8", True) in kinds
+
+
+def test_an_e_hyb_p2_p1_difference_is_a_finding_not_a_void(tmp_path):
+    """E-hyb pages nothing; its DRAM tier is multithreaded host arithmetic. A P2/P1 text difference is reported."""
+    def edit(a, b, d, p, lt, r):
+        if (b, d, p) == (8, 2, "P2") and a in ("E-hyb", "E-hyb-u"):
+            r["requests"][1]["text_sha"] = "different"
+    v = red.reduce([_work(tmp_path, edit)], REG)
+    assert v["verdict"] == "READ" and not v["void_lifetimes"]
+    kinds = {(f["kind"], f["arm"], f["rules"]) for f in v["findings"]}
+    assert kinds == {("token_invariance", "E-hyb", False), ("token_invariance", "E-hyb-u", False)}
+    assert {"S8", "V8", "E-allvram-g", "E-allvram-e"} == red.TOKEN_RULED
 
 
 def test_cross_budget_tokens_are_reported_never_ruled(tmp_path):
@@ -211,6 +223,18 @@ def test_a_draw_spread_over_three_percent_is_unstable_not_void(tmp_path):
     assert v["cells"]["S8|12|P3"]["state"] == "UNSTABLE"
     row = {(x["budget"], x["pass"]): x for x in v["readings"]}[(12, "P3")]
     assert "S8" not in row["ratios"] and "S4" in row["ratios"]
+
+
+def test_a_draw_spread_of_exactly_three_percent_reads(tmp_path):
+    """The rule is max/min <= 1.03: a cell sitting exactly on the boundary is READ, not UNSTABLE."""
+    vals = {1: (1.0, 100.0), 2: (1.015, 101.5), 3: (1.03, 103.0)}
+
+    def edit(a, b, d, p, lt, r):
+        if (a, b, p) == ("S8", 12, "P2"):
+            r.update(tpot_p50=vals[d][0], out_tok_s=vals[d][1])
+    v = red.reduce([_work(tmp_path, edit)], REG)
+    c = v["cells"]["S8|12|P2"]
+    assert c["spread"] == red.STABLE and c["state"] == "READ"
 
 
 def test_a_duplicated_lifetime_across_boxes_voids(tmp_path):
