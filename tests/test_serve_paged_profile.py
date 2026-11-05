@@ -47,7 +47,7 @@ def test_a_fitting_profile_returns_its_path(tmp_path):
 def test_refuses_a_profile_with_no_routed_tokens(tmp_path):
     zero = [dict(r, tokens_routed=0) if r["row"] == "expert" else r for r in _rows()]
     for rows in (zero, [{"row": "meta"}]):
-        with pytest.raises(ValueError, match="no routed tokens"):
+        with pytest.raises(ValueError, match=f"no routed tokens in {L} of {L} MoE layers, first 0"):
             sp.placement_profile(str(_write(tmp_path, rows)), L, E)
 
 
@@ -60,6 +60,16 @@ def test_refuses_a_profile_from_another_model(tmp_path, rows, first):
     with pytest.raises(ValueError, match=f"outside this model's {L} layers x {E} experts") as err:
         sp.placement_profile(str(_write(tmp_path, rows)), L, E)
     assert f"first {first}" in str(err.value)
+
+
+def test_refuses_a_partial_capture(tmp_path):
+    """A layer with no routed tokens: every forward routes through every MoE layer, so the capture missed it."""
+    rows = [dict(r, tokens_routed=0) if r["row"] == "expert" and r["layer_id"] == 2 else r for r in _rows()]
+    with pytest.raises(ValueError, match=f"no routed tokens in 1 of {L} MoE layers, first 2 -- a partial capture"):
+        sp.placement_profile(str(_write(tmp_path, rows)), L, E)
+    absent = [r for r in _rows() if not (r["row"] == "expert" and r["layer_id"] == 3)]
+    with pytest.raises(ValueError, match="first 3 -- a partial capture"):
+        sp.placement_profile(str(_write(tmp_path, absent, "absent.jsonl")), L, E)
 
 
 def test_the_measured_profile_moves_the_routed_mass_into_vram(tmp_path):

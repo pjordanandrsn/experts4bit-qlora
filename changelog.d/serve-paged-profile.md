@@ -5,6 +5,7 @@
   uniform-assumed mass. Unset, nothing changes.
 - The profile is checked at startup, before any weight is read, and refused by name when:
   - the file is missing;
-  - it holds no routed tokens;
-  - any of its (layer, expert) pairs is outside the served model's MoE layers x experts.
+  - any of its (layer, expert) pairs is outside the served model's MoE layers x experts;
+  - any MoE layer holds no routed tokens. That would be a partial capture, and the solver would place that layer by
+    its tie-break, silently.
 - The startup log and `/health` (`levers.placement_profile`) record the path and the profile's kind and sha256.

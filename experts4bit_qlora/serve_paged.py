@@ -1537,19 +1537,25 @@ def placement_profile(path: str, n_moe_layers: int, n_experts: int):
 
     The profile is an :mod:`.engines.expert_profile` JSONL (``row: expert`` lines), whose ``layer_id`` is the MoE module's
     ordinal 0..L-1, the solver's own numbering, also for a model with leading dense layers. Refuses (ValueError) a profile
-    with no routed tokens, or with any (layer, expert) outside this model's L x E: the solver would ignore those rows and
-    place by what is left, silently."""
+    with any (layer, expert) outside this model's L x E, or with a layer that holds no routed tokens: the solver would
+    ignore the former and tie-break the latter, silently."""
     if not path:
         return None
     from .engines.placement import load_routing_mass
     mass, _ = load_routing_mass(path, n_moe_layers, n_experts)
-    if sum(mass.values()) <= 0:
-        raise ValueError(f"E4B_PAGED_PROFILE {path}: no routed tokens in its expert rows -- refusing a profile that "
-                         "places by nothing")
     bad = sorted(key for key in mass if not (0 <= key[0] < n_moe_layers and 0 <= key[1] < n_experts))
     if bad:
         raise ValueError(f"E4B_PAGED_PROFILE {path}: {len(bad)} (layer, expert) pair(s) outside this model's "
                          f"{n_moe_layers} layers x {n_experts} experts, first {bad[0]} -- a profile from another model")
+    # every forward routes tokens through every MoE layer, so a layer with no mass is a partial capture (all of them: a
+    # profile with no routed tokens at all), which the solver would place by its tie-break, silently
+    per_layer = collections.defaultdict(float)
+    for (layer, _), tokens in mass.items():
+        per_layer[layer] += tokens
+    empty = [layer for layer in range(n_moe_layers) if per_layer[layer] <= 0]
+    if empty:
+        raise ValueError(f"E4B_PAGED_PROFILE {path}: no routed tokens in {len(empty)} of {n_moe_layers} MoE layers, "
+                         f"first {empty[0]} -- a partial capture")
     return path
 
 
