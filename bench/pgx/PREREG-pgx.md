@@ -413,3 +413,92 @@ The machine and instance ids stay in the private receipt store only.
    control. Open within it: the fit is one prompt per kind and decode-only. A broader fit (more prompts per kind, or
    prefill mass too) needs routing captured on a GPU, so it is not $0; the shakedown could capture it at no extra box
    if the reviewer prefers that to the traces.
+
+## Amendment 1 (2026-11-05): the shakedown's box side
+
+Written 2026-11-05 (clock read 17:56Z). The registration merged as 582514dc with no box side: no controller driver, no box
+runner, no staged pins. So pod-launch had no command to run. This amendment adds them for **the shakedown only**. Its merge is
+the shakedown's launch commit. The reading's box plan is registered in a later amendment, after the shakedown's receipt.
+Nothing above changes, except the shakedown's fit and its worst case (below).
+
+**What it adds:**
+- `bench/pgx/pgx_drive.sh`, the controller side. It is P238's driver with this lane's run ids (`pgx-shake-1`, retry ids
+  `pgx-shake-r1` to `-r3`), and it sources the shared `bench/common/drive_tail.sh`. Its fetch is `rsync --no-links`.
+- `bench/pgx/pgx_run.sh`, the box. `bench/pgx/staged-pgx.sha256` pins its 22 staged files. Two of them come from shared
+  code: SC1's SGLang venv installer (`bench/sc1/sglang/install.sh`) and P39's NF4 bake.
+- `pgx_tripwire.py`, `pgx_box.py` (the lifetime record) and `pgx_shake.py` (the verdict).
+- `tests/test_pgx_kit.py`. It runs, at $0 against this commit, every box step that needs no GPU: the staging, the tripwire,
+  both self-tests, both hooks, the header reader and the exit codes.
+
+**The box (one RTX 4090; the host floors above):**
+- **Refusals, before STARTED:**
+
+  | code | cause |
+  |---|---|
+  | 18 | CUDA unusable, or a driver below 580 (SGLang 0.5.23 pins torch 2.14.1, whose wheels are CUDA 13) |
+  | 10 | torch will not import |
+  | 28 | the image's torch is not `2.8.0+cu128` |
+  | 15 | the card: not a 4090, not cc 8.9, < 128 SMs or < 24,000 MiB |
+  | 13 | disk < 250 GB |
+  | 16 | measured RAM, min(MemTotal, cgroup), < 60 GiB |
+  | 19 | download < 40 MB/s |
+  | 41 | the guard fit |
+
+  Only 13 and 18 name the machine to the launcher.
+- **Installs:**
+  - e4b at the launch commit, from git, in the image's python. 0.58.1 predates e4b#2169, so no release carries
+    `E4B_PAGED_PROFILE`.
+  - grouped-nf4-gemm 0.51.0 from PyPI. Its `bench/calibrate.py` is checked out from the v0.51.0 tag commit 30adb1bf.
+  - SGLang 0.5.23 in its own venv.
+  - vLLM 0.29.0, with `vllm-expert-pager` installed from git at e9264fda, in its own venv.
+  - Each has a tripwire. A failure is rc 9.
+- **Then, in order:**
+  1. The kit's self-tests (rc 25).
+  2. The three checkpoints are fetched at their revisions (rc 11).
+  3. **The bytes per expert are read from the box's own snapshots.** Their headers must hash to the registered ones (rc 9
+     otherwise), and the K table is recomputed from them.
+  4. The NF4 bake (rc 12).
+  5. `calibrate.py` (rc 33), then `pgx_place_preview.py` on the box's `calib.json`. This is E-hyb's expectation, receipted.
+  6. A 20 s card-clock burn, recorded and never ruled.
+- **Lifetimes:** one per arm at 8 GB, in draw 1's order: S4, S8, V8, E-hyb. Each runs P1 and P2 at c1 over `warm_c1`.
+  Every server runs with prefix or radix caching off, at a context of 2,048 and at most 4 sequences.
+- **Each counter shim on a real record:**
+  - **S4 and S8:** an untimed instrument lifetime before the arm's timed one. It runs with decode and prefill graphs
+    `disabled`, `PGX_ROUTE_DUMP` on, and the P1 prompts once (pass `I1`). The dump replays through SGLang's rule
+    (`pgx_residency.sglang_residency`), and it must self-check: the engine's own host-path loads equal the replay
+    (`host_path_check`, 0 mismatches). The registration asked for one such pass; the shakedown runs one per SGLang arm.
+  - **V8:** `VLLM_EXPERT_PAGER_LOG_INTERVAL=1`, and one eager probe before P1, between P1 and P2, and after P2. A probe is
+    one 1,024-token prefill with 1 output token, longer than any captured size. Each pass's counts are the difference of
+    the cumulative counters at its two probes.
+  - **E-hyb:** `/health`'s `levers.placement_profile`, the step trace, and **the placement proof from a new in-process
+    hook** (`bench/pgx/hook_e4b/sitecustomize.py`). `serve_paged` reports the profile but not the tiers. The hook wraps
+    `enable_hybrid_tier` and records the manifest `build_engine` hands it, as per-layer expert counts per tier.
+- **Per lifetime:** wall time, peak host RSS (the server's process group) and peak VRAM, sampled each second.
+
+**A finding from the $0 path, before any box: the registered SGLang hook could not have loaded.** `bench/pgx/hook/` is
+loaded as `usercustomize`. Python runs `usercustomize` only when `site.ENABLE_USER_SITE` is true, and a venv without
+system site-packages sets it false. Every engine on the box runs in such a venv, so no SGLang process would have dumped
+anything. `bench/pgx/hook/sitecustomize.py` now imports it; `sitecustomize` loads in every interpreter.
+`tests/test_pgx_kit.py` shows both cases in a real venv: the hook loads with the shim, and does not load without it.
+
+**The shakedown's verdict (`pgx_shake.py`):**
+- **STOP:** an arm did not serve. Its server did not start, or a pass is missing, has a request fault or has the wrong
+  `prompts_sha`. As registered: "If any arm cannot serve at its budget: STOP and report."
+- **SHAKE_FAULTS:** every arm served, but a lifetime carries a fault the reducer would VOID it for (`pgx_reduce.lifetime_faults`).
+  The reading's kit needs an amendment first.
+- **SHAKE_OK:** neither of the above.
+
+The box finishes 0 only on SHAKE_OK, and 27 otherwise. It is never read. P2 against P1 token identity is recorded and not
+ruled.
+
+**The shakedown's fit and worst case (they replace the shakedown row above):**
+- setup 5,350 s + 4 lifetimes x 900 s + 2 instrument lifetimes x 450 s + reserve 600 s = 10,450 s;
+- x 1.25 = **13,062 s = 3.63 h**;
+- worst = 3.63 h x USD 0.85 + 120 GB x USD 0.02 = **USD 5.49**, against USD 5.22 before.
+- The lane worst becomes 5.49 + 20.62 + 0.75 = **USD 26.86**, under the USD 35 per-run cap.
+
+**Open risks, stated now (each would read SHAKE_FAULTS or STOP, never a reading):**
+- S4's Marlin MoE is compiled by SGLang's JIT with the image's nvcc (CUDA 12.8), while SGLang 0.5.23's torch is CUDA 13.
+- The pager may not log on the probe if its MoE call runs inside a captured piece.
+- E-hyb's engine-loaded slot bytes are read from the placement proof. S4's, S8's and V8's slot bytes are read only from
+  their logs and peak VRAM: the K check uses the checkpoint headers measured on the box.
