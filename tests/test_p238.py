@@ -1301,3 +1301,24 @@ def test_tc1_arm_loads_the_p238_hook_by_its_staged_sha(monkeypatch, tmp_path):
     with pytest.raises(SystemExit) as e:
         T.load_arm_hook(a)
     assert e.value.code == 10
+
+
+# amendment 4: the measured packed held-out pool at the pinned tokenizer and data (p238-shake-r4's PREPARE: 39 rows of 2048)
+P238_PACKED_HELD_OUT_ROWS = 39
+
+
+def test_amendment_4_the_held_out_count_fits_the_packed_pool():
+    """--eval-n 48 could never pack from TC1's 400-example held-out pool at 2048 tokens; the runner, the page and the
+    pool agree on 36 now, with margin under the measured 39."""
+    run = (ROOT / "bench" / "p238" / "p238_run.sh").read_text(encoding="utf-8")
+    eval_n = [int(ln.split("EVAL_N=")[1].split()[0]) for ln in run.splitlines() if "EVAL_N=" in ln and "SEQ=2048" in ln]
+    assert eval_n == [36] and eval_n[0] < P238_PACKED_HELD_OUT_ROWS
+    assert "--eval-n $EVAL_N" in run
+    page = (ROOT / "bench" / "p238" / "PREREG-p238.md").read_text(encoding="utf-8")
+    assert "held-out loss after step 60 (`--eval-n 36`, amendment 4; it was 48)" in page
+    assert "## Amendment 4 (2026-11-05): the held-out count fits the packed pool" in page
+    am4 = page[page.index("## Amendment 4 (2026-11-05)"):]
+    # the page names what it narrows and what r4 counts toward (review round 1), and the PREPARE record is a launch gate
+    assert "narrows amendment 2's retry" in am4 and "Every other retry still needs rc 18 before" in am4
+    assert "r4 counts as one STARTED box" in am4 and "`p238-shake-r5` is the lane's last STARTED box" in am4
+    assert "The launch kit REFUSES any create without a PREPARE record" in am4

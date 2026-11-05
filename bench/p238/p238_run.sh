@@ -34,7 +34,7 @@ NVML_VERSION=13.615.71              # nvidia-ml-py: the energy counter (p238_op.
 TORCH_WANT=2.12.1+cu130
 MODEL=Qwen/Qwen3.6-35B-A3B; REVISION=995ad96eacd98c81ed38be0c5b274b04031597b0
 CLOCK_FLOOR=2700; MIN_MOPS=15; GPU_CLASS=5090; MIN_RAM_GB=64; MIN_DISK_GB=200; MIN_DRIVER=580
-STEPS=60; SEQ=2048; EVAL_N=48
+STEPS=60; SEQ=2048; EVAL_N=36   # amendment 4: TC1's 400-example held-out pool packs 39 rows of 2048 (p238-shake-r4)
 LOAD_S=${P238_LOAD_S_REGISTERED:-900}   # the per-load wall the guard fit uses: the shakedown's measured wall, registered before the reading
 case "$LOAD_S" in ''|*[!0-9]*|0*) say "refusing: P238_LOAD_S_REGISTERED '$LOAD_S' is not whole seconds (no leading 0: \$(( )) reads octal)"; finish 78;; esac
 [ "$LOAD_S" -ge 300 ] || { say "refusing: P238_LOAD_S_REGISTERED $LOAD_S s is under the 300 s floor (a guard fit that passes trivially)"; finish 78; }
