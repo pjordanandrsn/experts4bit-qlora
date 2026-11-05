@@ -44,10 +44,13 @@ Counts and bytes only.
   `trace.npz` plus `trace.npz.meta.json`, which holds the environment, the model's config and index hashes, the
   harness arguments and the summary with its verdict. It exits 3 on VOID.
 - `replay.py`: replays a training trace or a #1469 decode trace through the four policies at the six budgets. CPU only.
+  With `--per-layer-k`, it replays a decode trace with K slots in each layer under three shipped rules instead:
+  `lru_seeded` (SGLang paged experts), `lru` (the vLLM expert pager's VRAM tier) and `lfu_protect` (e4b's ColdTier).
+  It reports hits, misses and page-ins per layer and in total; each class cites the code it re-states.
 - `cross_step_bar.py`: the bar registered before the capture. A policy is frozen at each step boundary and scored on
   the next step's forward, against the shuffled null, with the reporting reads (saturation, the frozen ceiling, skew).
 - `RESULTS-qwen3-30b-a2000.md` and `results-2026-10-10/`: the Qwen3-30B-A3B read and its outputs.
-- `tests/test_train_routing_trace.py`: CPU tests.
+- `tests/test_train_routing_trace.py` and `tests/test_replay_per_layer.py`: CPU tests.
   - **The forward/recompute check is armed:** a toy router whose recompute of one micro-batch routes differently is
     reported as exactly that micro-batch and layer.
   - **The completeness guard is armed by two cases:**
@@ -71,4 +74,7 @@ python bench/train-routing-trace/replay.py --trace /path/trace.npz --expect-mb 8
     --truncation-reason "OOM at step 18" --fit-steps 5 --out replay.json
 python bench/train-routing-trace/replay.py --decode <gnf4>/bench/cold-engine/routing-trace/qwen3_prose.jsonl \
     --fit-steps 128 --out decode-prose.json
+# per-layer budgets: K slots in every layer, three residency rules
+python bench/train-routing-trace/replay.py --decode <gnf4>/bench/cold-engine/routing-trace/qwen3_prose.jsonl \
+    --fit-steps 128 --per-layer-k 8,32,64 --out per-layer-prose.json
 ```
