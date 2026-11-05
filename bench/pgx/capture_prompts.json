@@ -1,0 +1,10 @@
+{
+ "note": "the four #1469 capture prompts; every scored window must contain none of their text",
+ "prompts": {
+  "code": "def merge_intervals(intervals):\n    intervals.sort(key=lambda x: x[0])\n    out = []\n    for start, end in intervals:\n        if out and start <= out[-1][1]:\n            out[-1][1] = max(out[-1][1], end)\n        else:\n            out.append([start, end])\n    return out\n\n",
+  "dialogue": "A: Have you tried restarting it?\nB: Twice. Same error.\nA: What does the log say right before it fails?\nB: Nothing useful, just a timeout after thirty seconds.\nA: Thirty seconds is the default. Something upstream is not answering.\n",
+  "math": "Theorem. Let G be a finite group and H a subgroup of G. Then the order of H divides the order of G. Proof. The left cosets of H partition G, and each coset gH has the same cardinality as H, since h -> gh is a bijection. Hence |G| = [G:H] * |H|. ",
+  "prose": "The question of how memory works has occupied philosophers and scientists for centuries. When we recall an event, we do not replay a recording; we reconstruct it, and the reconstruction is shaped by everything we have learned since. This is why eyewitness testimony is less reliable than juries assume. "
+ },
+ "source": "grouped-nf4-gemm bench/cold-engine/routing-trace/capture_routing.py @69283616 (PROMPTS)"
+}

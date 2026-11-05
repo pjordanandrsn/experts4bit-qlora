@@ -6,13 +6,12 @@ and the attribution gains a placement branch; revision 2 at 05:47Z: E-hyb's expe
 on the box's calib.json, and Q7 moves to 0.2; revision 3 at 05:49Z: the CPU is a recorded, scoped condition, and
 E-hyb's hit rate is reporting only; revision 4 at 15:00Z, in-tree: Z3 measured the checkpoints' bytes per expert, so
 S4's K is 33/67/101 (was 34/68/102 from an inferred ~2.45 MB) and its predictions are recomputed at that K; the FP8
-revision is pinned; the c1 and c4 warm passes carry separate prompt sets). The lane number is claimed at merge;
+revision is pinned; the c1 and c4 warm passes carry separate prompt sets; revision 5 at 15:34Z: the scored prompt
+sets are built from the four sources the maintainer approved, and their shas are registered below). The lane number is
+claimed at merge;
 `PGX` is the lane's working name, not a reservation. Under the 2026-11-04 paging-baselines ruling (B): E-hyb is e4b's
 stage-1 entry, and E-pipe is never a matched arm.
 
-**Not yet registrable:** the three scored prompt sets (below) and their `prompts_sha` are not built. Their source is an
-open item; they are committed, with their shas, by an amendment to this page before it merges. No sha is written here
-until it is computed from the committed sets.
 
 ## The question
 
@@ -98,6 +97,28 @@ handicap (the maintainer's ruling on revision 0). The profile is `bench/pgx/fit_
   - **warm_c1** (P1, P2): 8 requests, 4 code and 4 dialogue;
   - **warm_c4** (P3): 16 requests, 8 code and 8 dialogue;
   - **shift** (P4): 8 requests, 4 math and 4 prose.
+
+  The sets are built by `bench/pgx/pgx_prompts.py` and committed under `bench/pgx/prompts/` with a manifest of every
+  source file's sha256. Each kind's corpus is tokenized once (no special tokens), and window i is tokens
+  [8,192 i, 8,192 i + 1,024). Every kind is rendered as raw text, with no chat template, so every engine is sent the
+  same ids. The kit test asserts that no window contains a line or sentence of the four #1469 capture prompts
+  (`bench/pgx/capture_prompts.json`), and that no window is in two sets.
+
+  | kind | source (pinned) | rendering | licence |
+  |---|---|---|---|
+  | prose | `Salesforce/wikitext` @b08601e0, `wikitext-2-raw-v1` test | non-empty rows joined by blank lines (SC2's) | CC-BY-SA-3.0 / GFDL |
+  | code | `python/cpython` @8183fa5e (tag v3.13.9): `Lib/{argparse, dataclasses, functools, inspect, typing, collections/__init__, pathlib/_local, enum, textwrap, difflib}.py` | the files joined by blank lines | PSF-2.0 |
+  | math | `EleutherAI/hendrycks_math` @21a56338, test, the seven subjects in sorted order | `Problem: …` / `Solution: …` per row | MIT |
+  | dialogue | `HuggingFaceH4/ultrachat_200k` @8049631c, `test_sft` | `User: …` / `Assistant: …` lines per conversation | MIT |
+
+  | set | requests | `prompts_sha` |
+  |---|---|---|
+  | warm_c1 | 8 | `d45648005719bb7ff6979e814f0c9cde5824e85d12b60f5d1cd0e107b838f554` |
+  | warm_c4 | 16 | `37589f7c124653b62f321a6641d76ab5162840d25e618321f574025704b11b12` |
+  | shift | 8 | `c4477b9ad77d5c02a2a30eade3ea1021e04e21299f9c43ce4bed31717403a295` |
+
+  Training-data overlap with these public texts does not matter here: the reading is routing and paging speed, not
+  quality.
 - **Output:** 256 tokens per request, greedy, `ignore_eos` and `min_tokens = max_tokens` (P235/SC2), temperature 0.
 - **Concurrency:** closed loop at c = 1 (8 requests per pass) and c = 4 (16 requests per pass, 4 waves).
 - **One server lifetime per (arm, budget, draw)**, passes in this order:
@@ -275,6 +296,8 @@ covers E-hyb's: NLL +0.0021 against all-VRAM).
 - **Z6, the fit profile:** `pgx_fit_profile.py` writes `fit_profile.jsonl` from the pinned traces, and its test
   checks the row format against `placement.load_routing_mass` and `serve_paged.placement_profile` (48 x 128, positive
   mass in every layer), so the profile E-hyb reads is the one registered.
+- **The scored prompt sets** (`pgx_prompts.py`, `prompts/`, `tests/test_pgx_prompts.py`): sizes, kinds, exact
+  1,024-token windows, the shas against this page, no window in two sets, and no capture-prompt text.
 - **Z5, the kit test** (`tests/test_pgx_prereg.py`): this page's K table, budgets, arms, controls, passes, stability
   rule and checkpoint pins against the kit's constants, and the fit profile's sha against the one named here, so the
   page and the kit cannot drift apart.
@@ -378,8 +401,8 @@ The machine and instance ids stay in the private receipt store only.
 3. **The RAM floor at 62 GiB listed is INFERRED;** the shakedown measures it. If E-hyb's bf16 streaming load needs more,
    a fast-class 4090 at that floor may not exist (P237), and the fallback is a DRAM tier sized to fit, stated before the
    reading.
-4. **The scored prompt sets' source.** The three sets need 1,024-token texts of each kind that no capture prompt
-   shares. Their source, and the sets with their shas, come by amendment before this page merges.
+4. **RESOLVED (revision 5):** the scored prompt sets come from the four pinned public sources in the Workload table,
+   approved by the maintainer; their shas are registered there.
 5. **RESOLVED (revision 1):** E-hyb places from the held-out fit profile (e4b#2169); uniform placement is the E-hyb-u
    control. Open within it: the fit is one prompt per kind and decode-only. A broader fit (more prompts per kind, or
    prefill mass too) needs routing captured on a GPU, so it is not $0; the shakedown could capture it at no extra box
