@@ -858,6 +858,7 @@ class PagedServeConfig:
     model: str = ""                      # E4B_PAGED_MODEL (HF id or local snapshot)
     arena: str = ""                      # E4B_PAGED_ARENA (the NF4 arena; <arena>.index.json beside it)
     calib: str = ""                      # E4B_PAGED_CALIB (placement calibration JSON; the solver refuses to guess)
+    profile: str = ""                    # E4B_PAGED_PROFILE (expert_profile JSONL: the solver's routing mass; unset = uniform)
     revision: str = ""                   # E4B_PAGED_REVISION
     served_names: tuple = ()             # E4B_PAGED_SERVED_NAME: extra names accepted in `model` (comma-separated)
     max_seqs: int = 16                   # E4B_PAGED_MAX_SEQS: batch width == KV slots ("auto": resolve_max_seqs)
@@ -927,6 +928,7 @@ class PagedServeConfig:
             model=env("E4B_PAGED_MODEL", ""),
             arena=env("E4B_PAGED_ARENA", ""),
             calib=env("E4B_PAGED_CALIB", ""),
+            profile=env("E4B_PAGED_PROFILE", ""),
             revision=env("E4B_PAGED_REVISION", ""),
             served_names=tuple(x.strip() for x in env("E4B_PAGED_SERVED_NAME", "").split(",") if x.strip()),
             max_seqs=_max_seqs_env(env("E4B_PAGED_MAX_SEQS", "")),
@@ -1530,6 +1532,33 @@ def arena_layer_ids(arena: str, n_moe_layers: int) -> list:
     return ids
 
 
+def placement_profile(path: str, n_moe_layers: int, n_experts: int):
+    """``E4B_PAGED_PROFILE`` for the solver: the path when its routing mass fits this model; None when unset.
+
+    The profile is an :mod:`.engines.expert_profile` JSONL (``row: expert`` lines), whose ``layer_id`` is the MoE module's
+    ordinal 0..L-1, the solver's own numbering, also for a model with leading dense layers. Refuses (ValueError) a profile
+    with any (layer, expert) outside this model's L x E, or with a layer that holds no routed tokens: the solver would
+    ignore the former and tie-break the latter, silently."""
+    if not path:
+        return None
+    from .engines.placement import load_routing_mass
+    mass, _ = load_routing_mass(path, n_moe_layers, n_experts)
+    bad = sorted(key for key in mass if not (0 <= key[0] < n_moe_layers and 0 <= key[1] < n_experts))
+    if bad:
+        raise ValueError(f"E4B_PAGED_PROFILE {path}: {len(bad)} (layer, expert) pair(s) outside this model's "
+                         f"{n_moe_layers} layers x {n_experts} experts, first {bad[0]} -- a profile from another model")
+    # every forward routes tokens through every MoE layer, so a layer with no mass is a partial capture (all of them: a
+    # profile with no routed tokens at all), which the solver would place by its tie-break, silently
+    per_layer = collections.defaultdict(float)
+    for (layer, _), tokens in mass.items():
+        per_layer[layer] += tokens
+    empty = [layer for layer in range(n_moe_layers) if per_layer[layer] <= 0]
+    if empty:
+        raise ValueError(f"E4B_PAGED_PROFILE {path}: no routed tokens in {len(empty)} of {n_moe_layers} MoE layers, "
+                         f"first {empty[0]} -- a partial capture")
+    return path
+
+
 def _bytes_per_expert(arena: str) -> int:
     idx = json.loads(open(arena + ".index.json", encoding="utf-8").read())
     bpe = 0
@@ -1991,7 +2020,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     for name, val in (("E4B_PAGED_MODEL", cfg.model), ("E4B_PAGED_ARENA", cfg.arena), ("E4B_PAGED_CALIB", cfg.calib)):
         if not val:
             raise ValueError(f"{name} is required")
-    for path in (cfg.arena, cfg.arena + ".index.json", cfg.calib):
+    for path in (cfg.arena, cfg.arena + ".index.json", cfg.calib) + ((cfg.profile,) if cfg.profile else ()):
         if not os.path.exists(path):
             raise FileNotFoundError(path)
     # The arena's index, read for EVERY config before any weight is read: a merged arena (bench/d0/ARENA-DESIGN.md)
@@ -2101,8 +2130,12 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     torch.set_num_threads(cfg.torch_threads)
     man = solve_placement(n_layers=L, n_experts=E, bytes_per_expert=_bytes_per_expert(cfg.arena),
                           vram_budget_bytes=int(cfg.vram_gb * 2**30), dram_budget_bytes=int(cfg.dram_gb * 2**30),
-                          calibration=json.loads(open(cfg.calib, encoding="utf-8").read()), profile_path=None,
+                          calibration=json.loads(open(cfg.calib, encoding="utf-8").read()),
+                          profile_path=placement_profile(cfg.profile, L, E),
                           batch=1, top_k=k, cpu_us_fixed=None, cpu_us_per_row=None)
+    placement_profile_record = {"path": cfg.profile or None, **man["profile"]}
+    log(f"placement: {man['profile']['kind']} routing mass"
+        + (f" from {cfg.profile} (sha256 {man['profile']['sha256'][:12]})" if cfg.profile else ""))
     if cfg.placement == "all-vram":
         # step_decomp --placement-override all-vram: the solver ran, then every expert is in the VRAM tier
         pairs = sorted(tuple(pp) for t in ("vram", "dram", "nvme") for pp in man["tiers"][t])
@@ -2224,6 +2257,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     info.update(levers)
     info.update(fusions)
     info["hot_rows_floor"] = {**hot_floor, "hot_rows": cfg.hot_rows}
+    info["placement_profile"] = placement_profile_record
     info["fusion_modes"] = fusion_report.get("modes")
     info["fusion_sources"] = fusion_report.get("sources")
     info["fusion_report"] = fusion_report.get("folds")
