@@ -15,7 +15,8 @@
    ``all-vram`` on a cc 8.9 CUDA device, and that ``build_engine`` hands ``enable_hybrid_tier`` the manifest in the
    position the placement-proof hook reads (``bench/pgx/hook_e4b``);
 5. ``--box`` only: the installed e4b is the launch commit, grouped-nf4-gemm is the pinned release, torch is the image's,
-   and CUDA is usable.
+   and CUDA is usable; then ``serve_paged``'s web stack (fastapi, uvicorn), imported by name at its pins, since the
+   server imports both lazily and nothing else would before the first E-hyb start.
 
 Prints ``PGX_TRIPWIRE OK`` and exits 0, or names the first failed check and exits 9 (the runner's install code).
 """
@@ -39,6 +40,10 @@ SETS = {"warm_c1": ("d45648005719bb7ff6979e814f0c9cde5824e85d12b60f5d1cd0e107b83
 K_AT_8GB = {"S4": 67, "S8": 35, "V8": 35, "E-hyb": 62}
 EHYB_VRAM_GIB_8GB = 7.451
 GNF4_VERSION = "0.51.0"
+# serve_paged's web stack, which it imports LAZILY (fastapi in create_app, uvicorn in main): nothing else on the box
+# imports them before the first E-hyb server start, so a broken [serve] install would pass every other check
+FASTAPI_VERSION = "0.141.1"
+UVICORN_VERSION = "0.54.0"
 
 
 def _sha(path: str) -> str:
@@ -112,6 +117,14 @@ def check_box(e4b_sha: str, torch_want: str) -> None:
     assert torch.cuda.is_available(), "CUDA is not usable"
 
 
+def check_serve_stack() -> None:
+    """Import serve_paged's web stack by name and check the pins (the g3-gpu-check-1 lesson: a lazy import is untested)."""
+    import fastapi
+    import uvicorn
+    assert fastapi.__version__ == FASTAPI_VERSION, f"fastapi {fastapi.__version__} is not {FASTAPI_VERSION}"
+    assert uvicorn.__version__ == UVICORN_VERSION, f"uvicorn {uvicorn.__version__} is not {UVICORN_VERSION}"
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--kit", required=True)
@@ -121,6 +134,7 @@ def main(argv=None) -> int:
              ("K table", lambda: check_k(a.kit)), ("serve_paged config", lambda: check_serve_paged(a.kit))]
     if a.box:
         steps.append(("installed pins", lambda: check_box(*a.box)))
+        steps.append(("serve stack", check_serve_stack))
     for name, fn in steps:
         try:
             fn()

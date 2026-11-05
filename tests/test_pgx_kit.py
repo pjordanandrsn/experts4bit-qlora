@@ -114,6 +114,41 @@ def test_the_tripwire_on_this_commit():
     assert tw.main(["--kit", str(PGX)]) == 0
 
 
+def _web(version_f, version_u):
+    import types
+    f, u = types.ModuleType("fastapi"), types.ModuleType("uvicorn")
+    f.__version__, u.__version__ = version_f, version_u
+    return {"fastapi": f, "uvicorn": u}
+
+
+@pytest.mark.parametrize("mods, want", [
+    ({"fastapi": None}, "ModuleNotFoundError"),                  # a broken or skipped [serve] install
+    ({"uvicorn": None}, "ModuleNotFoundError"),
+    (_web("0.141.0", "0.54.0"), "fastapi 0.141.0 is not"),
+    (_web("0.141.1", "0.53.9"), "uvicorn 0.53.9 is not"),
+    (_web("0.141.1", "0.54.0"), None),
+])
+def test_the_box_tripwire_imports_the_serve_stack(monkeypatch, capsys, mods, want):
+    """serve_paged imports fastapi and uvicorn lazily, so the --box tripwire must import both by name at their pins; a
+    tripwire without those imports fails here (the maintainer's R1 on e4b#2172)."""
+    import pgx_tripwire as tw
+    monkeypatch.setattr(tw, "check_box", lambda *a: None)            # the CPU stand-in for the installed-pin step
+    for name, mod in mods.items():
+        monkeypatch.setitem(sys.modules, name, mod)
+    rc = tw.main(["--kit", str(PGX), "--box", "0" * 40, "2.8.0+cu128"])
+    out = capsys.readouterr().out
+    if want is None:
+        assert rc == 0 and "PGX_TRIPWIRE ok serve stack" in out, out
+    else:
+        assert rc == 9 and "PGX_TRIPWIRE FAIL serve stack" in out and want in out, out
+
+
+def test_the_runner_installs_the_serve_stack_the_tripwire_checks():
+    import pgx_tripwire as tw
+    assert f'"fastapi=={tw.FASTAPI_VERSION}" "uvicorn=={tw.UVICORN_VERSION}"' in RUN
+    assert '--box "$E4B_SHA" "$TORCH_WANT"' in RUN
+
+
 @pytest.mark.parametrize("script", ["pgx_shake.py", "pgx_box.py"])
 def test_the_box_self_tests(script):
     r = subprocess.run([sys.executable, str(PGX / script), "--self-test"], capture_output=True, text=True)
