@@ -1,0 +1,386 @@
+# PGX: Paging stage 1 — e4b's tiered serving against SGLang Paged Experts and the vLLM Expert Pager at matched expert-VRAM budgets, on one RTX 4090 (descriptive; registered before any run)
+
+Status: REGISTRATION DRAFT (not merged, so nothing is registered yet). Written 2026-11-05 (clock read 05:17Z;
+revision 1 at 05:33Z on the maintainer's review: E-hyb places from a measured routing profile, E-hyb-u is a control,
+and the attribution gains a placement branch; revision 2 at 05:47Z: E-hyb's expectation is the solver's own placement
+on the box's calib.json, and Q7 moves to 0.2; revision 3 at 05:49Z: the CPU is a recorded, scoped condition, and
+E-hyb's hit rate is reporting only; revision 4 at 15:00Z, in-tree: Z3 measured the checkpoints' bytes per expert, so
+S4's K is 33/67/101 (was 34/68/102 from an inferred ~2.45 MB) and its predictions are recomputed at that K; the FP8
+revision is pinned; the c1 and c4 warm passes carry separate prompt sets). The lane number is claimed at merge;
+`PGX` is the lane's working name, not a reservation. Under the 2026-11-04 paging-baselines ruling (B): E-hyb is e4b's
+stage-1 entry, and E-pipe is never a matched arm.
+
+**Not yet registrable:** the three scored prompt sets (below) and their `prompts_sha` are not built. Their source is an
+open item; they are committed, with their shas, by an amendment to this page before it merges. No sha is written here
+until it is computed from the committed sets.
+
+## The question
+
+At the same budget of expert-attributable VRAM on one RTX 4090, with the rest of the experts in pinned host RAM, how fast
+do three paged MoE servers decode and prefill Qwen3-30B-A3B? The three are SGLang's Paged Experts, the vLLM Expert Pager,
+and e4b's `serve_paged` at the solver placement (VRAM-hot experts on the GPU, the rest computed on the host CPU). Each is
+measured at concurrency 1 and 4, warm, with one cold and one content-shifted cell. Alongside speed, the run records how
+often each server's VRAM tier holds the experts a token routes to.
+
+It is **descriptive**. It reports per-cell numbers and ratios beside their draw spread. It licenses no default, and no
+claim beyond the registered cells.
+
+## The arms
+
+| arm | engine (pinned at registration) | checkpoint (pinned revision) | expert format, kernel | how the budget is set |
+|---|---|---|---|---|
+| **S4** | SGLang 0.5.23 (tag 7df5dd0, commit 297e54fd), Paged Experts | `Qwen/Qwen3-30B-A3B-GPTQ-Int4` @9b534e43 (P235's) | GPTQ int4, Marlin MoE | `--paged-experts-num-resident K` |
+| **S8** | SGLang 0.5.23, Paged Experts | `Qwen/Qwen3-30B-A3B-FP8` @d206ba73 (block-128 FP8, `weight_scale_inv`) | FP8, Triton fused_moe | `--paged-experts-num-resident K` |
+| **V8** | vLLM 0.29.0 + vllm-expert-pager e9264fda (0.1.1), own venv | the same FP8 snapshot (one copy on disk) | FP8, Triton FP8 MoE | `VLLM_EXPERT_PAGER_CACHE_SLOTS=K`, RAM tier = every expert (its default), no SSD file |
+| **E-hyb** | e4b + grouped-nf4-gemm at the pins in force at registration; `python -m experts4bit_qlora.serve_paged` | `Qwen/Qwen3-30B-A3B` bf16 @ad44e777, baked to an NF4 arena on the box | NF4, gnf4 kernels; DRAM experts on the host CPU | `E4B_PAGED_PLACEMENT=solver`, `E4B_PAGED_VRAM_GB` = the budget in GiB, `E4B_PAGED_DRAM_GB=16` (holds every non-VRAM expert, so the NVMe tier is empty), `E4B_PAGED_PROFILE` = the held-out fit profile (below; e4b#2169) |
+
+**The fit profile (E-hyb's routing mass, fixed before any run).** The solver places by a measured routing mass, not
+uniform-assumed mass: a uniform-placed static set against two adaptive LRU baselines would mostly measure a placement
+handicap (the maintainer's ruling on revision 0). The profile is `bench/pgx/fit_profile.jsonl`, an
+`engines/expert_profile` JSONL written at $0 by `pgx_fit_profile.py` from the #1469 decode traces (grouped-nf4-gemm
+`bench/cold-engine/routing-trace/qwen3_{code,dialogue,math,prose}.jsonl`, pinned by sha256):
+- the same model on e4b's own NF4 path (the census ran `load_moe_4bit_streaming` and the pipelined engine), so routing
+  carries E-hyb's numerics;
+- the four content kinds, 512 greedy decode steps each; `tokens_routed` = routed picks per (layer, expert) over all
+  steps; `layer_id` = the MoE ordinal, which for Qwen3-30B-A3B (every decoder layer MoE) is the trace's layer index and
+  the arena id;
+- held out: the four capture prompts and their continuations are excluded from every scored prompt set (the kit
+  sha-checks the scored sets against them);
+- its limits, stated: one prompt per kind, and a decode-only mass.
+- Its sha256 is `0a46edd68005b46db6bb2174542ec948df2843071efce2ecb36099fda04c626a`; the traces' sha256 prefixes are
+  code `64647ca1`, dialogue `1dc7aea0`, math `b432a869`, prose `1293f390` (in the profile's meta row).
+- The receipt records the profile's sha256, and `/health`'s `levers.placement_profile` must name it (kind `measured`)
+  on every E-hyb lifetime, or the pass is VOID.
+
+**Controls (reported, never matched):**
+- **E-hyb-u** (8 GB only): E-hyb without `E4B_PAGED_PROFILE` (uniform-assumed mass, `serve_paged` as shipped before
+  e4b#2169). E-hyb against E-hyb-u is what the measured profile buys.
+- **E-allvram-g** (e4b's ceiling): `serve_paged` at `E4B_PAGED_PLACEMENT=all-vram`, graphs `auto`. Every NF4 expert is in VRAM (about 16.3 GB), so it sits over every budget.
+- **E-allvram-e**: the same with `E4B_PAGED_GRAPHS=0`. The difference from E-allvram-g isolates what eager decode costs e4b, which E-hyb pays at every budget (graphs refuse at `solver`).
+- **E-pipe is not an arm** (ruling B). The pipelined engine keeps its packed base weights for its T>1 fallback, so its VRAM is near all-resident at any K. It needs a lean prefill before it can be matched.
+
+**Arms struck from stage 1:** the zero-residency `--cpu-offload-gb` controls and the static-hot e4b control go to a later stage. The A2000 is struck throughout (ruling 1).
+
+## The matched budget
+
+- **The budget is expert-attributable VRAM in decimal GB: 4, 8 and 12.** K follows per format as
+  `K = floor(budget / (48 × bytes_per_expert))`. The registered table is computed from the checkpoints' safetensors
+  headers (Z3, `bench/pgx/pgx_bytes.py`, committed as `bench/pgx/bytes_per_expert.json`) and, for NF4, P233's
+  placement record. The box measures each engine's loaded slot bytes before the first timed cell; where that gives a
+  different K, the measured K replaces the table's, recorded in the receipt.
+
+| budget | FP8 K (S8, V8) | int4 K (S4) | NF4 (E-hyb) |
+|---|---|---|---|
+| 4 GB | 17 | 33 | 31 experts' worth; `E4B_PAGED_VRAM_GB=3.725` |
+| 8 GB | 35 | 67 | 62; `7.451` |
+| 12 GB | 52 | 101 | 94; `11.176` |
+
+  Bytes per expert: FP8 4,719,744 (three 768×2048 E4M3 projections and their 128-block scales); GPTQ int4 g128
+  2,470,912 (qweight, qzeros, scales, g_idx), or 2,451,456 without the g_idx, which is trivial at `desc_act: false`
+  (both give the same K at every budget); NF4 2,654,208 (P233). Every checkpoint has 48 × 128 experts of one size.
+- **The solver reads GiB** (`vram_gb * 2**30`), so E-hyb's knob is the decimal budget converted. The solver may place
+  fewer than the budget's bytes; the placement proof (below) records what it placed, and an E-hyb cell whose VRAM-tier
+  expert bytes exceed the decimal budget is VOID.
+- **Each arm's non-slot VRAM is reported, not charged against the budget.** That covers the pager's all-E scales and
+  its W-row working slab, SGLang's buffers, and e4b's non-expert weights. Peak VRAM total and the KV blocks available
+  are reported per cell. The budget matches expert capacity, not total memory.
+- **SGLang's graph limit is a measured output.** SGLang captures decode only up to `K // top_k` sequences: 2 at FP8
+  K=17, so S8's c4 cell at 4 GB decodes eagerly. When `topk_ids.numel() > K` (S8 c4 at 4 GB: 32 > 17), it plans on the
+  host in waves. Graph coverage, the share of decode steps replayed, is recorded per cell for every arm.
+
+## Workload
+
+- **Prompts:** fixed token ids, identical in every engine, under P235's `prompts_sha` contract (each engine's driver
+  sends token-id lists; the receipt carries the sha of the list per pass). Prompt length 1,024 tokens (p1024),
+  tokenized once with the Qwen3-30B-A3B tokenizer (byte-identical `tokenizer.json`, sha256 `aeb13307…`, in all three
+  checkpoints). Content kinds as locality-1469: code, dialogue, math, prose. Three sets, each disjoint from the
+  four #1469 capture prompts and from the other two:
+  - **warm_c1** (P1, P2): 8 requests, 4 code and 4 dialogue;
+  - **warm_c4** (P3): 16 requests, 8 code and 8 dialogue;
+  - **shift** (P4): 8 requests, 4 math and 4 prose.
+- **Output:** 256 tokens per request, greedy, `ignore_eos` and `min_tokens = max_tokens` (P235/SC2), temperature 0.
+- **Concurrency:** closed loop at c = 1 (8 requests per pass) and c = 4 (16 requests per pass, 4 waves).
+- **One server lifetime per (arm, budget, draw)**, passes in this order:
+  Controls run one lifetime per draw: E-hyb-u at 8 GB (all four passes), E-allvram-g and E-allvram-e (P1-P3).
+  1. **P1 (cold)**: c1 over the warm set on a fresh server. Recorded; READ as the arm's cold cell at 8 GB only.
+  2. **P2 (warm, c1)**: the same requests again.
+  3. **P3 (warm, c4)**: the warm set at c4.
+  4. **P4 (shifted, at 8 GB only)**: c1 over the shift set, on the cache P1-P3 warmed.
+- **Draws:** 3 fresh-process lifetimes per (arm, budget). Arm order within a draw is rotated (draw d starts at arm d
+  of S4, S8, V8, E-hyb), so no arm always runs first on a cold host page cache. Budgets ascend within an arm.
+
+## Measures per pass
+
+- **Speed:** output tok/s, TTFT p50/p99, ITL p50/p99, all from the driver's own clocks (SSE token arrival), the same
+  driver for every engine.
+- **Residency:**
+  - S4/S8: VRAM hit rate and page-ins per token, computed exactly from the per-layer per-step `topk_ids` dumped by the
+    counter shim, replayed through SGLang's own `LRUPolicy` and `plan_waves` (PE/residency.py at 297e54fd). On the
+    shakedown, check the hit rate against a hook counting the device path's `count` writes.
+  - V8: the pager's device hit/miss counters per tier, dumped at the end of each pass (they log only on eager calls).
+    Bytes = misses × row bytes.
+  - E-hyb: the VRAM-tier hit rate and the DRAM-tier rows computed on the CPU per token, from `E4B_PAGED_STEP_TRACE`
+    and the tier counters. **E-hyb pages nothing in**: a DRAM expert is computed in place.
+- **Graph coverage** per pass; **peak VRAM** and **KV blocks**; **host CPU utilization** (1 s samples); routed-expert
+  agreement against S8's routing on the same prompts (routing differs across formats, so a hit-rate gap can partly be
+  routing).
+- **Provenance:** versions, revisions, `prompts_sha`, the measured bytes per expert and K, the card (name, cc, SMs,
+  power limit, clocks from a 20 s `card_clock` burn, recorded and not ruled), CPU model and cores, min(MemTotal,
+  cgroup) RAM.
+
+## Validity and the rule (`bench/pgx/pgx_reduce.py`, self-tested before data)
+
+**VOID a pass** when any of these holds (each check fails closed; a missing record is a fault):
+- a version, revision, card class or `prompts_sha` mismatch;
+- an arm's K, or E-hyb's placed VRAM-tier bytes, differ from the registered table as the box measured it;
+- fewer than the registered requests completed, or any request returned an error or a short output;
+- a missing counter dump (S: no topk dump; V8: no counter dump; E-hyb: no step trace or placement proof);
+- V8: any pager give-up during the pass (gather.py:44-47, "one token's output … wrong");
+- E-hyb: the placement proof (per-layer tier byte and expert counts read after the build) is missing, or any NVMe-tier
+  expert is non-zero;
+- E-hyb: `/health`'s `levers.placement_profile` is not kind `measured` with the fit profile's sha256 (E-hyb-u: not
+  kind `uniform-assumed`).
+
+**Token invariance (reported per arm; it rules only where stated):**
+- P2 against P1 within one lifetime: same prompts, different cache state, so the greedy tokens must be identical for
+  S8, V8 and E-hyb. A difference VOIDs that lifetime's passes and is reported as a paging finding.
+- Across budgets within an arm: S8 and V8 should be token-identical (Triton). A difference is reported as a finding.
+  E-hyb across budgets is NOT expected to be bitwise (the DRAM tier's host arithmetic differs; P233 saw 7/10 prompts
+  match), so it is reported, never ruled.
+- S4 (Marlin) is reported, never ruled: `use_atomic_add = (fp16 or cc >= 9) and not mxfp4`, and the GPTQ checkpoint
+  runs in fp16, so atomics are likely on at cc 8.9 (the box records which). Token-order nondeterminism (#48150) also
+  applies.
+
+**Stability:** a cell's three draws must have max/min ≤ **1.03** on its median ITL and on its output tok/s (P235's
+self-pair rule, applied to the three). Otherwise the cell reads UNSTABLE, is reported, and stays out of every headline
+ratio.
+
+**The box's verdict:** READ when every registered pass READs or is UNSTABLE. A VOID pass is reported with its faults and
+never dropped to rescue the rest.
+
+## Readings
+
+- **The headline:** per budget and concurrency (warm), E-hyb's output tok/s and median ITL against each of S4, S8 and
+  V8, and the best of the three, with TTFT p99, peak VRAM and host CPU beside them. Every E-hyb row also carries the
+  placement preview's VRAM share for that budget, from the box's calib.json. Losses and wins are reported together.
+  ITL and tok/s are the decisive measures for every arm.
+- **Same-format check:** S8 against V8 (FP8 against FP8). It is the instrument sanity row and needs no e4b.
+- **Residency:** each arm's hit rate per cell against the predictions below, and S8/V8 against each other (both are
+  LRU at the same K). **For E-hyb (and E-hyb-u) the hit rate is REPORTING only, never a comparator:** the solver trades
+  VRAM hits for CPU-tier compute by design, so a lower hit rate is not a worse placement.
+- **Cold and shifted:** per arm at 8 GB, P1 and P4 against P2.
+- **Attribution of an E-hyb loss** (from the step trace and the controls, stated now):
+  - **The capture-legal hybrid tier** is named when E-hyb's ITL gap is mostly the eager tax. That tax is read as
+    E-allvram-e minus E-allvram-g, and the rule is that it is ≥ 50 % of E-hyb's ITL gap to the best baseline at that
+    cell.
+  - **The lean-prefill / GPU-paging path** is named when the gap is mostly DRAM-tier host compute, read from the step
+    trace's host-tier time, by the same ≥ 50 % rule.
+  - **Placement quality** is named when E-hyb-u's ITL minus E-hyb's at 8 GB is ≥ 50 % of E-hyb-u's gap to the best
+    baseline: the measured profile closed most of what uniform placement lost, so the remaining placement lever is a
+    better profile (broader, or fitted per workload), not an engine build.
+  - Otherwise the branches that pass are named, each with its share stated.
+  - This is the "a loss names the engine work" consequence. It names work; it does not size it.
+
+## Predictions (written before any stage-1 data; expectations, not sizing)
+
+Decode hit rates from the per-layer replay (e4b `bench/train-routing-trace/replay.py --per-layer-k` at beaa5018) on
+the #1469 Qwen3-30B-A3B decode traces. Those are B=1 decode on the traces' own prompts, scored on steps 128-511. They
+predict the c1 warm cells only. This run's prompts differ, so a band of ±0.05 is the expectation, not a bar.
+
+| arm (policy) | budget | K | code | dialogue | math | prose |
+|---|---|---|---|---|---|---|
+| S8 (lru_seeded) / V8 (lru) | 4 GB | 17 | 0.578 | 0.503 | 0.587 | 0.630 |
+| | 8 GB | 35 | 0.769 | 0.747 | 0.814 | 0.846 |
+| | 12 GB | 52 | 0.878 | 0.929 | 0.930 | 0.945 |
+| S4 (lru_seeded) | 4 GB | 33 | 0.752 | 0.718 | 0.793 | 0.828 |
+| | 8 GB | 67 | 0.933 | 0.983 | 0.977 | 0.986 |
+| | 12 GB | 101 | 0.988 | 0.997 | 0.998 | 0.998 |
+
+**E-hyb is a static placement, so neither LRU nor lfu_protect predicts it.** Its VRAM hit rate is the coverage of
+the experts the solver places from the fit profile; E-hyb-u's, of those it places under uniform-assumed mass. Two
+proxies, computed on the same traces (scored on steps 128-511):
+
+| E-hyb | 4 GB (K≈31) | 8 GB (K≈62) | 12 GB (K≈94) |
+|---|---|---|---|
+| index-ordered static set (experts 0..K-1 per layer) | 0.23-0.26 | 0.48-0.50 | 0.74-0.75 |
+| a fit-window profile set (top-K over steps < 128) | 0.58-0.77 | 0.84-0.94 | 0.96-0.98 |
+
+**These proxies are NOT E-hyb's expectation (revision 2).** The solver balances GPU against CPU completion time, so it
+keeps hot experts on the DRAM tier when the host CPU is fast. Run at $0 on the fit profile (`pgx_place_preview.py`,
+the solver exactly as `build_engine` calls it), the VRAM tier's share of the profile's routed mass depends on the
+calibration blob's CPU scatter bandwidth:
+
+| CPU scatter (GB/s) | E-hyb 4 / 8 / 12 GB | E-hyb-u 8 GB |
+|---|---|---|
+| 496.5 (the sc1 5090 host's measured blob, a 96-core EPYC) | 0.523 / 0.709 / 0.760 | 0.493 |
+| 100 | 0.576 / 0.813 / 0.921 | 0.493 |
+| 60 | 0.582 / 0.825 / 0.939 | 0.493 |
+| top-by-mass ceiling (any host) | 0.591 / 0.843 / 0.967 | |
+
+**E-hyb's registered expectation is therefore a method, not a number:** after the shakedown's `calibrate.py` writes the
+box's `calib.json`, `pgx_place_preview.py` runs on it and its shares are E-hyb's and E-hyb-u's expected VRAM hit
+rates, posted (and receipted) before the reading launches. They are on the profile's own prompts, so on this run's
+held-out prompts E-hyb should sit at or below them. A fast-class desktop CPU (dual-channel memory) is expected near
+the 60-100 GB/s rows.
+
+**lfu_protect (ColdTier) is not engaged in stage 1:** RAM holds every expert, so E-hyb's NVMe tier is empty. Its
+replay predictions belong to the SSD sub-grid. They carry the ascending-order caveat (the traces store routed sets
+sorted, so its page-ins above misses depend on that order) and, since grouped-nf4-gemm#590, page-ins = misses.
+
+| # | prediction |
+|---|---|
+| Q1 | at every budget, S4's hit rate > S8's ≈ V8's (int4's K is about twice FP8's) |
+| Q2 | S8 and V8 hit rates agree within 0.01 at every cell (both are LRU at the same K; only tie-breaks differ) |
+| Q3 | E-hyb's c1 warm ITL is longer than S4's at 4 GB and 8 GB (at the index proxy, about 75 % and 50 % of its routed experts are computed on the host CPU) |
+| Q4 | E-hyb's eager tax (E-allvram-e minus E-allvram-g) is a visible share of its ITL at 12 GB (P66: 8.05 against 1.184 ms/token fixed tax) |
+| Q5 | S8's c4 cell at 4 GB runs eager and on the host wave path, and its ITL lead over V8 at that cell shrinks or reverses |
+| Q6 | P2 against P1 is token-identical for S8, V8 and E-hyb on every lifetime |
+| Q7 | E-hyb's VRAM hit rate at 8 GB is at least 0.2 above E-hyb-u's, and its c1 warm ITL is shorter (the $0 preview gives +0.22 to +0.33 over the CPU range above) |
+
+Cross-engine speed order at each cell is NOT predicted, only reported.
+
+## Consequence, registered now
+
+- **READ:** `RESULTS-pgx.md`, and a row in `docs/REPRODUCE.md`: "e4b serve_paged (solver placement) against SGLang
+  Paged Experts and the vLLM Expert Pager at matched expert-VRAM budgets, Qwen3-30B-A3B, one RTX 4090". Wins and losses
+  appear together, with the attribution above.
+- **Next, from the attribution:** stage 2 (the remaining arms, the SSD sub-grid, quality against bf16) or one of the two
+  named engine builds. That choice is a new decision; this page registers none.
+- No default moves.
+
+**Scope:** one model, one card class, decode at p1024 and c ≤ 4, host RAM holding every expert. E-hyb's placement and
+speed depend on the host CPU (its scatter bandwidth sets how much hot mass the solver keeps on the CPU tier). This
+reading is for the recorded CPU, and nothing is claimed for another CPU class. Nothing about
+prefill-heavy load, larger batches, SSD tiers, other models or other cards. Nothing about quality against bf16 (P233
+covers E-hyb's: NLL +0.0021 against all-VRAM).
+
+## The $0 path first (no A2000, nothing rented)
+
+- **Z1, driver and reducer on CPU.** A stub OpenAI-compatible SSE server per engine flavour drives every registered
+  pass. The reducer's self-test covers each VOID rule, the stability rule, the token-invariance rules and the
+  attribution rule on fixture records, including a fixture written from a REAL shakedown record once one exists (the
+  "gates tested only on handwritten fixtures" lesson).
+- **Z2, counter shims on CPU.**
+  - The SGLang `topk_ids` dump replayed through PE/residency.py's `LRUPolicy` + `plan_waves`, with msgspec stubbed as
+    in the per-layer differential, on a synthetic routing sequence with a hand-computed answer, including the wave
+    case.
+  - The pager's end-of-run counter dump against `table.ExpertTable` on CPU torch.
+- **Z3, byte accounting from the safetensors headers** of the three checkpoints (header-only range reads; done:
+  `pgx_bytes.py`, `bytes_per_expert.json`, `tests/test_pgx_bytes.py`). It gives the registered K table above.
+- **Z4, E-hyb config checks on CPU:** `PagedServeConfig.from_env` at each budget (the graphs/solver refusals, the
+  hot-rows floor = 0 with the NVMe tier empty), and the solver run on a stub calibration to check the placement
+  proof's fields.
+- **Z4b, the placement preview:** `pgx_place_preview.py` and its test (every registered placement within its decimal
+  budget with the NVMe tier empty; profile > uniform <= the top-by-mass ceiling; the CPU-speed dependence).
+- **Z6, the fit profile:** `pgx_fit_profile.py` writes `fit_profile.jsonl` from the pinned traces, and its test
+  checks the row format against `placement.load_routing_mass` and `serve_paged.placement_profile` (48 x 128, positive
+  mass in every layer), so the profile E-hyb reads is the one registered.
+- **Z5, the kit test** (`tests/test_pgx_prereg.py`): this page's K table, budgets, arms, controls, passes, stability
+  rule and checkpoint pins against the kit's constants, and the fit profile's sha against the one named here, so the
+  page and the kit cannot drift apart.
+
+## Run ids, order and the stop
+
+- **The shakedown first: `pgx-shake-1`** (retry ids `pgx-shake-r1` to `-r3`). Never read.
+  - It covers: the three venvs and e4b install; the fetch; the NF4 bake; grouped-nf4-gemm `bench/calibrate.py` writing
+    E-hyb's `calib.json` on this host (E-hyb's solver refuses to guess bandwidths, and a host-specific blob is
+    required); the measured bytes per expert and K table; the card-clock burn.
+  - Then one lifetime per arm at 8 GB with P1 and P2 at c1; each counter shim on a real record; peak host RSS per arm.
+  - It measures the per-lifetime wall per arm, from which the reading's guard is fit.
+  - If any arm cannot serve at its budget: STOP and report. That is a finding about the engine, not a retry.
+- **Then the reading: `pgx-4090-1`** (retry ids `pgx-4090-r1` to `-r3` for a box that does not start).
+  - **The split rule (P238's form):** the reading runs in the fewest K of 1, 2 or 3 boxes whose largest box fits the
+    box cap (worst ≤ USD 15, guard ≤ 18 h under the per-run override, or ≤ 6 h without it).
+  - **Boxes are whole draws, never split by arm**, so every cross-arm ratio is within one box.
+  - **Every box is pinned to box 1's machine.** If it cannot be rented within 24 h, the reading is labelled
+    `cross_host`, its stability band is reported as a cross-host band, and its ratios stay within one box.
+  - The plan is decided from the shakedown's receipt and stated before the reading launches.
+- Two strikes end the lane. Host refusals, before `STARTED`, are not strikes.
+
+## Budget (INFERRED estimates, all to be refit from the shakedown)
+
+**The card and host floors:**
+- **Card:** one RTX 4090 on Vast, verified/secure, direct SSH, cc 8.9, ≥ 128 SMs, VRAM ≥ 24,000 MiB.
+- **CPU:** a fast-class CPU (`p237_host.vast_cpu_class`), and no narrower bound: a desktop-only or server-only floor on
+  top of the others risks an empty market (P237). E-hyb's DRAM tier computes on the host CPU, so its numbers depend on
+  the CPU. The CPU is a recorded, scoped condition: the box's `calibrate.py` blob (scatter GB/s, cores, model) and the
+  placement preview's shares are receipted before the reading, every arm of a draw shares the CPU, and the K=2 split
+  pins both reading boxes to box 1's machine.
+- **Host RAM:** listed ≥ 62 GiB and measured min(MemTotal, cgroup) ≥ 60 GiB.
+  - Per arm, the need is: S8/V8 pin about 31 GB of FP8 experts; S4 about 17 GB; E-hyb streams the bf16 load plus a
+    DRAM tier of up to about 15 GiB (P233's floor for the same load was 60 GiB).
+  - Arms run one at a time, so the floor is the largest single arm, measured at the shakedown, and a pre-reading
+    amendment moves it if the measurement says so.
+  - P237's census found the 4090 fast class almost entirely at 30-62 GiB listed; a 128 GiB floor would empty it.
+- **Disk:** ≥ 250 GB, for the three checkpoints (about 61 + 17 + 31 GB), the NF4 arena (16.3 GB) and three venvs.
+- **Rate cap:** ≤ USD 0.85/h. P237 saw 4090 offers at USD 0.61-0.80; price was never the binding floor.
+- **Downloads:** ≤ USD 0.02/GB, about 120 GB per box.
+- **No power floor:** every ratio is within one box. The power limit and clocks are recorded.
+
+**The fit (per box; × 1.25 for the guard):**
+- **Setup:** installs 1,800 s; fetch 2,750 s (110 GB at 40 MB/s); bake 500 s; calibrate 300 s. Total 5,350 s.
+- **Lifetimes, estimated:**
+  - Baseline lifetimes about 700 s each: load plus P1-P3, with P4 at 8 GB.
+  - E-hyb about 1,300 s (eager, with the CPU tier); E-hyb-u the same.
+  - The two all-VRAM controls about 600 s each.
+  - **One draw** = 9 × 700 + 3 × 1,300 + 1,300 (E-hyb-u) + 2 × 600 + 4 × 300 (P4) = 13,900 s.
+- **Reserve:** 600 s.
+
+| plan | box guard | box worst (guard × 0.85 + 120 GB × 0.02) |
+|---|---|---|
+| shakedown: setup + 4 lifetimes × 900 s + reserve | (5,350 + 3,600 + 600) × 1.25 = 11,940 s = 3.3 h | **USD 5.22** |
+| reading K = 1 (3 draws, one box) | (5,350 + 41,700 + 600) × 1.25 = 59,562 s = 16.5 h | USD 16.46, over the USD 15 box cap |
+| reading K = 2 (draws {1,2} and {3}) | 11.7 h and 6.9 h (both under the per-run override) | **USD 12.36 + USD 8.26 = USD 20.62** |
+| reading K = 3 (one draw a box) | 6.9 h each (over the 6 h global cap: the per-run override) | USD 8.26 each, **USD 24.78** |
+
+**At the estimate, the plan is K = 2.**
+- **Lane worst:** shakedown + reading + 3 retries at about USD 0.25 each = 5.22 + 20.62 + 0.75 = **USD 26.59**
+  (USD 30.75 if the shakedown's fit forces K = 3).
+- That is under the USD 35 per-run cap, and each box is under USD 15. Expected spend is about half the worst.
+- The daily rail (USD 100) is shared with the other lanes' boxes.
+
+## Launch
+
+- One exact launch commit per box (this registration's merge or a later amendment's), through pod-launch with
+  `--validate` passing, the host pinned, rent-watch armed; then the maintainer's Approved naming that commit and the
+  kit's hash. The kit's approval reader fails closed.
+- The shakedown launches after Z1-Z6 are green, e4b#2169 and the registration have merged, and the pins name a
+  release (or commit) that carries `E4B_PAGED_PROFILE`.
+
+## What was seen before this page (stated, not hidden)
+
+- No number from any arm on this card, model and workload.
+- The per-layer replay predictions (above) and the static-coverage proxies, computed on the #1469 traces on CPU.
+- From source only: SGLang PE's residency, wave and capture rules at 297e54fd; the pager's tiers, counters and give-up
+  path at e9264fda; `serve_paged`'s solver path, its graph refusals and its hot-rows floor at e4b main.
+- grouped-nf4-gemm#590 (ColdTier two-pass): page-ins = misses on the same traces. Not exercised here.
+
+## What this lane cannot say
+
+- Anything about quality against bf16, SSD tiers, concurrency above 4, prompt lengths other than 1,024, prefill-heavy
+  load, other models or other cards.
+- Anything about E-pipe or a lean prefill: they are not built.
+- Why an engine is slower, beyond the registered attribution rule.
+- Anything about a power-capped card's absolute speed: power is recorded, not ruled.
+
+## Receipts
+
+Per box, fetched and committed to `bench/pgx/receipts/<run>/`: every pass's driver record, the counter dumps, the step
+traces, the placement proofs, `calib.json`, the bytes-per-expert and K table, `versions.txt`, `logs/` and `SHA256SUMS`.
+The machine and instance ids stay in the private receipt store only.
+
+## Open items for the reviewer
+
+1. **The workload is two concurrencies and one prompt length (stage-1 scope as directed).** The design's c16 and
+   p4096 cells are left for stage 2.
+2. **RESOLVED (revision 4):** the FP8 checkpoint is `Qwen/Qwen3-30B-A3B-FP8` @d206ba73, and S8 and V8 share one
+   snapshot on disk.
+3. **The RAM floor at 62 GiB listed is INFERRED;** the shakedown measures it. If E-hyb's bf16 streaming load needs more,
+   a fast-class 4090 at that floor may not exist (P237), and the fallback is a DRAM tier sized to fit, stated before the
+   reading.
+4. **The scored prompt sets' source.** The three sets need 1,024-token texts of each kind that no capture prompt
+   shares. Their source, and the sets with their shas, come by amendment before this page merges.
+5. **RESOLVED (revision 1):** E-hyb places from the held-out fit profile (e4b#2169); uniform placement is the E-hyb-u
+   control. Open within it: the fit is one prompt per kind and decode-only. A broader fit (more prompts per kind, or
+   prefill mass too) needs routing captured on a GPU, so it is not $0; the shakedown could capture it at no extra box
+   if the reviewer prefers that to the traces.
