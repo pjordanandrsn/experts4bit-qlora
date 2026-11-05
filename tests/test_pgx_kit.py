@@ -80,7 +80,9 @@ def test_the_guard_fit_is_amendment_1s():
     v = {k: int(x) for k, x in re.findall(r"\b(INSTALL_S|FETCH_S|BAKE_S|CALIB_S|LIFETIME_S|INSTR_S|RESERVE)=(\d+)", RUN)}
     fit = v["INSTALL_S"] + v["FETCH_S"] + v["BAKE_S"] + v["CALIB_S"] + 4 * v["LIFETIME_S"] + 2 * v["INSTR_S"] + v["RESERVE"]
     assert (fit, fit * 125 // 100) == (10_450, 13_062)
-    assert "FIT=$((INSTALL_S + FETCH_S + BAKE_S + CALIB_S + 4 * LIFETIME_S + 2 * INSTR_S + RESERVE))" in RUN
+    assert "INSTALL_TO_GATE_S=$((INSTALL_S + FETCH_S + BAKE_S + CALIB_S))" in RUN
+    assert "NEED_LIFETIMES=$((4 * LIFETIME_S + 2 * INSTR_S))" in RUN
+    assert "FIT=$((INSTALL_TO_GATE_S + NEED_LIFETIMES + RESERVE))" in RUN
 
 
 @pytest.mark.skipif(shutil.which("git") is None or shutil.which("shasum") is None, reason="needs git and shasum")

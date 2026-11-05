@@ -158,7 +158,10 @@ case "$DL" in status=2[0-9][0-9]\ *) ;; *) DL_MB_S=0;; esac
 [ "${DL_MB_S:-0}" -ge "$MIN_DL_MB_S" ] 2>/dev/null || { say "REFUSED: download ${DL:-none} -- below ${MIN_DL_MB_S} MB/s"; echo "refused: download ${DL:-none}" > REFUSAL; finish 19; }
 # ---- the pre-install fit check (bench/common/README.md, "Guard fit"): Amendment 1's shakedown fit
 FIT_HEADROOM_PCT=125
-FIT=$((INSTALL_S + FETCH_S + BAKE_S + CALIB_S + 4 * LIFETIME_S + 2 * INSTR_S + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((PGX_DEADLINE_EPOCH - $(date +%s)))
+INSTALL_TO_GATE_S=$((INSTALL_S + FETCH_S + BAKE_S + CALIB_S))   # the setup still ahead of the first lifetime: 5,350 s
+NEED_LIFETIMES=$((4 * LIFETIME_S + 2 * INSTR_S))                # four timed lifetimes and two instrument lifetimes: 4,500 s
+FIT=$((INSTALL_TO_GATE_S + NEED_LIFETIMES + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((PGX_DEADLINE_EPOCH - $(date +%s)))
+# rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
 [ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
 echo "GUARD_FIT fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s" | tee -a summary.txt
 # ---- the start: every pre-install check has passed; from here the box counts toward the box-started cap
