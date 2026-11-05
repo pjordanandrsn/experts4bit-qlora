@@ -1317,3 +1317,8 @@ def test_amendment_4_the_held_out_count_fits_the_packed_pool():
     page = (ROOT / "bench" / "p238" / "PREREG-p238.md").read_text(encoding="utf-8")
     assert "held-out loss after step 60 (`--eval-n 36`, amendment 4; it was 48)" in page
     assert "## Amendment 4 (2026-11-05): the held-out count fits the packed pool" in page
+    am4 = page[page.index("## Amendment 4 (2026-11-05)"):]
+    # the page names what it narrows and what r4 counts toward (review round 1), and the PREPARE record is a launch gate
+    assert "narrows amendment 2's retry" in am4 and "Every other retry still needs rc 18 before" in am4
+    assert "r4 counts as one STARTED box" in am4 and "`p238-shake-r5` is the lane's last STARTED box" in am4
+    assert "The launch kit REFUSES any create without a PREPARE record" in am4

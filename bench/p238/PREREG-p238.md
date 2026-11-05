@@ -640,8 +640,9 @@ reliability). No rule changes.
 
 ## Amendment 4 (2026-11-05): the held-out count fits the packed pool
 
-This changes `--eval-n` (the loss line under "The step points", and `p238_run.sh`) and how the stop rule reads one box.
-Nothing else changes: the arms, points, schedule, bars, readings, predictions, budget, the host rule and the retry ids stand.
+This changes `--eval-n` (the loss line under "The step points", and `p238_run.sh`). It also narrows amendment 2's retry
+condition for ONE record, below. Nothing else changes: the arms, points, schedule, bars, readings, predictions, budget,
+the host rule, the retry ids (r3 to r5), the two-strike rule and amendment 3's two-STARTED-box bound all stand.
 
 **The defect, from the receipt.** `p238-shake-r4` was the first P238 box past the card floor: an RTX 5090 at 3,105 MHz
 whose card burn, CUDA probe, single-thread loop (17.08 Mops) and tripwire all passed. It ended rc 9 at PREPARE, before
@@ -659,15 +660,22 @@ Every host would fail the same way. The $0 path stubbed PREPARE, although PREPAR
 - TC1's pool size does not move: other lanes' registrations read it.
 - The held-out bars (0.01 within a framework, 0.05 across frameworks) compare arms on the same rows, so they are
   unchanged. Each arm's held-out mean is now over 36 rows instead of 48.
-- Before the next box, PREPARE runs at $0 on a CPU with the pinned tokenizer and data, and it must pack at least 36
-  held-out rows.
+- **A launch gate, not a habit:** before the next box, PREPARE runs at $0 on a CPU with the pinned tokenizer and data.
+  The launch kit REFUSES any create without a PREPARE record from the launch commit that packs at least 36 held-out rows
+  and at least 240 train rows.
 
-**The box that STARTED.** `p238-shake-r4` wrote STARTED, so the stop rule would read it. It is not a reading: it ended
-at PREPARE before any load, so no P238 number exists.
-- It is recorded as a harness failure on the defect this amendment fixes, and it consumes its id.
-- The lane resumes at `p238-shake-r5`, launched only from a kit cut at this amendment's merge, with a fresh approval.
-- The launch kit's stop check admits r5 after r4 only for this record: a STARTED box whose receipt ends at PREPARE with
-  no load log. Any other STARTED box is read as before, and a second PREPARE failure stops the lane.
+**The box that STARTED, and the retry condition.** `p238-shake-r4` wrote STARTED and ended rc 9 at PREPARE, before any
+load, so no P238 number exists. It is not a reading. It is recorded as a harness failure on the defect this amendment
+fixes, and it consumes its id.
+- **What it counts toward.** r4 counts as one STARTED box under amendment 3's bound (at most two) and as one strike under
+  "Two strikes end the lane". So `p238-shake-r5` is the lane's last STARTED box, its last strike and its last retry id.
+  Any failure on r5 stops the lane until the maintainer rules, and that includes an rc 18 host refusal.
+- **Amendment 2's retry condition, narrowed for this one record.** Amendment 2 launches a retry only after the previous
+  shakedown box ended rc 18 before STARTED. Under that rule r5 would not launch after r4. This amendment admits r5 after
+  r4 because r4's rc 9 at PREPARE, after STARTED, is the defect fixed here. Every other retry still needs rc 18 before
+  STARTED.
+- **How r5 launches.** Only from a kit cut at this amendment's merge, with a fresh approval. That kit's stop check admits
+  r5 after r4 only for this record: a STARTED box whose receipt ends at PREPARE with no load log.
 
 **Cost.** `p238-shake-r4` cost USD 0.80, compute and download to PREPARE. It does not count toward amendment 2's
 refused-spend cap, which covers boxes refused before STARTED; it is recorded beside it. The box worst stays USD 8.20.
