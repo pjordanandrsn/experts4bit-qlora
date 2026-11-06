@@ -767,3 +767,85 @@ identity is reported per lifetime, and it never VOIDs a pass or moves a cell. No
 - the reading: two boxes, USD 14.85 + 9.31 = **USD 24.16**, each under USD 15;
 - the lane: spent USD 2.36 (pgx-shake-1 0.96 + pgx-shake-r1 1.40) + the reading 24.16 + three non-starting retries at about
   USD 0.25 = **USD 27.27**, under the USD 35 per-run cap. At the K = 3 fallback it would be 2.36 + 27.93 + 0.75 = USD 31.04.
+
+## Amendment 4 (2026-11-06): how a reading box ends
+
+Written 2026-11-06 (clock read 09:58Z), after Amendment 3's merge and before any reading box. It fixes a defect in how the
+registered stop and Amendment 3 combine. It is not chosen from any reading's data: there is none yet.
+
+**The defect.** Amendment 2 says "the next box that STARTS and does not finish 0 is strike two and ends the lane".
+Amendment 3 says a reading box "finishes 0 with `PART_OK`, else 27". Together, one VOID cell anywhere in box 1's 14.64 h
+(one request fault, or one ruled token-identity miss) gives 27. That is strike two (`pgx-shake-1` is strike one), so the
+lane ends and box 2 never runs. Draw 3 is then missing, the three-draw stability rule cannot read, and box 1's spend is
+wasted. Strikes exist to stop boxes that fail to run, not boxes that ran and recorded VOID cells.
+
+**1. A reading box ends in one of three classes** (`bench/pgx/pgx_box_end.py`, run by the controller on the fetched run
+directory):
+- **(a) `PART_OK`:** rc 0 with a part record that verifies and reads `PART_OK`. Not a strike.
+- **(b) `PART_FAULTS`:** rc 27 with a complete, verifiable part record that reads `PART_FAULTS`. **It is not a strike.**
+  Its faulted cells are VOID under the registered rules, unchanged, and the next box proceeds. A class (b) box is not
+  retried: retry ids are for boxes that do not start, as registered.
+- **(c) anything else after `STARTED`:** no part record, an incomplete or unverifiable one, a crash, or any other code.
+  **That is a strike, as registered.**
+
+**What "verifies" means.** The controller reruns the box's own part reduction (`pgx_reduce.py`, part mode) on the fetched
+`read/` directory, with the box's own `registration.json`, for the draws the box's run id names. The result must equal
+the box's `part_verdict.json` field for field. So the record covers every scheduled lifetime of those draws, skipped ones
+included (a skipped lifetime reduces as missing), and it belongs to the directory it came with. Also required:
+- the box ran the registered schedule (`box_schedule.txt` equals `pgx_schedule.py --box K-i`);
+- the exit code is the one in the box's file for its own nonce, and it agrees with the code the launcher read. The
+  nonce comes from the box, so it must be the driver's 16-hex form before it is used in a path; anything else is
+  class (c);
+- rc 0 carries the nonce's success marker.
+
+A 27 without such a record is class (c). A 27 can also come from a reduction that crashed: `pgx_read.sh` maps any
+non-zero reducer exit to 27. An rc 0 without a verified `PART_OK` record is also class (c). The box side cannot produce
+one, so it fails closed.
+
+**Only a missing `STARTED` reads as never started.** Not started is the permissive outcome, so any other error reading
+`STARTED` (a permission error, say) is not absence. The classifier raises, and the kit stops for a person.
+
+**Strikes count lane-wide.** `pgx-shake-1` is strike one (Amendment 2, rule 6). `pgx-shake-r1` finished 0. So any class
+(c) reading box is strike two and ends the lane. Host refusals before `STARTED` stay non-strikes, as registered.
+
+**2. The shakedown's "STOP and report", carried into the reading.** Box 1's part record can show an arm that served NO
+lifetime at some budget. That means each of the arm's scheduled lifetimes at that budget either recorded a startup
+failure or completed no request in any pass. If so, the lane **stops for a person before box 2**. That is a finding about
+the engine, not a retry. A lifetime skipped for time is not a serve failure. The classifier lists these as `no_serve`
+and exits 11.
+
+**3. This changes no reading rule.** VOID, READ, the stability rule and the attribution are unchanged. It changes only
+whether the next box may launch. It is made before any reading box.
+
+**4. Its tests, at $0** (`tests/test_pgx_box_end.py`):
+- class (b) on the shakedown's real lifetimes (r1, committed), reduced in part mode as box 2-1 would reduce them;
+- class (a) on a whole-draw fixture built from r1's real records, under the plain and the retry ids;
+- class (c): 17 record mutants (a missing, truncated or edited record, a lifetime removed after the reduction, a wrong
+  schedule, nonce, id or registration) and every other code after `STARTED`. Each test names the check that caught it;
+- six malformed nonces, `../x` among them, each with a readable 27 planted where the bad nonce would lead: class (c);
+- a `STARTED` that cannot be stat'ed raises; it never reads as not started;
+- the `no_serve` rule:
+  - a startup failure, and every request faulted, each stop;
+  - one serving lifetime of two does not stop;
+  - a lifetime skipped for time does not stop;
+  - a control that served nothing stops;
+- the box schedule's timed lifetimes equal the reducer's schedule for each box's draws.
+
+Code mutants of the classifier were also run. Each of these fails at least one test:
+- skipping the verification;
+- skipping the schedule check;
+- skipping the success marker;
+- reading `no_serve` from any one lifetime instead of all;
+- counting a skipped lifetime as a serve failure;
+- skipping the exit-code check;
+- testing `STARTED` with `os.path.exists` (which reads any stat error as absent);
+- skipping the nonce check, or matching it with `re.match` in place of `re.fullmatch`.
+
+**The reading kit is cut from this amendment's merge.** That merge is the launch commit. The kit's stop calls
+`pgx_box_end.py` on each started reading box:
+- (a) and (b) add no strike;
+- (b) with `no_serve` stops for a person;
+- (c) adds a strike;
+- any exit outside the five classes stops for a person.
+
+Nothing staged to the box changes: `staged-pgx.sha256` is unchanged.
