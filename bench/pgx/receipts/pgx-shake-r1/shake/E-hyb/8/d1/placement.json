@@ -1,0 +1,261 @@
+{
+ "arena": "/root/pgx/work/nf4.arena",
+ "per_layer": {
+  "37": {
+   "vram": 59,
+   "dram": 69,
+   "nvme": 0
+  },
+  "38": {
+   "vram": 63,
+   "dram": 65,
+   "nvme": 0
+  },
+  "28": {
+   "vram": 61,
+   "dram": 67,
+   "nvme": 0
+  },
+  "25": {
+   "vram": 66,
+   "dram": 62,
+   "nvme": 0
+  },
+  "22": {
+   "vram": 61,
+   "dram": 67,
+   "nvme": 0
+  },
+  "15": {
+   "vram": 61,
+   "dram": 67,
+   "nvme": 0
+  },
+  "40": {
+   "vram": 60,
+   "dram": 68,
+   "nvme": 0
+  },
+  "13": {
+   "vram": 64,
+   "dram": 64,
+   "nvme": 0
+  },
+  "43": {
+   "vram": 70,
+   "dram": 58,
+   "nvme": 0
+  },
+  "14": {
+   "vram": 64,
+   "dram": 64,
+   "nvme": 0
+  },
+  "27": {
+   "vram": 56,
+   "dram": 72,
+   "nvme": 0
+  },
+  "9": {
+   "vram": 59,
+   "dram": 69,
+   "nvme": 0
+  },
+  "18": {
+   "vram": 51,
+   "dram": 77,
+   "nvme": 0
+  },
+  "2": {
+   "vram": 71,
+   "dram": 57,
+   "nvme": 0
+  },
+  "17": {
+   "vram": 65,
+   "dram": 63,
+   "nvme": 0
+  },
+  "34": {
+   "vram": 53,
+   "dram": 75,
+   "nvme": 0
+  },
+  "26": {
+   "vram": 66,
+   "dram": 62,
+   "nvme": 0
+  },
+  "23": {
+   "vram": 65,
+   "dram": 63,
+   "nvme": 0
+  },
+  "41": {
+   "vram": 59,
+   "dram": 69,
+   "nvme": 0
+  },
+  "35": {
+   "vram": 66,
+   "dram": 62,
+   "nvme": 0
+  },
+  "42": {
+   "vram": 62,
+   "dram": 66,
+   "nvme": 0
+  },
+  "5": {
+   "vram": 64,
+   "dram": 64,
+   "nvme": 0
+  },
+  "39": {
+   "vram": 62,
+   "dram": 66,
+   "nvme": 0
+  },
+  "29": {
+   "vram": 70,
+   "dram": 58,
+   "nvme": 0
+  },
+  "19": {
+   "vram": 58,
+   "dram": 70,
+   "nvme": 0
+  },
+  "32": {
+   "vram": 63,
+   "dram": 65,
+   "nvme": 0
+  },
+  "20": {
+   "vram": 62,
+   "dram": 66,
+   "nvme": 0
+  },
+  "33": {
+   "vram": 56,
+   "dram": 72,
+   "nvme": 0
+  },
+  "36": {
+   "vram": 58,
+   "dram": 70,
+   "nvme": 0
+  },
+  "21": {
+   "vram": 62,
+   "dram": 66,
+   "nvme": 0
+  },
+  "47": {
+   "vram": 62,
+   "dram": 66,
+   "nvme": 0
+  },
+  "16": {
+   "vram": 62,
+   "dram": 66,
+   "nvme": 0
+  },
+  "31": {
+   "vram": 58,
+   "dram": 70,
+   "nvme": 0
+  },
+  "11": {
+   "vram": 65,
+   "dram": 63,
+   "nvme": 0
+  },
+  "24": {
+   "vram": 62,
+   "dram": 66,
+   "nvme": 0
+  },
+  "6": {
+   "vram": 58,
+   "dram": 70,
+   "nvme": 0
+  },
+  "10": {
+   "vram": 62,
+   "dram": 66,
+   "nvme": 0
+  },
+  "44": {
+   "vram": 58,
+   "dram": 70,
+   "nvme": 0
+  },
+  "45": {
+   "vram": 62,
+   "dram": 66,
+   "nvme": 0
+  },
+  "7": {
+   "vram": 60,
+   "dram": 68,
+   "nvme": 0
+  },
+  "46": {
+   "vram": 62,
+   "dram": 66,
+   "nvme": 0
+  },
+  "12": {
+   "vram": 67,
+   "dram": 61,
+   "nvme": 0
+  },
+  "30": {
+   "vram": 67,
+   "dram": 61,
+   "nvme": 0
+  },
+  "4": {
+   "vram": 65,
+   "dram": 63,
+   "nvme": 0
+  },
+  "3": {
+   "vram": 71,
+   "dram": 57,
+   "nvme": 0
+  },
+  "8": {
+   "vram": 67,
+   "dram": 61,
+   "nvme": 0
+  },
+  "0": {
+   "vram": 80,
+   "dram": 48,
+   "nvme": 0
+  },
+  "1": {
+   "vram": 69,
+   "dram": 59,
+   "nvme": 0
+  }
+ },
+ "experts": {
+  "vram": 3014,
+  "dram": 3130,
+  "nvme": 0
+ },
+ "masses": {
+  "vram_frac": 0.8000399271647135,
+  "dram_frac": 0.19996007283528647,
+  "nvme_frac": 0.0,
+  "target_gpu_cpu_ratio": 10.856908087803733,
+  "achieved_gpu_cpu_ratio": 4.000998378429939
+ },
+ "profile": {
+  "kind": "measured",
+  "sha256": "0a46edd68005b46db6bb2174542ec948df2843071efce2ecb36099fda04c626a"
+ }
+}

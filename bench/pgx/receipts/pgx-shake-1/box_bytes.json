@@ -1,0 +1,77 @@
+{
+ "bf16": {
+  "bytes_per_expert": 9437184,
+  "header_sha256": "1191fc22e5c15692b86080408a9f4730c274c23061c2a6e1fdefdb42716eaaca",
+  "repo": "Qwen/Qwen3-30B-A3B",
+  "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "shards": 16,
+  "tensors_per_expert": [
+   "down_proj.weight",
+   "gate_proj.weight",
+   "up_proj.weight"
+  ]
+ },
+ "fp8": {
+  "bytes_per_expert": 4719744,
+  "header_sha256": "383e1ad589e3f4c808141845181901f2cfec07d6497ed3ae26272352fbdcd87b",
+  "repo": "Qwen/Qwen3-30B-A3B-FP8",
+  "revision": "d206ba732169f29bb77fbf80fc2c4b81d4d30782",
+  "shards": 7,
+  "tensors_per_expert": [
+   "down_proj.weight",
+   "down_proj.weight_scale_inv",
+   "gate_proj.weight",
+   "gate_proj.weight_scale_inv",
+   "up_proj.weight",
+   "up_proj.weight_scale_inv"
+  ]
+ },
+ "int4": {
+  "bytes_per_expert": 2470912,
+  "bytes_per_expert_without_g_idx": 2451456,
+  "header_sha256": "ede15765a61268431aa8f7042ad1445af09cccf9923d927826a312e7caee71fe",
+  "repo": "Qwen/Qwen3-30B-A3B-GPTQ-Int4",
+  "revision": "9b534e4318b7ebc3c961a839f13eb18b1833f441",
+  "shards": 1,
+  "tensors_per_expert": [
+   "down_proj.g_idx",
+   "down_proj.qweight",
+   "down_proj.qzeros",
+   "down_proj.scales",
+   "gate_proj.g_idx",
+   "gate_proj.qweight",
+   "gate_proj.qzeros",
+   "gate_proj.scales",
+   "up_proj.g_idx",
+   "up_proj.qweight",
+   "up_proj.qzeros",
+   "up_proj.scales"
+  ]
+ },
+ "k_table": {
+  "E-hyb": {
+   "12": 94,
+   "4": 31,
+   "8": 62
+  },
+  "S4": {
+   "12": 101,
+   "4": 33,
+   "8": 67
+  },
+  "S8": {
+   "12": 52,
+   "4": 17,
+   "8": 35
+  },
+  "V8": {
+   "12": 52,
+   "4": 17,
+   "8": 35
+  }
+ },
+ "nf4": {
+  "bytes_per_expert": 2654208,
+  "source": "P233's placement record"
+ }
+}

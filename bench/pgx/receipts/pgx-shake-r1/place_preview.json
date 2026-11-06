@@ -1,0 +1,68 @@
+{
+ "E-hyb-u|12": {
+  "budget_bytes": 12000000000,
+  "dram_experts": 1623,
+  "nvme_experts": 0,
+  "profile_kind": "uniform-assumed",
+  "vram_bytes": 11999674368,
+  "vram_experts": 4521,
+  "vram_mass_share": 0.738311767578125
+ },
+ "E-hyb-u|4": {
+  "budget_bytes": 4000000000,
+  "dram_experts": 4638,
+  "nvme_experts": 0,
+  "profile_kind": "uniform-assumed",
+  "vram_bytes": 3997237248,
+  "vram_experts": 1506,
+  "vram_mass_share": 0.24564743041992188
+ },
+ "E-hyb-u|8": {
+  "budget_bytes": 8000000000,
+  "dram_experts": 3130,
+  "nvme_experts": 0,
+  "profile_kind": "uniform-assumed",
+  "vram_bytes": 7999782912,
+  "vram_experts": 3014,
+  "vram_mass_share": 0.4930623372395833
+ },
+ "E-hyb|12": {
+  "budget_bytes": 12000000000,
+  "dram_experts": 1623,
+  "nvme_experts": 0,
+  "profile_kind": "measured",
+  "vram_bytes": 11999674368,
+  "vram_experts": 4521,
+  "vram_mass_share": 0.9013811747233073
+ },
+ "E-hyb|4": {
+  "budget_bytes": 4000000000,
+  "dram_experts": 4638,
+  "nvme_experts": 0,
+  "profile_kind": "measured",
+  "vram_bytes": 3997237248,
+  "vram_experts": 1506,
+  "vram_mass_share": 0.5691121419270834
+ },
+ "E-hyb|8": {
+  "budget_bytes": 8000000000,
+  "dram_experts": 3130,
+  "nvme_experts": 0,
+  "profile_kind": "measured",
+  "vram_bytes": 7999782912,
+  "vram_experts": 3014,
+  "vram_mass_share": 0.8000399271647135
+ },
+ "ceiling|12": {
+  "vram_experts": 4521,
+  "vram_mass_share": 0.9668871561686198
+ },
+ "ceiling|4": {
+  "vram_experts": 1506,
+  "vram_mass_share": 0.5911636352539062
+ },
+ "ceiling|8": {
+  "vram_experts": 3014,
+  "vram_mass_share": 0.8427530924479166
+ }
+}

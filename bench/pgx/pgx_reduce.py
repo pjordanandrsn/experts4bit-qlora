@@ -39,11 +39,27 @@ def registered_passes(budget) -> tuple:
     return ("P1", "P2", "P3", "P4") if budget == 8 else ("P1", "P2", "P3")
 
 
-def schedule() -> list:
-    """Every registered (arm, budget, draw, pass): the matched arms, then the controls."""
-    out = [(a, b, d, p) for a in ARMS for b in BUDGETS for d in DRAWS for p in registered_passes(b)]
-    out += [(a, b, d, p) for a, b, ps in CONTROLS for d in DRAWS for p in ps]
+def schedule(draws=DRAWS) -> list:
+    """Every registered (arm, budget, draw, pass) of ``draws``: the matched arms, then the controls."""
+    out = [(a, b, d, p) for a in ARMS for b in BUDGETS for d in draws for p in registered_passes(b)]
+    out += [(a, b, d, p) for a, b, ps in CONTROLS for d in draws for p in ps]
     return out
+
+
+def residency(arm, lt, p):
+    """A lifetime's residency for pass p (Amendment 3): (hit rate or None, label). S arms: the instrument dump's replay,
+    labelled by the batch check (BATCH_MATCHED / APPROXIMATE); V8: the pager's counters; E-hyb / E-hyb-u: the hook's
+    tier counters, None when the routed-slot invariant failed (not measured). Reported, never a VOID."""
+    c = (lt or {}).get("counters") or {}
+    if arm in ("S4", "S8"):
+        r = (c.get(f"residency_{p}") or {}).get("hit_rate")
+        return r, ((c.get("batch") or {}).get(p) or {}).get("state", "APPROXIMATE")
+    if arm == "V8":
+        return ((c.get("passes") or {}).get(p) or {}).get("hit_rate"), "COUNTERS"
+    if arm in ("E-hyb", "E-hyb-u"):
+        r = ((lt or {}).get("vram_hit_rate") or {}).get(p)
+        return r, ("TIER_COUNTERS" if r is not None else "NOT_MEASURED")
+    return None, None
 
 
 def _load(path):
@@ -88,8 +104,11 @@ def pass_faults(rec, want_sha: str) -> list:
     return f
 
 
-def reduce(dirs, reg: dict) -> dict:
-    """reg: {"profile_sha", "budget_bytes": {"4": int, ...}, "sets": {"warm_c1", "warm_c4", "shift": sha}}."""
+def reduce(dirs, reg: dict, draws=DRAWS, part: bool = False) -> dict:
+    """reg: {"profile_sha", "budget_bytes": {"4": int, ...}, "sets": {"warm_c1", "warm_c4", "shift": sha},
+    optionally "preview": {"E-hyb|4": share, ...}}. ``part`` (Amendment 3, P238's form): one box of a split reduces its
+    own draws' faults only (lifetimes, passes, the ruled token identity) and reads PART_OK or PART_FAULTS; the reading is
+    the controller's merge of every box's directory."""
     rows, lifetimes = {}, {}
     for d in dirs:
         for arm in sorted(os.listdir(d)):
@@ -102,7 +121,7 @@ def reduce(dirs, reg: dict) -> dict:
                         continue
                     lifetimes[key] = {"lt": _load(os.path.join(base, "lifetime.json")), "dir": base}
     findings = []
-    for (arm, bud, dr, p) in schedule():
+    for (arm, bud, dr, p) in schedule(draws):
         L = lifetimes.get((arm, bud, dr))
         faults, lt_dram = [], None
         if L is None or L.get("duplicate") or L.get("lt") is None:
@@ -113,7 +132,8 @@ def reduce(dirs, reg: dict) -> dict:
             rec = _load(os.path.join(L["dir"], f"{p}.json"))
             faults += pass_faults(rec, reg["sets"][PASS_SET[p]])
             lt_dram = (L["lt"].get("dram_tier_s_per_token") or {}).get(p)
-        rows[(arm, bud, dr, p)] = {"faults": faults, "rec": rec, "lt_dram": lt_dram}
+        hit, label = residency(arm, (L or {}).get("lt"), p)
+        rows[(arm, bud, dr, p)] = {"faults": faults, "rec": rec, "lt_dram": lt_dram, "hit": hit, "hit_label": label}
     # token invariance within a lifetime: P2 must reproduce P1's greedy text, request by request
     for (arm, bud, dr) in {(a, b, d) for a, b, d, _ in rows}:
         p1, p2 = rows.get((arm, bud, dr, "P1")), rows.get((arm, bud, dr, "P2"))
@@ -128,6 +148,11 @@ def reduce(dirs, reg: dict) -> dict:
             for p in ("P1", "P2", "P3", "P4"):
                 if (arm, bud, dr, p) in rows:
                     rows[(arm, bud, dr, p)]["faults"].append("P2 differs from P1 (token invariance)")
+    if part:
+        void = sorted({k[:3] for k, r in rows.items() if r["faults"]}, key=str)
+        return {"verdict": "PART_OK" if not void else "PART_FAULTS", "draws": list(draws), "findings": findings,
+                "void_lifetimes": [list(v) for v in void],
+                "faults": {"|".join(map(str, k)): r["faults"] for k, r in rows.items() if r["faults"]}}
     # cross-budget identity for the Triton arms: reported only
     for arm in ("S8", "V8"):
         for dr in DRAWS:
@@ -138,7 +163,8 @@ def reduce(dirs, reg: dict) -> dict:
     # cells: (arm, budget, pass) over the three draws
     cells = {}
     for (arm, bud, dr, p), r in rows.items():
-        c = cells.setdefault((arm, bud, p), {"draws": {}, "void": []})
+        c = cells.setdefault((arm, bud, p), {"draws": {}, "void": [], "residency": {}})
+        c["residency"][dr] = {"hit_rate": r["hit"], "label": r["hit_label"]}
         if r["faults"]:
             c["void"].append({"draw": dr, "faults": r["faults"]})
         else:
@@ -166,11 +192,22 @@ def reduce(dirs, reg: dict) -> dict:
                                         "tok_s": e["median"]["out_tok_s"] / c["median"]["out_tok_s"]}
             readings.append(row)
     attribution = [attribute(cells, rows, bud, p) for bud in BUDGETS for p in ("P2", "P3")]
+    # Amendment 3, reported only: E-hyb's measured VRAM hit rate (P2, median over the draws that measured it) beside the
+    # placement preview's predicted share on the same box's calib; and Q7's hit-rate half at 8 GB
+    def _hit(arm, bud, p="P2"):
+        v = [x["hit_rate"] for x in cells[(arm, bud, p)]["residency"].values() if x["hit_rate"] is not None]
+        return statistics.median(v) if v else None
+    sanity = [{"budget": b, "measured": _hit("E-hyb", b), "preview": (reg.get("preview") or {}).get(f"E-hyb|{b}"),
+               "rules": False} for b in BUDGETS]
+    e8, u8 = _hit("E-hyb", 8), _hit("E-hyb-u", 8)
+    q7 = {"hit_delta": (e8 - u8) if e8 is not None and u8 is not None else None, "want": 0.2,
+          "state": "NOT_TESTED" if e8 is None or u8 is None else ("HOLDS" if e8 - u8 >= 0.2 else "FAILS")}
     void = sorted({k[:3] for k, r in rows.items() if r["faults"]}, key=str)
     verdict = "READ" if not any(c["state"] == "VOID" for c in cells.values()) else "VOID"
     return {"verdict": verdict, "cells": {"|".join(map(str, k)): {kk: vv for kk, vv in v.items()}
                                           for k, v in sorted(cells.items(), key=lambda kv: str(kv[0]))},
             "readings": readings, "attribution": attribution, "findings": findings,
+            "hit_vs_preview": sanity, "q7_hit_rate": q7,
             "void_lifetimes": [list(v) for v in void]}
 
 
@@ -195,6 +232,8 @@ def attribute(cells, rows, bud, p) -> dict:
             if rows[("E-hyb", bud, d, p)]["lt_dram"] is not None]
     if host:
         out["shares"]["dram_host"] = statistics.median(host) / gap
+    else:                                        # Amendment 3: no tier-counter record for this cell: reported, not a VOID
+        out["not_measured"] = ["dram_host"]
     if bud == 8:
         u = cells[("E-hyb-u", 8, p)]
         if u["state"] == "READ" and u["median"]["tpot_p50"] - best > 0:
@@ -211,9 +250,17 @@ def main(argv=None) -> int:
     ap.add_argument("--work", nargs="+", required=True)
     ap.add_argument("--registration", required=True, help="JSON: profile_sha, budget_bytes, sets")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--mode", choices=("reading", "part"), default="reading")
+    ap.add_argument("--draws", type=int, nargs="+", default=list(DRAWS))
     a = ap.parse_args(argv)
     with open(a.registration, encoding="utf-8") as f:
         reg = json.load(f)
+    if a.mode == "part":
+        v = reduce(a.work, reg, draws=tuple(a.draws), part=True)
+        with open(a.out, "w", encoding="utf-8") as f:
+            json.dump(v, f, indent=1, default=str)
+        print(f"part {v['verdict']} (draws {v['draws']}); {len(v['void_lifetimes'])} faulted lifetime(s)")
+        return 0 if v["verdict"] == "PART_OK" else 27
     v = reduce(a.work, reg)
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(v, f, indent=1, default=str)

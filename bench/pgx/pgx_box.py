@@ -47,7 +47,10 @@ def peaks(samples: str) -> tuple:
     return (max(vram) if vram else None, round(max(rss) / 2**20, 2) if rss else None)
 
 
-def s_counters(dump_dir: str, k: int) -> dict:
+def s_counters(dump_dir: str, k: int, passes=("I1",)) -> dict:
+    """Each pass's residency from the instrument lifetime's dump (warm state carried across its passes, as the server
+    carries it), plus the dump's host-path self-check. The shakedown scored its one pass I1; a reading lifetime scores
+    each of its passes (Amendment 3: the instrument lifetime runs the timed lifetime's whole pass sequence)."""
     import pgx_residency as res
     rows = []
     for path in sorted(glob.glob(os.path.join(dump_dir, "route-*.jsonl"))):
@@ -55,21 +58,107 @@ def s_counters(dump_dir: str, k: int) -> dict:
     if not rows:
         return {"counters_ok": False, "why": f"no routing rows under {dump_dir}"}
     check = res.host_path_check(rows, k)
-    resid = res.sglang_residency(rows, k, "I1")
-    ok = check["mismatched"] == 0 and check["checked"] > 0
-    return {"counters_ok": ok, "host_path_check": check, "residency_I1": {x: resid[x] for x in resid if x != "layers"},
-            "why": None if ok else f"host-path check: {check['mismatched']} mismatched of {check['checked']}"}
+    seen = {r["pass"] for r in rows}
+    missing = [p for p in passes if p not in seen]
+    out = {"host_path_check": check}
+    for p in passes:
+        if p in seen:
+            resid = res.sglang_residency(rows, k, p)
+            out[f"residency_{p}"] = {x: resid[x] for x in resid if x != "layers"}
+    ok = check["mismatched"] == 0 and check["checked"] > 0 and not missing
+    why = None if ok else (f"no dump rows for pass(es) {missing}" if missing else
+                           f"host-path check: {check['mismatched']} mismatched of {check['checked']}")
+    out.update({"counters_ok": ok, "why": why})
+    return out
 
 
-def v_counters(log: str, probes: list) -> dict:
+def read_windows(path: str) -> dict:
+    """The runner's pass windows: one line per pass, ``<pass> <start epoch> <end epoch>``."""
+    out = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+                out[parts[0]] = (int(parts[1]), int(parts[2]))
+    return out
+
+
+def running_reqs(log: str, window: tuple) -> list:
+    """SGLang's logged ``Decode batch, #running-req: N`` values (one line per 40 decode tokens at the default log level)
+    whose timestamp falls strictly inside the window: the boundary seconds are excluded (Amendment 3, the maintainer's
+    condition (ii)). Log times are the box's local time, read with the box's own clock rules."""
+    import re
+    import time
+    pat = re.compile(r"^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\] Decode batch, #running-req: (\d+)")
+    out = []
+    with open(log, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            m = pat.match(line)
+            if m:
+                t = time.mktime(time.strptime(m.group(1), "%Y-%m-%d %H:%M:%S"))
+                if window[0] < t < window[1]:
+                    out.append(int(m.group(2)))
+    return out
+
+
+def batch_check(timed_log: str, instr_log: str, timed_win: dict, instr_win: dict, passes) -> dict:
+    """Per pass: the timed (graphs on) and instrument (graphs off) servers' logged batch sizes. Equal sequences =
+    batch-matched; otherwise the cell's residency is APPROXIMATE (reported, never a VOID)."""
+    out = {}
+    for p in passes:
+        if p not in timed_win or p not in instr_win:
+            out[p] = {"state": "APPROXIMATE", "why": "no pass window"}
+            continue
+        a, b = running_reqs(timed_log, timed_win[p]), running_reqs(instr_log, instr_win[p])
+        out[p] = {"state": "BATCH_MATCHED" if a == b and a else "APPROXIMATE", "timed": a, "instr": b}
+    return out
+
+
+def e_tiers(path: str, windows: dict, decode_tokens: dict, layers: int, top_k: int) -> dict:
+    """E arms, per pass, from the hook's once-a-second cumulative tier counters (``dram_time.jsonl``): the last line at
+    or before the window's start against the first at or after its end. Per pass:
+    - ``dram_s_per_token``: the DRAM bus's host seconds (``_dram_contrib``) per decode token;
+    - ``routed``, ``want``: the decode routed slots the hook counted against the pass's decode tokens x MoE layers x
+      top_k (the maintainer's self-check: unequal means a route the hook does not see);
+    - ``hit_rate``: the VRAM-tier hit rate, 1 - nonvram / routed, ONLY when routed == want, else None ("not measured");
+    - ``nonvram_is_dram``: the non-VRAM rows equal the DRAM rows plus the host NVMe rows (reported).
+    A pass with no bracketing lines, or no decode tokens, reads None throughout (not measured, never a VOID)."""
+    rows = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                rows.append(json.loads(line))
+    rows.sort(key=lambda r: r["t"])
+    out = {}
+    for p, (t0, t1) in windows.items():
+        before = [r for r in rows if r["t"] <= t0]
+        after = [r for r in rows if r["t"] >= t1]
+        n = decode_tokens.get(p)
+        if not before or not after or not n:
+            out[p] = {"dram_s_per_token": None, "hit_rate": None, "routed": None, "want": None, "nonvram_is_dram": None}
+            continue
+        d = {k: after[0][k] - before[-1][k] for k in after[0] if k != "t"}
+        want = n * layers * top_k
+        ok = d["decode_routed"] == want
+        out[p] = {"dram_s_per_token": d["decode_ns"] / 1e9 / n, "routed": d["decode_routed"], "want": want,
+                  "hit_rate": (1 - d["decode_nonvram"] / d["decode_routed"]) if ok and d["decode_routed"] else None,
+                  "nonvram_is_dram": d["decode_nonvram"] == d["decode_dram_rows"] + d["decode_nvme_cpu_rows"]}
+    return out
+
+
+def v_counters(log: str, probes: list, passes=("P1", "P2")) -> dict:
+    """One eager probe before the first pass and after each pass (len(passes) + 1 offsets); each pass's counts are the
+    difference of the cumulative counters at its two probes. Anything else fails closed."""
     import pgx_residency as res
     with open(log, encoding="utf-8", errors="replace") as f:
         text = f.read()
     out = {"pager_giveups": res.pager_giveups(text), "passes": {}}
     try:
-        o0, o1, o2 = (int(x) for x in probes)
-        out["passes"]["P1"] = res.pager_pass_counts(text[:o0], text[:o1])
-        out["passes"]["P2"] = res.pager_pass_counts(text[:o1], text[:o2])
+        offs = [int(x) for x in (probes or [])]
+        if len(offs) != len(passes) + 1:
+            raise ValueError(f"{len(offs)} probe offset(s) for {len(passes)} pass(es)")
+        for j, p in enumerate(passes):
+            out["passes"][p] = res.pager_pass_counts(text[:offs[j]], text[:offs[j + 1]])
         for p in out["passes"].values():
             p.pop("layers", None)
         out["counters_ok"], out["why"] = True, None
@@ -102,23 +191,62 @@ def e_counters(health: str, placement: str, step_trace: str, bpe: int) -> dict:
     return out
 
 
+E_ARMS = ("E-hyb", "E-hyb-u", "E-allvram-g", "E-allvram-e")
+
+
+def _decode_tokens(lt_dir: str, passes) -> dict:
+    """Each pass's decode tokens from its own record: requests x (max_tokens - 1), the first token being prefill's."""
+    out = {}
+    for p in passes:
+        try:
+            with open(os.path.join(lt_dir, f"{p}.json"), encoding="utf-8") as f:
+                r = json.load(f)
+            out[p] = int(r["n"]) * (int(r["max_tokens"]) - 1)
+        except (FileNotFoundError, ValueError, KeyError):
+            out[p] = None
+    return out
+
+
 def lifetime(a) -> dict:
     vram, rss = peaks(a.samples)
-    lt = {"arm": a.arm, "budget": 8, "draw": 1, "k_registered": a.k if a.arm in ("S4", "S8", "V8") else None,
+    budget = a.budget if a.budget == "all" else int(a.budget)
+    passes = tuple(a.passes)
+    lt = {"arm": a.arm, "budget": budget, "draw": a.draw, "passes": list(passes),
+          "k_registered": a.k if a.arm in ("S4", "S8", "V8") else None,
           "k_measured": a.k_measured if a.arm in ("S4", "S8", "V8") else None, "wall_s": a.wall_s,
           "peak_vram_mib": vram, "peak_rss_gib": rss, "counters_ok": False, "pager_giveups": None,
           "startup_failed": a.startup_failed, "counters": None}
     if a.startup_failed:
         return lt
     if a.arm in ("S4", "S8"):
-        c = s_counters(a.route_dump, a.k)
+        # the shakedown scored its instrument's one pass I1; a reading lifetime scores its own passes
+        c = s_counters(a.route_dump, a.k, passes if a.windows else ("I1",))
+        if a.windows and a.instr_windows and a.instr_log and a.timed_log:
+            c["batch"] = batch_check(a.timed_log, a.instr_log, read_windows(a.windows), read_windows(a.instr_windows),
+                                     passes)
     elif a.arm == "V8":
-        c = v_counters(a.pager_log, a.probes)
+        c = v_counters(a.pager_log, a.probes, passes)
         lt["pager_giveups"] = c["pager_giveups"]
     else:
         c = e_counters(a.health, a.placement, a.step_trace, a.bpe)
         for key in ("profile", "vram_tier_bytes", "nvme_experts"):
             lt[key] = c[key]
+        if a.arm in ("E-allvram-g", "E-allvram-e"):
+            lt["profile"] = None          # all-vram reads no profile: the proof's nvme count and the trace still count
+        if a.arm in ("E-hyb", "E-hyb-u") and a.windows:
+            # Amendment 3: the tier counters (the hook), per pass, each behind its invariant. Missing or unreadable ->
+            # None for that pass: the dram_host branch and the hit rate read "not measured" there, never a VOID.
+            try:
+                with open(a.health, encoding="utf-8") as f:
+                    lev = json.load(f).get("levers") or {}
+                tiers = e_tiers(a.dram_time, read_windows(a.windows), _decode_tokens(a.lt, passes),
+                                int(lev["moe_layers"]), int(lev["top_k"]))
+            except (FileNotFoundError, ValueError, KeyError, TypeError) as exc:
+                tiers = {p: {"dram_s_per_token": None, "hit_rate": None, "why": f"{type(exc).__name__}: {exc}"}
+                         for p in passes}
+            lt["tiers"] = tiers
+            lt["dram_tier_s_per_token"] = {p: tiers[p]["dram_s_per_token"] for p in passes if p in tiers}
+            lt["vram_hit_rate"] = {p: tiers[p]["hit_rate"] for p in passes if p in tiers}
     lt["counters_ok"] = bool(c["counters_ok"])
     lt["counters"] = c
     return lt
@@ -128,8 +256,16 @@ def _args(argv):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd")
     p = sub.add_parser("lifetime")
-    p.add_argument("--arm", required=True, choices=("S4", "S8", "V8", "E-hyb"))
+    p.add_argument("--arm", required=True, choices=("S4", "S8", "V8") + E_ARMS)
     p.add_argument("--lt", required=True)
+    p.add_argument("--budget", default="8")
+    p.add_argument("--draw", type=int, default=1)
+    p.add_argument("--passes", nargs="+", default=["P1", "P2"])
+    p.add_argument("--windows", help="this lifetime's pass windows (Amendment 3)")
+    p.add_argument("--instr-windows", help="S arms: the instrument lifetime's pass windows")
+    p.add_argument("--instr-log", help="S arms: the instrument server's log")
+    p.add_argument("--timed-log", help="S arms: this timed server's log")
+    p.add_argument("--dram-time", help="E arms: the hook's dram_time.jsonl")
     p.add_argument("--wall-s", type=float)
     p.add_argument("--samples", default="")
     p.add_argument("--startup-failed", default=None)
@@ -137,7 +273,7 @@ def _args(argv):
     p.add_argument("--k-measured", type=int)
     p.add_argument("--route-dump")
     p.add_argument("--pager-log")
-    p.add_argument("--probes", nargs=3)
+    p.add_argument("--probes", nargs="+")
     p.add_argument("--health")
     p.add_argument("--placement")
     p.add_argument("--step-trace")

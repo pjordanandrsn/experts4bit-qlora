@@ -1,7 +1,7 @@
 #!/bin/bash
 # PGX's CONTROLLER side (bench/pgx/PREREG-pgx.md, Amendment 1): P238's driver (bench/p238/p238_drive.sh) by named edits -- this
-# lane's run ids (the shakedown pgx-shake-1 and its retry ids pgx-shake-r1 to -r3; the reading's ids arrive with the amendment
-# that registers its box plan), its staged files (its own kit plus the shared card-clock burn and P39's NF4 bake), and the box it
+# lane's run ids (the shakedown pgx-shake-1 and its retry ids pgx-shake-r1 to -r3; Amendment 3: the reading's boxes
+# pgx-4090-1-2-1 / -2 and their retry ids pgx-4090-r<n>-2-<i>), its staged files (its own kit plus the shared card-clock burn and P39's NF4 bake), and the box it
 # runs (PGX_BOX: shake). The fetch imports no links (rsync --no-links, bench/common rule 8). It stages the hash-pinned files to
 # the rented box, starts pgx_run.sh, polls its TP_DONE marker with a heartbeat line, and fetches the run directory back. It does
 # not create, destroy, or approve compute: pod-launch, which calls it, holds the provider key.
@@ -19,9 +19,11 @@ if [ -n "${PGX_DRIVE_TAIL_DIR:-}" ]; then finish "$PGX_DRIVE_TAIL_DIR" "${PGX_DR
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set"; exit 78; }
 done
-# The registered ids (Amendment 1): the shakedown and its three retry ids. Every other id is refused here and on the box.
+# The registered ids (Amendment 1): the shakedown and its three retry ids; (Amendment 3) the reading's two boxes at K = 2 and
+# the retry ids that name the box they replace. Every other id is refused here and on the box.
 case "$E4B_RENT_RUN_ID" in
   pgx-shake-1|pgx-shake-r[1-3])           BOX=shake;;
+  pgx-4090-1-2-[12]|pgx-4090-r[1-3]-2-[12]) BOX=read;;
   *) say "refusing unregistered run ID: $E4B_RENT_RUN_ID"; exit 78;;
 esac
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
@@ -35,6 +37,7 @@ STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/hook" "$STAGE/hook_e4b" "$STAGE/prompts"
 for f in bench/pgx/pgx_run.sh bench/pgx/pgx_drive.py bench/pgx/pgx_reduce.py bench/pgx/pgx_residency.py bench/pgx/pgx_bytes.py \
          bench/pgx/pgx_place_preview.py bench/pgx/pgx_tripwire.py bench/pgx/pgx_shake.py bench/pgx/pgx_box.py \
+         bench/pgx/pgx_schedule.py bench/pgx/pgx_dram_bench.py bench/pgx/pgx_read.sh \
          bench/pgx/fit_profile.jsonl bench/pgx/bytes_per_expert.json bench/pgx/staged-pgx.sha256 \
          bench/train-routing-trace/replay.py bench/common/card_clock.py bench/p39/k8_bake.py; do
   cp "$REPO/$f" "$STAGE/" || { say "stage missing: $f"; exit 78; }

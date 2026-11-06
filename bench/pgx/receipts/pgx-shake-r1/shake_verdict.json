@@ -1,0 +1,51 @@
+{
+ "verdict": "SHAKE_OK",
+ "arms": {
+  "S4": {
+   "served": true,
+   "faults": [],
+   "wall_s": 88.0,
+   "peak_rss_gib": 23.8,
+   "peak_vram_mib": 18567.0,
+   "k_registered": 67,
+   "k_measured": 67,
+   "p2_equals_p1": false
+  },
+  "S8": {
+   "served": true,
+   "faults": [],
+   "wall_s": 170.0,
+   "peak_rss_gib": 49.96,
+   "peak_vram_mib": 18697.0,
+   "k_registered": 35,
+   "k_measured": 35,
+   "p2_equals_p1": true
+  },
+  "V8": {
+   "served": true,
+   "faults": [],
+   "wall_s": 211.0,
+   "peak_rss_gib": 30.84,
+   "peak_vram_mib": 22103.0,
+   "k_registered": 35,
+   "k_measured": 35,
+   "p2_equals_p1": true
+  },
+  "E-hyb": {
+   "served": true,
+   "faults": [],
+   "wall_s": 836.0,
+   "peak_rss_gib": 19.13,
+   "peak_vram_mib": 12609.0,
+   "k_registered": null,
+   "k_measured": null,
+   "p2_equals_p1": true
+  }
+ },
+ "stop": [],
+ "faults": [],
+ "fit": {
+  "lifetime_wall_max_s": 836.0,
+  "peak_rss_max_gib": 49.96
+ }
+}

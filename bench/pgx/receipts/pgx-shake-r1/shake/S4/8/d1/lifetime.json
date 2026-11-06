@@ -1,0 +1,33 @@
+{
+ "arm": "S4",
+ "budget": 8,
+ "draw": 1,
+ "k_registered": 67,
+ "k_measured": 67,
+ "wall_s": 88.0,
+ "peak_vram_mib": 18567.0,
+ "peak_rss_gib": 23.8,
+ "counters_ok": true,
+ "pager_giveups": null,
+ "startup_failed": null,
+ "counters": {
+  "counters_ok": true,
+  "host_path_check": {
+   "checked": 98736,
+   "mismatched": 0,
+   "first": null,
+   "skipped_device_calls": 0
+  },
+  "residency_I1": {
+   "calls": 98304,
+   "tokens": 2048,
+   "hits": 757966,
+   "misses": 28466,
+   "page_ins": 28466,
+   "hit_rate": 0.9638036092122396,
+   "page_ins_per_token": 13.8994140625,
+   "misses_per_token": 13.8994140625
+  },
+  "why": null
+ }
+}

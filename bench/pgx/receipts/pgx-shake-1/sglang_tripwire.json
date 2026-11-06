@@ -1,0 +1,32 @@
+{
+ "pin": "0.5.23",
+ "tag_commit": "297e54fd105e974cdf401e5b4d20253a22c16f90",
+ "python": "3.11.13",
+ "venv": "/root/pgx/venv-sglang",
+ "errors": [],
+ "warnings": [
+  "compute capability 8.9 is not the registered RTX 5090 (12.0)",
+  "torch built for CUDA 13.0 but the JIT nvcc is 12.8: the box-A container question (cu130 wheels + 12.9 toolkit)"
+ ],
+ "sglang": "0.5.23",
+ "torch": "2.14.1+cu130",
+ "torch_cuda": "13.0",
+ "cuda_available": true,
+ "compute_capability": "8.9",
+ "cc_tuple": [
+  8,
+  9
+ ],
+ "device_name": "NVIDIA GeForce RTX 4090",
+ "flashinfer": "0.7.2",
+ "sglang_kernel": "0.4.10",
+ "tvm_ffi": "0.1.11",
+ "ninja": "/root/pgx/venv-sglang/bin/ninja",
+ "nvcc_first_line": "nvcc: NVIDIA (R) Cuda compiler driver",
+ "nvcc_release": "12.8",
+ "nvcc_release_line": "Cuda compilation tools, release 12.8, V12.8.93",
+ "jit_target": "sm_89",
+ "jit_cache_target_dir": "sm89",
+ "cache_dir": "/root/pgx/sglang-cache",
+ "jit_cache_dir": "/root/pgx/sglang-cache/jit"
+}

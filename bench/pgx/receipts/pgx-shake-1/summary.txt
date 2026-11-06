@@ -1,0 +1,23 @@
+KNOBS e4b=3108e20d0f37e0da47dae51218fa84672af30d06 gnf4=0.51.0 sglang=0.5.23 vllm=0.29.0 pager=e9264fda36632a3904b7b1bf7ff13d85f02b3139 torch=2.8.0+cu128 K=S4:67,S8:35,V8:35 ehyb_vram_gib=7.451
+CUDA_PROBE ok torch=2.8.0+cu128 cc=8.9 sms=128
+HOST_RAM_GIB 62 (min of MemTotal and the cgroup limit)
+POWER_LIMIT_W 450 (recorded, never ruled)
+DOWNLOAD status=200 bytes=1407188992 seconds=20.0 mb_s=70.4
+GUARD_FIT fit=10450s need=13062s left=14398s
+STARTED 2026-11-06T00:48:36Z
+SGLANG_TRIPWIRE sglang 0.5.23 (tag 297e54fd) torch 2.14.1+cu130 cuda 13.0 flashinfer 0.7.2 sglang-kernel 0.4.10 tvm-ffi 0.1.11 cc 8.9 (NVIDIA GeForce RTX 4090) nvcc 'Cuda compilation tools, release 12.8, V12.8.93' jit_target sm_89 python 3.11.13 ninja yes
+SGLANG_TRIPWIRE WARN compute capability 8.9 is not the registered RTX 5090 (12.0)
+SGLANG_TRIPWIRE WARN torch built for CUDA 13.0 but the JIT nvcc is 12.8: the box-A container question (cu130 wheels + 12.9 toolkit)
+e4b 0.58.1 @3108e20d0f37e0da47dae51218fa84672af30d06
+gnf4 0.51.0 (calibrate.py @30adb1bfa76f95f9ce4a4c29734b8f36de907eca)
+torch(e4b) 2.8.0+cu128
+transformers(e4b) 5.17.0
+sglang 0.5.23 (tag 297e54fd) torch 2.14.1+cu130 cuda 13.0 flashinfer 0.7.2 sglang-kernel 0.4.10 tvm-ffi 0.1.11 cc 8.9 (NVIDIA GeForce RTX 4090) nvcc 'Cuda compilation tools, release 12.8, V12.8.93' jit_target sm_89 python 3.11.13 ninja yes
+vllm 0.29.0
+vllm-expert-pager 0.1.1 @e9264fda36632a3904b7b1bf7ff13d85f02b3139
+torch(vllm) 2.13.0+cu130
+self-tests ok
+FETCH bf16 Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+FETCH fp8 Qwen/Qwen3-30B-A3B-FP8@d206ba732169f29bb77fbf80fc2c4b81d4d30782 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-FP8/snapshots/d206ba732169f29bb77fbf80fc2c4b81d4d30782
+FETCH int4 Qwen/Qwen3-30B-A3B-GPTQ-Int4@9b534e4318b7ebc3c961a839f13eb18b1833f441 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-GPTQ-Int4/snapshots/9b534e4318b7ebc3c961a839f13eb18b1833f441
+K_MEASURED S4=67 S8=35 V8=35 (registered 67/35/35; a different K replaces the table's, recorded)

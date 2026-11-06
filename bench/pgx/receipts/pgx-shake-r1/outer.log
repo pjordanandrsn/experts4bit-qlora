@@ -1,0 +1,93 @@
+KNOBS e4b=562b147833f12b69a805c5cf6795587c65932a70 gnf4=0.51.0 sglang=0.5.23 vllm=0.29.0 pager=e9264fda36632a3904b7b1bf7ff13d85f02b3139 torch=2.8.0+cu128 K=S4:67,S8:35,V8:35 ehyb_vram_gib=7.451
+PY_IMG /opt/conda/bin/python
+CUDA_PROBE ok torch=2.8.0+cu128 cc=8.9 sms=128
+NVIDIA GeForce RTX 4090, 24564 MiB, 580.95.05, 8.9
+power.limit,enforced.power.limit,clocks.max.sm,temperature.gpu,clocks.sm 450.00 W, 450.00 W, 3120 MHz, 46, 210 MHz
+CPU(s):                                  24
+Vendor ID:                               GenuineIntel
+Model name:                              13th Gen Intel(R) Core(TM) i7-13700KF
+Flags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities ibpb_exit_to_user
+NUMA node(s):                            1
+               total        used        free      shared  buff/cache   available
+Mem:              62           2          44           0          16          59
+overlay         250G   26M  250G   1% /
+HOST_RAM_GIB 62 (min of MemTotal and the cgroup limit)
+POWER_LIMIT_W 450 (recorded, never ruled)
+DOWNLOAD status=200 bytes=1608515584 seconds=20.0 mb_s=80.4
+GUARD_FIT fit=10450s need=13062s left=14496s
+STARTED 2026-11-06T05:42:52Z
+[2026-11-06T05:42:52Z] pgx: install e4b @562b147833f12b69a805c5cf6795587c65932a70 + grouped-nf4-gemm==0.51.0 (image python; torch held at 2.8.0+cu128)
+PGX_TRIPWIRE ok prompt sets
+PGX_TRIPWIRE ok fit profile
+PGX_TRIPWIRE ok K table
+PGX_TRIPWIRE ok serve_paged config
+PGX_TRIPWIRE ok installed pins
+PGX_TRIPWIRE ok serve stack
+PGX_TRIPWIRE ok image pins
+PGX_TRIPWIRE ok bake chain
+PGX_TRIPWIRE ok calibrate
+PGX_TRIPWIRE OK
+[2026-11-06T05:43:20Z] pgx: install sglang==0.5.23 (bench/sc1/sglang/install.sh)
+SGLANG_TRIPWIRE sglang 0.5.23 (tag 297e54fd) torch 2.14.1+cu130 cuda 13.0 flashinfer 0.7.2 sglang-kernel 0.4.10 tvm-ffi 0.1.11 cc 8.9 (NVIDIA GeForce RTX 4090) nvcc 'Cuda compilation tools, release 12.8, V12.8.93' jit_target sm_89 python 3.11.13 ninja yes
+SGLANG_TRIPWIRE WARN compute capability 8.9 is not the registered RTX 5090 (12.0)
+SGLANG_TRIPWIRE WARN torch built for CUDA 13.0 but the JIT nvcc is 12.8: the box-A container question (cu130 wheels + 12.9 toolkit)
+[2026-11-06T05:45:18Z] pgx: install vllm==0.29.0 + vllm-expert-pager @e9264fda36632a3904b7b1bf7ff13d85f02b3139
+e4b 0.58.1 @562b147833f12b69a805c5cf6795587c65932a70
+gnf4 0.51.0 (calibrate.py @30adb1bfa76f95f9ce4a4c29734b8f36de907eca)
+torch(e4b) 2.8.0+cu128
+transformers(e4b) 5.17.0
+sglang 0.5.23 (tag 297e54fd) torch 2.14.1+cu130 cuda 13.0 flashinfer 0.7.2 sglang-kernel 0.4.10 tvm-ffi 0.1.11 cc 8.9 (NVIDIA GeForce RTX 4090) nvcc 'Cuda compilation tools, release 12.8, V12.8.93' jit_target sm_89 python 3.11.13 ninja yes
+vllm 0.29.0
+vllm-expert-pager 0.1.1 @e9264fda36632a3904b7b1bf7ff13d85f02b3139
+torch(vllm) 2.13.0+cu130
+self-tests ok
+[2026-11-06T05:46:46Z] pgx: fetch Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+FETCH bf16 Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+[2026-11-06T05:50:50Z] pgx: fetch Qwen/Qwen3-30B-A3B-FP8 @ d206ba732169f29bb77fbf80fc2c4b81d4d30782
+FETCH fp8 Qwen/Qwen3-30B-A3B-FP8@d206ba732169f29bb77fbf80fc2c4b81d4d30782 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-FP8/snapshots/d206ba732169f29bb77fbf80fc2c4b81d4d30782
+[2026-11-06T05:53:00Z] pgx: fetch Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441
+FETCH int4 Qwen/Qwen3-30B-A3B-GPTQ-Int4@9b534e4318b7ebc3c961a839f13eb18b1833f441 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-GPTQ-Int4/snapshots/9b534e4318b7ebc3c961a839f13eb18b1833f441
+K_MEASURED S4=67 S8=35 V8=35 (registered 67/35/35; a different K replaces the table's, recorded)
+[2026-11-06T05:56:30Z] pgx: bake the NF4 arena
+BAKE OK
+[2026-11-06T05:57:12Z] pgx: calibrate (grouped-nf4-gemm bench/calibrate.py @30adb1bfa76f95f9ce4a4c29734b8f36de907eca)
+grouped scatter   :     85.2 GB/s  (24t, 2 MiB blocks, E=4096)
+GATE G0           : 105.3% of triad -> PROCEED
+cuda:0 NVIDIA GeForce RTX 4090: triad 924.9 GB/s | link h2d 24.1 / d2h 26.34 GB/s | h2d single-copy 24.07 GB/s -> link_eff 0.999
+B_nvme seq best   : 7.82 GB/s (o_direct=True)
+E-hyb|8      vram  3014 share 0.800
+ceiling|12   vram  4521 share 0.967
+ceiling|4    vram  1506 share 0.591
+ceiling|8    vram  3014 share 0.843
+CARD_CLOCK {"any_sample_bits_every_sample": true, "any_sample_bits_seen": [], "burn_seconds": 20.0, "busy_clean_fraction": 0.0133, "busy_reliability_fraction": 0.0, "busy_reliability_samples": 0, "busy_samples": 75, "busy_soft_clean_fraction": 0.0133, "busy_swpowercap_fraction": 0.9867, "busy_swpowercap_samples": 74, "dtype": "bfloat16", "floor_mhz": 0.0, "hard_reasons_any_sample": [], "matmul_n": 8192, "mem_median": 10251, "mode": "clock", "pass": true, "per_sample": [[2535, "0x0"], [2565, "0x4"], [2565, "0x4"], [2550, "0x4"], [2445, "0x4"], [2460, "0x4"], [2535, "0x4"], [2475, "0x4"], [2460, "0x4"], [2475, "0x4"], [2520, "0x4"], [2460, "0x4"], [2445, "0x4"], [2490, "0x4"], [2490, "0x4"], [2460, "0x4"], [2460, "0x4"], [2490, "0x4"], [2475, "0x4"], [2460, "0x4"], [2475, "0x4"], [2490, "0x4"], [2460, "0x4"], [2460, "0x4"], [2475, "0x4"], [2475, "0x4"], [2460, "0x4"], [2475, "0x4"], [2490, "0x4"], [2460, "0x4"], [2475, "0x4"], [2475, "0x4"], [2475, "0x4"], [2460, "0x4"], [2475, "0x4"], [2475, "0x4"], [2460, "0x4"], [2475, "0x4"], [2475, "0x4"], [2475, "0x4"], [2460, "0x4"], [2460, "0x4"], [2475, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2475, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"], [2460, "0x4"]], "persistent_share": 0.95, "reasons_seen": ["SwPowerCap"], "reasons_seen_mask": "0x4", "refusal": null, "sample_period_s": 0.25, "samples": 75, "sm_max": 2565, "sm_median": 2460, "sm_p10": 2460, "why": ""}
+[2026-11-06T05:58:42Z] pgx: instrument lifetime S4 (graphs off, routing dump)
+SGLANG_ENGAGEMENT ok
+pgx_run.sh: line 328:  2478 Killed                  ( . $W/sglang.env; exec setsid env PYTHONPATH=${SGL_HOOK_PATH:-} ${SGL_DUMP_ENV:-} $W/venv-sglang/bin/python -m sglang.launch_server --model-path "$m" --revision "$rev" --host 127.0.0.1 --port $PORT_SGL --served-model-name pgx --enable-paged-experts --paged-experts-num-resident "$k" --disable-radix-cache --context-length 2048 --max-running-requests 4 --random-seed 0 --log-level info $extra ) > "$log" 2>&1 < /dev/null
+S4 instrument: 98736 dump rows
+[2026-11-06T06:06:58Z] pgx: lifetime S4 (8 GB)
+SGLANG_ENGAGEMENT ok
+S4 P1 rc=0 faults 0 tok/s 132.3
+S4 P2 rc=0 faults 0 tok/s 132.3
+pgx_run.sh: line 328:  4062 Killed                  ( . $W/sglang.env; exec setsid env PYTHONPATH=${SGL_HOOK_PATH:-} ${SGL_DUMP_ENV:-} $W/venv-sglang/bin/python -m sglang.launch_server --model-path "$m" --revision "$rev" --host 127.0.0.1 --port $PORT_SGL --served-model-name pgx --enable-paged-experts --paged-experts-num-resident "$k" --disable-radix-cache --context-length 2048 --max-running-requests 4 --random-seed 0 --log-level info $extra ) > "$log" 2>&1 < /dev/null
+PGX_LIFETIME S4 counters_ok=True wall=88.0 peak_vram=18567.0 peak_rss=23.8 
+[2026-11-06T06:08:28Z] pgx: instrument lifetime S8 (graphs off, routing dump)
+SGLANG_ENGAGEMENT ok
+pgx_run.sh: line 328:  4796 Killed                  ( . $W/sglang.env; exec setsid env PYTHONPATH=${SGL_HOOK_PATH:-} ${SGL_DUMP_ENV:-} $W/venv-sglang/bin/python -m sglang.launch_server --model-path "$m" --revision "$rev" --host 127.0.0.1 --port $PORT_SGL --served-model-name pgx --enable-paged-experts --paged-experts-num-resident "$k" --disable-radix-cache --context-length 2048 --max-running-requests 4 --random-seed 0 --log-level info $extra ) > "$log" 2>&1 < /dev/null
+S8 instrument: 98736 dump rows
+[2026-11-06T06:12:08Z] pgx: lifetime S8 (8 GB)
+SGLANG_ENGAGEMENT ok
+S8 P1 rc=0 faults 0 tok/s 42.6
+S8 P2 rc=0 faults 0 tok/s 42.6
+pgx_run.sh: line 328:  5617 Killed                  ( . $W/sglang.env; exec setsid env PYTHONPATH=${SGL_HOOK_PATH:-} ${SGL_DUMP_ENV:-} $W/venv-sglang/bin/python -m sglang.launch_server --model-path "$m" --revision "$rev" --host 127.0.0.1 --port $PORT_SGL --served-model-name pgx --enable-paged-experts --paged-experts-num-resident "$k" --disable-radix-cache --context-length 2048 --max-running-requests 4 --random-seed 0 --log-level info $extra ) > "$log" 2>&1 < /dev/null
+PGX_LIFETIME S8 counters_ok=True wall=170.0 peak_vram=18697.0 peak_rss=49.96 
+[2026-11-06T06:15:00Z] pgx: lifetime V8 (8 GB)
+V8 P1 rc=0 faults 0 tok/s 46.2
+V8 P2 rc=0 faults 0 tok/s 46.5
+PGX_LIFETIME V8 counters_ok=True wall=211.0 peak_vram=22103.0 peak_rss=30.84 
+[2026-11-06T06:18:31Z] pgx: lifetime E-hyb (8 GB)
+E-hyb P1 rc=0 faults 0 tok/s 5.0
+E-hyb P2 rc=0 faults 0 tok/s 5.2
+PGX_LIFETIME E-hyb counters_ok=True wall=836.0 peak_vram=12609.0 peak_rss=19.13 
+[2026-11-06T06:32:27Z] pgx: verdict
+PGX_SHAKE SHAKE_OK: 0 stop(s), 0 fault(s); lifetime wall max 836.0 s, peak RSS max 49.96 GiB
+[2026-11-06T06:32:27Z] pgx: TP_DONE rc=0
