@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -42,6 +43,7 @@ PART_OK, PART_FAULTS, STRIKE, NOT_STARTED = "PART_OK", "PART_FAULTS", "STRIKE", 
 EXIT = {PART_OK: 0, PART_FAULTS: 10, STRIKE: 12, NOT_STARTED: 13}
 EXIT_NO_SERVE = 11
 PREFIX = "PGX"
+NONCE_RE = re.compile(r"[0-9a-f]{16}")                # the driver's nonce form
 
 
 def _text(path):
@@ -51,6 +53,16 @@ def _text(path):
             return f.read().strip()
     except FileNotFoundError:
         return None
+
+
+def _present(path) -> bool:
+    """True if the path exists. Only FileNotFoundError means absent: any other stat error (PermissionError, ...) propagates,
+    since absence of STARTED is the permissive outcome (NOT_STARTED) and must never be inferred from an unreadable path."""
+    try:
+        os.lstat(path)
+    except FileNotFoundError:
+        return False
+    return True
 
 
 def _json(path):
@@ -101,7 +113,7 @@ def classify(box_dir: str, run_id: str | None = None, rc: int | None = None) -> 
     out = {"class": STRIKE, "why": [], "run_id": None, "rc": None, "spec": None, "draws": None, "no_serve": [],
            "stop_for_person": False}
     why = out["why"]
-    if not os.path.exists(os.path.join(box_dir, "STARTED")):
+    if not _present(os.path.join(box_dir, "STARTED")):
         out["class"] = NOT_STARTED
         why.append("no STARTED: the registered pre-STARTED rules apply")
         return out
@@ -127,7 +139,10 @@ def classify(box_dir: str, run_id: str | None = None, rc: int | None = None) -> 
     out.update(spec=spec, draws=draws)
     # the box's own exit code, for its own nonce
     nonce = _text(os.path.join(box_dir, f"{PREFIX}_RUN_NONCE"))
-    code = _text(os.path.join(box_dir, f"{PREFIX}_EXIT_CODE.{nonce}")) if nonce else None
+    if nonce is None or not NONCE_RE.fullmatch(nonce):       # read from the box (untrusted): validated before any path use
+        why.append(f"{PREFIX}_RUN_NONCE {'missing' if nonce is None else 'malformed'}")
+        return out
+    code = _text(os.path.join(box_dir, f"{PREFIX}_EXIT_CODE.{nonce}"))
     if code is None or not code.isdigit():
         why.append(f"no readable {PREFIX}_EXIT_CODE for the box's nonce")
         return out

@@ -793,12 +793,17 @@ directory):
 the box's `part_verdict.json` field for field. So the record covers every scheduled lifetime of those draws, skipped ones
 included (a skipped lifetime reduces as missing), and it belongs to the directory it came with. Also required:
 - the box ran the registered schedule (`box_schedule.txt` equals `pgx_schedule.py --box K-i`);
-- the exit code is the one in the box's file for its own nonce, and it agrees with the code the launcher read;
+- the exit code is the one in the box's file for its own nonce, and it agrees with the code the launcher read. The
+  nonce comes from the box, so it must be the driver's 16-hex form before it is used in a path; anything else is
+  class (c);
 - rc 0 carries the nonce's success marker.
 
 A 27 without such a record is class (c). A 27 can also come from a reduction that crashed: `pgx_read.sh` maps any
 non-zero reducer exit to 27. An rc 0 without a verified `PART_OK` record is also class (c). The box side cannot produce
 one, so it fails closed.
+
+**Only a missing `STARTED` reads as never started.** Not started is the permissive outcome, so any other error reading
+`STARTED` (a permission error, say) is not absence. The classifier raises, and the kit stops for a person.
 
 **Strikes count lane-wide.** `pgx-shake-1` is strike one (Amendment 2, rule 6). `pgx-shake-r1` finished 0. So any class
 (c) reading box is strike two and ends the lane. Host refusals before `STARTED` stay non-strikes, as registered.
@@ -817,6 +822,8 @@ whether the next box may launch. It is made before any reading box.
 - class (a) on a whole-draw fixture built from r1's real records, under the plain and the retry ids;
 - class (c): 17 record mutants (a missing, truncated or edited record, a lifetime removed after the reduction, a wrong
   schedule, nonce, id or registration) and every other code after `STARTED`. Each test names the check that caught it;
+- six malformed nonces, `../x` among them, each with a readable 27 planted where the bad nonce would lead: class (c);
+- a `STARTED` that cannot be stat'ed raises; it never reads as not started;
 - the `no_serve` rule:
   - a startup failure, and every request faulted, each stop;
   - one serving lifetime of two does not stop;
@@ -830,7 +837,9 @@ Code mutants of the classifier were also run. Each of these fails at least one t
 - skipping the success marker;
 - reading `no_serve` from any one lifetime instead of all;
 - counting a skipped lifetime as a serve failure;
-- skipping the exit-code check.
+- skipping the exit-code check;
+- testing `STARTED` with `os.path.exists` (which reads any stat error as absent);
+- skipping the nonce check, or matching it with `re.match` in place of `re.fullmatch`.
 
 **The reading kit is cut from this amendment's merge.** That merge is the launch commit. The kit's stop calls
 `pgx_box_end.py` on each started reading box:

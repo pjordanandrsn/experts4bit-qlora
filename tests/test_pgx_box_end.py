@@ -224,6 +224,44 @@ def test_c_the_caller_and_the_box_must_agree(tmp_path):
     assert be.classify(str(d), "pgx-4090-1-2-1", 27)["class"] == be.PART_FAULTS
 
 
+def test_an_unreadable_started_never_reads_not_started(tmp_path, monkeypatch):
+    """NOT_STARTED is the permissive outcome (no strike), so only FileNotFoundError may mean "absent": a STARTED that
+    cannot be stat'ed raises, and the caller stops for a person."""
+    d = _box(tmp_path, "pgx-4090-1-2-1", _r1_read, 27)
+    real = be.os.lstat
+
+    def lstat(path, *a, **k):
+        if str(path).endswith("STARTED"):
+            raise PermissionError(13, "Permission denied", str(path))
+        return real(path, *a, **k)
+    def exists(path):                                        # os.path.exists' own rule: ANY stat error reads as False
+        try:
+            lstat(path)
+        except OSError:
+            return False
+        return True
+    monkeypatch.setattr(be.os, "lstat", lstat)
+    monkeypatch.setattr(be.os.path, "exists", exists)
+    with pytest.raises(PermissionError):
+        be.classify(str(d))
+
+
+@pytest.mark.parametrize("nonce", ["../x", "0123456789ABCDEF", "0123456789abcde", "0123456789abcdef0",
+                                   "0123456789abcdef/../../x", "01234567 89abcdef"])
+def test_c_a_malformed_nonce_is_never_used_as_a_path(tmp_path, nonce):
+    d = _box(tmp_path, "pgx-4090-1-2-1", _r1_read, 27)
+    (d / "PGX_RUN_NONCE").write_text(nonce + "\n")
+    target = d / f"PGX_EXIT_CODE.{nonce}"                    # a readable 27 where an unvalidated nonce would lead
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("27\n")
+    except OSError:
+        pass
+    res = be.classify(str(d))
+    assert res["class"] == be.STRIKE and res["rc"] is None, res
+    assert any("PGX_RUN_NONCE malformed" in w for w in res["why"]), res["why"]
+
+
 # ---------------------------------------------------------------- the second rule: an arm that served nothing
 def _fail(arm, b, d, how):
     def go(box):
