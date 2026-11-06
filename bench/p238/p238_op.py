@@ -529,6 +529,10 @@ def main(argv=None):
     ap.add_argument("--rows", default=",".join(map(str, ROWS)))
     ap.add_argument("--dry", action="store_true", help="CPU, stand-in module, no library: a record that never reads")
     a = ap.parse_args(argv)
+    # amendment 5: resolve --tc1 in BOTH modes, so a dry run exercises the path the GPU run loads. p238-shake-r5's op processes
+    # died at the default ``../tc1/tc1_arm.py``, which the box's flat staging does not have; the runner now passes the staged copy.
+    if not os.path.isfile(a.tc1):
+        raise SystemExit(f"p238_op: --tc1 {a.tc1} is not a file (on the box the runner passes the staged $W/tc1_arm.py)")
     rows = [int(r) for r in a.rows.split(",")]
     if any(r not in ROWS for r in rows):
         raise SystemExit(f"p238_op: --rows {a.rows} is not inside the registered {ROWS}")
