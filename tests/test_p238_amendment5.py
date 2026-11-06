@@ -25,7 +25,10 @@ FIX = ROOT / "tests" / "fixtures" / "p238_r5"
 RUN = (P238 / "p238_run.sh").read_text(encoding="utf-8")
 SHIM = P238 / "p238_shim_sitecustomize.py"
 TARGETS = ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"]
-# the real records, from p238-shake-r5's receipt (bench/p238/receipts after the lane commits it; the private store until then)
+# the real records, from p238-shake-r5's receipt (bench/p238/receipts after the lane commits it; the private store until then).
+# op_1.last_line.txt is op_1.log's last line, byte for byte. load_5.cell_refused.json is the U0 load's record re-serialized with
+# sorted keys (content-equal to loads/5/qwen3_5_unsloth_p238_5_U0_2k.json, whose own sha256 is 0b2f42d92d67dcc7b4520b857198bd9109
+# 95fb4a74935711728f59f3509ac7bf, and to the log's CELL REFUSED line).
 FIXTURES = {"op_1.last_line.txt": "ff098865a07daff142b448615d96e90703921b7837e733cce0f03d4c976acbdd",
             "load_5.cell_refused.json": "4dc3a3cb6a98e43c0a64b232205a3fad37fda5f4f5b2070b66d1b453c723ecbb"}
 
@@ -97,12 +100,31 @@ LLAMA = '''class FastLlamaModel:
     def get_peft_model(model, r=16, target_modules=None, lora_alpha=16, target_parameters=None, **kwargs):
         return {"via": "llama", "target_parameters": target_parameters}
 '''
-VISION = '''class FastBaseModel:
+VISION_CLASS = '''import functools
+
+
+class FastBaseModel:
     @staticmethod
     def get_peft_model(model, r=16, target_modules=None, lora_alpha=16, target_parameters=None, **kwargs):
         return {"via": "vision", "target_parameters": target_parameters}
 '''
+# vision.py:5709-5718 rebinds it at import through unsloth_zoo's wrap_loader_for_grouped_moe (functools.wraps of the original)
+ZOO_REBIND = '''
+
+def _zoo_wrap(fn):
+    @functools.wraps(fn)
+    def w(*args, **kwargs):
+        return fn(*args, **kwargs)
+    return w
+
+
+FastBaseModel.get_peft_model = staticmethod(_zoo_wrap(FastBaseModel.get_peft_model))
+'''
+VISION = VISION_CLASS + ZOO_REBIND                                    # the box's shape
 VISION_NO_TP = VISION.replace("target_parameters=None, ", "").replace('"target_parameters": target_parameters', '"kw": kwargs')
+VISION_REBIND_NO_WRAPS = VISION.replace("    @functools.wraps(fn)\n", "")
+VISION_REBIND_PLAIN = VISION.replace("FastBaseModel.get_peft_model = staticmethod(_zoo_wrap(FastBaseModel.get_peft_model))",
+                                     "FastBaseModel.get_peft_model = _zoo_wrap(FastBaseModel.get_peft_model)")
 # loader.py's two dispatchers, as unsloth 2026.10.8 writes them (models/loader.py:1182-1190 and 2127-2136)
 LOADER = '''import functools
 from .llama import FastLlamaModel
@@ -197,12 +219,36 @@ def test_with_the_shim_fastmodel_passes_target_parameters_explicitly(tmp_path):
                                                            ".get_peft_model(model, **kwargs)")},
      "not (model, *args, **kwargs)"),
     ("a target without the parameter", {"vision": VISION_NO_TP}, "does not name target_parameters"),
+    ("a rebinding wrapper without wraps", {"vision": VISION_REBIND_NO_WRAPS}, "does not name target_parameters"),
+    ("a rebinding that is not a staticmethod", {"vision": VISION_REBIND_PLAIN}, "is not a staticmethod"),
 ])
 def test_the_shim_refuses_anything_but_the_verified_shape(tmp_path, case, kw, why):
     """Each refusal raises at the import of unsloth.models.loader: the arm fails loud, never with the targets dropped."""
     r, out = _probe(tmp_path, _unsloth(tmp_path, **kw))
     assert out is None and r.returncode != 0, (case, r.stdout[-400:])
     assert "P238 shim: " in r.stderr and why in r.stderr, (case, r.stderr[-800:])
+
+
+def test_without_the_zoo_rebinding_the_shim_still_passes(tmp_path):
+    """If unsloth_zoo's import fails, vision.py's try/except leaves the plain staticmethod: the shim passes on that shape too."""
+    r, out = _probe(tmp_path, _unsloth(tmp_path, vision=VISION_CLASS))
+    assert out, r.stderr[-1500:]
+    assert out["FastModel"]["info"]["passed"] is True
+    assert out["FastModel"]["reached"] == {"via": "vision", "target_parameters": TARGETS}
+
+
+def test_a_shadowed_sitecustomize_still_runs(tmp_path):
+    """The shim is first on PYTHONPATH, so it shadows any later sitecustomize; it chains it, as Python would run it without the
+    shim."""
+    site, other = tmp_path / "p238_site", tmp_path / "other"
+    site.mkdir()
+    other.mkdir()
+    shutil.copy(SHIM, site / "sitecustomize.py")
+    (other / "sitecustomize.py").write_text("import sys\nprint('OTHER_SITECUSTOMIZE_RAN', file=sys.stderr)\n")
+    r = subprocess.run([sys.executable, "-c", "pass"], env={**os.environ, "PYTHONPATH": os.pathsep.join([str(site), str(other)])},
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0 and "OTHER_SITECUSTOMIZE_RAN" in r.stderr
+    assert f"P238_SHIM chained the shadowed sitecustomize {other / 'sitecustomize.py'}" in r.stderr
 
 
 def test_the_shim_is_inert_without_unsloth(tmp_path):

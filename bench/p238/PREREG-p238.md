@@ -719,12 +719,19 @@ The $0 path missed both: `p238_op.py`'s dry mode never resolved `--tc1`, and no 
   - the dispatcher's signature is exactly `(model, *args, **kwargs)`, with no `__wrapped__` yet;
   - the target names `target_parameters`.
   It is inert in any process that never imports Unsloth's loader (the e4b arms).
+  On the box, Unsloth's `models/vision.py:5709-5718` rebinds `FastBaseModel.get_peft_model` at import as
+  `staticmethod(wrap_loader_for_grouped_moe(...))`. That is unsloth_zoo's wrapper, which carries `functools.wraps` of the
+  original, so `inspect.signature` follows it to the original's `target_parameters`. The shim passes on that shape and on
+  the unwrapped one. A `sitecustomize` the shim shadows is chained, so placing it changes nothing else in the process.
 - **`tc1_arm.py` does not change.** It is shared: TC1's runner uses T24, and P237 pins its bytes. The binding check stays
   where it was registered: the reducer VOIDs any row whose adapter census lacks the 80 expert (layer, projection) entries
   or differs from the reference. So expert targets dropped by any route cannot pass silently.
 - The runner and driver accept `p238-shake-r6` to `p238-shake-r8` (below).
 - `staged-p238.sha256` moves for `p238_run.sh` and `p238_op.py`, and names the shim.
-- **The $0 tests** (`tests/test_p238_amendment5.py`) start from r5's own records, sha256-pinned fixtures from its receipt:
+- **The $0 tests** (`tests/test_p238_amendment5.py`) start from r5's own records, sha256-pinned fixtures from its receipt.
+  The op line is byte-equal to the log's last line. The U0 refusal is its load record re-serialized with sorted keys, content-equal
+  to the receipt's file (whose own sha256 is `0b2f42d9…`).
+  The tests check:
   - the op error is exactly the old default resolved from the flat work directory;
   - T24 on the wheel's dispatcher shape reproduces r5's refusal text word for word.
   Then:
@@ -733,17 +740,22 @@ The $0 path missed both: `p238_op.py`'s dry mode never resolved `--tc1`, and no 
   - on a flat staging, the runner's form runs and r5's form refuses at $0;
   - with the shim, the real T24 passes `target_parameters` and the keyword reaches `FastBaseModel`, while the sibling
     dispatcher is untouched;
-  - the shim refuses another version, an already-wrapped dispatcher, another dispatcher shape, and a target without the
-    parameter;
+  - the stand-in carries the box's import-time rebinding of the target (unsloth_zoo's `functools.wraps` wrapper, as a
+    staticmethod), and the shim also passes without it;
+  - the shim refuses another version, an already-wrapped dispatcher, another dispatcher shape, a target without the
+    parameter, a rebinding wrapper without `wraps`, and a rebinding that is not a staticmethod;
+  - a `sitecustomize` it shadows still runs;
   - it is inert without Unsloth.
-  Seven code mutants were each killed: no `__wrapped__`, no version pin, no shape check, no already-wrapped check, no target
-  check, the runner without `--tc1`, and `p238_op.py` without its check.
+  Nine code mutants were each killed: no `__wrapped__`, no version pin, no shape check, no already-wrapped check, no target
+  check, no staticmethod check, no chaining, the runner without `--tc1`, and `p238_op.py` without its check.
 
 **The next box and the stop.**
 - **Why one more shakedown box.** `p238-shake-r5` finished 0, and "a finished shakedown ends it" reads that record as
   written. But it carries no row a reading could use. The reading's fit, each arm's measured per-load wall, does not exist,
   and neither do the op cells or any Unsloth engagement counter. One more shakedown box is registered: `p238-shake-r6`, with
   retry ids `p238-shake-r7` and `p238-shake-r8` for a box that does not start.
+  `p238-shake-r6` launches after r5's exempt record as a **newly registered box, not an amendment 2 retry**. Amendment 2's
+  "each launched only after the previous shakedown box ended rc 18 before STARTED" governs r7 and r8 only.
 - **r5's exact record** is exempt from "a finished shakedown ends it" for r6, r7 and r8 only, when all of these hold:
   - it STARTED and finished 0;
   - every row of its reduction is VOID (22 of 22);
@@ -762,5 +774,6 @@ The $0 path missed both: `p238_op.py`'s dry mode never resolved `--tc1`, and no 
   this amendment's merge. r6 launches only from a kit cut at this merge, with a fresh approval.
 
 **Cost.** Spent so far: r4 USD 0.80, r5 USD 0.77 and the refused boxes USD 0.066, USD 1.64 in all. This amendment adds at
-most one STARTED shakedown box at amendment 3's worst, USD 8.20 (5.25 h x USD 1.25 + 82 GB x USD 0.02). The refused spend
+most one STARTED shakedown box at amendment 3's worst: 5.25 h x USD 1.25 + 82 GB x USD 0.02 = USD 8.2025, stated here
+rounded up as **USD 8.21** (amendment 3 wrote 8.20). The refused spend
 stays under its launch rule. The reading's budget is unchanged.

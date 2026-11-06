@@ -16,9 +16,16 @@ the same metadata ``functools.wraps`` gives the sibling dispatcher. No call path
 reach and passes ``target_parameters`` explicitly. It REFUSES (raises at that import, so the arm fails loud) unless the
 installed unsloth is the pin, ``FastModel`` subclasses ``FastBaseModel``, both methods are staticmethods, the dispatcher's
 signature is exactly ``(model, *args, **kwargs)`` with no ``__wrapped__`` yet, and the target names ``target_parameters``.
-Inert in any process that never imports ``unsloth.models.loader`` (the e4b arms)."""
+Inert in any process that never imports ``unsloth.models.loader`` (the e4b arms).
+
+On the box, unsloth's vision.py:5709-5718 rebinds ``FastBaseModel.get_peft_model`` at import as
+``staticmethod(wrap_loader_for_grouped_moe(...))`` (unsloth_zoo's wrapper, ``functools.wraps`` of the original), so the target
+the shim reads is that wrapper and ``inspect.signature`` follows it to the original's ``target_parameters``. A sitecustomize
+this file shadows is chained (run after the hook is installed), so placing the shim changes nothing else."""
 import importlib.abc
+import importlib.machinery
 import importlib.util
+import os
 import sys
 
 PIN = "2026.10.8"
@@ -82,3 +89,19 @@ class _Finder(importlib.abc.MetaPathFinder):
 
 
 sys.meta_path.insert(0, _Finder())
+
+
+def chain_shadowed():
+    """Run the sitecustomize this one shadows, if any (one later on sys.path would otherwise never run), as Python would
+    without the shim. Returns its path, or None."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    rest = [p for p in sys.path if os.path.abspath(p or os.curdir) != here]
+    spec = importlib.machinery.PathFinder.find_spec("sitecustomize", rest)
+    if spec is None or spec.loader is None:
+        return None
+    spec.loader.exec_module(importlib.util.module_from_spec(spec))
+    print(f"P238_SHIM chained the shadowed sitecustomize {spec.origin}", file=sys.stderr, flush=True)
+    return spec.origin
+
+
+chain_shadowed()
