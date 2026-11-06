@@ -1,3 +1,0 @@
-Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-Fetching 8 files:  12%|█▎        | 1/8 [00:00<00:01,  4.74it/s]Fetching 8 files:  88%|████████▊ | 7/8 [00:00<00:00,  7.73it/s]Fetching 8 files: 100%|██████████| 8/8 [03:29<00:00, 36.69s/it]Fetching 8 files: 100%|██████████| 8/8 [03:29<00:00, 26.14s/it]
-/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-GPTQ-Int4/snapshots/9b534e4318b7ebc3c961a839f13eb18b1833f441
