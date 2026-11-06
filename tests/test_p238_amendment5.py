@@ -252,12 +252,17 @@ def test_a_shadowed_sitecustomize_still_runs(tmp_path):
 
 
 def test_the_shim_is_inert_without_unsloth(tmp_path):
+    """Inert: no patch line. A base Python that ships its own sitecustomize (Homebrew, Debian and Ubuntu system pythons, likely
+    the box image) logs one chain line, and nothing else may appear."""
     site = tmp_path / "p238_site"
     site.mkdir()
     shutil.copy(SHIM, site / "sitecustomize.py")
     r = subprocess.run([sys.executable, "-c", "import json, sys; print(any(type(f).__name__ == '_Finder' for f in sys.meta_path))"],
                        env={**os.environ, "PYTHONPATH": str(site)}, capture_output=True, text=True, timeout=120)
-    assert r.returncode == 0 and r.stdout.strip() == "True" and "P238_SHIM" not in r.stderr
+    assert r.returncode == 0 and r.stdout.strip() == "True", r.stderr[-800:]
+    shim_lines = [ln for ln in r.stderr.splitlines() if "P238_SHIM" in ln]
+    assert all(ln.startswith("P238_SHIM chained the shadowed sitecustomize ") for ln in shim_lines), shim_lines
+    assert len(shim_lines) <= 1, shim_lines
 
 
 # -- the page ------------------------------------------------------------------------------------------------------------------
