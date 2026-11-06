@@ -1,5 +1,5 @@
 #!/bin/bash
-# Lane PGX, BOX side (bench/pgx/PREREG-pgx.md, Amendment 1): THE SHAKEDOWN pgx-shake-1 on one RTX 4090. Never read. It covers
+# Lane PGX, BOX side (bench/pgx/PREREG-pgx.md, Amendments 1 and 2): THE SHAKEDOWN pgx-shake-1 on one RTX 4090. Never read. It covers
 # the registered shakedown paragraph ("Run ids, order and the stop"): the three engine venvs and e4b; the fetch of the three
 # pinned checkpoints; the NF4 bake; grouped-nf4-gemm's bench/calibrate.py writing E-hyb's calib.json on this host; the
 # measured bytes per expert and K table; the card-clock burn; then ONE lifetime per arm at 8 GB (S4, S8, V8, E-hyb, in draw
@@ -89,7 +89,8 @@ nvidia-smi --query-gpu=name,memory.total,driver_version,compute_cap --format=csv
 nvidia-smi --query-gpu=power.limit,enforced.power.limit,clocks.max.sm,temperature.gpu,clocks.sm --format=csv,noheader | sed "s/^/power.limit,enforced.power.limit,clocks.max.sm,temperature.gpu,clocks.sm /" | tee -a forensics.txt
 lscpu | grep -E "Model name|^Vendor ID|^CPU\(s\)|NUMA node\(s\)|^Flags" | cut -c1-2000 | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
 cat /sys/fs/cgroup/memory.max 2>/dev/null | sed "s/^/cgroup memory.max /" | tee -a forensics.txt
-env | grep -E '^(PYTORCH_|TORCH_|CUDA_|NV_|NVIDIA_)' | sort > env_image.txt || true
+env | grep -E '^(PYTORCH_|TORCH_|CUDA_|NV_|NVIDIA_|PYTHON|PIP_|LD_LIBRARY_PATH=|PATH=)' | sort > env_image.txt || true   # Amendment 2: + PYTHON*, PIP_*, LD_LIBRARY_PATH, PATH
+python -c 'import sys; print(sys.executable); print(sys.path)' > logs/sys_path.txt 2>&1 || true   # Amendment 2: the image python's own path
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 CC=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1)
 SMS=${CUDA_PROBE##*sms=}
@@ -176,13 +177,17 @@ echo "torch==${TORCH_WANT%%+*}" > $W/constraints.txt
 say "install e4b @$E4B_SHA + grouped-nf4-gemm==$GNF4_VERSION (image python; torch held at $TORCH_WANT)"
 perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input -c $W/constraints.txt --prefer-binary \
   "experts4bit-qlora[serve] @ git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" "grouped-nf4-gemm==$GNF4_VERSION" \
-  "transformers==5.17.0" "bitsandbytes==0.50.2" accelerate safetensors "huggingface_hub>=0.23" "fastapi==0.141.1" "uvicorn==0.54.0" \
+  "transformers==5.17.0" "bitsandbytes==0.50.2" "accelerate==1.15.0" "safetensors==0.8.0" "huggingface_hub==1.33.0" \
+  "fastapi==0.141.1" "uvicorn==0.54.0" \
   > logs/pip_e4b.log 2>&1 || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
 # grouped-nf4-gemm's calibrate.py and its C bench are not packaged: the release tag's tree, by its commit
 perl -e 'alarm 600; exec @ARGV' git clone -q --filter=blob:none --no-checkout https://github.com/pjordanandrsn/grouped-nf4-gemm.git $W/gnf4-src > logs/gnf4_clone.log 2>&1 \
   && git -C $W/gnf4-src checkout -q $GNF4_TAG_SHA -- bench/calibrate.py bench/hybrid_calib.c >> logs/gnf4_clone.log 2>&1 \
   || { tail -3 logs/gnf4_clone.log; say "GNF4 SOURCE FAIL"; finish 9; }
-(cd $W && PYTHONPATH= python $W/pgx_tripwire.py --kit $W --box "$E4B_SHA" "$TORCH_WANT") | tee logs/tripwire_e4b.log
+# Amendment 2: the tripwire also runs the bake's own imports and calls (k8_bake.py) and builds calibrate's microbench, so a
+# broken bake or calibrate chain is rc 9 here, before the 15-minute fetch (pgx-shake-1 met it in the bake's first second)
+(cd $W && PYTHONPATH= python $W/pgx_tripwire.py --kit $W --box "$E4B_SHA" "$TORCH_WANT" --bake $W/k8_bake.py \
+  --calib $W/gnf4-src/bench/calibrate.py) | tee logs/tripwire_e4b.log
 [ "${PIPESTATUS[0]}" = 0 ] || { say "TRIPWIRE FAIL (e4b)"; finish 9; }
 python - <<PYV >> versions.txt
 import importlib.metadata as md, torch, transformers, experts4bit_qlora as e
@@ -258,9 +263,21 @@ echo "K_MEASURED S4=$KM_S4 S8=$KM_S8 V8=$KM_V8 (registered $K_S4/$K_S8/$K_V8; a 
 # ---- the NF4 arena (P39's k8_bake.py, as SC1 and P233 bake it)
 can_run $BAKE_S bake || finish 40
 say "bake the NF4 arena"; mkdir -p $W/work
-K8_MODEL="$SNAP_bf16" K8_WORK="$W/work" perl -e "alarm $(step_alarm 5400); exec @ARGV" python $W/k8_bake.py > logs/bake.log 2>&1 \
-  || { tail -3 logs/bake.log; say "BAKE FAIL"; finish 12; }
-[ -e $W/work/nf4.arena ] || { say "BAKE FAIL: no arena"; finish 12; }
+# Amendment 2: k8_bake.py catches its own exception and writes only "BAKE FAILED" to stdout; the error and traceback go to
+# work/bake.json. bake_why appends them to logs/bake.log (and the driver now fetches work/*.json too). The bake runs with
+# PYTHONPATH cleared, as the tripwire that checked its imports did.
+bake_why(){ [ -s $W/work/bake.json ] || { echo "bake_why: no work/bake.json" >> logs/bake.log; return 0; }
+  python - $W/work/bake.json >> logs/bake.log 2>&1 <<'PYB'
+import json, sys
+r = json.load(open(sys.argv[1]))
+print(f"bake.json: status={r.get('status')} step={r.get('step')}")
+print(f"err: {r.get('err')}")
+print(r.get("tb") or "(no traceback)")
+PYB
+}
+K8_MODEL="$SNAP_bf16" K8_WORK="$W/work" PYTHONPATH= perl -e "alarm $(step_alarm 5400); exec @ARGV" python $W/k8_bake.py > logs/bake.log 2>&1 \
+  || { bake_why; tail -25 logs/bake.log; say "BAKE FAIL"; finish 12; }
+[ -e $W/work/nf4.arena ] || { bake_why; tail -25 logs/bake.log; say "BAKE FAIL: no arena"; finish 12; }
 grep -a "BAKE" logs/bake.log | tail -1 | tee -a summary.txt
 # ---- calibrate (E-hyb's solver refuses to guess bandwidths) and the placement preview on THIS host's blob
 can_run $CALIB_S calibrate || finish 40

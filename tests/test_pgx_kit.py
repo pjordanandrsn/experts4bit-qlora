@@ -8,7 +8,11 @@
 - the shake verdict's and the box helper's self-tests;
 - both hooks load where the box loads them: the SGLang routing hook inside a VENV (through ``hook/sitecustomize.py``; without it a
   venv never imports ``usercustomize``), and the E-hyb placement-proof hook wraps ``enable_hybrid_tier`` and records the tiers;
-- the box's local safetensors-header reader, and the pins the runner and the tripwire share.
+- the box's local safetensors-header reader, and the pins the runner and the tripwire share;
+- Amendment 2: the image-python pins on the runner's line and in the tripwire; the tripwire's bake chain (the imports and calls
+  read from ``k8_bake.py``) and calibrate steps, on this commit and on fixtures for each way they fail; ``bake_why`` copying
+  ``work/bake.json`` into ``logs/bake.log``; the driver's fetch rules carrying ``work/*.json`` and nothing else from ``work/``;
+  and the bake's exact load call on a shardless snapshot, which must stop only at the first shard read.
 """
 from __future__ import annotations
 
@@ -134,10 +138,12 @@ def test_the_box_tripwire_imports_the_serve_stack(monkeypatch, capsys, mods, wan
     """serve_paged imports fastapi and uvicorn lazily, so the --box tripwire must import both by name at their pins; a
     tripwire without those imports fails here (the maintainer's R1 on e4b#2172)."""
     import pgx_tripwire as tw
-    monkeypatch.setattr(tw, "check_box", lambda *a: None)            # the CPU stand-in for the installed-pin step
+    monkeypatch.setattr(tw, "check_box", lambda *a: None)            # the CPU stand-ins for the installed-pin steps
+    for step in ("check_image_pins", "check_bake_chain", "check_calibrate"):   # Amendment 2's steps: tested on their own below
+        monkeypatch.setattr(tw, step, lambda *a: None)
     for name, mod in mods.items():
         monkeypatch.setitem(sys.modules, name, mod)
-    rc = tw.main(["--kit", str(PGX), "--box", "0" * 40, "2.8.0+cu128"])
+    rc = tw.main(["--kit", str(PGX), "--box", "0" * 40, "2.8.0+cu128", "--bake", "k8_bake.py", "--calib", "calibrate.py"])
     out = capsys.readouterr().out
     if want is None:
         assert rc == 0 and "PGX_TRIPWIRE ok serve stack" in out, out
@@ -149,6 +155,171 @@ def test_the_runner_installs_the_serve_stack_the_tripwire_checks():
     import pgx_tripwire as tw
     assert f'"fastapi=={tw.FASTAPI_VERSION}" "uvicorn=={tw.UVICORN_VERSION}"' in RUN
     assert '--box "$E4B_SHA" "$TORCH_WANT"' in RUN
+
+
+def _pip_line() -> str:
+    m = re.search(r'python -m pip install -q --no-input -c \$W/constraints\.txt --prefer-binary \\\n(.*?)> logs/pip_e4b\.log', RUN, re.S)
+    assert m, "the image-python install line moved"
+    return m.group(1)
+
+
+def test_the_runner_pins_every_image_package_the_tripwire_checks():
+    """Amendment 2 A: every package on the image-python install line is pinned, and the tripwire checks each at that pin."""
+    import pgx_tripwire as tw
+    line = _pip_line()
+    named = set(re.findall(r'"([A-Za-z0-9_.-]+)(?:\[[a-z,]+\])?(?:==|>=| @)', line))
+    assert named == set(tw.IMAGE_PINS) | {"experts4bit-qlora"}, sorted(named ^ (set(tw.IMAGE_PINS) | {"experts4bit-qlora"}))
+    for name, ver in tw.IMAGE_PINS.items():
+        want = f'"{name}==$GNF4_VERSION"' if name == "grouped-nf4-gemm" else f'"{name}=={ver}"'
+        assert want in line, want
+    assert ">=" not in line and not re.search(r"(^|\s)(accelerate|safetensors|huggingface_hub)(\s|$)", line), line
+
+
+def test_the_box_tripwire_runs_the_bake_and_calibrate_chains():
+    assert '--bake $W/k8_bake.py \\\n  --calib $W/gnf4-src/bench/calibrate.py' in RUN
+    import pgx_tripwire as tw
+    with pytest.raises(SystemExit):
+        tw.main(["--kit", str(PGX), "--box", "0" * 40, "2.8.0+cu128"])         # --box without --bake/--calib is a usage error
+
+
+def test_the_bake_chain_reads_the_bakes_own_imports_and_calls():
+    import pgx_tripwire as tw
+    stmts, calls = tw.bake_imports(str(REPO / "bench/p39/k8_bake.py"))
+    for st in ("from experts4bit_qlora.loader import load_moe_4bit_streaming", "from nvme_arena import bake_expert_tensors",
+               "from experts4bit_qlora.engines.hot_residency import target_modules",
+               "from experts4bit_qlora.engines.nvme_experts import NF4_SEGMENTS", "from safetensors.torch import save_file"):
+        assert st in stmts, st
+    assert calls == {"load_moe_4bit_streaming": [(5, ["quant_type"])],
+                     "bake_expert_tensors": [(2, ["name_template", "kinds", "align"])]}, calls
+
+
+def test_the_bake_chain_on_this_commit():
+    for mod in ("accelerate", "safetensors", "nvme_arena"):
+        pytest.importorskip(mod)
+    import pgx_tripwire as tw
+    tw.check_bake_chain(str(REPO / "bench/p39/k8_bake.py"))
+
+
+def _fake_bake(tmp_path, monkeypatch, imports: str, call: str):
+    (tmp_path / "pgx_fake_loader.py").write_text("def load_moe_4bit_streaming(model_id, device, dtype, a, b, quant_type='nf4'):\n"
+                                                 "    pass\n")
+    (tmp_path / "pgx_fake_arena.py").write_text("def bake_expert_tensors(snap, arena, name_template, kinds, align=4096):\n"
+                                                "    pass\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    bake = tmp_path / "k8_fake.py"
+    bake.write_text(f"{imports}\ntry:\n    {call}\n    bake_expert_tensors('s', 'a', name_template='t', kinds=(), align=4096)\n"
+                    "except Exception:\n    pass\n")
+    return str(bake)
+
+
+@pytest.mark.parametrize("imports, call, want", [
+    ("from pgx_fake_loader import load_moe_4bit_streaming\nfrom pgx_fake_arena import bake_expert_tensors",
+     "load_moe_4bit_streaming('m', 'cuda', None, 8, 16, quant_type='nf4')", None),
+    ("from pgx_fake_loader import load_moe_4bit_streaming\nfrom pgx_fake_arena import bake_expert_tensors\nimport pgx_no_such_module",
+     "load_moe_4bit_streaming('m', 'cuda', None, 8, 16, quant_type='nf4')", "import pgx_no_such_module` fails"),
+    ("from pgx_fake_loader import load_moe_4bit_streaming\nfrom pgx_fake_arena import bake_expert_tensors",
+     "load_moe_4bit_streaming('m', 'cuda', None, 8, 16, 32, quant_type='nf4')", "does not bind"),
+    ("from pgx_fake_loader import load_moe_4bit_streaming\nfrom pgx_fake_arena import bake_expert_tensors",
+     "load_moe_4bit_streaming('m', 'cuda', None, 8, 16, quant='nf4')", "does not bind"),
+])
+def test_the_bake_chain_fails_each_way(tmp_path, monkeypatch, imports, call, want):
+    import pgx_tripwire as tw
+    bake = _fake_bake(tmp_path, monkeypatch, imports, call)
+    if want is None:
+        tw.check_bake_chain(bake)
+    else:
+        with pytest.raises(AssertionError, match=re.escape(want)):
+            tw.check_bake_chain(bake)
+
+
+@pytest.mark.parametrize("builds, src, want", [(True, True, None), (False, True, "does not build"), (True, False, "is missing")])
+def test_the_calibrate_step(tmp_path, builds, src, want):
+    import pgx_tripwire as tw
+    bench = tmp_path / "bench"
+    bench.mkdir()
+    if src:
+        (bench / "hybrid_calib.c").write_text("int main(void){return 0;}\n")
+    body = ("    out = workdir / 'hybrid_calib'\n    out.write_text('bin')\n    return out, 'cc -O3'\n" if builds
+            else "    return None, 'compile failed: no'\n")
+    (bench / "calibrate.py").write_text("from pathlib import Path\nHERE = Path(__file__).resolve().parent\n"
+                                        "C_SRC = HERE / 'hybrid_calib.c'\n\n\ndef build_microbench(workdir):\n" + body)
+    if want is None:
+        tw.check_calibrate(str(bench / "calibrate.py"))
+    else:
+        with pytest.raises(AssertionError, match=want):
+            tw.check_calibrate(str(bench / "calibrate.py"))
+
+
+@pytest.mark.parametrize("record", [True, False])
+def test_bake_why_copies_the_bakes_own_error_into_its_log(tmp_path, record):
+    """Amendment 2 C: k8_bake.py prints only "BAKE FAILED"; its error and traceback are in work/bake.json."""
+    fn = re.search(r"^bake_why\(\)\{.*?^\}$", RUN, re.S | re.M)
+    assert fn, "bake_why moved"
+    (tmp_path / "logs").mkdir()
+    (tmp_path / "work").mkdir()
+    (tmp_path / "logs" / "bake.log").write_text("BAKE FAILED\n")
+    if record:
+        (tmp_path / "work" / "bake.json").write_text(json.dumps(
+            {"step": "start", "status": "FAILED", "err": "ImportError('no module x')", "tb": "Traceback (most recent call last):\n  boom\n"}))
+    script = f"W={tmp_path}; cd {tmp_path}\n{fn.group(0)}\nbake_why\n"
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env={**os.environ, "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ.get('PATH', '')}"})
+    assert r.returncode == 0, r.stderr
+    log = (tmp_path / "logs" / "bake.log").read_text()
+    assert log.startswith("BAKE FAILED\n")
+    if record:
+        assert "status=FAILED" in log and "err: ImportError('no module x')" in log and "boom" in log, log
+    else:
+        assert "bake_why: no work/bake.json" in log, log
+    assert "PYTHONPATH= perl" in RUN and RUN.count("bake_why;") == 2
+
+
+@pytest.mark.skipif(shutil.which("rsync") is None, reason="needs rsync")
+def test_the_fetch_carries_work_json_and_nothing_else_from_work(tmp_path):
+    """Amendment 2 C: the driver's rsync rules, run on a fixture tree."""
+    m = re.search(r"^PGX_RSYNC_EXCLUDES=\(.*?\)$", DRIVE, re.S | re.M)
+    assert m, "PGX_RSYNC_EXCLUDES moved"
+    src, dst = tmp_path / "box", tmp_path / "out"
+    files = {"work/bake.json": True, "work/nf4.arena": False, "work/nf4snap/model-00000.safetensors": False,
+             "work/nf4snap/model.safetensors.index.json": False, "work/notes.txt": False, "summary.txt": True,
+             "logs/bake.log": True, "venv-sglang/x.py": False, "calib.json": True}
+    for rel in files:
+        (src / rel).parent.mkdir(parents=True, exist_ok=True)
+        (src / rel).write_text("x")
+    r = subprocess.run(["bash", "-c", f'{m.group(0)}\nrsync -a --no-links "${{PGX_RSYNC_EXCLUDES[@]}}" {src}/ {dst}/'],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    got = {rel: (dst / rel).exists() for rel in files}
+    assert got == files, got
+
+
+def test_the_bakes_load_call_stops_only_at_the_first_shard_read(tmp_path, capfd):
+    """Amendment 2 F: the bake's exact call into the loader, on a shardless snapshot (a small Qwen3-MoE config and an index
+    naming shards that do not exist). It must log the host and the checkpoint (pgx-shake-1's bake.log had neither) and then
+    fail on the first shard: nothing in the imports, the config, the admission or the meta build may stop it."""
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("accelerate")
+    from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
+    cfg = Qwen3MoeConfig(vocab_size=128, hidden_size=64, intermediate_size=128, moe_intermediate_size=64, num_hidden_layers=2,
+                         num_attention_heads=4, num_key_value_heads=2, head_dim=16, num_experts=8, num_experts_per_tok=2,
+                         decoder_sparse_step=1, mlp_only_layers=[], norm_topk_prob=True, tie_word_embeddings=False,
+                         max_position_embeddings=64)
+    cfg.architectures = ["Qwen3MoeForCausalLM"]
+    cfg.save_pretrained(tmp_path)
+    with torch.device("meta"):
+        names = [n for n, _ in Qwen3MoeForCausalLM(cfg).named_parameters() if ".mlp.experts." not in n]
+    wm = {n: "model-00001-of-00002.safetensors" for n in names}
+    for li in range(2):
+        for e in range(8):
+            for proj in ("gate_proj", "up_proj", "down_proj"):
+                wm[f"model.layers.{li}.mlp.experts.{e}.{proj}.weight"] = "model-00002-of-00002.safetensors"
+    (tmp_path / "model.safetensors.index.json").write_text(json.dumps({"metadata": {}, "weight_map": wm}))
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+    with pytest.raises(FileNotFoundError, match=r"model-0000[12]-of-00002\.safetensors"):
+        load_moe_4bit_streaming(str(tmp_path), "cuda", torch.bfloat16, 8, 16, quant_type="nf4")   # k8_bake.py's call
+    err = capfd.readouterr()
+    assert "host CPUs:" in err.out + err.err and "checkpoint: local directory" in err.out + err.err
+    assert 'load_moe_4bit_streaming(MODEL, "cuda",\n                                       torch.bfloat16, 8, 16, quant_type="nf4")' in \
+        (REPO / "bench/p39/k8_bake.py").read_text(), "the bake's call moved: update this test's call with it"
 
 
 @pytest.mark.parametrize("script", ["pgx_shake.py", "pgx_box.py"])
