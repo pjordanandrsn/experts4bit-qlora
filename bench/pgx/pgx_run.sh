@@ -60,7 +60,20 @@ for f in pgx_drive.py pgx_reduce.py pgx_residency.py pgx_bytes.py pgx_place_prev
 # pgx_residency.py loads replay.py from ../train-routing-trace (the repo's layout); the box keeps that layout
 mkdir -p $W/rt/train-routing-trace $W/rt/pgx && cp $W/replay.py $W/rt/train-routing-trace/ && cp $W/pgx_residency.py $W/pgx_box.py $W/rt/pgx/
 # ---- refusals before anything is installed or fetched
-CUDA_PROBE=$(python - <<'PYC' 2>/dev/null | tail -1
+# Amendment 2: the image python, bound by ABSOLUTE path before anything can change PATH, and used by every image-python step.
+# pgx-shake-1 sourced SC1's sglang.env in this shell after the SGLang install; that file puts venv-sglang first on PATH, so
+# every later bare `python` (the bake, calibrate, the E-hyb server, every helper) ran SGLang's venv, which has no e4b: the bake
+# died on its first import (rc 12). Nothing in this script sources sglang.env now except the SGLang subshells.
+PY_IMG=$(command -v python) && [ -x "$PY_IMG" ] || { say "refusing: no python on the image's PATH"; finish 78; }
+echo "PY_IMG $PY_IMG" | tee -a summary.txt
+# what a bare `python` resolves to at each phase (it must stay $PY_IMG: nothing changes this shell's PATH)
+phase_py(){ echo "$(date -u +%FT%TZ) $1: bare python = $(command -v python); PY_IMG = $PY_IMG" >> logs/interpreters.txt; }
+# the import guard: the SAME interpreter the guarded step runs, right before it; rc 9 on failure (an install failure)
+img_guard(){ phase_py "before $1"
+  PYTHONPATH= "$PY_IMG" -c 'import experts4bit_qlora, nvme_arena' > logs/img_guard_$1.log 2>&1 \
+    || { cat logs/img_guard_$1.log; say "IMPORT GUARD FAIL before $1: $PY_IMG cannot import experts4bit_qlora and nvme_arena"; finish 9; }; }
+phase_py start
+CUDA_PROBE=$("$PY_IMG" - <<'PYC' 2>/dev/null | tail -1
 import sys
 try:
     import torch
@@ -90,7 +103,7 @@ nvidia-smi --query-gpu=power.limit,enforced.power.limit,clocks.max.sm,temperatur
 lscpu | grep -E "Model name|^Vendor ID|^CPU\(s\)|NUMA node\(s\)|^Flags" | cut -c1-2000 | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
 cat /sys/fs/cgroup/memory.max 2>/dev/null | sed "s/^/cgroup memory.max /" | tee -a forensics.txt
 env | grep -E '^(PYTORCH_|TORCH_|CUDA_|NV_|NVIDIA_|PYTHON|PIP_|LD_LIBRARY_PATH=|PATH=)' | sort > env_image.txt || true   # Amendment 2: + PYTHON*, PIP_*, LD_LIBRARY_PATH, PATH
-python -c 'import sys; print(sys.executable); print(sys.path)' > logs/sys_path.txt 2>&1 || true   # Amendment 2: the image python's own path
+"$PY_IMG" -c 'import sys; print(sys.executable); print(sys.path)' > logs/sys_path.txt 2>&1 || true   # Amendment 2: the image python's own path
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 CC=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1)
 SMS=${CUDA_PROBE##*sms=}
@@ -102,7 +115,7 @@ VRAM_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | h
 FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB (three checkpoints, the NF4 arena, three venvs)"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
 # the measured host RAM: min(MemTotal, the cgroup's limit), in GiB
-RAM_GIB=$(python - <<'PYR'
+RAM_GIB=$("$PY_IMG" - <<'PYR'
 mt = int(next(l.split()[1] for l in open("/proc/meminfo") if l.startswith("MemTotal:"))) * 1024
 try:
     cg = open("/sys/fs/cgroup/memory.max").read().strip()
@@ -120,7 +133,7 @@ PL=$(nvidia-smi --query-gpu=power.limit --format=csv,noheader,nounits 2>/dev/nul
 echo "POWER_LIMIT_W ${PL:-unreadable} (recorded, never ruled)" | tee -a summary.txt
 # the download probe (P233's form, on the largest checkpoint's first shard): below MIN_DL_MB_S, a non-2xx or an error is 19
 rm -f $W/download_probe.json
-DL=$(MIX=$BF16 MIX_REV=$BF16_REV FLOOR=$MIN_DL_MB_S OUT=$W/download_probe.json timeout 120 python - <<'PYD' 2>/dev/null | tail -1
+DL=$(MIX=$BF16 MIX_REV=$BF16_REV FLOOR=$MIN_DL_MB_S OUT=$W/download_probe.json timeout 120 "$PY_IMG" - <<'PYD' 2>/dev/null | tail -1
 import json, os, time, urllib.request
 m, rev = os.environ["MIX"], os.environ["MIX_REV"]
 rec = {"model": m, "revision": rev, "floor_mb_s": int(os.environ["FLOOR"]), "status": None, "bytes": 0, "seconds": None,
@@ -175,7 +188,7 @@ command -v git >/dev/null 2>&1 || { tail -3 logs/apt_git.log; say "NO GIT"; fini
 # ---- e4b (image python, torch held at the image's): the launch commit and the pinned grouped-nf4-gemm release
 echo "torch==${TORCH_WANT%%+*}" > $W/constraints.txt
 say "install e4b @$E4B_SHA + grouped-nf4-gemm==$GNF4_VERSION (image python; torch held at $TORCH_WANT)"
-perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input -c $W/constraints.txt --prefer-binary \
+perl -e 'alarm 1800; exec @ARGV' "$PY_IMG" -m pip install -q --no-input -c $W/constraints.txt --prefer-binary \
   "experts4bit-qlora[serve] @ git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" "grouped-nf4-gemm==$GNF4_VERSION" \
   "transformers==5.17.0" "bitsandbytes==0.50.2" "accelerate==1.15.0" "safetensors==0.8.0" "huggingface_hub==1.33.0" \
   "fastapi==0.141.1" "uvicorn==0.54.0" \
@@ -186,10 +199,10 @@ perl -e 'alarm 600; exec @ARGV' git clone -q --filter=blob:none --no-checkout ht
   || { tail -3 logs/gnf4_clone.log; say "GNF4 SOURCE FAIL"; finish 9; }
 # Amendment 2: the tripwire also runs the bake's own imports and calls (k8_bake.py) and builds calibrate's microbench, so a
 # broken bake or calibrate chain is rc 9 here, before the 15-minute fetch (pgx-shake-1 met it in the bake's first second)
-(cd $W && PYTHONPATH= python $W/pgx_tripwire.py --kit $W --box "$E4B_SHA" "$TORCH_WANT" --bake $W/k8_bake.py \
+(cd $W && PYTHONPATH= "$PY_IMG" $W/pgx_tripwire.py --kit $W --box "$E4B_SHA" "$TORCH_WANT" --bake $W/k8_bake.py \
   --calib $W/gnf4-src/bench/calibrate.py) | tee logs/tripwire_e4b.log
 [ "${PIPESTATUS[0]}" = 0 ] || { say "TRIPWIRE FAIL (e4b)"; finish 9; }
-python - <<PYV >> versions.txt
+"$PY_IMG" - <<PYV >> versions.txt
 import importlib.metadata as md, torch, transformers, experts4bit_qlora as e
 print(f"e4b {e.__version__} @$E4B_SHA\ngnf4 {md.version('grouped-nf4-gemm')} (calibrate.py @$GNF4_TAG_SHA)\ntorch(e4b) {torch.__version__}\ntransformers(e4b) {transformers.__version__}")
 PYV
@@ -198,11 +211,11 @@ say "install sglang==$SGLANG_VERSION (bench/sc1/sglang/install.sh)"
 SGLANG_PIN=$SGLANG_VERSION SGLANG_TAG_COMMIT=$SGLANG_TAG_SHA bash $W/sglang_install.sh 2700 $W/versions.txt $W > logs/sglang_install.log 2>&1 \
   || { tail -6 logs/sglang_install.log; say "SGLANG INSTALL FAIL"; finish 9; }
 grep -a "SGLANG_TRIPWIRE" logs/sglang_install.log | tee -a summary.txt
-. $W/sglang.env
+phase_py sglang-installed
 # the routing hook must load in the venv: it is imported through hook/sitecustomize.py (a venv never runs usercustomize)
 PYTHONPATH=$W/hook $W/venv-sglang/bin/python -c 'import sys; assert "usercustomize" in sys.modules, "the PGX hook did not load in venv-sglang"' \
   || { say "HOOK FAIL: the routing hook does not load in venv-sglang"; finish 9; }
-PYTHONPATH= $W/venv-sglang/bin/python - <<'PYS' > logs/tripwire_sglang.log 2>&1 || { cat logs/tripwire_sglang.log; say "TRIPWIRE FAIL (sglang paged experts)"; finish 9; }
+( . $W/sglang.env; PYTHONPATH= exec $W/venv-sglang/bin/python - ) <<'PYS' > logs/tripwire_sglang.log 2>&1 || { cat logs/tripwire_sglang.log; say "TRIPWIRE FAIL (sglang paged experts)"; finish 9; }
 import importlib
 m = importlib.import_module("sglang.srt.layers.moe.paged_experts.method")
 x = importlib.import_module("sglang.srt.layers.moe.paged_experts.executor")
@@ -215,7 +228,7 @@ print("tripwire OK (sglang paged experts)")
 PYS
 # ---- vLLM 0.29.0 + the pager at its tag commit, in their own venv
 say "install vllm==$VLLM_VERSION + vllm-expert-pager @$PAGER_SHA"
-python -m venv $W/venv-vllm > logs/venv_vllm.log 2>&1 || { say "VENV FAIL (vllm)"; finish 9; }
+"$PY_IMG" -m venv $W/venv-vllm > logs/venv_vllm.log 2>&1 || { say "VENV FAIL (vllm)"; finish 9; }
 perl -e 'alarm 2700; exec @ARGV' $W/venv-vllm/bin/python -m pip install -q --no-input --prefer-binary "vllm==$VLLM_VERSION" \
   "vllm-expert-pager @ git+https://github.com/monochromegane/vllm-expert-pager.git@$PAGER_SHA" > logs/pip_vllm.log 2>&1 \
   || { tail -6 logs/pip_vllm.log; say "PIP FAIL (vllm / pager)"; finish 9; }
@@ -235,21 +248,21 @@ PYV
 cat versions.txt | tee -a summary.txt
 # ---- the kit's own self-tests, on the box's interpreter
 for t in "pgx_shake.py --self-test" "rt/pgx/pgx_box.py --self-test"; do
-  (cd $W && python $W/$t) > logs/selftest_$(echo "$t" | cut -d' ' -f1 | tr '/.' '__').log 2>&1 || { say "SELF-TEST FAILED: $t"; finish 25; }
+  (cd $W && "$PY_IMG" $W/$t) > logs/selftest_$(echo "$t" | cut -d' ' -f1 | tr '/.' '__').log 2>&1 || { say "SELF-TEST FAILED: $t"; finish 25; }
 done
 echo "self-tests ok" | tee -a summary.txt
 # ---- fetch the three checkpoints at their revisions
 can_run $FETCH_S fetch || finish 40
 fetch(){ local tag=$1 m=$2 rev=$3
   say "fetch $m @ $rev"
-  perl -e "alarm $(step_alarm 3600); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$m', revision='$rev', allow_patterns=['*.safetensors','*.json','tokenizer*','*.txt','merges.txt','vocab.json'], max_workers=8))" > logs/fetch_$tag.log 2>&1 \
+  perl -e "alarm $(step_alarm 3600); exec @ARGV" "$PY_IMG" -c "from huggingface_hub import snapshot_download as s; print(s('$m', revision='$rev', allow_patterns=['*.safetensors','*.json','tokenizer*','*.txt','merges.txt','vocab.json'], max_workers=8))" > logs/fetch_$tag.log 2>&1 \
     || { tail -2 logs/fetch_$tag.log; say "DL FAIL ($tag)"; finish 11; }
   local snap; snap=$(tail -1 logs/fetch_$tag.log); [ -d "$snap" ] || { say "DL FAIL ($tag): no snapshot dir"; finish 11; }
   echo "FETCH $tag $m@$rev $snap" | tee -a summary.txt; eval "SNAP_$tag=\$snap"; }
 fetch bf16 $BF16 $BF16_REV; fetch fp8 $FP8 $FP8_REV; fetch int4 $INT4 $INT4_REV
 # ---- the bytes per expert and the K table, measured from the box's own snapshots; the headers must be the registered ones
-python $W/pgx_bytes.py --local "bf16=$SNAP_bf16" "fp8=$SNAP_fp8" "int4=$SNAP_int4" --out $W/box_bytes.json > logs/bytes.log 2>&1 || { tail -3 logs/bytes.log; say "BYTES FAIL"; finish 9; }
-K_MEASURED=$(python - <<'PYK'
+"$PY_IMG" $W/pgx_bytes.py --local "bf16=$SNAP_bf16" "fp8=$SNAP_fp8" "int4=$SNAP_int4" --out $W/box_bytes.json > logs/bytes.log 2>&1 || { tail -3 logs/bytes.log; say "BYTES FAIL"; finish 9; }
+K_MEASURED=$("$PY_IMG" - <<'PYK'
 import json
 reg, box = json.load(open("/root/pgx/bytes_per_expert.json")), json.load(open("/root/pgx/box_bytes.json"))
 for fmt in ("bf16", "fp8", "int4"):
@@ -267,7 +280,7 @@ say "bake the NF4 arena"; mkdir -p $W/work
 # work/bake.json. bake_why appends them to logs/bake.log (and the driver now fetches work/*.json too). The bake runs with
 # PYTHONPATH cleared, as the tripwire that checked its imports did.
 bake_why(){ [ -s $W/work/bake.json ] || { echo "bake_why: no work/bake.json" >> logs/bake.log; return 0; }
-  python - $W/work/bake.json >> logs/bake.log 2>&1 <<'PYB'
+  "$PY_IMG" - $W/work/bake.json >> logs/bake.log 2>&1 <<'PYB'
 import json, sys
 r = json.load(open(sys.argv[1]))
 print(f"bake.json: status={r.get('status')} step={r.get('step')}")
@@ -275,22 +288,25 @@ print(f"err: {r.get('err')}")
 print(r.get("tb") or "(no traceback)")
 PYB
 }
-K8_MODEL="$SNAP_bf16" K8_WORK="$W/work" PYTHONPATH= perl -e "alarm $(step_alarm 5400); exec @ARGV" python $W/k8_bake.py > logs/bake.log 2>&1 \
+img_guard bake
+K8_MODEL="$SNAP_bf16" K8_WORK="$W/work" PYTHONPATH= perl -e "alarm $(step_alarm 5400); exec @ARGV" "$PY_IMG" $W/k8_bake.py > logs/bake.log 2>&1 \
   || { bake_why; tail -25 logs/bake.log; say "BAKE FAIL"; finish 12; }
 [ -e $W/work/nf4.arena ] || { bake_why; tail -25 logs/bake.log; say "BAKE FAIL: no arena"; finish 12; }
 grep -a "BAKE" logs/bake.log | tail -1 | tee -a summary.txt
 # ---- calibrate (E-hyb's solver refuses to guess bandwidths) and the placement preview on THIS host's blob
 can_run $CALIB_S calibrate || finish 40
 say "calibrate (grouped-nf4-gemm bench/calibrate.py @$GNF4_TAG_SHA)"
-perl -e "alarm 1500; exec @ARGV" python $W/gnf4-src/bench/calibrate.py --out $W/calib.json --nvme-dir $W --nvme-gib 8 --tag pgx > logs/calibrate.log 2>&1 \
+img_guard calibrate
+perl -e "alarm 1500; exec @ARGV" "$PY_IMG" $W/gnf4-src/bench/calibrate.py --out $W/calib.json --nvme-dir $W --nvme-gib 8 --tag pgx > logs/calibrate.log 2>&1 \
   || { tail -5 logs/calibrate.log; say "CALIBRATE FAIL"; finish 33; }
 rm -f $W/hybrid_calib_nvme.dat
 tail -4 logs/calibrate.log | tee -a summary.txt
-PYTHONPATH= python $W/pgx_place_preview.py --calib $W/calib.json --profile $W/fit_profile.jsonl --out $W/place_preview.json > logs/place_preview.log 2>&1 \
+img_guard place_preview
+PYTHONPATH= "$PY_IMG" $W/pgx_place_preview.py --calib $W/calib.json --profile $W/fit_profile.jsonl --out $W/place_preview.json > logs/place_preview.log 2>&1 \
   || { tail -3 logs/place_preview.log; say "PLACEMENT PREVIEW FAIL"; finish 9; }
 tail -4 logs/place_preview.log | tee -a summary.txt
 # ---- the card-clock burn: recorded, never ruled
-perl -e 'alarm 120; exec @ARGV' python $W/card_clock.py burn --floor 0 --seconds 20 --out $W/card_clock.json > logs/card_clock.log 2>&1 || true
+perl -e 'alarm 120; exec @ARGV' "$PY_IMG" $W/card_clock.py burn --floor 0 --seconds 20 --out $W/card_clock.json > logs/card_clock.log 2>&1 || true
 tail -1 logs/card_clock.log | tee -a summary.txt
 # ---- server helpers (SC2's: bench/sc2/sc2_box_e.sh)
 wait_http(){ local url=$1 cap=$2 pid=$3 log=$4 t0 code; t0=$(date +%s)
@@ -318,12 +334,12 @@ sampler_start(){ local out=$1 pgid=$2
   echo $!; }
 sampler_stop(){ kill "$1" 2>/dev/null; wait "$1" 2>/dev/null; }
 drive(){ local port=$1 set=$2 pass=$3 out=$4 tag=$5
-  perl -e "alarm $(step_alarm 900); exec @ARGV" python $W/pgx_drive.py --url "http://127.0.0.1:$port" --model pgx --prompts $W/prompts/$set.json \
+  perl -e "alarm $(step_alarm 900); exec @ARGV" "$PY_IMG" $W/pgx_drive.py --url "http://127.0.0.1:$port" --model pgx --prompts $W/prompts/$set.json \
     --concurrency 1 --pass-id "$pass" --out "$out" > logs/drive_${tag}_$pass.log 2>&1; }
 # V8's eager probe: one 1,024-token prefill with one output token (longer than any captured size, so the MoE layers run
 # eagerly and the pager logs its cumulative counters); returns the server log's byte offset once the lines are flushed
 probe(){ local port=$1 log=$2
-  python - "$port" <<'PYP' > /dev/null 2>&1
+  "$PY_IMG" - "$port" <<'PYP' > /dev/null 2>&1
 import json, sys, urllib.request
 ids = json.load(open("/root/pgx/prompts/warm_c1.json"))[0]["token_ids"]
 body = {"model": "pgx", "prompt": ids, "max_tokens": 1, "temperature": 0}
@@ -334,12 +350,15 @@ PYP
 # ---- the servers: each sets SRV_PID (its own process group) or returns non-zero
 sgl_start(){ local m=$1 rev=$2 k=$3 log=$4 extra=${5:-}
   # shellcheck disable=SC2086  # extra is a flag list by design
-  setsid env PYTHONPATH=${SGL_HOOK_PATH:-} ${SGL_DUMP_ENV:-} $W/venv-sglang/bin/python -m sglang.launch_server --model-path "$m" --revision "$rev" \
-    --host 127.0.0.1 --port $PORT_SGL --served-model-name pgx --enable-paged-experts --paged-experts-num-resident "$k" \
-    --disable-radix-cache --context-length 2048 --max-running-requests 4 --random-seed 0 --log-level info $extra > "$log" 2>&1 < /dev/null &
+  # Amendment 2: SC1's sglang.env (CUDA_HOME, venv-sglang first on PATH, the JIT caches) is sourced HERE, in the server's own
+  # subshell, as SC1's server.sh does; never in the runner's shell
+  ( . $W/sglang.env; exec setsid env PYTHONPATH=${SGL_HOOK_PATH:-} ${SGL_DUMP_ENV:-} $W/venv-sglang/bin/python -m sglang.launch_server \
+    --model-path "$m" --revision "$rev" --host 127.0.0.1 --port $PORT_SGL --served-model-name pgx --enable-paged-experts \
+    --paged-experts-num-resident "$k" --disable-radix-cache --context-length 2048 --max-running-requests 4 --random-seed 0 \
+    --log-level info $extra ) > "$log" 2>&1 < /dev/null &
   SRV_PID=$!; wait_http "http://127.0.0.1:$PORT_SGL/health" 2400 $SRV_PID "$log" || return $?
   curl -fsS -m 30 "http://127.0.0.1:$PORT_SGL/server_info" -o "$log.server_info.json" 2>/dev/null || true
-  WANT_K=$k python - "$log.server_info.json" <<'PYE' || return 43
+  WANT_K=$k "$PY_IMG" - "$log.server_info.json" <<'PYE' || return 43
 import json, os, sys
 i = json.load(open(sys.argv[1]))
 bad = [f"{k}={i.get(k)!r}" for k, want in (("version", "0.5.23"), ("enable_paged_experts", True),
@@ -356,11 +375,12 @@ vllm_start(){ local k=$1 log=$2
   SRV_PID=$!; wait_http "http://127.0.0.1:$PORT_VLLM/v1/models" 2400 $SRV_PID "$log" || return $?
   grep -aq "vllm-expert-pager" "$log" || { say "V8: the pager logged nothing at startup (plugin not engaged?)"; return 43; }; }
 e4b_start(){ local log=$1 lt=$2
+  img_guard e-hyb-server
   setsid env PYTHONPATH=$W/hook_e4b PGX_PLACEMENT_OUT=$lt/placement.json E4B_PAGED_MODEL=$BF16 E4B_PAGED_REVISION=$BF16_REV \
     E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_PLACEMENT=solver E4B_PAGED_VRAM_GB=$EHYB_VRAM_GIB \
     E4B_PAGED_DRAM_GB=$EHYB_DRAM_GIB E4B_PAGED_PROFILE=$W/fit_profile.jsonl E4B_PAGED_STEP_TRACE=$lt/step_trace.jsonl \
     E4B_PAGED_MAX_SEQS=4 E4B_PAGED_MAX_TOKENS_PER_SEQ=2048 E4B_PAGED_SERVED_NAME=pgx E4B_HOST=127.0.0.1 E4B_PORT=$PORT_E4B \
-    python -m experts4bit_qlora.serve_paged > "$log" 2>&1 < /dev/null &
+    "$PY_IMG" -m experts4bit_qlora.serve_paged > "$log" 2>&1 < /dev/null &
   SRV_PID=$!; wait_e4b_ready "http://127.0.0.1:$PORT_E4B/health" 2400 $SRV_PID "$log" || return $?; }
 # ---- one lifetime: start, P1, P2 (V8: a probe before, between and after), stop; then lifetime.json
 lifetime(){ local arm=$1 lt=$W/shake/$1/8/d1 t0 rc smp port log failed="" probes=""
@@ -377,9 +397,9 @@ lifetime(){ local arm=$1 lt=$W/shake/$1/8/d1 t0 rc smp port log failed="" probes
   else
     smp=$(sampler_start $lt/samples.txt "$SRV_PID")
     [ "$arm" = V8 ] && probes="$(probe $port "$log")"
-    drive $port warm_c1 P1 $lt/P1.json "$arm"; echo "$arm P1 rc=$? $(python -c "import json; r=json.load(open('$lt/P1.json')); print('faults', r['faults'], 'tok/s', round(r['out_tok_s'] or 0, 1))" 2>/dev/null)" | tee -a summary.txt
+    drive $port warm_c1 P1 $lt/P1.json "$arm"; echo "$arm P1 rc=$? $("$PY_IMG" -c "import json; r=json.load(open('$lt/P1.json')); print('faults', r['faults'], 'tok/s', round(r['out_tok_s'] or 0, 1))" 2>/dev/null)" | tee -a summary.txt
     [ "$arm" = V8 ] && probes="$probes $(probe $port "$log")"
-    drive $port warm_c1 P2 $lt/P2.json "$arm"; echo "$arm P2 rc=$? $(python -c "import json; r=json.load(open('$lt/P2.json')); print('faults', r['faults'], 'tok/s', round(r['out_tok_s'] or 0, 1))" 2>/dev/null)" | tee -a summary.txt
+    drive $port warm_c1 P2 $lt/P2.json "$arm"; echo "$arm P2 rc=$? $("$PY_IMG" -c "import json; r=json.load(open('$lt/P2.json')); print('faults', r['faults'], 'tok/s', round(r['out_tok_s'] or 0, 1))" 2>/dev/null)" | tee -a summary.txt
     [ "$arm" = V8 ] && probes="$probes $(probe $port "$log")"
     [ "$arm" = E-hyb ] && curl -fsS -m 30 "http://127.0.0.1:$PORT_E4B/health" -o $lt/health.json 2>/dev/null
     sampler_stop "$smp"
@@ -397,7 +417,7 @@ lifetime(){ local arm=$1 lt=$W/shake/$1/8/d1 t0 rc smp port log failed="" probes
         set -- $probes; [ $# = 3 ] && args+=(--probes "$1" "$2" "$3");;
     E-hyb) args+=(--health "$lt/health.json" --placement "$lt/placement.json" --step-trace "$lt/step_trace.jsonl");;
   esac
-  python $W/rt/pgx/pgx_box.py "${args[@]}" 2>&1 | tee -a summary.txt; }
+  "$PY_IMG" $W/rt/pgx/pgx_box.py "${args[@]}" 2>&1 | tee -a summary.txt; }
 # ---- the untimed instrument lifetime for S4 / S8: graphs off, the routing dump on, the P1 prompts once (pass I1)
 instrument(){ local arm=$1 m=$2 rev=$3 k=$4 extra=${5:-} d=$W/instr/$1 log=$W/logs/server_${1}_instr.log
   mkdir -p "$d"; echo I1 > "$d/PASS"
@@ -416,6 +436,6 @@ can_run $LIFETIME_S lifetime_S8 && lifetime S8
 can_run $LIFETIME_S lifetime_V8 && lifetime V8
 can_run $LIFETIME_S lifetime_E-hyb && lifetime E-hyb
 # ---- the verdict: SHAKE_OK (0), or STOP / SHAKE_FAULTS (27); never a reading
-say "verdict"; python $W/pgx_shake.py --work $W/shake --out $W/shake_verdict.json 2>&1 | tee -a summary.txt
+say "verdict"; "$PY_IMG" $W/pgx_shake.py --work $W/shake --out $W/shake_verdict.json 2>&1 | tee -a summary.txt
 rc=${PIPESTATUS[0]}
 case "$rc" in 0) finish 0;; 27) finish 27;; *) say "the verdict step failed (rc $rc)"; finish 27;; esac

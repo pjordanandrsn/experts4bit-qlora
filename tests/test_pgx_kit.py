@@ -158,7 +158,7 @@ def test_the_runner_installs_the_serve_stack_the_tripwire_checks():
 
 
 def _pip_line() -> str:
-    m = re.search(r'python -m pip install -q --no-input -c \$W/constraints\.txt --prefer-binary \\\n(.*?)> logs/pip_e4b\.log', RUN, re.S)
+    m = re.search(r'"\$PY_IMG" -m pip install -q --no-input -c \$W/constraints\.txt --prefer-binary \\\n(.*?)> logs/pip_e4b\.log', RUN, re.S)
     assert m, "the image-python install line moved"
     return m.group(1)
 
@@ -261,7 +261,7 @@ def test_bake_why_copies_the_bakes_own_error_into_its_log(tmp_path, record):
     if record:
         (tmp_path / "work" / "bake.json").write_text(json.dumps(
             {"step": "start", "status": "FAILED", "err": "ImportError('no module x')", "tb": "Traceback (most recent call last):\n  boom\n"}))
-    script = f"W={tmp_path}; cd {tmp_path}\n{fn.group(0)}\nbake_why\n"
+    script = f"W={tmp_path}; PY_IMG={sys.executable}; cd {tmp_path}\n{fn.group(0)}\nbake_why\n"
     r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env={**os.environ, "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ.get('PATH', '')}"})
     assert r.returncode == 0, r.stderr
     log = (tmp_path / "logs" / "bake.log").read_text()
@@ -377,3 +377,104 @@ def test_the_staged_manifest_hashes_the_tree():
     for sha, name in rows:
         path = src.get(name, PGX / name)
         assert hashlib.sha256(path.read_bytes()).hexdigest() == sha, name
+
+
+# ---- Amendment 2, the root cause: pgx-shake-1's runner sourced SC1's sglang.env in its own shell (venv-sglang first on PATH),
+# so the bake's bare `python` was SGLang's venv, which has no e4b: ModuleNotFoundError, "BAKE FAILED", rc 12.
+
+def _code_lines(text: str) -> list[str]:
+    """The runner's shell lines: heredoc bodies (python sources) and comment lines dropped."""
+    out, hd = [], None
+    for ln in text.splitlines():
+        if hd is not None:
+            if ln.strip() == hd:
+                hd = None
+            continue
+        if ln.lstrip().startswith("#"):
+            continue
+        out.append(ln)
+        m = re.search(r"<<-?\s*'?([A-Z_]+)'?", ln)
+        if m:
+            hd = m.group(1)
+    return out
+
+
+_BARE_PY = re.compile(r'(?<![\w/$"\'.-])python(?= +[-$/"])')    # an invocation: python then a flag, a path or a variable
+
+
+def test_no_env_file_is_sourced_in_the_runners_own_shell():
+    lines = _code_lines(RUN)
+    top = [ln for ln in lines if re.match(r"\s*(\.|source)\s", ln)]
+    assert not top, f"a top-level source changes the runner's own PATH: {top}"
+    sgl = [ln for ln in lines if "sglang.env" in ln]
+    assert len(sgl) == 2 and all(re.search(r"\(\s*\.\s+\$W/sglang\.env;\s", ln) for ln in sgl), sgl   # tripwire + server subshells
+
+
+def test_every_python_call_is_the_bound_image_python_or_a_venv():
+    bare = [ln.strip() for ln in _code_lines(RUN) if _BARE_PY.search(ln.replace("command -v python", ""))]
+    assert not bare, f"a bare python resolves through PATH: {bare}"
+    assert RUN.index("PY_IMG=$(command -v python)") < RUN.index('CUDA_PROBE=$("$PY_IMG"') < RUN.index("sglang_install.sh 2700")
+    venv_calls = re.findall(r"\$W/(venv-[a-z]+)/bin/python", RUN)
+    assert set(venv_calls) == {"venv-sglang", "venv-vllm"}, venv_calls
+
+
+@pytest.mark.parametrize("step, marker", [("bake", '"$PY_IMG" $W/k8_bake.py'), ("calibrate", '"$PY_IMG" $W/gnf4-src/bench/calibrate.py'),
+                                          ("place_preview", '"$PY_IMG" $W/pgx_place_preview.py'),
+                                          ("e-hyb-server", '"$PY_IMG" -m experts4bit_qlora.serve_paged')])
+def test_each_e4b_step_is_guarded_by_its_own_interpreter(step, marker):
+    """The guard imports e4b and nvme_arena with "$PY_IMG", the interpreter the step runs, right before the step."""
+    lines = RUN.splitlines()
+    at = next(i for i, ln in enumerate(lines) if marker in ln)
+    guard = next(i for i in range(at, -1, -1) if re.search(rf"\bimg_guard {re.escape(step)}\b", lines[i]))
+    assert at - guard <= 6, (step, guard, at)
+    assert "PYTHONPATH= \"$PY_IMG\" -c 'import experts4bit_qlora, nvme_arena'" in RUN
+
+
+def _stand_in_venv(tmp_path) -> Path:
+    """venv-sglang's python as pgx-shake-1 met it: torch and the stdlib import, e4b does not (the maintainer's repro form)."""
+    vbin = tmp_path / "venv-sglang" / "bin"
+    vbin.mkdir(parents=True)
+    (vbin / "python").write_text(
+        "#!/bin/sh\n"
+        f"exec {sys.executable} -c '\n"
+        "import os, sys\n"
+        "class NotInstalled:\n"
+        "    def find_spec(self, name, path=None, target=None):\n"
+        "        if name.split(\".\")[0] in (\"experts4bit_qlora\", \"nvme_arena\"):\n"
+        "            raise ModuleNotFoundError(\"No module named \" + repr(name.split(\".\")[0]))\n"
+        "sys.meta_path.insert(0, NotInstalled())\n"
+        "sys.argv = sys.argv[1:]\n"
+        "exec(sys.argv[1]) if sys.argv[:1] == [\"-c\"] else None\n"
+        "' \"$@\"\n")
+    (vbin / "python").chmod(0o755)
+    return vbin.parent
+
+
+@pytest.mark.parametrize("sequence, want_ok", [("a1", False), ("a2", True)])
+def test_the_bakes_interpreter_after_the_sglang_install(tmp_path, sequence, want_ok):
+    """Dynamic, in pgx-shake-1's own order: bind PY_IMG (this runner's line), install SGLang (SC1's sglang.env, venv first on
+    PATH), then run the bake's import in the bake's interpreter. The Amendment 1 sequence (the env sourced in the runner's
+    shell, a bare `python` for the bake) reproduces the box's ModuleNotFoundError; this runner's sequence does not."""
+    install = (REPO / "bench/sc1/sglang/install.sh").read_text()
+    assert "export PATH=$VENV/bin:$CUDA_HOME/bin:\\$PATH" in install, "SC1's sglang.env no longer puts the venv first"
+    venv = _stand_in_venv(tmp_path)
+    img = tmp_path / "img"
+    img.mkdir()
+    (img / "python").write_text(f"#!/bin/sh\nexec {sys.executable} \"$@\"\n")      # the image python (a symlink would drop the venv)
+    (img / "python").chmod(0o755)
+    w = tmp_path / "w"
+    w.mkdir()
+    (w / "sglang.env").write_text(f"export CUDA_HOME=/nonexistent-cuda\nexport PATH={venv}/bin:/nonexistent-cuda/bin:$PATH\n")
+    bind = re.search(r"^PY_IMG=\$\(command -v python\).*$", RUN, re.M).group(0)
+    runner_sources = [ln for ln in _code_lines(RUN) if re.match(r"\s*(\.|source)\s", ln)]
+    if sequence == "a1":   # Amendment 1: `. $W/sglang.env` at the top level, then `python $W/k8_bake.py`
+        body, bake = f". {w}/sglang.env", "python"
+    else:                  # this runner: its own top-level sources (none), then "$PY_IMG" $W/k8_bake.py
+        body, bake = "\n".join(ln.replace("$W", str(w)) for ln in runner_sources), '"$PY_IMG"'
+    script = (f"say(){{ :; }}; finish(){{ exit \"$1\"; }}\nexport PATH={img}:$PATH\nW={w}\n{bind}\n{body}\n"
+              f"{bake} -c 'import sys, experts4bit_qlora; print(\"IMPORTED\", sys.executable)'\n")
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    if want_ok:
+        assert r.returncode == 0 and "IMPORTED" in r.stdout, r.stdout + r.stderr
+    else:
+        assert r.returncode != 0 and "No module named 'experts4bit_qlora'" in r.stderr, r.stdout + r.stderr

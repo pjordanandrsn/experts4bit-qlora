@@ -503,50 +503,59 @@ ruled.
 - E-hyb's engine-loaded slot bytes are read from the placement proof. S4's, S8's and V8's slot bytes are read only from
   their logs and peak VRAM: the K check uses the checkpoint headers measured on the box.
 
-## Amendment 2 (2026-11-06): after pgx-shake-1's bake failure
+## Amendment 2 (2026-11-06): pgx-shake-1's bake ran in the wrong interpreter
 
-Written 2026-11-06 (clock read 01:19Z). Nothing above changes except what is listed here.
+Written 2026-11-06 (clock reads 01:19Z and 01:49Z). Nothing above changes except what is listed here.
 
-**What happened.** `pgx-shake-1` started and ended rc 12 (`BAKE FAIL: no arena`) at USD 0.959. Everything before the bake
-passed:
+**What happened: a defect in this lane's kit, found by the shakedown.** `pgx-shake-1` passed:
 - every refusal check (driver 580.95, torch 2.8.0+cu128, cc 8.9 with 128 SMs, 62 GiB, 70 MB/s);
 - the guard fit (14,398 s left against the 13,062 s it needs);
 - the four installs and all their tripwires;
 - the three fetches, with K measured at 67/35/35, as registered.
 
-The bake failed within its first second, and the cause is unknown.
-- `k8_bake.py` catches its own exception. It printed only `BAKE FAILED` and wrote the error to `work/bake.json`, which the
-  driver did not fetch.
-- None of the loader's log lines appear, so it most likely failed during the bake's imports or in the call itself.
-- A $0 replay on CPU under torch 2.8.0 with transformers 5.17.0 imports the whole chain cleanly. It gets as far as the
-  first shard read.
-- The unpinned packages the box most likely pulled are the versions tested: accelerate 1.15.0, safetensors 0.8.0 and
-  huggingface_hub 1.33.0 were the latest releases on 2026-11-06.
-- One difference remains unread: the runner cleared `PYTHONPATH` for the tripwire but not for the bake, and the box did
-  not record whether the image sets it.
+It then ended rc 12 in the bake's first second, at USD 0.959.
 
-This amendment does not fix an unknown cause. It makes the next failure name itself, and it moves the bake's and calibrate's
-dependencies into the tripwire, so they fail before the fetch.
+The cause:
+- After the SGLang install, `pgx_run.sh` sourced SC1's `sglang.env` in its own top-level shell. That file puts
+  `venv-sglang/bin` first on `PATH`.
+- From that line on, every bare `python` in the runner was SGLang's venv, which has torch 2.14.1 and no e4b.
+- `k8_bake.py` therefore failed on `from experts4bit_qlora.loader import ...`. Its own handler caught the error, printed
+  `BAKE FAILED` and exited 0. With no arena written, the runner finished 12.
+- The same failure is reproduced at $0 with the real `k8_bake.py`, a stand-in venv python and the same `export`, byte
+  for byte: a 12-byte `bake.log`, no arena, and `ModuleNotFoundError: No module named 'experts4bit_qlora'` in
+  `bake.json`.
+- It was not the bake alone. Seventeen bare `python` call sites followed the source line: calibrate, the placement preview, the
+  card clock, the E-hyb server, the K and driver helpers, `pgx_box` and `pgx_shake`. The ones that happened to work ran on
+  the wrong interpreter. SC1 itself sources the file only inside its installer and server scripts, never in a lane
+  runner's top shell.
 
-**A. Pins.** The image-python install line now pins `accelerate==1.15.0`, `safetensors==0.8.0` and `huggingface_hub==1.33.0`.
-Amendment 1 left these three unpinned. The tripwire checks every package that line names at its pin (`IMAGE_PINS`), and
-the kit test holds the line and the tripwire in step. These pins are hygiene: they are not presented as the fix.
+**1. The fix.**
+- The runner binds the image python by absolute path before anything can change `PATH`
+  (`PY_IMG=$(command -v python)`), and every image-python step runs `"$PY_IMG"`. Every other python call is an explicit
+  venv path.
+- Nothing sources `sglang.env` in the runner's shell. It is sourced only inside the SGLang subshells, the tripwire and the
+  server, as SC1's `server.sh` does.
+- The vLLM venv is now created from `"$PY_IMG"`. Before, it was created from SGLang's venv python.
 
-**B. The tripwire runs the bake's and calibrate's chain, at rc 9, before the fetch.**
-- **The bake:** `pgx_tripwire.py --box ... --bake k8_bake.py --calib calibrate.py` reads every import statement in the staged
-  `k8_bake.py` from its source and executes each one in the box's interpreter. It then binds each of the bake's calls to
-  `load_moe_4bit_streaming` and `bake_expert_tensors` against the installed signatures.
-- **Calibrate:** it imports grouped-nf4-gemm's `calibrate.py` from the release tag's tree and compiles its CPU microbench
-  with calibrate's own `build_microbench`.
+**2. The guard.** Right before the bake, calibrate, the placement preview and the E-hyb server start, `img_guard` runs
+`"$PY_IMG" -c 'import experts4bit_qlora, nvme_arena'`, the interpreter the step itself runs, and stops at rc 9 on failure.
+`logs/interpreters.txt` records what a bare `python` and `$PY_IMG` resolve to at each phase.
 
-**C. Observability.**
-- The bake runs with `PYTHONPATH` cleared, as the tripwire does.
+**3. The tripwire runs the bake's and calibrate's chain, at rc 9, before the fetch.**
+- `pgx_tripwire.py --box ... --bake k8_bake.py --calib calibrate.py` reads every import in the staged `k8_bake.py` from its
+  source and executes each one. It binds the bake's calls to `load_moe_4bit_streaming` and `bake_expert_tensors` against
+  the installed signatures.
+- It imports grouped-nf4-gemm's `calibrate.py` and builds its CPU microbench with calibrate's own `build_microbench`.
+- It runs in `"$PY_IMG"`, the interpreter the bake and calibrate now run.
+
+**4. Observability.**
 - On either bake failure, the runner appends `work/bake.json`'s status, error and traceback to `logs/bake.log`.
 - The driver fetches `work/*.json`. The NF4 snapshot and the arena stay on the box.
-- `env_image.txt` now also records `PYTHON*`, `PIP_*`, `LD_LIBRARY_PATH` and `PATH`.
-- `logs/sys_path.txt` records the image python's executable and `sys.path`.
+- The bake runs with `PYTHONPATH` cleared, as the tripwire does.
+- `env_image.txt` also records `PYTHON*`, `PIP_*`, `LD_LIBRARY_PATH` and `PATH`.
+- `logs/sys_path.txt` records the image python's `sys.path`.
 
-**D. The launch slack, registered.**
+**5. The launch slack, registered.**
 - The shakedown's guard is **4.05 h**: Amendment 1's fit of 13,062 s plus 1,500 s of launch slack.
   - rent.py hands the box a deadline of launch + wallclock, so a guard equal to the fit leaves less than the fit at the
     box's check, and every box refuses rc 41.
@@ -555,27 +564,42 @@ the kit test holds the line and the tripwire in step. These pins are hygiene: th
 - Worst case per box: 4.05 h x USD 0.85 + 120 GB x USD 0.02 = **USD 5.85**.
 - The maintainer ruled this for pgx-shake-1 in its Approved; this registers it.
 
-**E. The stop: one narrow exemption, in P238 Amendment 4's form.**
-- `pgx-shake-r1` may follow `pgx-shake-1` only when `pgx-shake-1`'s fetched record is exactly this failure:
-  - it STARTED;
-  - its exit code is 12;
-  - `logs/bake.log` begins with the line `BAKE FAILED`;
-  - its `outer.log` says `BAKE FAIL: no arena`;
-  - nothing ran after the bake (no `logs/calibrate.log` and no `shake/`).
-- `pgx-shake-1` still counts as one STARTED box and one strike. So `pgx-shake-r1` is the last shakedown box before two
-  strikes end the lane, and every other stop is unchanged.
-- Any other record, or any other id, reads the ordinary stop ("a started box that did not finish 0 stops for a person").
-- The kit implements the exemption, with a stub case for each way it refuses.
+**6. The stop: one exemption, for pgx-shake-1's exact record.** `pgx-shake-1`'s record is exempt from "a started box that
+did not finish 0 stops for a person", for every later id, when all of these hold:
+- it STARTED;
+- its exit code is 12;
+- `logs/bake.log` begins with the line `BAKE FAILED`;
+- its `outer.log` says `BAKE FAIL: no arena`;
+- nothing ran after the bake (no `logs/calibrate.log` and no `shake/`).
 
-**F. The kit test, at $0.**
-- `tests/test_pgx_kit.py` runs the new tripwire steps against this commit's `k8_bake.py`, and against fixtures for each
-  way they fail.
-- It also calls the bake's exact load on a shardless snapshot (a small Qwen3-MoE config and an index naming shards that do
-  not exist). That load must get through imports, config, admission and the meta build, and stop only at the first
-  shard read.
-- The same test is run once, before the kit is cut, in a CPU venv at torch 2.8.0 + transformers 5.17.0 with the pins in A.
+`pgx-shake-1` still counts as one STARTED box and one strike. Every other stop is unchanged:
+- host refusals before STARTED (13, 15, 16, 18, 19) are not strikes, and the four ids bound them, as registered. So `r2`
+  may follow an `r1` refused before STARTED, and `r3` an `r2`;
+- the next box that STARTS and does not finish 0 is strike two and ends the lane;
+- any other record of `pgx-shake-1` reads the ordinary stop.
+
+The kit implements this, with stub cases for each way the exemption refuses. Two of them: `r2` after `r1` rc 18 before
+STARTED opens; `r2` after `r1` STARTED and not 0 stops.
+
+**7. Pins, hygiene only.** The image-python install line now pins `accelerate==1.15.0`, `safetensors==0.8.0` and
+`huggingface_hub==1.33.0`. These are the versions an unpinned install resolved to on 2026-11-06 under transformers 5.17.0's
+bounds. The tripwire checks every package on that line at its pin. These pins are not the fix.
+
+**8. The kit test, at $0.** `tests/test_pgx_kit.py`:
+- **static:** no top-level source in `pgx_run.sh`; `sglang.env` only in subshells; no bare `python` invocation;
+  `PY_IMG` bound before the first probe and before the SGLang install; each e4b step guarded by its own interpreter;
+- **dynamic, in pgx-shake-1's order:** bind `PY_IMG` with this runner's own line, install a stand-in SGLang venv through
+  SC1's `sglang.env` form, then import e4b in the bake's interpreter. Amendment 1's sequence reproduces the box's
+  `ModuleNotFoundError`; this runner's does not. All four static and dynamic checks fail against Amendment 1's runner;
+- each new tripwire step on this commit, and on a fixture for each way it fails;
+- `bake_why`, with and without a record;
+- the driver's rsync rules, on a fixture tree;
+- the bake's exact load call on a shardless snapshot, which must log the host and the checkpoint and stop only at the
+  first shard read.
+
+The suite also runs once in a CPU venv at torch 2.8.0 + transformers 5.17.0 with the pins in 7, before the kit is cut.
 
 **The worst cases, after this amendment:**
 - the shakedown per box: USD 5.85;
-- the lane: pgx-shake-1's USD 0.959 + pgx-shake-r1's USD 5.85 + the reading's USD 20.62 + three refused retries at about
-  USD 0.25 each = **USD 28.18**, under the USD 35 per-run cap.
+- the lane: pgx-shake-1's USD 0.959 + the next started shakedown box's USD 5.85 + the reading's USD 20.62 + three
+  refused retries at about USD 0.25 each = **USD 28.18**, under the USD 35 per-run cap.
