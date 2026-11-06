@@ -1,5 +1,11 @@
 #!/bin/bash
-# Lane PGX, BOX side (bench/pgx/PREREG-pgx.md, Amendments 1 and 2): THE SHAKEDOWN pgx-shake-1 on one RTX 4090. Never read. It covers
+# Lane PGX, BOX side (bench/pgx/PREREG-pgx.md, Amendments 1, 2 and 3). Two boxes share the setup below:
+# - PGX_BOX=read (Amendment 3): one box of THE READING's registered split, pgx-4090-1-2-<i> (retry ids pgx-4090-r<n>-2-<i>),
+#   running the draws pgx_schedule.py assigns that box (box 1: draws 1 and 2; box 2: draw 3), every lifetime in
+#   pgx_schedule.py's order with its passes, each S lifetime after its graphs-off instrument lifetime, then the box's own
+#   reduction (pgx_reduce.py --mode part): PART_OK (0) or PART_FAULTS (27). The reading is the controller's merge.
+# - PGX_BOX=shake: THE SHAKEDOWN (Amendments 1 and 2), as below.
+# THE SHAKEDOWN pgx-shake-1 on one RTX 4090. Never read. It covers
 # the registered shakedown paragraph ("Run ids, order and the stop"): the three engine venvs and e4b; the fetch of the three
 # pinned checkpoints; the NF4 bake; grouped-nf4-gemm's bench/calibrate.py writing E-hyb's calib.json on this host; the
 # measured bytes per expert and K table; the card-clock burn; then ONE lifetime per arm at 8 GB (S4, S8, V8, E-hyb, in draw
@@ -28,6 +34,8 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
 case "$PGX_RUN_ID" in
   pgx-shake-1|pgx-shake-r[1-3]) WANT_BOX=shake;;
+  # Amendment 3: the reading's split is K = 2 (pgx_schedule.PLAN_K, bound to this pattern by the kit test)
+  pgx-4090-1-2-[12]|pgx-4090-r[1-3]-2-[12]) WANT_BOX=read; BOX_I=${PGX_RUN_ID##*-}; BOX_SPEC=2-$BOX_I;;
   *) say "unregistered run ID: $PGX_RUN_ID"; finish 78;;
 esac
 [ "$PGX_BOX" = "$WANT_BOX" ] || { say "refusing: box $PGX_BOX is not $WANT_BOX for $PGX_RUN_ID"; finish 78; }
@@ -42,6 +50,9 @@ INT4=Qwen/Qwen3-30B-A3B-GPTQ-Int4;  INT4_REV=9b534e4318b7ebc3c961a839f13eb18b183
 GPU_CLASS=4090; WANT_CC=8.9; MIN_SMS=128; MIN_VRAM_MIB=24000; MIN_RAM_GIB=60; MIN_DISK_GB=250; MIN_DL_MB_S=40; MIN_DRIVER=580
 INSTALL_S=1800; FETCH_S=2750; BAKE_S=500; CALIB_S=300; LIFETIME_S=900; INSTR_S=450; RESERVE=600
 K_S4=67; K_S8=35; K_V8=35; EHYB_VRAM_GIB=7.451; EHYB_DRAM_GIB=16     # the registered 8 GB row (pgx_tripwire.py checks the table)
+# Amendment 3: the reading's whole registered K table and E-hyb's GiB knob per budget (PREREG "The matched budget")
+K_S4_4=33; K_S4_8=67; K_S4_12=101; K_S8_4=17; K_S8_8=35; K_S8_12=52; K_V8_4=17; K_V8_8=35; K_V8_12=52
+EHYB_GIB_4=3.725; EHYB_GIB_8=7.451; EHYB_GIB_12=11.176
 PORT_SGL=30000; PORT_VLLM=8000; PORT_E4B=8778
 # ---- the knobs are frozen: no engine, kernel or lane key may arrive in the box's environment (the image's own are recorded)
 for k in $(env | grep -oE '^(E4B|GNF4|VLLM|SGLANG|PGX)_[A-Za-z0-9_]+' | sort -u); do
@@ -52,13 +63,14 @@ export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOK
 echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_VERSION sglang=$SGLANG_VERSION vllm=$VLLM_VERSION pager=$PAGER_SHA torch=$TORCH_WANT K=S4:$K_S4,S8:$K_S8,V8:$K_V8 ehyb_vram_gib=$EHYB_VRAM_GIB" | tee -a summary.txt
 # ---- staged pieces, byte-for-byte
 for f in pgx_drive.py pgx_reduce.py pgx_residency.py pgx_bytes.py pgx_place_preview.py pgx_tripwire.py pgx_shake.py pgx_box.py \
+         pgx_schedule.py pgx_dram_bench.py pgx_read.sh \
          fit_profile.jsonl bytes_per_expert.json replay.py card_clock.py k8_bake.py sglang_install.sh hook/usercustomize.py \
          hook/sitecustomize.py hook_e4b/sitecustomize.py prompts/warm_c1.json prompts/warm_c4.json prompts/shift.json \
          prompts/manifest.json staged-pgx.sha256; do
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged-pgx.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/pgx/staged-pgx.sha256"; finish 9; }
 # pgx_residency.py loads replay.py from ../train-routing-trace (the repo's layout); the box keeps that layout
-mkdir -p $W/rt/train-routing-trace $W/rt/pgx && cp $W/replay.py $W/rt/train-routing-trace/ && cp $W/pgx_residency.py $W/pgx_box.py $W/rt/pgx/
+mkdir -p $W/rt/train-routing-trace $W/rt/pgx && cp $W/replay.py $W/rt/train-routing-trace/ && cp $W/pgx_residency.py $W/pgx_box.py $W/pgx_reduce.py $W/rt/pgx/
 # ---- refusals before anything is installed or fetched
 # Amendment 2: the image python, bound by ABSOLUTE path before anything can change PATH, and used by every image-python step.
 # pgx-shake-1 sourced SC1's sglang.env in this shell after the SGLang install; that file puts venv-sglang first on PATH, so
@@ -170,11 +182,17 @@ echo "DOWNLOAD ${DL:-none}" | tee -a summary.txt
 DL_MB_S=${DL##*mb_s=}; DL_MB_S=${DL_MB_S%%.*}
 case "$DL" in status=2[0-9][0-9]\ *) ;; *) DL_MB_S=0;; esac
 [ "${DL_MB_S:-0}" -ge "$MIN_DL_MB_S" ] 2>/dev/null || { say "REFUSED: download ${DL:-none} -- below ${MIN_DL_MB_S} MB/s"; echo "refused: download ${DL:-none}" > REFUSAL; finish 19; }
-# ---- the pre-install fit check (bench/common/README.md, "Guard fit"): Amendment 1's shakedown fit
+# ---- the pre-install fit check (bench/common/README.md, "Guard fit"): Amendment 1's shakedown fit, or Amendment 3's reading
+# box fit (pgx_schedule.py --need: this box's modelled work from the shakedown's receipt x 1.25)
 FIT_HEADROOM_PCT=125
 INSTALL_TO_GATE_S=$((INSTALL_S + FETCH_S + BAKE_S + CALIB_S))   # the setup still ahead of the first lifetime: 5,350 s
 NEED_LIFETIMES=$((4 * LIFETIME_S + 2 * INSTR_S))                # four timed lifetimes and two instrument lifetimes: 4,500 s
 FIT=$((INSTALL_TO_GATE_S + NEED_LIFETIMES + RESERVE)); FIT_NEED=$((FIT * FIT_HEADROOM_PCT / 100)); LEFT=$((PGX_DEADLINE_EPOCH - $(date +%s)))
+if [ "$PGX_BOX" = read ]; then
+  FIT_NEED=$("$PY_IMG" $W/pgx_schedule.py --need "$BOX_SPEC") && [ "${FIT_NEED:-0}" -gt 0 ] 2>/dev/null \
+    || { say "refusing: pgx_schedule.py --need $BOX_SPEC gave '${FIT_NEED:-}'"; finish 78; }
+  FIT=$((FIT_NEED * 100 / FIT_HEADROOM_PCT))
+fi
 # rc 41: a refusal before the install, not a strike; two consecutive headroom refusals count as one strike
 [ "$LEFT" -ge "$FIT_NEED" ] || { say "REFUSED: needs ${FIT_NEED}s (fit ${FIT}s x ${FIT_HEADROOM_PCT}%), ${LEFT}s left"; echo "refused: fit ${FIT_NEED}s, ${LEFT}s left" > REFUSAL; finish 41; }
 echo "GUARD_FIT fit=${FIT}s need=${FIT_NEED}s left=${LEFT}s" | tee -a summary.txt
@@ -333,9 +351,9 @@ sampler_start(){ local out=$1 pgid=$2
   ( while :; do echo "$(date +%s) $(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | head -1 | tr -dc 0-9) $(ps -o rss= -g "$pgid" 2>/dev/null | awk '{s+=$1} END {print s+0}')"; sleep 1; done ) > "$out" 2>/dev/null &
   echo $!; }
 sampler_stop(){ kill "$1" 2>/dev/null; wait "$1" 2>/dev/null; }
-drive(){ local port=$1 set=$2 pass=$3 out=$4 tag=$5
-  perl -e "alarm $(step_alarm 900); exec @ARGV" "$PY_IMG" $W/pgx_drive.py --url "http://127.0.0.1:$port" --model pgx --prompts $W/prompts/$set.json \
-    --concurrency 1 --pass-id "$pass" --out "$out" > logs/drive_${tag}_$pass.log 2>&1; }
+drive(){ local port=$1 set=$2 pass=$3 out=$4 tag=$5 conc=${6:-1} cap=${7:-900}
+  perl -e "alarm $(step_alarm "$cap"); exec @ARGV" "$PY_IMG" $W/pgx_drive.py --url "http://127.0.0.1:$port" --model pgx --prompts $W/prompts/$set.json \
+    --concurrency "$conc" --pass-id "$pass" --out "$out" > logs/drive_${tag}_$pass.log 2>&1; }
 # V8's eager probe: one 1,024-token prefill with one output token (longer than any captured size, so the MoE layers run
 # eagerly and the pager logs its cumulative counters); returns the server log's byte offset once the lines are flushed
 probe(){ local port=$1 log=$2
@@ -374,11 +392,21 @@ vllm_start(){ local k=$1 log=$2
     > "$log" 2>&1 < /dev/null &
   SRV_PID=$!; wait_http "http://127.0.0.1:$PORT_VLLM/v1/models" 2400 $SRV_PID "$log" || return $?
   grep -aq "vllm-expert-pager" "$log" || { say "V8: the pager logged nothing at startup (plugin not engaged?)"; return 43; }; }
-e4b_start(){ local log=$1 lt=$2
+# e4b's server for an E arm (Amendment 3: per arm and budget). E-hyb: the solver at the budget's GiB knob, the fit profile,
+# the placement proof and the tier counters; E-hyb-u: the same at 8 GB without the profile (uniform-assumed mass);
+# E-allvram-g / -e: every expert in VRAM, graphs auto / 0, the proof only (no tier is cold, so no counters)
+e4b_start(){ local log=$1 lt=$2 arm=${3:-E-hyb} gib=${4:-$EHYB_VRAM_GIB} place=solver prof="E4B_PAGED_PROFILE=$W/fit_profile.jsonl" extra=""
+  case "$arm" in
+    E-hyb) extra="PGX_DRAM_TIME_OUT=$lt/dram_time.jsonl";;
+    E-hyb-u) prof=""; extra="PGX_DRAM_TIME_OUT=$lt/dram_time.jsonl";;
+    E-allvram-g) place=all-vram;;
+    E-allvram-e) place=all-vram; extra="E4B_PAGED_GRAPHS=0";;
+  esac
   img_guard e-hyb-server
-  setsid env PYTHONPATH=$W/hook_e4b PGX_PLACEMENT_OUT=$lt/placement.json E4B_PAGED_MODEL=$BF16 E4B_PAGED_REVISION=$BF16_REV \
-    E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_PLACEMENT=solver E4B_PAGED_VRAM_GB=$EHYB_VRAM_GIB \
-    E4B_PAGED_DRAM_GB=$EHYB_DRAM_GIB E4B_PAGED_PROFILE=$W/fit_profile.jsonl E4B_PAGED_STEP_TRACE=$lt/step_trace.jsonl \
+  # shellcheck disable=SC2086  # prof and extra are one KEY=VALUE each, or empty, by design
+  setsid env PYTHONPATH=$W/hook_e4b PGX_PLACEMENT_OUT=$lt/placement.json $extra E4B_PAGED_MODEL=$BF16 E4B_PAGED_REVISION=$BF16_REV \
+    E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_PLACEMENT=$place E4B_PAGED_VRAM_GB=$gib \
+    E4B_PAGED_DRAM_GB=$EHYB_DRAM_GIB $prof E4B_PAGED_STEP_TRACE=$lt/step_trace.jsonl \
     E4B_PAGED_MAX_SEQS=4 E4B_PAGED_MAX_TOKENS_PER_SEQ=2048 E4B_PAGED_SERVED_NAME=pgx E4B_HOST=127.0.0.1 E4B_PORT=$PORT_E4B \
     "$PY_IMG" -m experts4bit_qlora.serve_paged > "$log" 2>&1 < /dev/null &
   SRV_PID=$!; wait_e4b_ready "http://127.0.0.1:$PORT_E4B/health" 2400 $SRV_PID "$log" || return $?; }
@@ -428,6 +456,8 @@ instrument(){ local arm=$1 m=$2 rev=$3 k=$4 extra=${5:-} d=$W/instr/$1 log=$W/lo
   drive $PORT_SGL warm_c1 I1 $d/I1.json "${arm}_instr"
   stop_pid "$SRV_PID"; SRV_PID=""
   echo "$arm instrument: $(cat $d/route-*.jsonl 2>/dev/null | wc -l | tr -d ' ') dump rows" | tee -a summary.txt; }
+# ---- THE READING (Amendment 3): this box's lifetimes, then its part reduction; never falls through to the shakedown's
+[ "$PGX_BOX" = read ] && { . $W/pgx_read.sh; exit 0; }
 # ---- draw 1's order (PREREG: draw d starts at arm d of S4, S8, V8, E-hyb), the instrument lifetimes before their arm's
 can_run $INSTR_S instrument_S4 && instrument S4 "$INT4" "$INT4_REV" "$KM_S4" "--dtype float16"
 can_run $LIFETIME_S lifetime_S4 && lifetime S4

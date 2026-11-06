@@ -1,0 +1,10 @@
+[calibrate] running CPU microbench (/usr/bin/cc -O3 -march=native)...
+[calibrate] running GPU benches...
+
+calibration blob: /root/pgx/calib.json
+host: 13th Gen Intel(R) Core(TM) i7-13700KF | 24 cpus | quota None | flags ['avx2']
+B_dram triad best :     80.9 GB/s  (16t compact nt=1)
+grouped scatter   :     85.2 GB/s  (24t, 2 MiB blocks, E=4096)
+GATE G0           : 105.3% of triad -> PROCEED
+cuda:0 NVIDIA GeForce RTX 4090: triad 924.9 GB/s | link h2d 24.1 / d2h 26.34 GB/s | h2d single-copy 24.07 GB/s -> link_eff 0.999
+B_nvme seq best   : 7.82 GB/s (o_direct=True)

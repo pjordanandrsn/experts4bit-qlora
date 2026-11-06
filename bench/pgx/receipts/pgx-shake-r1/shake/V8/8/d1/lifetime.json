@@ -1,0 +1,36 @@
+{
+ "arm": "V8",
+ "budget": 8,
+ "draw": 1,
+ "k_registered": 35,
+ "k_measured": 35,
+ "wall_s": 211.0,
+ "peak_vram_mib": 22103.0,
+ "peak_rss_gib": 30.84,
+ "counters_ok": true,
+ "pager_giveups": 0,
+ "startup_failed": null,
+ "counters": {
+  "pager_giveups": 0,
+  "passes": {
+   "P1": {
+    "vram_hits": 658085,
+    "vram_misses": 125275,
+    "ram_hits": 783360,
+    "ram_misses": 0,
+    "hit_rate": 0.8400799121732027,
+    "probe_included": true
+   },
+   "P2": {
+    "vram_hits": 658044,
+    "vram_misses": 125316,
+    "ram_hits": 783360,
+    "ram_misses": 0,
+    "hit_rate": 0.8400275735294118,
+    "probe_included": true
+   }
+  },
+  "counters_ok": true,
+  "why": null
+ }
+}

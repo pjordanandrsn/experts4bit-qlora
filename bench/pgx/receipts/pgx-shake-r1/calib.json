@@ -1,0 +1,437 @@
+{
+  "schema": "gnf4-hybrid-calib/2",
+  "created_utc": "2026-11-06T05:57:15Z",
+  "quick_mode": false,
+  "host": {
+    "hostname": "pgx",
+    "kernel": "6.8.0-138-generic",
+    "machine": "x86_64",
+    "cpu_model": "13th Gen Intel(R) Core(TM) i7-13700KF",
+    "cpu_flags_watched": [
+      "avx2"
+    ],
+    "online_cpus": 24,
+    "cgroup_cpu_quota": null,
+    "numa_nodes": 1,
+    "mem_total_gib": 62.6,
+    "thp": "always [madvise] never",
+    "hugetlb_2m_total": "0",
+    "governor": "powersave",
+    "loadavg_at_start": "2.31 1.12 0.99 1/556 1590"
+  },
+  "gpus": [
+    {
+      "index": "0",
+      "name": "NVIDIA GeForce RTX 4090",
+      "vram": "24564 MiB",
+      "power_limit": "450.00 W",
+      "pcie_gen_max": "4",
+      "pcie_width_max": "16",
+      "pcie_gen_idle": "1",
+      "pcie_width_idle": "16"
+    }
+  ],
+  "notes": [],
+  "cpu_bench_build": "/usr/bin/cc -O3 -march=native",
+  "cpu_bench": {
+    "features": {
+      "avx2": 1,
+      "avx512f": 0,
+      "avx512bw": 0,
+      "avx512vl": 0,
+      "avx512vbmi": 0,
+      "avx512vnni": 0
+    },
+    "topology": {
+      "online_cpus": 24,
+      "l3_domains": 1
+    },
+    "compiled_simd": "avx2",
+    "triad": [
+      {
+        "threads": 1,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 34.62
+      },
+      {
+        "threads": 2,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 40.01
+      },
+      {
+        "threads": 4,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 52.95
+      },
+      {
+        "threads": 8,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 71.07
+      },
+      {
+        "threads": 16,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 80.05
+      },
+      {
+        "threads": 24,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 71.34
+      },
+      {
+        "threads": 1,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 44.82
+      },
+      {
+        "threads": 2,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 52.73
+      },
+      {
+        "threads": 4,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 69.54
+      },
+      {
+        "threads": 8,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 73.26
+      },
+      {
+        "threads": 16,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 80.9
+      },
+      {
+        "threads": 24,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 80.17
+      }
+    ],
+    "triad_best": {
+      "gbs": 80.9,
+      "threads": 16,
+      "pin": "compact",
+      "nt": 1
+    },
+    "scatter": [
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 1,
+        "gbs": 30.29
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 2,
+        "gbs": 37.83
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 4,
+        "gbs": 59.93
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 8,
+        "gbs": 65.17
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 16,
+        "gbs": 83.05
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 24,
+        "gbs": 85.19
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 1,
+        "gbs": 30.27
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 2,
+        "gbs": 37.89
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 4,
+        "gbs": 59.89
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 8,
+        "gbs": 65.24
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 16,
+        "gbs": 83.15
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 24,
+        "gbs": 85.04
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 1,
+        "gbs": 30.31
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 2,
+        "gbs": 37.83
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 4,
+        "gbs": 60.01
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 8,
+        "gbs": 65.42
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 16,
+        "gbs": 83.14
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 24,
+        "gbs": 84.69
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 1,
+        "gbs": 30.22
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 2,
+        "gbs": 37.8
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 4,
+        "gbs": 59.09
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 8,
+        "gbs": 65.4
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 16,
+        "gbs": 83.08
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 24,
+        "gbs": 84.0
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 1,
+        "gbs": 30.33
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 2,
+        "gbs": 37.87
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 4,
+        "gbs": 59.91
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 8,
+        "gbs": 65.83
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 16,
+        "gbs": 83.11
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 24,
+        "gbs": 83.75
+      }
+    ],
+    "scatter_best": {
+      "gbs": 85.19,
+      "block_mib": 2,
+      "threads": 24,
+      "experts": 4096
+    },
+    "gate_g0": {
+      "scatter_pct_of_triad": 105.3
+    },
+    "nvme": {
+      "o_direct": true,
+      "points": [
+        {
+          "mode": "seq",
+          "qd": 1,
+          "gbs": 3.84,
+          "ok": true
+        },
+        {
+          "mode": "seq",
+          "qd": 4,
+          "gbs": 6.94,
+          "ok": true
+        },
+        {
+          "mode": "seq",
+          "qd": 8,
+          "gbs": 7.21,
+          "ok": true
+        },
+        {
+          "mode": "seq",
+          "qd": 16,
+          "gbs": 7.82,
+          "ok": true
+        },
+        {
+          "mode": "rand",
+          "qd": 1,
+          "gbs": 3.53,
+          "ok": true
+        },
+        {
+          "mode": "rand",
+          "qd": 4,
+          "gbs": 6.97,
+          "ok": true
+        },
+        {
+          "mode": "rand",
+          "qd": 8,
+          "gbs": 7.18,
+          "ok": true
+        },
+        {
+          "mode": "rand",
+          "qd": 16,
+          "gbs": 7.73,
+          "ok": true
+        }
+      ]
+    },
+    "config": {
+      "triad_gib": 2,
+      "arena_gib": 8,
+      "topk": 8,
+      "fetches": 400,
+      "seed": 20260816,
+      "reps": 5,
+      "tile_bytes": 1048576
+    }
+  },
+  "gpu_bench": {
+    "devices": [
+      {
+        "device": "cuda:0",
+        "name": "NVIDIA GeForce RTX 4090",
+        "b_vram_triad_gbs": 924.9,
+        "b_link": {
+          "h2d_8kb": {
+            "gbs": 4.31,
+            "usec": 1.9
+          },
+          "d2h_8kb": {
+            "gbs": 4.67,
+            "usec": 1.8
+          },
+          "h2d_64mb": {
+            "gbs": 24.1,
+            "usec": 2784.2
+          },
+          "d2h_64mb": {
+            "gbs": 26.34,
+            "usec": 2548.1
+          },
+          "h2d_64mb_single": {
+            "gbs": 24.07,
+            "usec": 2788.2,
+            "reps": 10
+          }
+        }
+      }
+    ]
+  },
+  "gate_g0": {
+    "scatter_pct_of_triad": 105.3,
+    "verdict": "proceed",
+    "thresholds": {
+      "proceed": 70.0,
+      "resolve": 50.0
+    },
+    "triad_best": {
+      "gbs": 80.9,
+      "threads": 16,
+      "pin": "compact",
+      "nt": 1
+    },
+    "scatter_best": {
+      "gbs": 85.19,
+      "block_mib": 2,
+      "threads": 24,
+      "experts": 4096
+    }
+  },
+  "wall_seconds": 59.0
+}

@@ -1,0 +1,9 @@
+[2026-11-06T05:43:20Z] sglang-install: nvcc: /usr/local/cuda/bin/nvcc :: Cuda compilation tools, release 12.8, V12.8.93
+[2026-11-06T05:43:20Z] sglang-install: venv /root/pgx/venv-sglang (python -m venv, no system site packages)
+[2026-11-06T05:43:22Z] sglang-install: pip install sglang==0.5.23 ninja (alarm 2700s; log /root/pgx/logs/pip_sglang.log)
+[2026-11-06T05:45:10Z] sglang-install: tripwire
+SGLANG_TRIPWIRE sglang 0.5.23 (tag 297e54fd) torch 2.14.1+cu130 cuda 13.0 flashinfer 0.7.2 sglang-kernel 0.4.10 tvm-ffi 0.1.11 cc 8.9 (NVIDIA GeForce RTX 4090) nvcc 'Cuda compilation tools, release 12.8, V12.8.93' jit_target sm_89 python 3.11.13 ninja yes
+SGLANG_TRIPWIRE WARN compute capability 8.9 is not the registered RTX 5090 (12.0)
+SGLANG_TRIPWIRE WARN torch built for CUDA 13.0 but the JIT nvcc is 12.8: the box-A container question (cu130 wheels + 12.9 toolkit)
+[2026-11-06T05:45:14Z] sglang-install: ok: /root/pgx/venv-sglang ; env /root/pgx/sglang.env ; caches /root/pgx/sglang-cache
+SGLANG_INSTALL OK

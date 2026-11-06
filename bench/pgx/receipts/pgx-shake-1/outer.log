@@ -1,0 +1,49 @@
+KNOBS e4b=3108e20d0f37e0da47dae51218fa84672af30d06 gnf4=0.51.0 sglang=0.5.23 vllm=0.29.0 pager=e9264fda36632a3904b7b1bf7ff13d85f02b3139 torch=2.8.0+cu128 K=S4:67,S8:35,V8:35 ehyb_vram_gib=7.451
+CUDA_PROBE ok torch=2.8.0+cu128 cc=8.9 sms=128
+NVIDIA GeForce RTX 4090, 24564 MiB, 580.95.05, 8.9
+power.limit,enforced.power.limit,clocks.max.sm,temperature.gpu,clocks.sm 450.00 W, 450.00 W, 3120 MHz, 36, 210 MHz
+CPU(s):                                  24
+Vendor ID:                               GenuineIntel
+Model name:                              13th Gen Intel(R) Core(TM) i7-13700KF
+Flags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities ibpb_exit_to_user
+NUMA node(s):                            1
+               total        used        free      shared  buff/cache   available
+Mem:              62           2          44           0          16          59
+overlay         250G  2.2M  250G   1% /
+HOST_RAM_GIB 62 (min of MemTotal and the cgroup limit)
+POWER_LIMIT_W 450 (recorded, never ruled)
+DOWNLOAD status=200 bytes=1407188992 seconds=20.0 mb_s=70.4
+GUARD_FIT fit=10450s need=13062s left=14398s
+STARTED 2026-11-06T00:48:36Z
+[2026-11-06T00:48:36Z] pgx: install e4b @3108e20d0f37e0da47dae51218fa84672af30d06 + grouped-nf4-gemm==0.51.0 (image python; torch held at 2.8.0+cu128)
+PGX_TRIPWIRE ok prompt sets
+PGX_TRIPWIRE ok fit profile
+PGX_TRIPWIRE ok K table
+PGX_TRIPWIRE ok serve_paged config
+PGX_TRIPWIRE ok installed pins
+PGX_TRIPWIRE ok serve stack
+PGX_TRIPWIRE OK
+[2026-11-06T00:49:03Z] pgx: install sglang==0.5.23 (bench/sc1/sglang/install.sh)
+SGLANG_TRIPWIRE sglang 0.5.23 (tag 297e54fd) torch 2.14.1+cu130 cuda 13.0 flashinfer 0.7.2 sglang-kernel 0.4.10 tvm-ffi 0.1.11 cc 8.9 (NVIDIA GeForce RTX 4090) nvcc 'Cuda compilation tools, release 12.8, V12.8.93' jit_target sm_89 python 3.11.13 ninja yes
+SGLANG_TRIPWIRE WARN compute capability 8.9 is not the registered RTX 5090 (12.0)
+SGLANG_TRIPWIRE WARN torch built for CUDA 13.0 but the JIT nvcc is 12.8: the box-A container question (cu130 wheels + 12.9 toolkit)
+[2026-11-06T00:51:06Z] pgx: install vllm==0.29.0 + vllm-expert-pager @e9264fda36632a3904b7b1bf7ff13d85f02b3139
+e4b 0.58.1 @3108e20d0f37e0da47dae51218fa84672af30d06
+gnf4 0.51.0 (calibrate.py @30adb1bfa76f95f9ce4a4c29734b8f36de907eca)
+torch(e4b) 2.8.0+cu128
+transformers(e4b) 5.17.0
+sglang 0.5.23 (tag 297e54fd) torch 2.14.1+cu130 cuda 13.0 flashinfer 0.7.2 sglang-kernel 0.4.10 tvm-ffi 0.1.11 cc 8.9 (NVIDIA GeForce RTX 4090) nvcc 'Cuda compilation tools, release 12.8, V12.8.93' jit_target sm_89 python 3.11.13 ninja yes
+vllm 0.29.0
+vllm-expert-pager 0.1.1 @e9264fda36632a3904b7b1bf7ff13d85f02b3139
+torch(vllm) 2.13.0+cu130
+self-tests ok
+[2026-11-06T00:52:40Z] pgx: fetch Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+FETCH bf16 Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+[2026-11-06T00:56:44Z] pgx: fetch Qwen/Qwen3-30B-A3B-FP8 @ d206ba732169f29bb77fbf80fc2c4b81d4d30782
+FETCH fp8 Qwen/Qwen3-30B-A3B-FP8@d206ba732169f29bb77fbf80fc2c4b81d4d30782 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-FP8/snapshots/d206ba732169f29bb77fbf80fc2c4b81d4d30782
+[2026-11-06T00:58:53Z] pgx: fetch Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441
+FETCH int4 Qwen/Qwen3-30B-A3B-GPTQ-Int4@9b534e4318b7ebc3c961a839f13eb18b1833f441 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-GPTQ-Int4/snapshots/9b534e4318b7ebc3c961a839f13eb18b1833f441
+K_MEASURED S4=67 S8=35 V8=35 (registered 67/35/35; a different K replaces the table's, recorded)
+[2026-11-06T01:02:49Z] pgx: bake the NF4 arena
+[2026-11-06T01:02:49Z] pgx: BAKE FAIL: no arena
+[2026-11-06T01:02:49Z] pgx: TP_DONE rc=12

@@ -1,0 +1,33 @@
+{
+ "arm": "S8",
+ "budget": 8,
+ "draw": 1,
+ "k_registered": 35,
+ "k_measured": 35,
+ "wall_s": 170.0,
+ "peak_vram_mib": 18697.0,
+ "peak_rss_gib": 49.96,
+ "counters_ok": true,
+ "pager_giveups": null,
+ "startup_failed": null,
+ "counters": {
+  "counters_ok": true,
+  "host_path_check": {
+   "checked": 98736,
+   "mismatched": 0,
+   "first": null,
+   "skipped_device_calls": 0
+  },
+  "residency_I1": {
+   "calls": 98304,
+   "tokens": 2048,
+   "hits": 661075,
+   "misses": 125357,
+   "page_ins": 125357,
+   "hit_rate": 0.840600331624349,
+   "page_ins_per_token": 61.20947265625,
+   "misses_per_token": 61.20947265625
+  },
+  "why": null
+ }
+}

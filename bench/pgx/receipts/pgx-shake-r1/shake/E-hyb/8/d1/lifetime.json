@@ -1,0 +1,34 @@
+{
+ "arm": "E-hyb",
+ "budget": 8,
+ "draw": 1,
+ "k_registered": null,
+ "k_measured": null,
+ "wall_s": 836.0,
+ "peak_vram_mib": 12609.0,
+ "peak_rss_gib": 19.13,
+ "counters_ok": true,
+ "pager_giveups": null,
+ "startup_failed": null,
+ "counters": {
+  "counters_ok": true,
+  "why": null,
+  "profile": {
+   "kind": "measured",
+   "sha256": "0a46edd68005b46db6bb2174542ec948df2843071efce2ecb36099fda04c626a"
+  },
+  "vram_tier_bytes": 7999782912,
+  "nvme_experts": 0,
+  "placed_experts": {
+   "vram": 3014,
+   "dram": 3130,
+   "nvme": 0
+  }
+ },
+ "profile": {
+  "kind": "measured",
+  "sha256": "0a46edd68005b46db6bb2174542ec948df2843071efce2ecb36099fda04c626a"
+ },
+ "vram_tier_bytes": 7999782912,
+ "nvme_experts": 0
+}

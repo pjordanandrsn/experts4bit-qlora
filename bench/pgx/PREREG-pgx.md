@@ -603,3 +603,167 @@ The suite also runs once in a CPU venv at torch 2.8.0 + transformers 5.17.0 with
 - the shakedown per box: USD 5.85;
 - the lane: pgx-shake-1's USD 0.959 + the next started shakedown box's USD 5.85 + the reading's USD 20.62 + three
   refused retries at about USD 0.25 each = **USD 28.18**, under the USD 35 per-run cap.
+
+## Amendment 3 (2026-11-06): the reading's box plan
+
+Written 2026-11-06 (clock read 06:40Z) after the shakedown's receipt, as the registration requires ("The plan is decided from
+the shakedown's receipt and stated before the reading launches"). Nothing above changes except what is listed here.
+
+**The shakedown's record.** `pgx-shake-r1` finished 0 with `SHAKE_OK`: all four arms served at 8 GB, with 0 faults and
+K measured 67/35/35 as registered. Its files are committed at `bench/pgx/receipts/pgx-shake-r1/`, and `pgx-shake-1`'s (the record
+Amendment 2 rule 6 names) at `bench/pgx/receipts/pgx-shake-1/`. Each has a README and `SHA256SUMS`. The shakedown is never
+read, and no rule below is chosen from its speed numbers. The fit is necessarily computed from them: that is what the
+shakedown is for. Every choice made after seeing the receipt is named where it is made, marked **(after the receipt)**.
+
+**1. The fit (`bench/pgx/pgx_schedule.py`; every constant is read back from the receipt by the kit test).**
+- **Setup:** STARTED to the first lifetime, measured: 950 s (installs 234, fetch 584, bake 42, calibrate + preview + clock
+  ~90). The margin: the fetch is re-fit at the runner's 40 MB/s refusal floor (2,750 s for about 110 GB) in place of the
+  measured 584 s, **(after the receipt)**. Setup fit = 950 - 584 + 2,750 = **3,116 s**. Each box pays it, since every box is a
+  new instance.
+- **Measured at 8 GB, c1, over warm_c1** (8 requests x 256 tokens): pass walls S4 15.5 s, S8 48.1 s, V8 44.2 s, E-hyb
+  412 / 397 s (median TPOT 6.1, 20.1, 18.4 and 190.7 ms). A lifetime's load is its wall minus its two passes.
+- **4 and 12 GB were NOT measured on the shakedown.** They are scaled, INFERRED, by TPOT ratios:
+  - **S4, S8, V8:** TPOT = a fixed part + misses x bytes per expert / link (calibrate's 24.07 GB/s h2d). The fixed part is
+    each arm's 8 GB TPOT minus its predicted page-in time. The model fits all three at 8 GB: S8's predicted page-ins
+    are 18.2 of its 20.1 ms. At 4 and 12 GB the hit rate is the registered prediction minus its own 0.05 band (more
+    page-ins), **(after the receipt)**. Ratios to 8 GB: S4 2.78 / 1.10, S8 2.00 / 0.64, V8 2.10 / 0.61 at 4 / 12 GB.
+  - **E-hyb, E-hyb-u (INFERRED):** TPOT = P66's eager GPU decode (8.05 ms) + the CPU tier's routed mass x a per-mass cost
+    fit at 8 GB. All of E-hyb's excess over the eager decode is charged to the CPU tier. The CPU mass comes from the box's
+    own placement preview (`place_preview.json`): 0.431 / 0.200 / 0.099 at 4 / 8 / 12 GB, and 0.507 for E-hyb-u.
+    Ratios: E-hyb 2.11 / 0.51; E-hyb-u 2.47.
+  - **The two all-VRAM controls** were never run: **300 s a lifetime, INFERRED.**
+- **Passes:** P1 and P2 are the shakedown's c1 passes scaled. P3 (c4, 16 requests) is twice the c1 pass, i.e.
+  serial-equivalent: c4 is assumed to buy no throughput (E-hyb's CPU tier reads each expert once per step, so a batch of 4
+  should cost no more per sequence than one). P4 is the P2 pass.
+- **The instrument lifetimes** (below, 2) run the same passes, slowed by the shakedown's measured graphs-off ratio I1 / P1
+  (S4 5.53, S8 2.97). S4's first SGLang start on a box adds its Marlin JIT once: 353 s (496 - 86 - 57, measured).
+- **Per draw** (s): instrument lifetimes 4,378; S4 + S8 + V8 2,525; E-hyb 6,281; E-hyb-u 4,967; controls 600; total
+  **18,751**. E-hyb and E-hyb-u are 60 % of it.
+- **A box's need** = (setup + JIT + its draws) x 1.25. Its guard = the need + 1,500 s of launch slack (Amendment 2 rule 5).
+  Worst = guard x USD 0.85 + 120 GB x USD 0.02.
+
+**2. S4/S8 residency at every cell: an instrument lifetime per (S arm, budget, draw)** (the maintainer's ruling). Each
+timed S lifetime is preceded by an untimed graphs-off instrument lifetime at the same budget and draw. That lifetime runs
+the same pass sequence (P1-P3, + P4 at 8 GB) with the routing dump, so every timed SGLang cell has its own replay. The
+attribution needs residency at c4, and the predictions cover c1 only. The server's own warmup is tagged `W0`: it is
+replayed for the cache state and never scored.
+- **(i) The assumption, stated:** the graphs-off instrument lifetime forms the same decode batches as the graphs-on timed
+  one. The loop is closed at c = 4 with fixed `max_tokens` and `ignore_eos`, so each wave of 4 starts and ends together.
+- **(ii) The check:** SGLang 0.5.23 logs `Decode batch, #running-req: N` every 40 decode tokens at its default level, and
+  both lifetimes log it. Per pass, the two logged sequences are compared inside the runner's pass windows (start and end
+  epochs, the boundary seconds excluded). Equal means `BATCH_MATCHED`; otherwise that cell's residency reads
+  `APPROXIMATE`, reported and never a VOID. No server flag changes.
+
+**3. The split (the registered rule: the fewest K of 1, 2 or 3 boxes whose largest box fits the box cap).** The box cap is
+min(18 h, (USD 15 - 2.40) / 0.85 = 14.82 h) = 53,364 s.
+
+| K | boxes (draws) | guard | worst | fits |
+|---|---|---|---|---|
+| 1 | {1, 2, 3} | 76,152 s = 21.15 h | USD 20.38 | no |
+| **2** | **{1, 2}; {3}** | **52,713 s = 14.64 h; 29,274 s = 8.13 h** | **USD 14.85 + 9.31 = 24.16** | **yes** |
+| 3 | {1}; {2}; {3} | 29,274 s = 8.13 h each | USD 9.31 each, 27.93 | yes |
+
+- **K = 2.** The kit carries it as a constant (`pgx_schedule.PLAN_K`) and nothing recomputes it at launch. Box 1 fits with
+  651 s to spare. **K = 3 is the fallback**, and only a later amendment can move to it, from a new receipt-based fit.
+  A launch-time number never does.
+- **Run ids:** box i of 2 runs as `pgx-4090-1-2-<i>`. A box that does not start is retried as `pgx-4090-r<n>-2-<i>`, which
+  names the box it replaces, with n = 1 to 3 across both boxes (three retry ids in all, as registered). The runner and the
+  driver accept exactly these ids.
+- Boxes are whole draws, as registered. Box 2 is pinned to box 1's machine; if that machine cannot be rented within 24 h of
+  box 1's receipt, the reading is labelled `cross_host`.
+- **The per-run override:** both boxes are over the 6 h cap. The rental policy's Teardown Policy carries the owner's
+  standing approval (2026-10-26): a run may declare `wallclock_override` up to 18 h when its estimate, the launcher's worst
+  at the guard with downloads, is at most USD 15. The launcher enforces it per box. Each box's manifest declares it; the
+  launcher checks it against that box's estimate; the receipt records it; and the create disclosure states the box's
+  hours and estimate against USD 15. No further grant is needed.
+- **Each box reduces its own draws** (`pgx_reduce.py --mode part`, P238's form): its lifetimes, passes and ruled token
+  identity. It finishes 0 with `PART_OK`, else 27. The reading is the controller's merge of both boxes' directories.
+
+**4. The host RAM floor stays: listed >= 62 GiB, measured >= 60 GiB.** The shakedown's peak host RSS was 49.96 GiB (S8),
+so 60 GiB leaves 10.04 GiB (20 % of the peak). S8's and V8's RAM tier holds every expert at every budget, so their RSS
+does not grow at 4 or 12 GB. E-hyb's largest DRAM tier is at 4 GB, 4,638 experts x 2.65 MB = 12.3 GB against 8.3 GB at
+8 GB, so about 23 GiB against its measured 19.13. The largest arm stays S8.
+
+**5. Two registered measures had no producer, found while building the kit (not from any reading's data).**
+- **E-hyb's DRAM-tier host time** was to be "read from the step trace's host-tier time". At this commit e4b's step trace
+  has no tier split: a decode step is `{"seg": {"dec_prep", "dec_issue", "dec_sync", ...}, "step_ms"}`, and `dec_issue`
+  (155-217 ms a step on the shakedown) covers both tiers. The reducer's field existed only in a handwritten fixture.
+- **E-hyb's VRAM-tier hit rate** was to come "from E4B_PAGED_STEP_TRACE and the tier counters". Neither the step trace
+  nor `/health` carries tier counts. e4b counts tier activations only in `_HybridTier.amort`, which `serve_paged` leaves
+  off.
+- The shakedown's lesson: its E-hyb `counters_ok` checked only that the trace was non-empty. In the reading kit, each
+  lifetime's counters check covers every quantity the reducer can VOID on: S, the per-pass dump and its host-path
+  self-check; V8, every pass between two probes; E arms, the placement proof, the profile and the trace. The tier
+  quantities below carry their own invariant and read "not measured", never VOID.
+
+**The replacement source: tier counters in the E-hyb hook** (`bench/pgx/hook_e4b/sitecustomize.py`, already loaded in
+every E-hyb server for the placement proof). It wraps the five `_HybridTier` methods a routed row can take:
+- `forward` (the per-layer entry): every routed slot;
+- `_cold_contrib`: every non-VRAM row;
+- `_dram_contrib` (the DRAM bus on the host): DRAM rows and a `perf_counter_ns` wall;
+- `_dram_on_gpu` (the thin and offload route): DRAM rows;
+- `_cold_on_cpu`: host NVMe rows, empty in stage 1.
+
+Every count is the `numel()` of an index the method already holds, so it adds no sync. A call of at most 4 rows is decode.
+A daemon thread appends the cumulative counters with a wall epoch once a second. Per pass, over the runner's windows:
+- **the DRAM-tier host time** = the decode `_dram_contrib` wall per decode token. It includes the method's own host copy
+  of the routed ids, as e4b's own `amort["dram_ns"]` does. With no record for a cell, the attribution's `dram_host`
+  branch reads "not measured", reported and never a VOID; the other two branches are unaffected;
+- **the VRAM-tier hit rate** = 1 - non-VRAM rows / routed slots, reported only, under an invariant: the routed slots must
+  equal the pass's decode tokens x MoE layers x top_k, the last two read from the box's `/health`. If they are unequal, a
+  route was missed, and that cell's hit rate reads "not measured". Beside it, never ruled: the preview's predicted VRAM
+  share on the same box (the shakedown's preview gave 0.800 at 8 GB).
+- **Q7's hit-rate half** reads from this measure. If no E-hyb or E-hyb-u cell at 8 GB passes the invariant, Q7 reads
+  `NOT_TESTED`, not a fail.
+- **The cost, bounded:** `bench/pgx/pgx_dram_bench.py` times each wrapper around a no-op original against the no-op, and
+  one append. At $0, on e4b's real `_HybridTier` under Python 3.14, it measured 309 + 286 + 622 ns a layer for forward,
+  `_cold_contrib` and `_dram_contrib`. That is 48 x 1.22 us = 58 us a decode step, 0.031 % of the shakedown's 190.7 ms
+  E-hyb step, plus 140 us a second for the append (0.014 %): **0.045 %, under the 0.1 % bound.** At 12 GB's modelled
+  98 ms step it is about 0.07 %. Each reading box reruns the bench on its own image python before any lifetime, and a
+  bound over 0.1 % or a wrap not in place is a premise failure (25).
+- **Symmetry, stated:** the counters load only in the e4b arms (E-hyb, E-hyb-u). The baselines carry nothing equivalent,
+  and the bound above is why that is acceptable.
+- **Tested on the real producer:** the bench and the kit test import e4b's real `hybrid` module through the hook. They
+  run `_dram_contrib`'s real body (its production `amort is None` branch, into a counting stub of the inner kernel) and
+  enter the other four real bodies, which stop at their first tensor op on CPU. They check the decode/prefill split on a
+  mixed set of calls, and that per-pass deltas from the hook's own output match a direct count, with the invariant
+  catching a deliberately missed route. A hook that omits any one of the five routes fails. The route list is pinned to
+  `_HybridTier`'s methods at this commit, so a new method fails the test until it is inspected.
+
+**6. P2 against P1 for S4, registered for the reading.** The shakedown recorded S4's P2 differing from its P1, and S8's,
+V8's and E-hyb's identical. As registered, S4 (Marlin) is reported and never ruled: at the reading, its P2-P1 token
+identity is reported per lifetime, and it never VOIDs a pass or moves a cell. No rule is added from the shakedown.
+
+**7. The reading's box side** (staged and hash-pinned with the rest, 25 files in `staged-pgx.sha256`):
+- `bench/pgx/pgx_read.sh` is sourced by `pgx_run.sh` on a read box after the shared setup. It runs, in order:
+  1. the tier-counter bench (25 on failure);
+  2. the measured K at every budget;
+  3. the part reduction's registration record;
+  4. each lifetime in `pgx_schedule.py`'s order, started only if its modelled need x 1.25 fits what is left (a skipped
+     lifetime leaves its cells to VOID);
+  5. the part reduction.
+- `pgx_run.sh`: the reading ids; its rc 41 fit is `pgx_schedule.py --need` for the box; the whole registered K table and
+  E-hyb's GiB knob per budget; drive at c1 or c4 with each lifetime's own step alarm; the E arms' servers per arm
+  (E-hyb-u without the profile, the all-VRAM controls at `all-vram`, graphs auto or 0).
+- `pgx_box.py`: any arm, budget, draw and pass list; V8's n + 1 probes; per-pass S residency; the batch check; the tier
+  counters.
+- `pgx_reduce.py`: per-cell residency with its label; the hit-rate sanity line; Q7's hit-rate half; "not measured"; part
+  mode.
+- `pgx_drive.sh` accepts the reading ids.
+- The interpreter rules of Amendment 2 hold in `pgx_read.sh`: no bare `python`, no `source` of an env file, every e4b step
+  behind `img_guard` in its own interpreter.
+- **The $0 kit test** is `tests/test_pgx_reading.py`, with `test_pgx_kit.py` unchanged and passing. It covers:
+  - the schedule;
+  - the plan and its pinned K;
+  - every fit constant read back from the committed receipt;
+  - the ids, both patterns;
+  - the tier counters on the real module, with the five route mutants;
+  - the readers;
+  - part mode on the shakedown's real lifetimes: their P1 and P2 rows carry no fault, and every other registered row of
+    draw 1 faults as missing;
+  - a stubbed run of box 2 end to end, in schedule order, with the skip path.
+
+**The worst cases, after this amendment:**
+- the reading: two boxes, USD 14.85 + 9.31 = **USD 24.16**, each under USD 15;
+- the lane: spent USD 2.36 (pgx-shake-1 0.96 + pgx-shake-r1 1.40) + the reading 24.16 + three non-starting retries at about
+  USD 0.25 = **USD 27.27**, under the USD 35 per-run cap. At the K = 3 fallback it would be 2.36 + 27.93 + 0.75 = USD 31.04.
