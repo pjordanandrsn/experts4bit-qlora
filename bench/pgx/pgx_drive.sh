@@ -69,7 +69,9 @@ OUT="$RUN_DIR/pgx"
 mkdir -p "$OUT" && [ -z "$(find "$OUT" -mindepth 1 -maxdepth 1 -print -quit)" ] || { say "fetch failed: $OUT is not an empty directory"; exit 22; }
 # the evidence only: no venv (GBs), no checkpoint or arena, no compile or JIT caches, no route-dump text over the store's
 # 10 MiB rule (the residency summary the box computes from it travels instead); nothing over 10 MiB (the store rule).
-PGX_RSYNC_EXCLUDES=(--exclude 'venv*' --exclude 'work' --exclude 'hf-cache' --exclude 'sglang-cache' --exclude 'vllm-cache'
+# Amendment 2: work/'s JSON records travel (work/bake.json holds the bake's error and traceback); the rest of work/ (the NF4
+# snapshot and the arena) does not. rsync's first matching rule wins, so the work/ rules come first.
+PGX_RSYNC_EXCLUDES=(--include 'work/' --include 'work/*.json' --exclude 'work/*' --exclude 'venv*' --exclude 'hf-cache' --exclude 'sglang-cache' --exclude 'vllm-cache'
   --exclude '__pycache__' --exclude 'pycache-*' --exclude '.cache' --exclude '*.safetensors' --exclude '*.arena' --exclude '*.pt'
   --exclude '*.bin' --exclude 'gnf4-src' --max-size=10m)
 big=$($SSH "cd $W && find . \( -name 'venv*' -o -name work -o -name hf-cache -o -name sglang-cache -o -name __pycache__ -o -name .cache \) -prune -o -type f -size +10M -print" 2>/dev/null | head -20 | tr '\n' ' ')
