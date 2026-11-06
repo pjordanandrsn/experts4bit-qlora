@@ -1,0 +1,12 @@
+  ok  every arm served, every counter fired: SHAKE_OK (want SHAKE_OK)
+  ok  V8's server did not start: STOP (want STOP)
+  ok  S4's P2 has a request fault: STOP (want STOP)
+  ok  E-hyb's P1 record is missing: STOP (want STOP)
+  ok  S8 has no lifetime record: STOP (want STOP)
+  ok  S8's routing dump is missing: SHAKE_FAULTS (want SHAKE_FAULTS)
+  ok  V8 gave up once: SHAKE_FAULTS (want SHAKE_FAULTS)
+  ok  S4's measured K is off the table: SHAKE_FAULTS (want SHAKE_FAULTS)
+  ok  E-hyb placed an expert on the NVMe tier: SHAKE_FAULTS (want SHAKE_FAULTS)
+  ok  E-hyb's VRAM tier is over 8 GB: SHAKE_FAULTS (want SHAKE_FAULTS)
+  ok  E-hyb served uniform-assumed mass: SHAKE_FAULTS (want SHAKE_FAULTS)
+PGX_SHAKE_SELFTEST OK 11/11

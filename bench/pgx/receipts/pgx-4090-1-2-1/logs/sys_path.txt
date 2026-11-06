@@ -1,0 +1,2 @@
+/opt/conda/bin/python
+['', '/opt/conda/lib/python311.zip', '/opt/conda/lib/python3.11', '/opt/conda/lib/python3.11/lib-dynload', '/opt/conda/lib/python3.11/site-packages']

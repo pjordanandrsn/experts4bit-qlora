@@ -36,6 +36,8 @@ case "$PGX_RUN_ID" in
   pgx-shake-1|pgx-shake-r[1-3]) WANT_BOX=shake;;
   # Amendment 3: the reading's split is K = 2 (pgx_schedule.PLAN_K, bound to this pattern by the kit test)
   pgx-4090-1-2-[12]|pgx-4090-r[1-3]-2-[12]) WANT_BOX=read; BOX_I=${PGX_RUN_ID##*-}; BOX_SPEC=2-$BOX_I;;
+  # PGX2 (PREREG-pgx2.md): the successor lane runs the same boxes under its own ids
+  pgx2-4090-1-2-[12]|pgx2-4090-r[1-3]-2-[12]) WANT_BOX=read; BOX_I=${PGX_RUN_ID##*-}; BOX_SPEC=2-$BOX_I;;
   *) say "unregistered run ID: $PGX_RUN_ID"; finish 78;;
 esac
 [ "$PGX_BOX" = "$WANT_BOX" ] || { say "refusing: box $PGX_BOX is not $WANT_BOX for $PGX_RUN_ID"; finish 78; }

@@ -24,6 +24,7 @@ done
 case "$E4B_RENT_RUN_ID" in
   pgx-shake-1|pgx-shake-r[1-3])           BOX=shake;;
   pgx-4090-1-2-[12]|pgx-4090-r[1-3]-2-[12]) BOX=read;;
+  pgx2-4090-1-2-[12]|pgx2-4090-r[1-3]-2-[12]) BOX=read;;   # PGX2 (PREREG-pgx2.md): the successor lane's ids
   *) say "refusing unregistered run ID: $E4B_RENT_RUN_ID"; exit 78;;
 esac
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
