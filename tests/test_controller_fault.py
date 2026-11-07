@@ -83,6 +83,10 @@ BREAKS = {
                                                                      if k != "list_after"}))), "provider unreachable"),
     "the guard's proof evidence does not parse": (
         lambda d: _edit_json(d, "teardown-proof.guard.json", lambda v: v.update(evidence="{not json")), "provider unreachable"),
+    "the guard's proof evidence is not an object": (
+        lambda d: _edit_json(d, "teardown-proof.guard.json", lambda v: v.update(evidence="[]")), "provider unreachable"),
+    "the final proof evidence is not an object": (
+        lambda d: _edit_json(d, "teardown-proof.json", lambda v: v.update(evidence="[]")), "instance absent"),
     "the guard's proof is not an object": (
         lambda d: (d / "teardown-proof.guard.json").write_text("[]", encoding="utf-8"), "provider unreachable"),
     "the final teardown proof is not complete": (lambda d: _edit_json(d, "teardown-proof.json", lambda v: v.update(complete=False)),
