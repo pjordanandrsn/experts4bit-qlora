@@ -75,6 +75,12 @@ BREAKS = {
     "no provider network failure in guard.log": (lambda d: (d / "guard.log").write_text(
         "\n".join(ln for ln in (d / "guard.log").read_text(encoding="utf-8").splitlines() if "BackendNetworkError(" not in ln),
         encoding="utf-8"), "no provider network failure"),
+    "network lines without BackendNetworkError(": (lambda d: (d / "guard.log").write_text(
+        (d / "guard.log").read_text(encoding="utf-8").replace("BackendNetworkError(", "OtherError("), encoding="utf-8"),
+        "no provider network failure"),
+    "network lines without the provider phrase": (lambda d: (d / "guard.log").write_text(
+        (d / "guard.log").read_text(encoding="utf-8").replace("network error talking to", "an error from"), encoding="utf-8"),
+        "no provider network failure"),
     "the final teardown proof is not complete": (lambda d: _edit_json(d, "teardown-proof.json", lambda v: v.update(complete=False)),
                                                 "instance absent"),
     "the instance is not shown absent": (lambda d: _edit_json(d, "teardown-proof.json", lambda v: _evidence(v, instance_absent=False)),
