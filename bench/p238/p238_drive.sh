@@ -22,7 +22,7 @@ done
 # The registered ids: a whole reading runs every process (BOX=all); p238-5090-<R>-<K>-<i> runs box i of a K-box split, its whole
 # (draw, point) blocks (BOX=K-i; p238_schedule.blocks: by draw and point group, never by arm). The shakedown: BOX=shake.
 case "$E4B_RENT_RUN_ID" in
-  p238-shake-1|p238-shake-r[1-5])        BOX=shake;;
+  p238-shake-1|p238-shake-r[1-8])        BOX=shake;;  # amendment 5: r6, retry ids r7 and r8
   p238-5090-[12]|p238-5090-r[1-3])        BOX=all;;
   p238-5090-[12]-2-[12]|p238-5090-[12]-4-[1-4]|p238-5090-[12]-8-[1-8]) BOX=${E4B_RENT_RUN_ID#p238-5090-[12]-};;
   *) say "refusing unregistered run ID: $E4B_RENT_RUN_ID"; exit 78;;
@@ -36,7 +36,8 @@ E4B_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null) || { say "refusing: cannot 
 STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
 for f in bench/p238/p238_run.sh bench/p238/p238_op.py bench/p238/p238_hook.py bench/p238/p238_bytes.py bench/p238/p238_reduce.py \
          bench/p238/p238_schedule.py bench/p238/staged-p238.sha256 bench/common/unsloth_moe_counter.py bench/common/card_clock.py \
-         bench/tc1/tc1_arm.py bench/tc1/f15v2.py bench/tc1/release_proof.py bench/tp4/tp4_alpaca.py; do
+         bench/tc1/tc1_arm.py bench/tc1/f15v2.py bench/tc1/release_proof.py bench/tp4/tp4_alpaca.py \
+         bench/p238/p238_shim_sitecustomize.py; do
   cp "$REPO/$f" "$STAGE/" || { say "stage missing: $f"; exit 78; }
 done
 (cd "$STAGE" && shasum -a 256 -c staged-p238.sha256 > /dev/null) || { say "refusing: staged files differ from staged-p238.sha256"; exit 78; }

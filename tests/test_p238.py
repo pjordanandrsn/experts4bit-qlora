@@ -1223,11 +1223,11 @@ def _id_block(text, var):
     return "\n".join(lines[i:j + 1])
 
 
-VALID_IDS = ["p238-shake-1", "p238-shake-r2", "p238-shake-r3", "p238-shake-r5", "p238-5090-1", "p238-5090-2", "p238-5090-r1",
+VALID_IDS = ["p238-shake-1", "p238-shake-r2", "p238-shake-r3", "p238-shake-r5", "p238-shake-r6", "p238-shake-r8", "p238-5090-1", "p238-5090-2", "p238-5090-r1",
              "p238-5090-r3", "p238-5090-1-2-1", "p238-5090-1-2-2", "p238-5090-2-4-4", "p238-5090-1-4-1", "p238-5090-1-8-8", "p238-5090-2-8-1"]
 BAD_IDS = ["p238-5090-1a", "p238-5090-1b", "p238-5090-1-2-3", "p238-5090-1-4-5", "p238-5090-1-3-1", "p238-5090-3-2-1",
            "p238-5090-1-8-9", "p238-5090-1-16-1", "p238-5090-1-2-1x", "p238-5090-1-1-1", "p238-shake-3", "p238-shake-r0",
-           "p238-shake-r6", ""]
+           "p238-shake-r9", ""]                                          # amendment 5: r6-r8 registered
 
 
 def test_the_runner_and_the_driver_map_every_id_to_the_same_box():
@@ -1262,7 +1262,8 @@ def test_the_runner_passes_eval_every_steps():
 
 STAGED = ["bench/p238/p238_run.sh", "bench/p238/p238_op.py", "bench/p238/p238_hook.py", "bench/p238/p238_bytes.py",
           "bench/p238/p238_reduce.py", "bench/p238/p238_schedule.py", "bench/common/unsloth_moe_counter.py", "bench/common/card_clock.py",
-          "bench/tc1/tc1_arm.py", "bench/tc1/f15v2.py", "bench/tc1/release_proof.py", "bench/tp4/tp4_alpaca.py"]
+          "bench/tc1/tc1_arm.py", "bench/tc1/f15v2.py", "bench/tc1/release_proof.py", "bench/tp4/tp4_alpaca.py",
+          "bench/p238/p238_shim_sitecustomize.py"]
 
 
 def test_the_staged_pin_is_the_repos_bytes_and_the_drivers_list():
