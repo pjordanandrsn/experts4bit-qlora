@@ -889,3 +889,41 @@ or reduced the runner's own shake op record.
 **Cost.** Spent so far: r4 USD 0.80, r5 USD 0.77, r6 USD 2.22 and the refused boxes USD 0.066, USD 3.86 in all. This amendment
 adds at most one STARTED shakedown box at amendment 5's worst, **USD 8.21**. The refused spend stays under its launch rule. The
 reading's budget is unchanged.
+
+## Amendment 7 (2026-11-07): a controller-side fault, registered before `p238-shake-r9`
+
+Written 2026-11-07, before `p238-shake-r9` launches. No P238 box has met a controller-side fault. Another lane's box has:
+`pgx2-4090-r1-2-1` (PGX2 Amendment 1) was healthy mid-run when a network outage at the controller cut the controller's calls
+to the provider. The controller-side guard read the lost heartbeat as a dead controller and destroyed the box before anything
+was fetched. Nothing else changes: the ids, the counts, the exemptions of amendments 4 to 6, the retry and refused-spend rules
+and amendment 4's launch gate all stand.
+
+**Why now.** r9 is P238's last STARTED shakedown box: under amendment 6, a STARTED r9 that does not finish 0 is strike two
+and ends the lane. A controller-side fault during r9 would destroy it with nothing said about the box, the host or the code.
+Registering what such a record is only after it happened would be an amendment after the outcome. So it is registered now.
+
+**The rule.** The same classifier and five conditions as PGX2 Amendment 1 (`bench/common/controller_fault.py`, with this
+lane's directory `p238`). A box is a **controller fault** only when all five hold:
+1. `guard-firing.json`: the guard fired, with `reason` exactly `heartbeat-loss`;
+2. `guard.log`: at least one line carries a provider network failure (`BackendNetworkError(` and `network error talking
+   to`);
+3. `teardown-proof.json`, the final proof: `complete` is true and its evidence reads `instance_absent` true;
+4. `receipt.json`: `status` is `ALARM`;
+5. no lane directory (`p238/`) was fetched.
+
+Anything else, an unreadable or malformed file included, is not a controller fault, and the ordinary stop applies.
+
+A controller fault:
+- is not a strike and not a read;
+- is not a STARTED box (its STARTED marker never came back), so amendment 6's bound and its "the box that STARTS among r9
+  to r11" are unchanged by it;
+- is replaced under the next retry id: r10 or r11 may follow a controller-fault box, as they may follow a pre-START rc 18;
+- does not count toward the refused-spend launch rule, which covers pre-START host floors only;
+- happens **at most once** in the lane. A second controller fault ends the lane: the controller is then not fit to run it.
+
+**Cost.** Spent so far: USD 3.86. Amendment 6's one STARTED box stays at **USD 8.21**. This amendment adds at most one
+controller-fault box, at a shakedown box's worst, **USD 8.21**: the lane's remaining worst is USD 16.42, plus the refused
+spend under its own launch rule. The reading's budget is unchanged.
+
+**The kit.** The stop reads the classifier from the launch commit (sha-pinned) and applies it before its "no readable exit
+code" check. r9 launches only from a kit cut at this amendment's merge, with a fresh approval.

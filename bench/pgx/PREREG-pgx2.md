@@ -171,3 +171,47 @@ under this page. The kit's screen excludes a host-fault box's machine.
 
 As PGX: every box's fetched files go to `bench/pgx/receipts/<run>/`, with `SHA256SUMS`. The provider's machine and
 instance ids stay in the private receipt store.
+
+## Amendment 1 (2026-11-07): a controller-side fault, from `pgx2-4090-r1-2-1`
+
+Written 2026-11-07 after `pgx2-4090-r1-2-1`'s receipt, before any further PGX2 box. Nothing else changes: the ids, the
+host-fault rule, the strikes, the budget's per-box worsts and the launch rule all stand.
+
+**The record.** `pgx2-4090-r1-2-1` was box 1's first retry: box 1's plain id was refused rc 19 before STARTED (its hub download
+measured below the floor). The retry ran for about four and a half hours and was healthy: draw 1's 21 lifetimes were done,
+draw 2 was at lifetime 24 of 42, and every prompt record was clean. Then a network outage at the controller cut the
+controller's own calls to the provider. The controller-side guard read the lost heartbeat as a dead controller and destroyed
+the box at 12:03Z, before anything was fetched. The receipt is `ALARM`, USD 3.388. Its guard files are in
+`tests/fixtures/ctlfault_pgx2_r1/`, redacted (the provider's ids stay in the private store). No lane directory came back, so
+the record says nothing about the box, the host or the code under test.
+
+Under the registered rules it is "a created box with no readable code", and the stop fails closed for a person. That is
+right, and this amendment does not loosen it. It registers what such a record is, before any other box runs.
+
+**The rule.** `bench/common/controller_fault.py` classes a box as a **controller fault** only when all five hold:
+1. `guard-firing.json`: the guard fired, with `reason` exactly `heartbeat-loss`;
+2. `guard.log`: at least one line carries a provider network failure (`BackendNetworkError(` and `network error talking
+   to`);
+3. `teardown-proof.json`, the final proof: `complete` is true and its evidence reads `instance_absent` true;
+4. `receipt.json`: `status` is `ALARM`;
+5. no lane directory was fetched.
+
+Anything else, an unreadable or malformed file included, is not a controller fault, and the lane's ordinary stop applies.
+
+A controller fault:
+- is not a strike and not a read;
+- is not a STARTED box (nothing came back, so whether it started is unknown): it is left out of the K = 2 count and the
+  started-spec rule;
+- is replaced under the next retry id, as a box that did not start is;
+- counts its ledger spend toward the launch rule;
+- happens **at most once** in the lane. A second controller fault ends the lane: the controller is then not fit to run it.
+
+**This record.** `pgx2-4090-r1-2-1` is a controller fault under the rule (`tests/test_controller_fault.py` reads its redacted
+record). It is the lane's one. Box 1's next id is `pgx2-4090-r2-2-1`, retry 2 of 3.
+
+**Spend.** So far: `pgx2-4090-1-2-1` USD 0.019 and `pgx2-4090-r1-2-1` USD 3.388, USD 3.41 in all. The lane's worst becomes
+3.41 + 14.85 (box 1) + 9.32 (box 2) + 5.00 (host faults) + 0.50 (two retry ids refused before STARTED) = **USD 33.08**, under
+the USD 35 per-run cap, and the launch rule still holds the cap on the ledger's actual spend.
+
+**The kit.** The stop reads the classifier from the launch commit (sha-pinned) and applies it before its "no readable exit
+code" check. The kit is cut from this amendment's merge and approved afresh.
