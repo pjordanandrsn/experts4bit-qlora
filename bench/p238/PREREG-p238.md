@@ -905,13 +905,17 @@ Registering what such a record is only after it happened would be an amendment a
 **The rule.** The same classifier and five conditions as PGX2 Amendment 1 (`bench/common/controller_fault.py`, with this
 lane's directory `p238`). A box is a **controller fault** only when all five hold:
 1. `guard-firing.json`: the guard fired, with `reason` exactly `heartbeat-loss`;
-2. `guard.log`: at least one line carries a provider network failure (`BackendNetworkError(` and `network error talking
-   to`);
+2. `teardown-proof.guard.json`, the guard's own proof written at the firing: its `reason` is `heartbeat-loss` and its
+   evidence reads `list_after` `"UNKNOWN"` (the guard's listing right after its destroy got no answer, so the controller
+   could not reach the provider then);
 3. `teardown-proof.json`, the final proof: `complete` is true and its evidence reads `instance_absent` true;
 4. `receipt.json`: `status` is `ALARM`;
 5. no lane directory (`p238/`) was fetched.
 
-Anything else, an unreadable or malformed file included, is not a controller fault, and the ordinary stop applies.
+Anything else, an unreadable or malformed file included, is not a controller fault, and the ordinary stop applies. A
+heartbeat lost while the provider still answered, a stalled or crashed controller process, leaves `list_after` a list: it is
+not a controller fault, and the lane stops for a person. The guard's log is not read: its network-failure lines carry no
+time, and they also appear in runs with no outage.
 
 A controller fault:
 - is not a strike and not a read;

@@ -17,19 +17,17 @@ import controller_fault as cf  # noqa: E402
 
 FIX = ROOT / "tests" / "fixtures" / "ctlfault_pgx2_r1"
 PINS = {"guard-firing.json": "3d983ded9dc8d68024beb605fc6582459c755faae6dd26618a76d33c0d5e73f8",
-        "guard.log.txt": "42094ce29628186f5fb2e477d3f02803b554873f0bad35c5d98da31693cff5e5",
+        "teardown-proof.guard.json": "a4185031f258813e14c80e5a04793aec39fe864048c039001e8619a6b0c609c3",
         "receipt_status.json": "0d32edca40cc1fa055dbd95b7178af320ea1aae783599f40adfbb68282199c33",
         "teardown-proof.json": "0bc65eae8da66c495e9559a67026a6301ac44f7ad6490809dee4e2652b1f8896"}
 
 
 def _run_dir(tmp_path, lane_dir=None):
-    """The record as a receipt directory (receipt.json from its status field, guard.log from guard.log.txt), plus a fetched
-    lane directory if named."""
+    """The record as a receipt directory (receipt.json from its status field), plus a fetched lane directory if named."""
     d = tmp_path / "pgx2-4090-r1-2-1"
     d.mkdir()
-    for name in ("guard-firing.json", "teardown-proof.json"):
+    for name in ("guard-firing.json", "teardown-proof.guard.json", "teardown-proof.json"):
         shutil.copy(FIX / name, d / name)
-    shutil.copy(FIX / "guard.log.txt", d / "guard.log")
     shutil.copy(FIX / "receipt_status.json", d / "receipt.json")
     if lane_dir:
         (d / lane_dir).mkdir()
@@ -41,16 +39,17 @@ def test_the_fixtures_are_the_redacted_record():
         b = (FIX / name).read_bytes()
         assert hashlib.sha256(b).hexdigest() == sha, name
         assert b"\r" not in b, name
-    assert (FIX / "guard.log.txt").read_text(encoding="utf-8").count("'controller.compute") == 3      # the redacted module paths
     assert json.loads((FIX / "guard-firing.json").read_text(encoding="utf-8"))["instance_id"] == "INSTANCE"
-    assert (FIX / "teardown-proof.json").read_text(encoding="utf-8").count("INSTANCE") == 2
+    for name in ("teardown-proof.guard.json", "teardown-proof.json"):
+        assert (FIX / name).read_text(encoding="utf-8").count("INSTANCE") == 2, name
 
 
 @pytest.mark.parametrize("lane", ["pgx", "p238"])
 def test_the_real_record_is_a_controller_fault(tmp_path, lane):
     ok, why = cf.controller_fault(str(_run_dir(tmp_path)), lane)
     assert ok, why
-    assert why.startswith("guard fired heartbeat-loss at 2026-11-07T12:02:32Z; 8 provider network failure line(s)"), why
+    assert why == ("guard fired heartbeat-loss at 2026-11-07T12:02:32Z; its listing after the destroy did not answer (proof at "
+                   "2026-11-07T12:05:02Z); instance absent; receipt ALARM; nothing fetched"), why
 
 
 def _edit_json(d, name, fn):
@@ -73,15 +72,19 @@ BREAKS = {
                                       "did not fire on heartbeat-loss"),
     "the guard firing is not an object": (lambda d: (d / "guard-firing.json").write_text("[]", encoding="utf-8"),
                                          "did not fire on heartbeat-loss"),
-    "no provider network failure in guard.log": (lambda d: (d / "guard.log").write_text(
-        "\n".join(ln for ln in (d / "guard.log").read_text(encoding="utf-8").splitlines() if "BackendNetworkError(" not in ln),
-        encoding="utf-8"), "no provider network failure"),
-    "network lines without BackendNetworkError(": (lambda d: (d / "guard.log").write_text(
-        (d / "guard.log").read_text(encoding="utf-8").replace("BackendNetworkError(", "OtherError("), encoding="utf-8"),
-        "no provider network failure"),
-    "network lines without the provider phrase": (lambda d: (d / "guard.log").write_text(
-        (d / "guard.log").read_text(encoding="utf-8").replace("network error talking to", "an error from"), encoding="utf-8"),
-        "no provider network failure"),
+    # condition 2, the guard's own proof at the firing. A stalled or crashed controller (the provider answered) leaves a list:
+    "the provider answered after the destroy (a stalled controller)": (
+        lambda d: _edit_json(d, "teardown-proof.guard.json", lambda v: _evidence(v, list_after=[])), "provider unreachable"),
+    "the guard's proof names another reason": (
+        lambda d: _edit_json(d, "teardown-proof.guard.json", lambda v: v.update(reason="wallclock")), "provider unreachable"),
+    "the guard's proof has no list_after": (
+        lambda d: _edit_json(d, "teardown-proof.guard.json",
+                             lambda v: v.update(evidence=json.dumps({k: x for k, x in json.loads(v["evidence"]).items()
+                                                                     if k != "list_after"}))), "provider unreachable"),
+    "the guard's proof evidence does not parse": (
+        lambda d: _edit_json(d, "teardown-proof.guard.json", lambda v: v.update(evidence="{not json")), "provider unreachable"),
+    "the guard's proof is not an object": (
+        lambda d: (d / "teardown-proof.guard.json").write_text("[]", encoding="utf-8"), "provider unreachable"),
     "the final teardown proof is not complete": (lambda d: _edit_json(d, "teardown-proof.json", lambda v: v.update(complete=False)),
                                                 "instance absent"),
     "the instance is not shown absent": (lambda d: _edit_json(d, "teardown-proof.json", lambda v: _evidence(v, instance_absent=False)),
@@ -109,7 +112,18 @@ def test_a_fetched_lane_directory_is_read_by_the_lane(tmp_path, lane):
     assert not ok and f"a lane directory ({lane}/) was fetched" in why
 
 
-@pytest.mark.parametrize("missing", ["guard-firing.json", "teardown-proof.json", "receipt.json", "guard.log"])
+def test_an_uncheckable_lane_directory_is_not_a_controller_fault(tmp_path, monkeypatch):
+    d = _run_dir(tmp_path)
+
+    def lstat(path, *a, **k):
+        raise PermissionError(13, "Permission denied", path)
+
+    monkeypatch.setattr(cf.os, "lstat", lstat)
+    ok, why = cf.controller_fault(str(d), "pgx")
+    assert not ok and "the lane directory cannot be checked (PermissionError)" in why
+
+
+@pytest.mark.parametrize("missing", ["guard-firing.json", "teardown-proof.guard.json", "teardown-proof.json", "receipt.json"])
 def test_a_missing_file_is_not_a_controller_fault(tmp_path, missing):
     d = _run_dir(tmp_path)
     (d / missing).unlink()
@@ -141,7 +155,8 @@ def test_each_page_registers_the_rule_as_the_classifier_reads_it(page, heading, 
     text = (ROOT / page).read_text(encoding="utf-8")
     assert text.count(heading) == 1
     amend = " ".join(text[text.index(heading):].split())
-    for term in ("`reason` exactly `heartbeat-loss`", f"`{cf.NET_FAILURE[0]}` and `{cf.NET_FAILURE[1]}`",
+    for term in ("`reason` exactly `heartbeat-loss`", "its `reason` is `heartbeat-loss` and its evidence reads `list_after` "
+                 "`\"UNKNOWN\"`", "a stalled or crashed controller process", "The guard's log is not read",
                  "`complete` is true and its evidence reads `instance_absent` true", "`status` is `ALARM`",
                  "is not a strike and not a read", "is not a STARTED box", "**at most once**",
                  "A second controller fault ends the lane", "before its \"no readable exit code\" check", retry, lane):
