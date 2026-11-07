@@ -1,0 +1,8 @@
+{
+  "method": "vast:verified-secure-destroy-failed",
+  "reason": "completion",
+  "evidence": "{\"destroy\": {\"error\": \"BackendNetworkError('network error talking to Vast (DELETE /v0/instances/INSTANCE/): [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate (_ssl.c:1082)')\", \"method\": \"vast:verified-secure-destroy-failed\"}, \"instance_absent\": true, \"list_after\": []}",
+  "complete": true,
+  "instance_id": "INSTANCE",
+  "at": "2026-11-07T14:07:02Z"
+}
