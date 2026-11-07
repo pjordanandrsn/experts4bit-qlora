@@ -12,6 +12,7 @@ order, the fit and the plan are written once.
 - **The split rule (P238's form):** the fewest K of 1, 2 or 3 boxes whose largest box fits the box cap; boxes are whole draws
   (K = 2: draws {1, 2} and {3}; K = 3: one draw a box). Box i of K runs as ``pgx-4090-1-<K>-<i>`` (K = 1: ``pgx-4090-1``);
   a box that does not start is retried as ``pgx-4090-r<n>-<K>-<i>``, n = 1..3 across all the boxes.
+  The successor lane PGX2 (PREREG-pgx2.md) runs the same boxes as ``pgx2-4090-1-<K>-<i>`` / ``pgx2-4090-r<n>-<K>-<i>``.
 
     python3 pgx_schedule.py --plan        # the fit per box and the K it picks
     python3 pgx_schedule.py --box K-i     # that box's lifetimes, in run order
@@ -31,6 +32,10 @@ CONTROLS = ("E-hyb-u", "E-allvram-g", "E-allvram-e")
 SPLITS = (1, 2, 3)
 RUN_IDS = ("pgx-4090-1",)
 RETRIES = (1, 2, 3)        # three retry ids in all across the boxes: pgx-4090-r<n>-<K>-<i> names the box it replaces
+# The lanes that read this plan: PGX (PREREG-pgx.md, ended at two strikes) and its successor PGX2 (PREREG-pgx2.md), which
+# runs the same boxes under its own ids, pgx2-4090-1-<K>-<i> and pgx2-4090-r<n>-<K>-<i>, with its own strike count.
+LANES = ("pgx", "pgx2")
+_RID_RE = r"(pgx2?)-4090-(?:1|r([1-3]))(?:-([23])-([1-3]))?"
 
 # ---- the box cap (PREREG "Run ids, order and the stop": worst <= USD 15, guard <= 18 h under the per-run override)
 POLICY_MAX_WALLCLOCK_H = 6
@@ -194,28 +199,42 @@ def fewest_k(instr=True):
 PLAN_K = 2
 
 
-def box_ids(k):
-    return [f"{RUN_IDS[0]}-{k}-{i}" for i in range(1, k + 1)] if k > 1 else [RUN_IDS[0]]
+def box_ids(k, lane="pgx"):
+    if lane not in LANES:
+        raise ValueError(lane)
+    first = f"{lane}-4090-1"
+    return [f"{first}-{k}-{i}" for i in range(1, k + 1)] if k > 1 else [first]
 
 
-def retry_id(n, k, i):
+def retry_id(n, k, i, lane="pgx"):
     """The n-th retry id of the lane (n = 1..3, across every box), replacing box i of K."""
-    if n not in RETRIES or k not in SPLITS or not 1 <= i <= k:
-        raise ValueError((n, k, i))
-    return f"pgx-4090-r{n}" if k == 1 else f"pgx-4090-r{n}-{k}-{i}"
+    if n not in RETRIES or k not in SPLITS or not 1 <= i <= k or lane not in LANES:
+        raise ValueError((n, k, i, lane))
+    return f"{lane}-4090-r{n}" if k == 1 else f"{lane}-4090-r{n}-{k}-{i}"
+
+
+def _match_run_id(rid):
+    import re
+    m = re.fullmatch(_RID_RE, rid)
+    if not m:
+        raise ValueError(f"not a registered reading id: {rid}")
+    return m
 
 
 def parse_run_id(rid):
-    """A reading run id -> (K, i, retry n or None); ValueError for anything unregistered."""
-    import re
-    m = re.fullmatch(r"pgx-4090-(?:1|r([1-3]))(?:-([23])-([1-3]))?", rid)
-    if not m:
-        raise ValueError(f"not a registered reading id: {rid}")
-    n = int(m.group(1)) if m.group(1) else None
-    k, i = (int(m.group(2)), int(m.group(3))) if m.group(2) else (1, 1)
+    """A reading run id of either lane -> (K, i, retry n or None); ValueError for anything unregistered."""
+    m = _match_run_id(rid)
+    n = int(m.group(2)) if m.group(2) else None
+    k, i = (int(m.group(3)), int(m.group(4))) if m.group(3) else (1, 1)
     if i > k:
         raise ValueError(f"box {i} of {k}: {rid}")
     return k, i, n
+
+
+def run_lane(rid):
+    """The lane a registered reading id belongs to: "pgx" or "pgx2"; ValueError for anything unregistered."""
+    parse_run_id(rid)
+    return _match_run_id(rid).group(1)
 
 
 def plan(instr=True):

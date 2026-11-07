@@ -1,0 +1,22 @@
+KNOBS e4b=519a46d9e931c437fef16a46c7b6adfd0b91a783 gnf4=0.51.0 sglang=0.5.23 vllm=0.29.0 pager=e9264fda36632a3904b7b1bf7ff13d85f02b3139 torch=2.8.0+cu128 K=S4:67,S8:35,V8:35 ehyb_vram_gib=7.451
+PY_IMG /opt/conda/bin/python
+CUDA_PROBE ok torch=2.8.0+cu128 cc=8.9 sms=128
+HOST_RAM_GIB 120 (min of MemTotal and the cgroup limit)
+POWER_LIMIT_W 350 (recorded, never ruled)
+DOWNLOAD status=200 bytes=1849688064 seconds=20.0 mb_s=92.5
+GUARD_FIT fit=40970s need=51213s left=52529s
+STARTED 2026-11-06T16:27:05Z
+SGLANG_TRIPWIRE sglang 0.5.23 (tag 297e54fd) torch 2.14.1+cu130 cuda 13.0 flashinfer 0.7.2 sglang-kernel 0.4.10 tvm-ffi 0.1.11 cc 8.9 (NVIDIA GeForce RTX 4090) nvcc 'Cuda compilation tools, release 12.8, V12.8.93' jit_target sm_89 python 3.11.13 ninja yes
+SGLANG_TRIPWIRE WARN compute capability 8.9 is not the registered RTX 5090 (12.0)
+SGLANG_TRIPWIRE WARN torch built for CUDA 13.0 but the JIT nvcc is 12.8: the box-A container question (cu130 wheels + 12.9 toolkit)
+e4b 0.58.1 @519a46d9e931c437fef16a46c7b6adfd0b91a783
+gnf4 0.51.0 (calibrate.py @30adb1bfa76f95f9ce4a4c29734b8f36de907eca)
+torch(e4b) 2.8.0+cu128
+transformers(e4b) 5.17.0
+sglang 0.5.23 (tag 297e54fd) torch 2.14.1+cu130 cuda 13.0 flashinfer 0.7.2 sglang-kernel 0.4.10 tvm-ffi 0.1.11 cc 8.9 (NVIDIA GeForce RTX 4090) nvcc 'Cuda compilation tools, release 12.8, V12.8.93' jit_target sm_89 python 3.11.13 ninja yes
+vllm 0.29.0
+vllm-expert-pager 0.1.1 @e9264fda36632a3904b7b1bf7ff13d85f02b3139
+torch(vllm) 2.13.0+cu130
+self-tests ok
+FETCH bf16 Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+FETCH fp8 Qwen/Qwen3-30B-A3B-FP8@d206ba732169f29bb77fbf80fc2c4b81d4d30782 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-FP8/snapshots/d206ba732169f29bb77fbf80fc2c4b81d4d30782

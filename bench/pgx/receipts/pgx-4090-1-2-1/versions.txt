@@ -1,0 +1,8 @@
+e4b 0.58.1 @519a46d9e931c437fef16a46c7b6adfd0b91a783
+gnf4 0.51.0 (calibrate.py @30adb1bfa76f95f9ce4a4c29734b8f36de907eca)
+torch(e4b) 2.8.0+cu128
+transformers(e4b) 5.17.0
+sglang 0.5.23 (tag 297e54fd) torch 2.14.1+cu130 cuda 13.0 flashinfer 0.7.2 sglang-kernel 0.4.10 tvm-ffi 0.1.11 cc 8.9 (NVIDIA GeForce RTX 4090) nvcc 'Cuda compilation tools, release 12.8, V12.8.93' jit_target sm_89 python 3.11.13 ninja yes
+vllm 0.29.0
+vllm-expert-pager 0.1.1 @e9264fda36632a3904b7b1bf7ff13d85f02b3139
+torch(vllm) 2.13.0+cu130

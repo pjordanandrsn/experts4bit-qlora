@@ -1,0 +1,162 @@
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 8 files:  12%|█▎        | 1/8 [00:00<00:01,  4.76it/s]Fetching 8 files:  38%|███▊      | 3/8 [00:00<00:00, 10.04it/s]Fetching 8 files:  62%|██████▎   | 5/8 [00:00<00:00, 12.60it/s]Error while downloading from https://huggingface.co/Qwen/Qwen3-30B-A3B-GPTQ-Int4/resolve/9b534e4318b7ebc3c961a839f13eb18b1833f441/tokenizer.json: _ssl.c:999: The handshake operation timed out
+Trying to resume download...
+Error while downloading from https://huggingface.co/Qwen/Qwen3-30B-A3B-GPTQ-Int4/resolve/9b534e4318b7ebc3c961a839f13eb18b1833f441/model.safetensors: _ssl.c:999: The handshake operation timed out
+Trying to resume download...
+Fetching 8 files:  75%|███████▌  | 6/8 [00:19<00:00, 12.60it/s]Error while downloading from https://huggingface.co/Qwen/Qwen3-30B-A3B-GPTQ-Int4/resolve/9b534e4318b7ebc3c961a839f13eb18b1833f441/tokenizer.json: [Errno 101] Network is unreachable
+Trying to resume download...
+Error while downloading from https://huggingface.co/Qwen/Qwen3-30B-A3B-GPTQ-Int4/resolve/9b534e4318b7ebc3c961a839f13eb18b1833f441/model.safetensors: [Errno 101] Network is unreachable
+Trying to resume download...
+Error while downloading from https://huggingface.co/Qwen/Qwen3-30B-A3B-GPTQ-Int4/resolve/9b534e4318b7ebc3c961a839f13eb18b1833f441/tokenizer.json: [Errno 101] Network is unreachable
+Trying to resume download...
+Error while downloading from https://huggingface.co/Qwen/Qwen3-30B-A3B-GPTQ-Int4/resolve/9b534e4318b7ebc3c961a839f13eb18b1833f441/model.safetensors: [Errno 101] Network is unreachable
+Trying to resume download...
+Error while downloading from https://huggingface.co/Qwen/Qwen3-30B-A3B-GPTQ-Int4/resolve/9b534e4318b7ebc3c961a839f13eb18b1833f441/tokenizer.json: [Errno 101] Network is unreachable
+Trying to resume download...
+Error while downloading from https://huggingface.co/Qwen/Qwen3-30B-A3B-GPTQ-Int4/resolve/9b534e4318b7ebc3c961a839f13eb18b1833f441/model.safetensors: [Errno 101] Network is unreachable
+Trying to resume download...
+Error while downloading from https://huggingface.co/Qwen/Qwen3-30B-A3B-GPTQ-Int4/resolve/9b534e4318b7ebc3c961a839f13eb18b1833f441/model.safetensors: [Errno 101] Network is unreachable
+Trying to resume download...
+Error while downloading from https://huggingface.co/Qwen/Qwen3-30B-A3B-GPTQ-Int4/resolve/9b534e4318b7ebc3c961a839f13eb18b1833f441/tokenizer.json: [Errno 101] Network is unreachable
+Trying to resume download...
+Error while downloading from https://huggingface.co/Qwen/Qwen3-30B-A3B-GPTQ-Int4/resolve/9b534e4318b7ebc3c961a839f13eb18b1833f441/model.safetensors: [Errno 101] Network is unreachable
+Max retries exceeded.
+Error while downloading from https://huggingface.co/Qwen/Qwen3-30B-A3B-GPTQ-Int4/resolve/9b534e4318b7ebc3c961a839f13eb18b1833f441/tokenizer.json: [Errno 101] Network is unreachable
+Max retries exceeded.
+Fetching 8 files:  75%|███████▌  | 6/8 [03:35<01:11, 35.97s/it]
+Traceback (most recent call last):
+  File "/opt/conda/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/opt/conda/lib/python3.11/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/opt/conda/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 101, in handle_request
+    raise exc
+  File "/opt/conda/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 78, in handle_request
+    stream = self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 124, in _connect
+    stream = self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+  File "/opt/conda/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/opt/conda/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: [Errno 101] Network is unreachable
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 89, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/_http.py", line 266, in _inner
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/_snapshot_download.py", line 532, in snapshot_download
+    hf_thread_map(
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/tqdm.py", line 441, in hf_thread_map
+    results[future_to_index[future]] = future.result()
+                                       ^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/opt/conda/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/_snapshot_download.py", line 512, in _inner_hf_hub_download
+    hf_hub_download(  # type: ignore
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 89, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/_http.py", line 266, in _inner
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 1047, in hf_hub_download
+    return _hf_hub_download_to_cache_dir(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 1285, in _hf_hub_download_to_cache_dir
+    _download_to_tmp_and_move(
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 2032, in _download_to_tmp_and_move
+    http_get(
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 89, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 475, in http_get
+    return http_get(
+           ^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 89, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 475, in http_get
+    return http_get(
+           ^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 89, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 475, in http_get
+    return http_get(
+           ^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 89, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 475, in http_get
+    return http_get(
+           ^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 89, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 475, in http_get
+    return http_get(
+           ^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 89, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 391, in http_get
+    response = stack.enter_context(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/contextlib.py", line 517, in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/_http.py", line 709, in http_stream_backoff
+    yield from _http_backoff_base(
+  File "/opt/conda/lib/python3.11/site-packages/huggingface_hub/utils/_http.py", line 530, in _http_backoff_base
+    with client.stream(method=method, url=url, **kwargs) as response:
+  File "/opt/conda/lib/python3.11/contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/httpx/_client.py", line 868, in stream
+    response = self.send(
+               ^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+  File "/opt/conda/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/opt/conda/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: [Errno 101] Network is unreachable
