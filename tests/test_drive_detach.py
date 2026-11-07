@@ -1,11 +1,12 @@
 """The drivers start the run DETACHED: the remote start command returns as soon as the run is in the background.
 
-``pgx_drive.sh`` and ``p238_drive.sh`` start the box's runner over ssh and then poll its TP_DONE marker with a heartbeat.
-Before this fix the start read ``cd $W && VARS nohup bash X_run.sh > outer.log 2>&1 < /dev/null & echo started``. ``&&``
-binds tighter than ``&``, so bash on the box backgrounded the whole and-list in a subshell. That subshell kept the ssh
-session's stdout open while it waited for the runner, so the ssh (and the driver) did not return until the run ended. The
-poll loop, its heartbeats and its "deadline near: fetch what exists" branch never ran: no launch log of either lane has a
-heartbeat line. ``cd $W || exit 20;`` first makes the backgrounded job the nohup command alone, with its own redirections.
+The seven drivers here (P227, P228, P229, P236, P237, P238 and PGX) start the box's runner over ssh, then poll its
+TP_DONE marker with a heartbeat line. Before this fix the start read
+``cd $W && VARS nohup bash X_run.sh > outer.log 2>&1 < /dev/null & echo started``. ``&&`` binds tighter than ``&``, so
+bash on the box backgrounded the whole and-list in a subshell. That subshell kept the ssh session's stdout open while it
+waited for the runner, so the ssh (and the driver) did not return until the run ended. The poll loop, its heartbeats and
+its "deadline near: fetch what exists" branch never ran. ``cd $W || exit 20;`` first makes the backgrounded job the nohup
+command alone, with its own redirections: the form the other lanes' drivers already use.
 
 Each test runs the driver's OWN start command, read from its file, under ``bash -c`` with stdout on a pipe, as sshd does.
 ``subprocess.run`` returns only at EOF on that pipe, so its wall time is the ssh's. The runner is a stand-in that sleeps
@@ -21,7 +22,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-DRIVERS = {"pgx": ROOT / "bench" / "pgx" / "pgx_drive.sh", "p238": ROOT / "bench" / "p238" / "p238_drive.sh"}
+LANES = ("p227", "p228", "p229", "p236", "p237", "p238", "pgx")  # every driver that started its run under `cd $W &&`
+DRIVERS = {lane: ROOT / "bench" / lane / f"{lane}_drive.sh" for lane in LANES}
 HOLD_S = 3
 
 
