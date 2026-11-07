@@ -40,7 +40,8 @@ def test_the_fixtures_are_the_redacted_record():
     for name, sha in PINS.items():
         b = (FIX / name).read_bytes()
         assert hashlib.sha256(b).hexdigest() == sha, name
-        assert b"\r" not in b and b"adertha" not in b, name
+        assert b"\r" not in b, name
+    assert (FIX / "guard.log.txt").read_text(encoding="utf-8").count("'controller.compute") == 3      # the redacted module paths
     assert json.loads((FIX / "guard-firing.json").read_text(encoding="utf-8"))["instance_id"] == "INSTANCE"
     assert (FIX / "teardown-proof.json").read_text(encoding="utf-8").count("INSTANCE") == 2
 
