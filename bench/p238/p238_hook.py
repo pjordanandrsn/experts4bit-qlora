@@ -4,7 +4,10 @@ tc1_arm.py's load_arm_hook calls the factory with no arguments and refuses any o
 
 OBSERVE ONLY. Every wrapper it installs returns the wrapped function's own output, unchanged (the tests show it per wrapper), and
 nothing here sets a knob, a dispatch or a route. The phases tc1_arm calls:
-- ``post_import(args)``: Unsloth arms install ``UnslothMoeCounter`` (bench/common/unsloth_moe_counter.py); e4b arms wrap
+- ``post_import(args)``: Unsloth arms ``import unsloth`` first, then install ``UnslothMoeCounter`` (bench/common/unsloth_moe_counter.py;
+  amendment 6: unsloth_zoo's package __init__ refuses every import until ``unsloth`` has set UNSLOTH_IS_PRESENT, and tc1_arm calls
+  this phase before its own ``import unsloth``), and record the message of any import the counter still reports failed
+  (``facts["counter_import_errors"]``; the shared counter keeps only the exception's type); e4b arms wrap
   ``nf4_route.train_gemm_route`` (read by grouped-nf4-gemm at call time, nf4_qlora.py:247-248) to log (n_groups, route) per call;
 - ``post_load(args, model)``: after the load and the framework's patching, before the first forward. Its device-to-host copies (the
   premise table, the A sha in the adapter census) run before eval0 and before tc1_arm's peak reset, so no timed step and no
@@ -22,6 +25,7 @@ load the model the same way.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -59,9 +63,11 @@ class P238Hook:
         except Exception as e:  # noqa: BLE001 -- recorded: the energy counter is then unread, and the sampled cross-check stands alone
             self.facts["nvml"] = f"unavailable: {type(e).__name__}"
         if self.fw == "unsloth":
+            import unsloth  # noqa: F401 -- amendment 6: before the counter, so unsloth_zoo's package __init__ admits its imports
             sys.path.insert(0, os.path.join(HERE, "..", "common"))
             from unsloth_moe_counter import UnslothMoeCounter
             self.counter = UnslothMoeCounter().install()
+            self.facts["counter_import_errors"] = self._import_errors(self.counter)
         elif self.fw == "e4b":
             import nf4_route
             fn, log = nf4_route.train_gemm_route, self.route_log
@@ -75,6 +81,22 @@ class P238Hook:
             train_gemm_route.__wrapped__ = fn
             self._saved.append((nf4_route, "train_gemm_route", fn))
             nf4_route.train_gemm_route = train_gemm_route
+
+    @staticmethod
+    def _import_errors(counter):
+        """Amendment 6: {module: "Type: message"} for each module the counter reports ``import failed`` (its own record keeps only
+        the exception's type), by importing it once more here. Empty when every import succeeded."""
+        out = {}
+        for entry in list(counter.absent) + list(counter.dispatch_absent):
+            mod, sep, _ = entry.partition(": import failed: ")
+            if not sep or mod in out:
+                continue
+            try:
+                importlib.import_module(mod)
+                out[mod] = "imported on the second attempt"
+            except Exception as e:  # noqa: BLE001 -- recorded: the message the counter's record drops
+                out[mod] = f"{type(e).__name__}: {str(e)[:300]}"
+        return out
 
     # -- post_load ------------------------------------------------------------------------------------------------------------
     def post_load(self, args, model):

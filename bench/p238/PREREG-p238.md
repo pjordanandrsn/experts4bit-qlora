@@ -777,3 +777,115 @@ The $0 path missed both: `p238_op.py`'s dry mode never resolved `--tc1`, and no 
 most one STARTED shakedown box at amendment 3's worst: 5.25 h x USD 1.25 + 82 GB x USD 0.02 = USD 8.2025, stated here
 rounded up as **USD 8.21** (amendment 3 wrote 8.20). The refused spend
 stays under its launch rule. The reading's budget is unchanged.
+
+## Amendment 6 (2026-11-07): three defects from `p238-shake-r6`, and the card clock's window
+
+Written 2026-11-07 after `p238-shake-r6`'s receipt. It fixes two kit defects, defines which clock samples the card floor reads,
+and registers one more shakedown box. Nothing else changes: the arms, points, schedule, bars, readings, predictions, the
+reading's budget and K split, the host rule, the refused-spend launch rule, amendment 4's launch gate, the floor's value and the
+two-strike rule all stand.
+
+**The record.** `p238-shake-r6` STARTED on an RTX 5090 (600 W limit) and finished 0 after 82 minutes, at USD 2.22.
+Amendment 5's fixes worked:
+- both op processes ran (rc 0, on the staged `--tc1`);
+- all five 2k loads ran, and the three Unsloth loads trained past T24.
+
+Its reduction reads `P238 VOID: 20 step rows, 2 op rows, 20 VOID`:
+- E_F and E_A at 2k READ, the first P238 rows to pass every check;
+- the 15 rows at 4k, 8k and the field point are never scheduled in a shakedown;
+- the other five VOIDs have three causes, none the host.
+
+1. **U0, U1 and UA: the engagement counters were never installed.** Each records
+   `unsloth_zoo.temporary_patches.moe_nf4_grouped / moe_grouped_fp16 / moe_utils: import failed: ImportError`.
+   - The order: tc1_arm calls the arm hook's `post_import` before its own `import unsloth`, and `p238_hook.post_import`
+     installed `UnslothMoeCounter` there.
+   - Why that fails: any `unsloth_zoo` import runs the package `__init__`. In the pinned unsloth_zoo 2026.10.8,
+     `__init__.py:555-556` raises `ImportError("Please install Unsloth via pip install unsloth!")` unless `UNSLOTH_IS_PRESENT`
+     is set, and unsloth 2026.10.8's `__init__.py:14` sets it. Both wheels were read, never run.
+   - The same process proves it: after the load, tc1_arm imported the same `moe_utils` and recorded
+     `moe_backend_selected: "grouped_mm"`.
+   - The counter keeps only the exception's type, so the message was lost.
+2. **U0, U1 and UA: the card clock** read `busy SM median 2647 MHz < floor 2700`.
+   - The card was neither power-bound nor throttled. In every load, E_F and E_A included, 2647 MHz is the card's light-load
+     clock, at a median 65-66 W. Seconds at 200 W or more ran at a median 3000 MHz (E_F, E_A) and 2955-2992 MHz (U0, U1, UA).
+   - No slowdown bit was set on any sample.
+   - Between the hook's first step edge and its last, the busy median is 3000, 3000, 2955, 2947 and 2947 MHz (E_F, E_A, U0,
+     U1, UA). Outside that window it is 2647 for every arm.
+   - The Unsloth loads trained in 144-223 s against 491-498 s for e4b. So the light-load setup and eval are most of their
+     log, and the whole-log median scored that share, not the card.
+3. **Both op rows: the shakedown's op cells were never the reducer's.**
+   - `p238_run.sh` has passed `--rows 64` to the shakedown's op processes since this page was registered (the shakedown's "one op
+     cell per framework").
+   - `p238_reduce.op_faults` required all ten registered cells in every mode.
+   - The $0 test of the shake reduction built its op record with all ten cells, so the two never met until r6.
+
+The $0 path missed all three: no $0 run installed the counter in tc1_arm's phase order, read a clock log through the step edges,
+or reduced the runner's own shake op record.
+
+**The changes.**
+- **The counter's import order.** `p238_hook.post_import` runs `import unsloth` before it installs the counter. The knobs are
+  already in the environment then (tc1_arm sets them first). It records the message of any import the counter still reports
+  failed, as `facts["counter_import_errors"]`. `bench/common/unsloth_moe_counter.py` does not change, since P237 pins it.
+- **The card clock reads the measured window.** The floor reads the clock samples from the hook's first step edge to its last
+  (`edges[0].t` to `edges[-1].t`), the interval whose device time a row measures. The floor's value and rule do not change: 2,700
+  MHz, amendment 83's clock mode, busy = SM above 1,000 MHz. Only which samples it reads changes, and it is the same window for
+  every arm and every point.
+  - Fail closed: a load whose edges are missing or unreadable is VOID. So is one with fewer than **100** busy samples in its
+    window. r6's smallest was 459 (UA, a 144 s window), and 100 is about 25 s at four samples a second.
+  - The whole log's busy median is recorded beside it, as information.
+  - **This is a definition fixed in a shakedown, before any reading, not a change made after an outcome.** No reading exists,
+    and E_F's and E_A's 2k rows pass under both windows.
+  - A power threshold was not chosen: no registered anchor fixes its cut. The whole log was not kept: it scores the share of
+    light-load setup and eval, which differs by arm, and on r6 it penalised exactly the arm whose steps ran fastest.
+- **The shakedown's op cells are one constant.** `p238_schedule.SHAKE_OP_ROWS = (64,)`. The runner passes it as `--rows`
+  (`p238_schedule.py --shake-op-rows`), and `op_faults` in shake mode checks exactly those rows under both routings. A reading
+  or a part still checks all ten cells.
+- The runner and driver accept `p238-shake-r9` to `p238-shake-r11` (below).
+- `staged-p238.sha256` moves for `p238_run.sh`, `p238_hook.py`, `p238_reduce.py` and `p238_schedule.py`.
+- **The $0 tests** (`tests/test_p238_amendment6.py`) start from r6's own records, sha256-pinned fixtures from its receipt:
+  - the five clock logs, byte for byte;
+  - the hook's step-edge times, extracted from each load's record (each record's sha256 stated);
+  - both op records, byte for byte.
+
+  They check:
+  - the whole-log summary refuses the U rows at 2647 MHz;
+  - the window passes all five at 3000 / 3000 / 2955 / 2947 / 2947 MHz;
+  - missing edges or a thin window VOIDs;
+  - the real op records pass in shake mode and fail in read mode;
+  - the runner's `--rows` comes from the shared constant;
+  - on a stand-in unsloth_zoo whose package `__init__` raises without `UNSLOTH_IS_PRESENT` (as the wheel's `:555`), the hook
+    installs the counter cleanly, while the old order fails and its message is recorded.
+
+**The next box and the stop.**
+- **Why one more shakedown box.** No Unsloth engagement counter has fired on a real record, and no op row has passed the
+  reducer. One more shakedown box is registered: `p238-shake-r9`, with retry ids `p238-shake-r10` and `p238-shake-r11` for a
+  box that does not start.
+  `p238-shake-r9` launches after r6's exempt record as a **newly registered box, not an amendment 2 retry**. Amendment 2's retry
+  rule governs r10 and r11 only.
+- **r6's exact record** is exempt from "a finished shakedown ends it" for r9, r10 and r11 only, in amendment 5's form, when all
+  of these hold:
+  - it STARTED and finished 0;
+  - its reduction (`verdict_p238.json`) is VOID with 20 step rows, 2 op rows and 20 VOID, the line
+    `P238 VOID: 20 step rows, 2 op rows, 20 VOID`;
+  - its E_F and E_A rows at 2k READ;
+  - every Unsloth row the shakedown schedules (U0, U1 and UA at 2k) VOIDs, each with a counter `import failed: ImportError`;
+  - both op rows VOID, each for its op cells alone (`missing or unregistered`).
+
+  The rows a shakedown never schedules (4k, 8k and the field point) VOID as `status None`; these conditions do not read them.
+  `tests/test_p238_amendment6.py` evaluates the five on r6's real `verdict_p238.json`, and the kit's stop is written against it.
+
+  Any other record of r6 reads the ordinary stop. Amendment 5's exemption of r5's exact record extends to r9, r10 and r11, on
+  its own conditions unchanged.
+- **The counts.**
+  - Amendment 3's bound of STARTED shakedown boxes (r4, r5 and r6 now) rises to four, for this one box only.
+  - Strikes: r4 is one; r5 and r6 finished 0, which is no strike.
+  - So the box that STARTS among r9 to r11 is the lane's last STARTED shakedown box. If it does not finish 0, that is strike
+    two, and the lane ends. If it finishes 0 with any row VOID that a shakedown schedules, the lane stops for the maintainer,
+    with no further exemption.
+- **Retries:** amendment 2's retry rule and its refused-spend launch rule stand.
+- **Launch:** amendment 4's gate stands: a $0 PREPARE record from the launch commit, which is this amendment's merge. r9
+  launches only from a kit cut at this merge, with a fresh approval.
+
+**Cost.** Spent so far: r4 USD 0.80, r5 USD 0.77, r6 USD 2.22 and the refused boxes USD 0.066, USD 3.86 in all. This amendment
+adds at most one STARTED shakedown box at amendment 5's worst, **USD 8.21**. The refused spend stays under its launch rule. The
+reading's budget is unchanged.

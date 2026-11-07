@@ -22,7 +22,7 @@ for v in P238_RUN_ID P238_BOX P238_DEADLINE_EPOCH E4B_SHA; do [ -n "${!v:-}" ] |
 # ---- the run id and the box it runs (the driver derives BOX from the id; a mismatch is refused, never trusted): a whole reading
 # runs every process (all); box i of a K-box split runs its whole (draw, point) blocks (K-i, p238_schedule.blocks); the shakedown
 case "$P238_RUN_ID" in
-  p238-shake-1|p238-shake-r[1-8]) WANT_BOX=shake;;   # amendment 5: r6, retry ids r7 and r8
+  p238-shake-1|p238-shake-r[1-9]|p238-shake-r1[01]) WANT_BOX=shake;;   # amendment 5: r6 (retries r7, r8); amendment 6: r9 (retries r10, r11)
   p238-5090-[12]|p238-5090-r[1-3]) WANT_BOX=all;;
   p238-5090-[12]-2-[12]|p238-5090-[12]-4-[1-4]|p238-5090-[12]-8-[1-8]) WANT_BOX=${P238_RUN_ID#p238-5090-[12]-};;
   *) say "unregistered run ID: $P238_RUN_ID"; finish 78;;
@@ -234,7 +234,7 @@ while read -r idx kind draw point who pos; do
   if [ "$kind" = op ]; then
     say "[$idx] op $who draw $draw (alarm $AL)"
     (cd $W && PYTHONPATH=$W/p238_site:$W perl -e "alarm $AL; exec @ARGV" $PY $W/p238_op.py --framework $who --draw $draw --tc1 $W/tc1_arm.py --out $W/ops/op_${idx}_$who.json \
-       $( [ "$P238_BOX" = shake ] && echo "--rows 64" )) > logs/op_$idx.log 2>&1
+       $( [ "$P238_BOX" = shake ] && echo "--rows $(python3 $W/p238_schedule.py --shake-op-rows)" )) > logs/op_$idx.log 2>&1
     echo "PROC $idx op $who draw=$draw rc=$?" | tee -a summary.txt
   else
     say "[$idx] step $who $point draw $draw pos $pos (alarm $AL)"

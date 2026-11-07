@@ -35,6 +35,10 @@ PINS = {"experts4bit-qlora": "0.58.1", "grouped-nf4-gemm": "0.51.0", "unsloth": 
         "peft": "0.21.2", "bitsandbytes": "0.50.2"}
 TORCH_PREFIX = "2.12.1"
 CLOCK_FLOOR_MHZ, CARD_MODE = 2700, "clock"           # TC1 amendment 83's training rule, named: card_clock.passes() has no default
+# Amendment 6: the floor reads the MEASURED window, the clock samples from the hook's first step edge to its last (edges[0].t ..
+# edges[-1].t), with at least this many busy samples in it (fail closed: no readable edges, or fewer, VOIDs the row). r6's smallest
+# in-window busy count was 459 (UA, a 144 s window at four samples a second); 100 is about 25 s of busy samples.
+CLOCK_WINDOW_MIN_BUSY = 100
 DENSE_AUTO_MAX_GROUPS = 16                           # gnf4 0.51.0 nf4_route: auto on sm_120 is dense at 1..16 present groups
 UNSLOTH_PINS = {"UNSLOTH_MOE_NF4_AUTO_MAX_ROWS": "128", "UNSLOTH_MOE_NF4_AUTOTUNE": "0", "UNSLOTH_MOE_GROUPED_TRITON": "auto",
                 "UNSLOTH_MOE_FUSED_ROUTER": "0", "UNSLOTH_ENABLE_LOGGING": "1"}
@@ -117,12 +121,17 @@ def check_card_identity(row):
 
 def check_card(row):
     """The card's identity, and the card under load (its own clock log, summarized by card_clock.py) judged by card_clock.passes()
-    itself in TC1 amendment 83's ``clock`` mode: >= 10 busy samples, a busy SM median >= 2,700 MHz, no slowdown bit on any sample,
-    Reliability on < 95 % of busy samples. SwPowerCap is recorded and never refuses. No copy of the rule lives here."""
+    itself in TC1 amendment 83's ``clock`` mode: a busy SM median >= 2,700 MHz, no slowdown bit on any sample, Reliability on < 95 %
+    of busy samples. SwPowerCap is recorded and never refuses. No copy of the rule lives here. Amendment 6: the summary is of the
+    measured window only (clock_window: the hook's first step edge to its last), with at least CLOCK_WINDOW_MIN_BUSY busy samples;
+    a summary with no window VOIDs the row."""
     import card_clock
     why = check_card_identity(row)
     k = row.get("clock") or {}
-    ok, w = card_clock.passes(k, CLOCK_FLOOR_MHZ, mode=CARD_MODE)
+    if k.get("window") is None:
+        why.append("the card clock: no measured window (the hook's step edges are missing or unreadable; amendment 6)")
+        return why
+    ok, w = card_clock.passes(k, CLOCK_FLOOR_MHZ, min_busy=CLOCK_WINDOW_MIN_BUSY, mode=CARD_MODE)
     if not ok:
         why.append(f"the card clock: {w}")
     return why
@@ -357,9 +366,16 @@ def stable(d1, d2):
     return (not why), "; ".join(why)
 
 
-def op_faults(o):
-    """An op process's record (p238_op.py): the registered cells, every arm's parity (the non-zero-B layout check; a miss is the
-    PREREG's STOP), B restored, the visit count, and every timing sample positive and finite."""
+def op_cells(mode="read"):
+    """The op cells a record must hold: the registered sweep (OP_ROWS x OP_ROUTINGS) for a reading or a part; amendment 6: the
+    shakedown's own rows (p238_schedule.SHAKE_OP_ROWS, the constant the runner passes as --rows) x OP_ROUTINGS in shake mode."""
+    rows = _sched().SHAKE_OP_ROWS if mode == "shake" else OP_ROWS
+    return {(r, k) for r in rows for k in OP_ROUTINGS}
+
+
+def op_faults(o, mode="read"):
+    """An op process's record (p238_op.py): the cells of ``mode`` (op_cells), every arm's parity (the non-zero-B layout check; a miss
+    is the PREREG's STOP), B restored, the visit count, and every timing sample positive and finite."""
     import math
     why = []
     if not o or o.get("p238_op") != 1:
@@ -372,7 +388,7 @@ def op_faults(o):
     if not arms or list(o.get("arms") or []) != list(arms):
         return why + [f"framework {o.get('framework')!r} with arms {o.get('arms')}"]
     cells = {(c.get("rows"), c.get("routing")): c for c in o.get("cells") or []}
-    want = {(r, k) for r in OP_ROWS for k in OP_ROUTINGS}
+    want = op_cells(mode)
     if set(cells) != want:
         why.append(f"cells {sorted(set(cells) ^ want, key=str)[:4]} missing or unregistered")
     for key, c in sorted(cells.items(), key=str):
@@ -545,7 +561,7 @@ def readings(out_rows, raw):
     return res
 
 
-def reduce(rows, op_rows, partial=None):
+def reduce(rows, op_rows, partial=None, mode="read"):
     """The verdict per row, the reference tables, the readings, and the box verdict. The reference premise table and census are
     the first OP row's (an op process loads exactly as a step load does); every other table must equal them. A step row is READ,
     OOM (tc1_arm's OOM stub on the registered box) or VOID; an OOM must REPRODUCE: every draw of that (point, arm) OOMs, else
@@ -555,7 +571,7 @@ def reduce(rows, op_rows, partial=None):
     ref_table, ref_census = ref.get("premise_table"), ref.get("adapters")
     out = {"rows": [], "op_rows": []}
     for o in op_rows or []:
-        why = op_faults(o.get("record")) + check_premise(o, ref_table) + check_census(o, ref_census)
+        why = op_faults(o.get("record"), mode) + check_premise(o, ref_table) + check_census(o, ref_census)
         out["op_rows"].append({"framework": o.get("framework"), "draw": o.get("draw"), "verdict": "VOID" if why else "READ", "why": why})
     for r in rows:
         if is_oom_row(r):
@@ -615,15 +631,38 @@ def release_proof_ok(path):
     return all(seen.get(d) is True for d in RELEASES)
 
 
-def clock_facts(path):
+def clock_facts(path, window=None):
     """A load's gpuclk log through card_clock.py's own summary (the same parser and busy threshold as the burn): the fields
-    card_clock.passes() reads in ``clock`` mode, under card_clock's own names, plus SwPowerCap's share (recorded only)."""
+    card_clock.passes() reads in ``clock`` mode, under card_clock's own names, plus SwPowerCap's share (recorded only). With
+    ``window`` (amendment 6: clock_window's (t0, t1)), only the samples whose epoch is within it, and the result carries
+    ``window`` and the whole log's busy SM median as information."""
     import card_clock
+    if window is None:
+        try:
+            sm = card_clock.summarize_log(path)
+        except OSError:
+            return {}
+        return {k: sm.get(k) for k in CLOCK_KEYS}
     try:
-        sm = card_clock.summarize_log(path)
+        rows = [r for r in (card_clock.parse_gpuclk_line(ln) for ln in open(path, encoding="utf-8", errors="replace")) if r is not None]
     except OSError:
-        return {}
-    return {k: sm.get(k) for k in CLOCK_KEYS}
+        return {"window": None}
+    t0, t1 = window
+    sm = card_clock.summarize([r[1:] for r in rows if t0 <= r[0] <= t1])
+    return {k: sm.get(k) for k in CLOCK_KEYS} | {"window": [t0, t1],
+                                                 "whole_log_sm_median": card_clock.summarize([r[1:] for r in rows])["sm_median"]}
+
+
+def clock_window(edges):
+    """Amendment 6: the measured window, (edges[0].t, edges[-1].t) of the hook's step edges, or None when the edges are missing,
+    fewer than two, not numbers, or not strictly increasing first to last (fail closed)."""
+    try:
+        ts = [float(e["t"]) for e in edges]
+    except (TypeError, KeyError, ValueError):
+        return None
+    if len(ts) < 2 or not ts[0] < ts[-1]:
+        return None
+    return ts[0], ts[-1]
 
 
 CLOCK_KEYS = ("busy_samples", "sm_median", "busy_reliability_samples", "any_sample_bits_seen", "busy_swpowercap_fraction")
@@ -687,10 +726,12 @@ def normalize_load(work, sched, box, proof_ok, env_box=None, rc=None):
     rec = ((cell.get("arm_hook") or {}).get("record")) or {}
     facts = rec.get("facts") or {}
     env = cell.get("env") or {}
+    win = clock_window(rec.get("edges"))           # amendment 6: the card clock reads the measured window only
     row = {"index": idx, "draw": sched["draw"], "point": point, "arm": arm, "framework": fw, "position": sched["position"],
            "status": cell.get("status"), "dry": False, "phase": cell.get("phase"), "rc": rc,
            "versions": {**{k: env.get(k) for k in PINS}, "torch": env.get("torch"), "release_proof_ok": proof_ok},
-           "card": box, "env_box": env_box, "clock": clock_facts(os.path.join(work, "loads", f"gpuclk_{idx}.txt")),
+           "card": box, "env_box": env_box,
+           "clock": clock_facts(os.path.join(work, "loads", f"gpuclk_{idx}.txt"), window=win) if win else {"window": None},
            "premise_table": _int_keys(facts.get("premise_table")), "adapters": facts.get("adapters"),
            "loader_used": cell.get("loader_used"), "unsloth_env": env.get("unsloth_env"),
            "hook": {"facts": facts, "edges": rec.get("edges"), "structural": rec.get("structural")},
@@ -810,7 +851,7 @@ def reduce_boxes(boxes, mode="read"):
                 info.append({"block": _block_of(x["want"]) if x["want"] is not None else None, "draws": x["draws"],
                              "n_rows": len(x["rows"]), "n_op_rows": len(x["ops"]),
                              "part_verdict": reduce(x["rows"], x["ops"], partial="PART_OK")["verdict"]})
-    out = reduce([r for x in boxes for r in x["rows"]], [o for x in boxes for o in x["ops"]], partial=MODES.get(mode))
+    out = reduce([r for x in boxes for r in x["rows"]], [o for x in boxes for o in x["ops"]], partial=MODES.get(mode), mode=mode)
     out["boxes"], out["merge_why"], out["k"] = info, why, k if mode == "read" else None
     out["cross_host"] = cross
     out["stability_scope"] = "cross_host" if cross else "within_host"
@@ -835,7 +876,7 @@ def _good_rows():
             "env_box": {k: "0" * 40 if v is None else v for k, v in ENV_BOX.items()},
             "card": {"name": "NVIDIA GeForce RTX 5090", "cap": [12, 0], "sm_count": 170},
             "clock": {"busy_samples": 200, "sm_median": 2800, "busy_reliability_samples": 0, "any_sample_bits_seen": [],
-                      "busy_swpowercap_fraction": 0.0},
+                      "busy_swpowercap_fraction": 0.0, "window": [1800000000.0, 1800000600.0]},
             "premise_table": table, "adapters": census, "point": "2k", "tokens_per_step": [2048] * STEPS,
             "step_ms": [1000.0] * STEPS, "micro_batches_per_step": 1, "profile_warm": PROFILED[0],
             "profile_steps": PROFILED[1] - PROFILED[0],
@@ -881,6 +922,9 @@ def selftest():
         (lambda r: r["clock"].update(any_sample_bits_seen=["HwSlowdown"]), "a slowdown bit on a sample"),
         (lambda r: r["clock"].pop("busy_reliability_samples"), "a clock summary without amendment 83's Reliability count"),
         (lambda r: r["clock"].update(busy_samples=9), "a card not read under load"),
+        (lambda r: r["clock"].update(busy_samples=CLOCK_WINDOW_MIN_BUSY - 1), "too few busy samples in the window (amendment 6)"),
+        (lambda r: r["clock"].update(window=None), "no measured window (amendment 6)"),
+        (lambda r: r["clock"].pop("window"), "a whole-log summary, no window (amendment 6)"),
         (lambda r: r["env_box"].update(E4B_TRAIN_DETERMINISTIC="1"), "an ambient e4b knob in env_box"),
         (lambda r: r["env_box"].pop("PYTORCH_CUDA_ALLOC_CONF"), "env_box without the allocator conf"),
         (lambda r: r["env_box"].update(UNSLOTH_MOE_NF4_AUTOTUNE="1"), "env_box with another Unsloth pin value"),
@@ -961,6 +1005,9 @@ def selftest():
          "visits": [{"device_ms_per_call": 1.0, "wall_ms_per_call": 1.1}] * (OP_REPS * 2 * 2)}
         for r in OP_ROWS for k in OP_ROUTINGS]}
     assert op_faults(good_op) == [], op_faults(good_op)
+    shake_op = dict(good_op, cells=[c for c in good_op["cells"] if c["rows"] in _sched().SHAKE_OP_ROWS])   # amendment 6
+    assert op_faults(shake_op, "shake") == [] and op_faults(shake_op) and op_faults(good_op, "shake"), "the shake cells"
+    cases += 1
     for mutate, label in [
         (lambda o: o.update(dry=True), "a dry op record"),
         (lambda o: o.update(capture="graph"), "another capture mode"),

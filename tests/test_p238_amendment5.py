@@ -274,4 +274,4 @@ def test_the_page_registers_the_box_the_counts_and_the_unchanged_harness():
                  "--tc1 $W/tc1_arm.py", "(22 of 22)", "this amendment's merge"):
         assert want in a5, want
     for rid in ("p238-shake-r6", "p238-shake-r7", "p238-shake-r8"):          # the runner and the driver accept the new ids
-        assert re.search(r"p238-shake-1\|p238-shake-r\[1-8\]\)", RUN), rid
+        assert re.search(r"p238-shake-1\|p238-shake-r\[1-9\]\|p238-shake-r1\[01\]\)", RUN), rid   # amendment 6 widened it
