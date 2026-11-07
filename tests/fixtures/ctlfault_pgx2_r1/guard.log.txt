@@ -1,0 +1,9 @@
+<frozen runpy>:130: RuntimeWarning: 'controller.compute.rent' found in sys.modules after import of package 'controller.compute', but prior to execution of 'controller.compute.rent'; this may result in unpredictable behaviour
+[guard] instance listing failed (1x): BackendNetworkError('network error talking to Vast (GET /v1/instances/): _ssl.c:1064: The handshake operation timed out')
+[guard] instance listing failed (1x): BackendNetworkError('network error talking to Vast (GET /v1/instances/): _ssl.c:1064: The handshake operation timed out')
+[guard] instance listing failed (1x): BackendNetworkError('network error talking to Vast (GET /v1/instances/): timed out')
+[rent] instance listing did not answer (BackendNetworkError('network error talking to Vast (GET /v1/instances/): [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate (_ssl.c:1082)')); asking again in 2 s
+[rent] instance listing did not answer (BackendNetworkError('network error talking to Vast (GET /v1/instances/): [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate (_ssl.c:1082)')); asking again in 4 s
+[rent] instance listing did not answer (BackendNetworkError('network error talking to Vast (GET /v1/instances/): [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate (_ssl.c:1082)')); asking again in 8 s
+[rent] instance listing did not answer (BackendNetworkError('network error talking to Vast (GET /v1/instances/): timed out')); asking again in 16 s
+[rent] instance listing unavailable after 5 asks: BackendNetworkError('network error talking to Vast (GET /v1/instances/): timed out')

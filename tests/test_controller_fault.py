@@ -17,17 +17,19 @@ import controller_fault as cf  # noqa: E402
 
 FIX = ROOT / "tests" / "fixtures" / "ctlfault_pgx2_r1"
 PINS = {"guard-firing.json": "3d983ded9dc8d68024beb605fc6582459c755faae6dd26618a76d33c0d5e73f8",
-        "guard.log": "42094ce29628186f5fb2e477d3f02803b554873f0bad35c5d98da31693cff5e5",
+        "guard.log.txt": "42094ce29628186f5fb2e477d3f02803b554873f0bad35c5d98da31693cff5e5",
         "receipt_status.json": "0d32edca40cc1fa055dbd95b7178af320ea1aae783599f40adfbb68282199c33",
         "teardown-proof.json": "0bc65eae8da66c495e9559a67026a6301ac44f7ad6490809dee4e2652b1f8896"}
 
 
 def _run_dir(tmp_path, lane_dir=None):
-    """The record as a receipt directory (receipt.json from its status field), plus a fetched lane directory if named."""
+    """The record as a receipt directory (receipt.json from its status field, guard.log from guard.log.txt), plus a fetched
+    lane directory if named."""
     d = tmp_path / "pgx2-4090-r1-2-1"
     d.mkdir()
-    for name in ("guard-firing.json", "teardown-proof.json", "guard.log"):
+    for name in ("guard-firing.json", "teardown-proof.json"):
         shutil.copy(FIX / name, d / name)
+    shutil.copy(FIX / "guard.log.txt", d / "guard.log")
     shutil.copy(FIX / "receipt_status.json", d / "receipt.json")
     if lane_dir:
         (d / lane_dir).mkdir()
