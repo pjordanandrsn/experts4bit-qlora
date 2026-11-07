@@ -223,7 +223,7 @@ IMPORT_FAILED = "import failed: ImportError"
 
 def r6_exact(verdict, started, rc):
     """The page's five conditions for r6's exact record (Amendment 6, "r6's exact record"), on its reduction (verdict_p238.json)
-    and its STARTED / exit code. The a6 kit's stop is written against this function. Any shape it cannot read is no."""
+    and its STARTED / exit code. The a7 kit's stop is written against this function. Any shape it cannot read is no."""
     try:
         rows = {(r["point"], r["arm"]): r for r in verdict["rows"]}
         ops = verdict["op_rows"]
@@ -264,6 +264,11 @@ def test_r6s_real_record_meets_the_five_conditions():
     ("an op row READ", lambda v: v["op_rows"][1].update(verdict="READ", why=[]), True, 0),
     ("one op row", lambda v: v["op_rows"].pop(), True, 0),
     ("no 2k U0 row", lambda v: v["rows"].pop(2), True, 0),
+    # each remaining part of a condition, changed alone (nothing above touches them)
+    ("the other E 2k row VOID", lambda v: v["rows"][0].update(verdict="VOID", why=["the card clock: x"]), True, 0),
+    ("another step-row count", lambda v: v.update(n_rows=19), True, 0),
+    ("another op-row count", lambda v: v.update(n_op_rows=1), True, 0),
+    ("an op row whose one reason is another", lambda v: v["op_rows"][0].update(why=["the layout check: parity STOP"]), True, 0),
 ])
 def test_mutated_copies_of_r6s_record_fail_the_conditions(label, mutate, started, rc):
     v = _verdict()
