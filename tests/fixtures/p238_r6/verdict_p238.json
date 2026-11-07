@@ -1,0 +1,654 @@
+{
+ "boxes": [],
+ "cross_host": false,
+ "image_env": {
+  "CUDA_VERSION": "12.8.1",
+  "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
+  "NVIDIA_PRODUCT_NAME": "CUDA",
+  "NVIDIA_REQUIRE_CUDA": "cuda>=12.8 brand=unknown,driver>=470,driver<471 brand=grid,driver>=470,driver<471 brand=tesla,driver>=470,driver<471 brand=nvidia,driver>=470,driver<471 brand=quadro,driver>=470,driver<471 brand=quadrortx,driver>=470,driver<471 brand=nvidiartx,driver>=470,driver<471 brand=vapps,driver>=470,driver<471 brand=vpc,driver>=470,driver<471 brand=vcs,driver>=470,driver<471 brand=vws,driver>=470,driver<471 brand=cloudgaming,driver>=470,driver<471 brand=unknown,driver>=535,driver<536 brand=grid,driver>=535,driver<536 brand=tesla,driver>=535,driver<536 brand=nvidia,driver>=535,driver<536 brand=quadro,driver>=535,driver<536 brand=quadrortx,driver>=535,driver<536 brand=nvidiartx,driver>=535,driver<536 brand=vapps,driver>=535,driver<536 brand=vpc,driver>=535,driver<536 brand=vcs,driver>=535,driver<536 brand=vws,driver>=535,driver<536 brand=cloudgaming,driver>=535,driver<536 brand=unknown,driver>=550,driver<551 brand=grid,driver>=550,driver<551 brand=tesla,driver>=550,driver<551 brand=nvidia,driver>=550,driver<551 brand=quadro,driver>=550,driver<551 brand=quadrortx,driver>=550,driver<551 brand=nvidiartx,driver>=550,driver<551 brand=vapps,driver>=550,driver<551 brand=vpc,driver>=550,driver<551 brand=vcs,driver>=550,driver<551 brand=vws,driver>=550,driver<551 brand=cloudgaming,driver>=550,driver<551 brand=unknown,driver>=560,driver<561 brand=grid,driver>=560,driver<561 brand=tesla,driver>=560,driver<561 brand=nvidia,driver>=560,driver<561 brand=quadro,driver>=560,driver<561 brand=quadrortx,driver>=560,driver<561 brand=nvidiartx,driver>=560,driver<561 brand=vapps,driver>=560,driver<561 brand=vpc,driver>=560,driver<561 brand=vcs,driver>=560,driver<561 brand=vws,driver>=560,driver<561 brand=cloudgaming,driver>=560,driver<561 brand=unknown,driver>=565,driver<566 brand=grid,driver>=565,driver<566 brand=tesla,driver>=565,driver<566 brand=nvidia,driver>=565,driver<566 brand=quadro,driver>=565,driver<566 brand=quadrortx,driver>=565,driver<566 brand=nvidiartx,driver>=565,driver<566 brand=vapps,driver>=565,driver<566 brand=vpc,driver>=565,driver<566 brand=vcs,driver>=565,driver<566 brand=vws,driver>=565,driver<566 brand=cloudgaming,driver>=565,driver<566",
+  "NVIDIA_VISIBLE_DEVICES": "all",
+  "NV_CUDA_CUDART_DEV_VERSION": "12.8.90-1",
+  "NV_CUDA_CUDART_VERSION": "12.8.90-1",
+  "NV_CUDA_LIB_VERSION": "12.8.1-1",
+  "NV_CUDA_NSIGHT_COMPUTE_DEV_PACKAGE": "cuda-nsight-compute-12-8=12.8.1-1",
+  "NV_CUDA_NSIGHT_COMPUTE_VERSION": "12.8.1-1",
+  "NV_LIBCUBLAS_DEV_PACKAGE": "libcublas-dev-12-8=12.8.4.1-1",
+  "NV_LIBCUBLAS_DEV_PACKAGE_NAME": "libcublas-dev-12-8",
+  "NV_LIBCUBLAS_DEV_VERSION": "12.8.4.1-1",
+  "NV_LIBCUBLAS_PACKAGE": "libcublas-12-8=12.8.4.1-1",
+  "NV_LIBCUBLAS_PACKAGE_NAME": "libcublas-12-8",
+  "NV_LIBCUBLAS_VERSION": "12.8.4.1-1",
+  "NV_LIBCUSPARSE_DEV_VERSION": "12.5.8.93-1",
+  "NV_LIBCUSPARSE_VERSION": "12.5.8.93-1",
+  "NV_LIBNCCL_DEV_PACKAGE": "libnccl-dev=2.25.1-1+cuda12.8",
+  "NV_LIBNCCL_DEV_PACKAGE_NAME": "libnccl-dev",
+  "NV_LIBNCCL_DEV_PACKAGE_VERSION": "2.25.1-1",
+  "NV_LIBNCCL_PACKAGE": "libnccl2=2.25.1-1+cuda12.8",
+  "NV_LIBNCCL_PACKAGE_NAME": "libnccl2",
+  "NV_LIBNCCL_PACKAGE_VERSION": "2.25.1-1",
+  "NV_LIBNPP_DEV_PACKAGE": "libnpp-dev-12-8=12.3.3.100-1",
+  "NV_LIBNPP_DEV_VERSION": "12.3.3.100-1",
+  "NV_LIBNPP_PACKAGE": "libnpp-12-8=12.3.3.100-1",
+  "NV_LIBNPP_VERSION": "12.3.3.100-1",
+  "NV_NVML_DEV_VERSION": "12.8.90-1",
+  "NV_NVPROF_DEV_PACKAGE": "cuda-nvprof-12-8=12.8.90-1",
+  "NV_NVPROF_VERSION": "12.8.90-1",
+  "NV_NVTX_VERSION": "12.8.90-1",
+  "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+  "PYTORCH_VERSION": "2.8.0"
+ },
+ "k": null,
+ "merge_why": [],
+ "n_oom": 0,
+ "n_op_rows": 2,
+ "n_rows": 20,
+ "n_void": 20,
+ "op_rows": [
+  {
+   "draw": 1,
+   "framework": "e4b",
+   "verdict": "VOID",
+   "why": [
+    "cells [(128, 'skew'), (128, 'uniform'), (256, 'skew'), (256, 'uniform')] missing or unregistered"
+   ]
+  },
+  {
+   "draw": 1,
+   "framework": "unsloth",
+   "verdict": "VOID",
+   "why": [
+    "cells [(128, 'skew'), (128, 'uniform'), (256, 'skew'), (256, 'uniform')] missing or unregistered"
+   ]
+  }
+ ],
+ "readings": null,
+ "rows": [
+  {
+   "arm": "E_F",
+   "draw": 1,
+   "energy": {
+    "j_per_step": 832.7071,
+    "j_per_token": 0.406595,
+    "joules": 38304.525,
+    "method": "nvml_total_energy",
+    "sampled_j_per_step": 836.1287,
+    "sampled_n": 617,
+    "seconds": 154.164,
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "READ",
+    "steps": 46
+   },
+   "index": 3,
+   "point": "2k",
+   "s_per_step": 3.38125,
+   "verdict": "READ",
+   "why": []
+  },
+  {
+   "arm": "E_A",
+   "draw": 1,
+   "energy": {
+    "j_per_step": 855.6694,
+    "j_per_token": 0.417807,
+    "joules": 39360.794,
+    "method": "nvml_total_energy",
+    "sampled_j_per_step": 854.8736,
+    "sampled_n": 663,
+    "seconds": 166.008,
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "READ",
+    "steps": 46
+   },
+   "index": 4,
+   "point": "2k",
+   "s_per_step": 3.6546999999999996,
+   "verdict": "READ",
+   "why": []
+  },
+  {
+   "arm": "U0",
+   "draw": 1,
+   "energy": {
+    "j_per_step": 340.2482,
+    "j_per_token": 0.166137,
+    "joules": 15651.417,
+    "method": "nvml_total_energy",
+    "sampled_j_per_step": 340.3648,
+    "sampled_n": 180,
+    "seconds": 45.025,
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "READ",
+    "steps": 46
+   },
+   "index": 5,
+   "point": "2k",
+   "s_per_step": 0.97075,
+   "verdict": "VOID",
+   "why": [
+    "the card clock: busy SM median 2647.0 MHz < floor 2700",
+    "not wrapped: ['unsloth_zoo.temporary_patches.moe_nf4_grouped: import failed: ImportError', 'unsloth_zoo.temporary_patches.moe_grouped_fp16: import failed: ImportError', 'unsloth_zoo.temporary_patches.moe_grouped_fp16.generic_grouped_mm: absent', 'unsloth_zoo.temporary_patches.moe_grouped_fp16.generic_grouped_wgrad: absent', 'unsloth_zoo.temporary_patches.moe_nf4_grouped.maybe_nf4_grouped_mm: absent', 'unsloth_zoo.temporary_patches.moe_grouped_fp16._self_check_generic: absent']; GENERIC_CALLS unreadable; NF4_FUSED_STATS unreadable",
+    "dispatch not wrapped: ['unsloth_zoo.temporary_patches.moe_utils: import failed: ImportError']; GENERIC_CALLS unreadable; generic_gemm: wrapper 0 != 61200 the decisions imply; generic_wgrad: wrapper 0 != 9600 the decisions imply",
+    "NF4_FUSED_STATS unreadable"
+   ]
+  },
+  {
+   "arm": "U1",
+   "draw": 1,
+   "energy": {
+    "j_per_step": 269.4943,
+    "j_per_token": 0.131589,
+    "joules": 12396.737,
+    "method": "nvml_total_energy",
+    "sampled_j_per_step": 269.885,
+    "sampled_n": 163,
+    "seconds": 40.761,
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "READ",
+    "steps": 46
+   },
+   "index": 6,
+   "point": "2k",
+   "s_per_step": 0.8903,
+   "verdict": "VOID",
+   "why": [
+    "the card clock: busy SM median 2647.0 MHz < floor 2700",
+    "not wrapped: ['unsloth_zoo.temporary_patches.moe_nf4_grouped: import failed: ImportError', 'unsloth_zoo.temporary_patches.moe_grouped_fp16: import failed: ImportError', 'unsloth_zoo.temporary_patches.moe_grouped_fp16.generic_grouped_mm: absent', 'unsloth_zoo.temporary_patches.moe_grouped_fp16.generic_grouped_wgrad: absent', 'unsloth_zoo.temporary_patches.moe_nf4_grouped.maybe_nf4_grouped_mm: absent', 'unsloth_zoo.temporary_patches.moe_grouped_fp16._self_check_generic: absent']; GENERIC_CALLS unreadable; NF4_FUSED_STATS unreadable",
+    "dispatch not wrapped: ['unsloth_zoo.temporary_patches.moe_utils: import failed: ImportError']; GENERIC_CALLS unreadable; generic_gemm: wrapper 0 != 40800 the decisions imply; generic_wgrad: wrapper 0 != 9600 the decisions imply",
+    "NF4_FUSED_STATS unreadable or no expected count (delta None, expected 0)"
+   ]
+  },
+  {
+   "arm": "UA",
+   "draw": 1,
+   "energy": {
+    "j_per_step": 270.8029,
+    "j_per_token": 0.132228,
+    "joules": 12456.934,
+    "method": "nvml_total_energy",
+    "sampled_j_per_step": 272.0757,
+    "sampled_n": 164,
+    "seconds": 41.339,
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "READ",
+    "steps": 46
+   },
+   "index": 7,
+   "point": "2k",
+   "s_per_step": 0.8863499999999999,
+   "verdict": "VOID",
+   "why": [
+    "the card clock: busy SM median 2647 MHz < floor 2700",
+    "not wrapped: ['unsloth_zoo.temporary_patches.moe_nf4_grouped: import failed: ImportError', 'unsloth_zoo.temporary_patches.moe_grouped_fp16: import failed: ImportError', 'unsloth_zoo.temporary_patches.moe_grouped_fp16.generic_grouped_mm: absent', 'unsloth_zoo.temporary_patches.moe_grouped_fp16.generic_grouped_wgrad: absent', 'unsloth_zoo.temporary_patches.moe_nf4_grouped.maybe_nf4_grouped_mm: absent', 'unsloth_zoo.temporary_patches.moe_grouped_fp16._self_check_generic: absent']; GENERIC_CALLS unreadable; NF4_FUSED_STATS unreadable",
+    "dispatch not wrapped: ['unsloth_zoo.temporary_patches.moe_utils: import failed: ImportError']; GENERIC_CALLS unreadable; generic_gemm: wrapper 0 != 40800 the decisions imply; generic_wgrad: wrapper 0 != 9600 the decisions imply",
+    "NF4_FUSED_STATS unreadable or no expected count (delta None, expected 0)"
+   ]
+  },
+  {
+   "arm": "E_F",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 8,
+   "point": "4k",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "E_A",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 9,
+   "point": "4k",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "U0",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 10,
+   "point": "4k",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "U1",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 11,
+   "point": "4k",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "UA",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 12,
+   "point": "4k",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "E_F",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 13,
+   "point": "8k",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "E_A",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 14,
+   "point": "8k",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "U0",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 15,
+   "point": "8k",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "U1",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 16,
+   "point": "8k",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "UA",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 17,
+   "point": "8k",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "E_F",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 18,
+   "point": "field",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "E_A",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 19,
+   "point": "field",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "U0",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 20,
+   "point": "field",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "U1",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 21,
+   "point": "field",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  },
+  {
+   "arm": "UA",
+   "draw": 1,
+   "energy": {
+    "j_per_step": null,
+    "j_per_token": null,
+    "method": "nvml_total_energy",
+    "spans": [
+     [
+      10,
+      20
+     ],
+     [
+      23,
+      59
+     ]
+    ],
+    "status": "UNREAD",
+    "why": "the row's profile window (None, None) is not the registered edges (20, 23)"
+   },
+   "index": 22,
+   "point": "field",
+   "s_per_step": null,
+   "verdict": "VOID",
+   "why": [
+    "status None"
+   ]
+  }
+ ],
+ "stability_scope": "within_host",
+ "verdict": "VOID"
+}

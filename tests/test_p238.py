@@ -315,6 +315,14 @@ _TC1_RECEIPTS = ROOT / "bench" / "h2h-2026-10-02" / "tc1" / "receipts"
 _CARD = {"name": "NVIDIA GeForce RTX 5090", "cap": [12, 0], "sm_count": 170}
 
 
+def _whole_log_window(log):
+    """Amendment 6: check_card reads a windowed summary. These amendment 1 logs have no step edges, so they are read over a window
+    holding every sample, which summarizes exactly the samples the whole log does."""
+    import card_clock
+    ts = [r[0] for r in (card_clock.parse_gpuclk_line(ln) for ln in open(log, encoding="utf-8", errors="replace")) if r is not None]
+    return min(ts), max(ts)
+
+
 @pytest.mark.parametrize("log, faults", [
     (ROOT / "tests" / "fixtures" / "card_clock" / "axo1767b-5090-1_gpuclk_hp1shake_axolotl.txt", []),
     (_TC1_RECEIPTS / "tc1-5090-137" / "gpuclk_qwen3pos69_e4b_fused_attn4_m_fd.txt", []),
@@ -327,8 +335,10 @@ def test_check_card_judges_real_clock_logs_by_amendment_83s_clock_mode(log, faul
     boundary card (SwPowerCap on 19 % of busy samples, Reliability on 81 %) and a clean card pass; the power-capped card refuses on
     its clock alone; amendment 79's capped card on its clock and persistent Reliability. Real logs from the TC1 record."""
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
-    clock = R.clock_facts(str(log))
-    assert set(clock) == set(R.CLOCK_KEYS) and clock["busy_samples"] >= 10
+    whole = R.clock_facts(str(log))
+    assert set(whole) == set(R.CLOCK_KEYS) and whole["busy_samples"] >= 10
+    clock = R.clock_facts(str(log), window=_whole_log_window(log))
+    assert {k: clock[k] for k in R.CLOCK_KEYS} == whole                     # a window holding every sample summarizes the same
     why = R.check_card({"card": _CARD, "clock": clock})
     assert len(why) == (1 if faults else 0), why
     assert all(f in why[0] for f in faults), why
@@ -340,7 +350,8 @@ def test_check_card_holds_no_copy_of_the_rule(monkeypatch):
     rule in card_clock.py changes the reducer's verdict with no edit here. The old copy's SwPowerCap bar would refuse the boundary card."""
     R = _load("p238_reduce", "bench/p238/p238_reduce.py")
     import card_clock
-    clock = R.clock_facts(str(ROOT / "tests" / "fixtures" / "card_clock" / "axo1767b-5090-1_gpuclk_hp1shake_axolotl.txt"))
+    log = ROOT / "tests" / "fixtures" / "card_clock" / "axo1767b-5090-1_gpuclk_hp1shake_axolotl.txt"
+    clock = R.clock_facts(str(log), window=_whole_log_window(log))
     assert clock["busy_swpowercap_fraction"] > 0.05 and R.check_card({"card": _CARD, "clock": clock}) == []
     seen = {}
 
@@ -349,7 +360,7 @@ def test_check_card_holds_no_copy_of_the_rule(monkeypatch):
         return False, "spied"
     monkeypatch.setattr(card_clock, "passes", spy)
     assert R.check_card({"card": _CARD, "clock": clock}) == ["the card clock: spied"]
-    assert seen == {"floor": 2700, "args": (), "mode": "clock"}
+    assert seen == {"floor": 2700, "args": (), "mode": "clock", "min_busy": R.CLOCK_WINDOW_MIN_BUSY}
     assert not hasattr(R, "SWPC_CLEAR")
 
 
@@ -550,7 +561,8 @@ def _work_dir(tmp_path):
             "loss_first": 2.0, "eval_loss_final": 1.5, "peak_vram_gb": 28.0, "loader_used": None, "profile_warm": 20, "profile_steps": 3,
             "arm_hook": {"record": {"facts": {**e["hook"]["facts"], "premise_table": table, "adapters": census,
                                               "absmax_compressed": R.N_LAYERS, "fast_train_absmax_dq": e["absmax"]["fast_train"]},
-                                    "edges": e["hook"]["edges"], "micro_batches": 1}}}
+                                    "edges": [dict(x, t=1700000010.0 + 2.5 * i) for i, x in enumerate(e["hook"]["edges"])],
+                                    "micro_batches": 1}}}   # amendment 6: edges carry t, the window (150 s) inside the clock log
     base = w / "loads" / "3" / "qwen3_5_e4b_p238_3_E_F_2k"
     _write(base.with_name(base.name + ".json"), cell)
     _write(base.with_name(base.name + "_profile.json"), e["profile"])
@@ -563,7 +575,7 @@ def _work_dir(tmp_path):
           "cells": [{"rows": r, "routing": k, "b_restored_zero": True,
                      "parity": {a_: {"errs": {"out": 1e-3}, "ok": True} for a_ in ("E_F", "E_A")},
                      "visits": [{"device_ms_per_call": 1.0, "wall_ms_per_call": 1.1}] * (R.OP_REPS * 4)}
-                    for r in R.OP_ROWS for k in R.OP_ROUTINGS]}
+                    for r in R._sched().SHAKE_OP_ROWS for k in R.OP_ROUTINGS]}   # amendment 6: the shakedown's op cells
     _write(w / "ops" / "op_1_e4b.json", op)
     return R, w
 
@@ -1013,7 +1025,7 @@ def test_the_runners_proc_lines_carry_each_loads_exit(tmp_path):
 def _ops(R, monkeypatch):
     """The schedule's op processes as op rows whose checks pass (op_faults, the premise and the census narrowed), so the box tests
     read the merge rules alone."""
-    monkeypatch.setattr(R, "op_faults", lambda rec: [])
+    monkeypatch.setattr(R, "op_faults", lambda rec, mode="read": [])
     monkeypatch.setattr(R, "check_premise", lambda o, t: [])
     monkeypatch.setattr(R, "check_census", lambda o, c: [])
     return [{"index": s["index"], "framework": s["framework"], "draw": s["draw"], "record": {}}
@@ -1223,11 +1235,12 @@ def _id_block(text, var):
     return "\n".join(lines[i:j + 1])
 
 
-VALID_IDS = ["p238-shake-1", "p238-shake-r2", "p238-shake-r3", "p238-shake-r5", "p238-shake-r6", "p238-shake-r8", "p238-5090-1", "p238-5090-2", "p238-5090-r1",
+VALID_IDS = ["p238-shake-1", "p238-shake-r2", "p238-shake-r3", "p238-shake-r5", "p238-shake-r6", "p238-shake-r8", "p238-shake-r9",
+             "p238-shake-r10", "p238-shake-r11", "p238-5090-1", "p238-5090-2", "p238-5090-r1",
              "p238-5090-r3", "p238-5090-1-2-1", "p238-5090-1-2-2", "p238-5090-2-4-4", "p238-5090-1-4-1", "p238-5090-1-8-8", "p238-5090-2-8-1"]
 BAD_IDS = ["p238-5090-1a", "p238-5090-1b", "p238-5090-1-2-3", "p238-5090-1-4-5", "p238-5090-1-3-1", "p238-5090-3-2-1",
            "p238-5090-1-8-9", "p238-5090-1-16-1", "p238-5090-1-2-1x", "p238-5090-1-1-1", "p238-shake-3", "p238-shake-r0",
-           "p238-shake-r9", ""]                                          # amendment 5: r6-r8 registered
+           "p238-shake-r12", "p238-shake-r01", "p238-shake-r100", ""]       # amendment 5: r6-r8; amendment 6: r9-r11
 
 
 def test_the_runner_and_the_driver_map_every_id_to_the_same_box():

@@ -7,6 +7,8 @@ plus two op processes per draw, each with its global index. The runner and the r
 So each point's two draws form a palindrome per arm, and every row carries its global index (1..44) and its position in its point.
 
 ``python3 p238_schedule.py [--draw N]`` prints one line per process: index, kind, draw, point, arm, position.
+``python3 p238_schedule.py --shake-op-rows`` prints SHAKE_OP_ROWS (amendment 6): the runner passes it to the shakedown's op
+processes, and the reducer's shake mode checks exactly those cells.
 """
 from __future__ import annotations
 
@@ -22,6 +24,9 @@ POLICY_MAX_WALLCLOCK_H = 6                           # the policy's global wallc
 RUN_OVERRIDE_MAX_H = 18                              # the per-run override's ceiling (allowed only when the run's worst <= USD 15)
 RUN_WORST_USD, USD_PER_H_MAX, DOWNLOAD_USD = 15.0, 1.05, 1.64
 INSTALL_S, FETCH_S, OP_TIMING_S, RESERVE_S, HEADROOM_PCT = 2700, 2400, 1800, 900, 125   # the runner's guard fit (the kit test binds them)
+# Amendment 6: the shakedown's op processes run these rows per expert, each under both routings, and the reducer's shake mode checks
+# exactly those cells. One constant: the runner reads it through --shake-op-rows, the reducer imports it.
+SHAKE_OP_ROWS = (64,)
 
 
 def schedule():
@@ -114,6 +119,9 @@ def main(argv=None):
         rest = argv[argv.index("--plan") + 1:]
         k = plan(int(rest[0]), float(rest[1]) if len(rest) > 1 else USD_PER_H_MAX)
         print("NO_FIT" if k is None else k)
+        return 0
+    if "--shake-op-rows" in argv:                       # amendment 6: the shakedown's op rows, as p238_op.py --rows takes them
+        print(",".join(map(str, SHAKE_OP_ROWS)))
         return 0
     if "--box" in argv:
         rows = box_rows(argv[argv.index("--box") + 1])
