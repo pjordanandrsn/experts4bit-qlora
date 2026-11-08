@@ -11,7 +11,8 @@ A reading box's end is one of three classes (bench/pgx/PREREG-pgx.md, Amendment 
 
 "Verifies" means the record re-derives exactly: this module reruns the box's own part reduction
 (``pgx_reduce.reduce(..., part=True)``) on the fetched ``read/`` directory with the box's own ``registration.json`` for
-the box's registered draws, and the result must equal the record field for field. So the record covers every scheduled
+the box's registered draws, and the result must equal the record field for field (``findings`` as a multiset: PGX2
+Amendment 2, below). So the record covers every scheduled
 lifetime of the box's draws, skipped ones included (a skipped lifetime reduces as missing), and it is the record of the
 directory it came with. The box must also have run its registered schedule (``box_schedule.txt`` equals
 ``pgx_schedule.py --box K-i``).
@@ -34,9 +35,16 @@ Which fetch failed is read from the box's own record: the runner fetches bf16, f
 tag's log may exist. Anything else ends rc 11 as a strike, as registered: a line not on the list, a truncated or
 unreadable log, a missing summary. An rc 11 under a PGX id is a strike, unchanged.
 
+PGX2 Amendment 2 (bench/pgx/PREREG-pgx2.md): the record's ``findings`` verify in any order. The reducer builds that list by
+iterating a set of (arm, budget, draw) tuples, whose order follows Python's per-process hash seed, so the box and this
+module can list the same findings in different orders. ``findings`` is compared as a multiset: each entry's JSON with
+sorted keys, the list sorted, so a missing, extra, duplicated or changed entry still fails. Every other field is compared
+exactly. The reducer, staged on the box, is unchanged; no consumer may read meaning into the list's order.
+
 Exit: 0 PART_OK; 10 PART_FAULTS; 11 PART_FAULTS with no_serve (stop for a person); 12 STRIKE; 13 NOT_STARTED;
 14 HOST_FAULT (PGX2 ids only). The last stdout line is the result as JSON. Any other exit (an unreadable directory raises)
-is not a class: the caller stops for a person. Stdlib only; tested by tests/test_pgx_box_end.py and tests/test_pgx2.py.
+is not a class: the caller stops for a person. Stdlib only; tested by tests/test_pgx_box_end.py, tests/test_pgx2.py and
+tests/test_pgx2_findings_order.py.
 """
 from __future__ import annotations
 
@@ -135,6 +143,28 @@ def _json(path):
         return json.loads(t), None
     except ValueError as exc:
         return None, f"{os.path.basename(path)} is not JSON ({exc.__class__.__name__})"
+
+
+def canonical_findings(findings) -> list:
+    """A findings list as a canonical multiset: each entry as JSON with sorted keys, then sorted (Amendment 2)."""
+    return sorted(json.dumps(f, sort_keys=True) for f in findings)
+
+
+def differs(rec, want: dict) -> list:
+    """The fields in which a part record does not verify against the re-derived one, sorted; [] when it verifies. A field
+    on one side only differs. ``findings`` differs unless both are lists equal as canonical multisets; every other field
+    must be equal exactly."""
+    if not isinstance(rec, dict):
+        return ["<not an object>"]
+    out = set(rec) ^ set(want)
+    for k in set(rec) & set(want):
+        a, b = rec[k], want[k]
+        if k == "findings":
+            if not (isinstance(a, list) and isinstance(b, list) and canonical_findings(a) == canonical_findings(b)):
+                out.add(k)
+        elif a != b:
+            out.add(k)
+    return sorted(out)
 
 
 def schedule_lines(spec: str) -> list:
@@ -243,9 +273,8 @@ def classify(box_dir: str, run_id: str | None = None, rc: int | None = None) -> 
     except (ValueError, KeyError, TypeError, AttributeError, FileNotFoundError, NotADirectoryError) as exc:
         why.append(f"the part reduction does not rerun on the fetched directory ({exc.__class__.__name__}: {exc})")
         return out
-    if rec != want:
-        diff = (sorted(k for k in set(rec) | set(want) if rec.get(k) != want.get(k)) if isinstance(rec, dict)
-                else ["<not an object>"])
+    diff = differs(rec, want)
+    if diff:
         why.append(f"part_verdict.json does not verify against read/ (differs in {', '.join(diff)})")
         return out
     verdict = rec["verdict"]

@@ -1,0 +1,75 @@
+{
+ "verdict": "PART_FAULTS",
+ "draws": [
+  1,
+  2
+ ],
+ "findings": [
+  {
+   "kind": "token_invariance",
+   "arm": "S4",
+   "budget": 8,
+   "draw": 2,
+   "differing_requests": 5,
+   "rules": false
+  },
+  {
+   "kind": "token_invariance",
+   "arm": "S4",
+   "budget": 4,
+   "draw": 1,
+   "differing_requests": 7,
+   "rules": false
+  },
+  {
+   "kind": "token_invariance",
+   "arm": "S4",
+   "budget": 12,
+   "draw": 2,
+   "differing_requests": 7,
+   "rules": false
+  },
+  {
+   "kind": "token_invariance",
+   "arm": "S4",
+   "budget": 8,
+   "draw": 1,
+   "differing_requests": 7,
+   "rules": false
+  },
+  {
+   "kind": "token_invariance",
+   "arm": "S4",
+   "budget": 12,
+   "draw": 1,
+   "differing_requests": 7,
+   "rules": false
+  },
+  {
+   "kind": "token_invariance",
+   "arm": "S4",
+   "budget": 4,
+   "draw": 2,
+   "differing_requests": 7,
+   "rules": false
+  }
+ ],
+ "void_lifetimes": [
+  [
+   "S4",
+   4,
+   1
+  ]
+ ],
+ "faults": {
+  "S4|4|1|P1": [
+   "counter dump missing"
+  ],
+  "S4|4|1|P2": [
+   "counter dump missing"
+  ],
+  "S4|4|1|P3": [
+   "counter dump missing"
+  ]
+ }
+}

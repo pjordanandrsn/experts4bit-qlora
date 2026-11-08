@@ -229,3 +229,40 @@ fired on the stale heartbeat at 12:02:32Z and completed that teardown at 12:03:3
 conditions, the classifier and every rule of this amendment are unchanged, and the record is still this lane's one controller
 fault. A kit cut at a launch commit after e4b#2181's merge starts the run detached, so an outage like this one no longer ends
 the driver.
+
+## Amendment 2 (2026-11-08): a part record's findings verify in any order, registered before box 2
+
+Written 2026-11-08 after `pgx2-4090-r2-2-1`'s receipt, before box 2 or any other PGX2 box. Nothing else changes: the ids,
+the host-fault rule, Amendment 1, the strikes, the budget and the launch rule all stand.
+
+**The record.** `pgx2-4090-r2-2-1` (box 1, retry 2) ran from 2026-11-07 23:50:46Z to 2026-11-08 06:36:27Z. It ended rc 27
+with a part record reading `PART_FAULTS` over draws 1 and 2. One lifetime faulted: `S4|4|1` (its counter dump is missing).
+Six `token_invariance` findings are reported, all at S4, none ruling. `pgx_box_end.py` classed the box a strike:
+"part_verdict.json does not verify against read/ (differs in findings)".
+
+**The cause.** The record and the controller's re-derivation of it are equal in every field but `findings`. There they hold
+the same six entries in a different order. `pgx_reduce.py` builds the list by iterating a set of (arm, budget, draw)
+tuples, whose order follows Python's per-process hash seed (`PYTHONHASHSEED`). Reduced on the controller from box 1's own
+`read/` under seeds 0, 1, 2 and 3, the list comes out in three different orders (seeds 1 and 3 agree), and none of them
+is the box's order. The classifier compared the two records list for list. So any box with two or more findings failed
+to verify at random. Box 1's strike is an artifact of the hash seed: its record is the record of its directory.
+
+**The rule.** `pgx_box_end.py` compares a part record's `findings` with the re-derived ones **as a multiset**: each entry as
+JSON with sorted keys, the list sorted. A missing, an added, a duplicated or a changed entry still fails. Every other field
+is compared exactly, and a field on one side only fails. The order of `findings` carries no meaning, and no consumer may
+read one into it.
+
+**No box-side byte changes.** The fix is on the controller only. `pgx_reduce.py` and every other staged file are unchanged
+(`staged-pgx.sha256` does not move), so box 2 runs box 1's box-side bytes. No other consumer compares `findings` in
+order: the reducer's own tests compare them as sets, and the kit's stop reads the class from `pgx_box_end.py`.
+
+**This record.** Under the amended classifier, `pgx2-4090-r2-2-1` is `PART_FAULTS` (b): not a strike, and its faulted
+lifetime `S4|4|1` is VOID under the registered rules. Box 1 has ended. Box 2 is `pgx2-4090-1-2-2`.
+
+**The $0 tests** are in `tests/test_pgx2_findings_order.py`. Box 1's real part record and the controller's re-derivation are
+sha-pinned in `tests/fixtures/pgx2_box1_part/` (`read/` is too large to vendor). The old comparison refuses them and the
+amended one verifies them. A synthetic box with four findings is reduced box-side under seeds 0 to 3. Its records list the
+findings in different orders, and each verifies under each seed. Every way a record can differ other than in order is
+still a strike. Code mutants of the comparison were each killed. They are listed in the PR.
+
+**The kit.** The stop pins the amended classifier's sha. The kit is cut from this amendment's merge and approved afresh.
