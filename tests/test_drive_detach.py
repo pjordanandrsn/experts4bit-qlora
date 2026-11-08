@@ -55,6 +55,8 @@ def _stand_in(work, lane):
 def test_the_start_returns_at_once_and_the_run_goes_on(tmp_path, lane):
     cmd = _start_command(DRIVERS[lane].read_text(encoding="utf-8"))
     assert cmd.startswith("cd $W || exit 20; "), cmd[:60]
+    # bash -c cannot send the session's SIGHUP, so the text holds what survives it: nohup, and no stdin from the session
+    assert re.search(rf" nohup bash {lane}_run\.sh > outer\.log 2>&1 < /dev/null & echo started$", cmd), cmd[-90:]
     work = tmp_path / "w"
     _stand_in(work, lane)
     r, dt = _run(cmd, work)

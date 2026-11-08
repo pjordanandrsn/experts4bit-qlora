@@ -931,3 +931,12 @@ spend under its own launch rule. The reading's budget is unchanged.
 
 **The kit.** The stop reads the classifier from the launch commit (sha-pinned) and applies it before its "no readable exit
 code" check. r9 launches only from a kit cut at this amendment's merge, with a fresh approval.
+
+**Note (2026-11-08, no rule change): the cause chain of `pgx2-4090-r1-2-1`.** This amendment says the guard read the lost
+heartbeat as a dead controller. The full chain, read from the run's launch log and receipt: the driver held its start ssh to
+the box open for the whole run (a driver defect, fixed in e4b#2181), and the outage at the controller cut it. The driver
+logged "start failed" at 12:00:02Z and exited 21. The launcher refreshes its heartbeat only while the driver runs, so the
+heartbeat's last write was 11:59:57Z; the launcher then began its own teardown, which could not reach the provider. The guard
+fired on the stale heartbeat at 12:02:32Z and completed that teardown at 12:03:32Z. The box was healthy throughout. The five
+conditions, the classifier and every rule of this amendment are unchanged. `p238_drive.sh` had the same start form; a kit cut
+at a launch commit after e4b#2181's merge starts the run detached, so an outage like this one no longer ends the driver.
