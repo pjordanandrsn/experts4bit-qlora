@@ -65,6 +65,28 @@
     "license_link": "https://huggingface.co/LiquidAI/LFM2-8B-A1B/blob/c1c44ff9fc00db3ebf4516970563f5f383d23670/LICENSE",
     "license_file": "LICENSES/LFM-Open-License-1.0.txt"
   },
+  "lfm2.5-8b-a1b": {
+    "repo": "LiquidAI/LFM2.5-8B-A1B",
+    "revision": "dd83f5cb02aa2938b66bba9a9998d38d0517c1f3",
+    "sha256": "9c0255c2d5c744c99b760a12edca2572935348dae340e79e2e6625af975d2d68",
+    "role": "control",
+    "license": "LFM Open License v1.0",
+    "license_card_id": "other",
+    "license_name": "lfm1.0",
+    "license_link": "https://huggingface.co/LiquidAI/LFM2.5-8B-A1B/blob/dd83f5cb02aa2938b66bba9a9998d38d0517c1f3/LICENSE",
+    "license_file": "LICENSES/LFM-Open-License-1.0.txt"
+  },
+  "lfm2.5-24b-a2b": {
+    "repo": "LiquidAI/LFM2.5-24B-A2B",
+    "revision": "3dc4cd09c9a2a99e1e819693e79d3aba5e9bb4f2",
+    "sha256": "b0c46662afe3881e49cf542e683bf5ea8a5e0b780a429b6141a48defc33531bf",
+    "role": "control",
+    "license": "LFM Open License v1.0",
+    "license_card_id": "other",
+    "license_name": "lfm1.0",
+    "license_link": "https://huggingface.co/LiquidAI/LFM2.5-24B-A2B/blob/3dc4cd09c9a2a99e1e819693e79d3aba5e9bb4f2/LICENSE",
+    "license_file": "LICENSES/LFM-Open-License-1.0.txt"
+  },
   "granite-4.0-h-tiny": {
     "repo": "ibm-granite/granite-4.0-h-tiny",
     "revision": "791e0d3d28c86e106c9b6e0b4cecdee0375b6124",

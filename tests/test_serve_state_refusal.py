@@ -28,6 +28,8 @@ REFUSED = {                                   # fixture -> the runner's reason, 
     "nemotron-3-super-120b-a12b": "Gated DeltaNet only",
     "granite-4.0-h-tiny": "Gated DeltaNet only",
     "lfm2-8b-a1b": "['conv']",
+    "lfm2.5-8b-a1b": "['conv']",
+    "lfm2.5-24b-a2b": "['conv']",
 }
 SERVED = ("qwen3-30b-a3b", "qwen3.6-35b-a3b", "olmoe-1b-7b-0924-instruct", "granite-3.1-3b-a800m-instruct",
           "mixtral-8x7b-instruct-v0.1", "gpt-oss-20b", "gemma-4-26b-a4b-it")
