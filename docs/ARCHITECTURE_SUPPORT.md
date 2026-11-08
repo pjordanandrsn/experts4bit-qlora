@@ -267,6 +267,8 @@ not cover, notably CUDA-graph capture and any throughput figure.*
 | `granitemoeshared` | `ibm-research/moe-7b-1b-active-shared-experts` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 40q/0u | ok | **reference-ok** |
 | `jamba` | `ai21labs/Jamba-tiny-dev` | toy | SUPPORTED_ARCHITECTURES | cpu | ok | 8q/0u | ok | **toy-ok** |
 | `lfm2_moe` | `LiquidAI/LFM2-8B-A1B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 22q/0u | ok | **reference-ok** |
+| `lfm2_moe` | `LiquidAI/LFM2.5-24B-A2B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 38q/0u | ok | **reference-ok** |
+| `lfm2_moe` | `LiquidAI/LFM2.5-8B-A1B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 22q/0u | ok | **reference-ok** |
 | `nemotron_h` | `inference-optimization/NemotronH-0.3B-A0.3B` | toy | SUPPORTED_ARCHITECTURES | cpu | ok | 2q/0u | ok | **toy-ok** |
 | `nemotron_h` | `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 23q/0u | ok | **reference-ok** |
 | `olmoe` | `OLMoE-1B-7B-0924` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 16q/0u | ok | **reference-ok** |
