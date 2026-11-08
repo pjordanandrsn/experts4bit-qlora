@@ -9,7 +9,8 @@ stays under its own licence, as declared on its model card, with a copy of that 
   google/gemma-4-26B-A4B-it (licence link: https://ai.google.dev/gemma/docs/gemma_4_license),
   ibm-granite/granite-3.1-3b-a800m-instruct, ibm-granite/granite-4.0-h-tiny, mistralai/Mixtral-8x7B-Instruct-v0.1,
   baidu/ERNIE-4.5-21B-A3B-PT, openai/gpt-oss-20b.
-- LFM Open License v1.0 (LICENSES/LFM-Open-License-1.0.txt): LiquidAI/LFM2-8B-A1B. Licensor: Liquid AI, Inc.
+- LFM Open License v1.0 (LICENSES/LFM-Open-License-1.0.txt): LiquidAI/LFM2-8B-A1B, LiquidAI/LFM2.5-8B-A1B,
+  LiquidAI/LFM2.5-24B-A2B. Licensor: Liquid AI, Inc.
 - OpenMDW License 1.1 (LICENSES/OpenMDW-1.1.txt, https://openmdw.ai/license/1-1/):
   nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16. Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 - NVIDIA Nemotron Open Model License (LICENSES/NVIDIA-Nemotron-Open-Model-License.txt,
