@@ -31,10 +31,7 @@ if [ "${P228_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage $(ls "$STAGE" | 
 say "run $E4B_RENT_RUN_ID -> $HOST:$PORT; deadline $DEADLINE; e4b $E4B_SHA"
 $SSH "test ! -e $W && mkdir -p $W" || { say "stage failed: remote dir exists or ssh refused"; exit 20; }
 scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT "$STAGE"/* "root@$HOST:$W/" || { say "stage failed: scp"; exit 20; }
-# The run starts detached: `cd $W || exit 20;` first, so what is backgrounded is the nohup command alone, with its own
-# redirections. Under `cd $W && ... &` bash backgrounds the whole and-list in a subshell that holds this ssh session's
-# stdout until the run ends, and the poll loop below never ran (tests/test_drive_detach.py).
-$SSH "cd $W || exit 20; P228_RUN_ID=$E4B_RENT_RUN_ID P228_DEADLINE_EPOCH=$DEADLINE E4B_SHA=$E4B_SHA P228_RUN_NONCE=$NONCE \
+$SSH "cd $W && P228_RUN_ID=$E4B_RENT_RUN_ID P228_DEADLINE_EPOCH=$DEADLINE E4B_SHA=$E4B_SHA P228_RUN_NONCE=$NONCE \
   nohup bash p228_run.sh > outer.log 2>&1 < /dev/null & echo started" || { say "start failed"; exit 21; }
 while :; do
   now=$(date +%s)

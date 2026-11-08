@@ -1,12 +1,17 @@
 """The drivers start the run DETACHED: the remote start command returns as soon as the run is in the background.
 
-The seven drivers here (P227, P228, P229, P236, P237, P238 and PGX) start the box's runner over ssh, then poll its
-TP_DONE marker with a heartbeat line. Before this fix the start read
+Every LIVE driver that started its run under ``cd $W &&`` (P237, P238 and PGX) starts the box's runner over ssh, then
+polls its TP_DONE marker with a heartbeat line. Before this fix the start read
 ``cd $W && VARS nohup bash X_run.sh > outer.log 2>&1 < /dev/null & echo started``. ``&&`` binds tighter than ``&``, so
 bash on the box backgrounded the whole and-list in a subshell. That subshell kept the ssh session's stdout open while it
 waited for the runner, so the ssh (and the driver) did not return until the run ended. The poll loop, its heartbeats and
 its "deadline near: fetch what exists" branch never ran. ``cd $W || exit 20;`` first makes the backgrounded job the nohup
 command alone, with its own redirections: the form the other lanes' drivers already use.
+
+Four CLOSED lanes' drivers (P227, P228, P229 and P236) keep the old form on purpose. Their results are merged, and
+tests/fixtures/drive_tail_allowlist.json (and, for P227, rule8_legacy_fetch.json) pins their bytes, so editing them would
+pull frozen drivers under two newer rules for no benefit. The last test keeps that list truthful. Reopening any of them
+fixes its tail, rule 8 (P227) and this start in one change.
 
 Each test runs the driver's OWN start command, read from its file, under ``bash -c`` with stdout on a pipe, as sshd does.
 ``subprocess.run`` returns only at EOF on that pipe, so its wall time is the ssh's. The runner is a stand-in that sleeps
@@ -14,6 +19,7 @@ and then writes a file. The command must return at once and the stand-in must st
 same command, must hold the pipe for the stand-in's whole run (the test's own power check).
 """
 
+import json
 import re
 import subprocess
 import time
@@ -22,7 +28,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-LANES = ("p227", "p228", "p229", "p236", "p237", "p238", "pgx")  # every driver that started its run under `cd $W &&`
+LANES = ("p237", "p238", "pgx")  # every LIVE driver that started its run under `cd $W &&`
+CLOSED_OLD_FORM = ("p227", "p228", "p229", "p236")  # closed lanes, kept in the old form on purpose (the docstring)
 DRIVERS = {lane: ROOT / "bench" / lane / f"{lane}_drive.sh" for lane in LANES}
 HOLD_S = 3
 
@@ -84,3 +91,14 @@ def test_a_missing_work_dir_starts_nothing(tmp_path, lane):
     """No work dir: the command exits 20 before any runner starts, so the driver says "start failed" (21)."""
     r, _ = _run(_start_command(DRIVERS[lane].read_text(encoding="utf-8")), tmp_path / "absent")
     assert r.returncode == 20 and r.stdout == "", (r.returncode, r.stdout)
+
+
+@pytest.mark.parametrize("lane", CLOSED_OLD_FORM)
+def test_the_closed_lanes_keep_the_old_form_and_stay_closed(lane):
+    """The four closed drivers still start under 'cd $W && ' and are still allowlisted as closed lanes: a driver that leaves
+    this list (reopened, or its start edited) must move to LANES, with its tail and fetch held to the newer rules."""
+    text = (ROOT / "bench" / lane / f"{lane}_drive.sh").read_text(encoding="utf-8")
+    assert re.search(r'^\$SSH "cd \$W && ', text, re.M), f"{lane}_drive.sh no longer starts under 'cd $W &&'"
+    allow = json.loads((ROOT / "tests" / "fixtures" / "drive_tail_allowlist.json").read_text(encoding="utf-8"))
+    row = allow["drivers"].get(f"bench/{lane}/{lane}_drive.sh")
+    assert row is not None and row.get("status", "").startswith("closed lane"), (lane, row)
