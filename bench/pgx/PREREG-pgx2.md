@@ -243,8 +243,8 @@ Six `token_invariance` findings are reported, all at S4, none ruling. `pgx_box_e
 **The cause.** The record and the controller's re-derivation of it are equal in every field but `findings`. There they hold
 the same six entries in a different order. `pgx_reduce.py` builds the list by iterating a set of (arm, budget, draw)
 tuples, whose order follows Python's per-process hash seed (`PYTHONHASHSEED`). Reduced on the controller from box 1's own
-`read/` under seeds 0, 1, 2 and 3, the list comes out in three different orders (seeds 1 and 3 agree), and none of them
-is the box's order. The classifier compared the two records list for list. So any box with two or more findings failed
+`read/` under the controller's Python 3.9.6, seeds 0, 1, 2 and 3 give three different orders (seeds 1 and 3 agree), and
+none of them is the box's order. Which seeds agree depends on the interpreter: under Python 3.15, seeds 0 and 3 agree. The classifier compared the two records list for list. So any box with two or more findings failed
 to verify at random. Box 1's strike is an artifact of the hash seed: its record is the record of its directory.
 
 **The rule.** `pgx_box_end.py` compares a part record's `findings` with the re-derived ones **as a multiset**: each entry as
