@@ -1,0 +1,108 @@
+{
+  "executable_sha256": "f95bbecba67975d3f8ef22e91549021d444509dabda3fb42bbb8d907970ed47e",
+  "helper_sha256": "aeca4c7c576282c22338bfc9afc87c6f45ad8150cd662365ebbb61bb676930b0",
+  "platform": "Linux-6.6.32-qnap-x86_64-with-glibc2.39",
+  "proves_gpu_engagement": false,
+  "python": "3.11.13 | packaged by conda-forge | (main, Jun  4 2025, 14:48:23) [GCC 13.3.0]",
+  "rows": [
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "experts4bit_qlora.engines.glue_fuse:fuse_t1_glue.<locals>._fwd",
+      "sha256": "b6ed0e81f4392fd4de5f6bedc90a19ffee8fbbf0de9ab916183bea384dbe6374"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "experts4bit_qlora.engines.glue_r2:_patch_layer_scaled.<locals>._fwd",
+      "sha256": "a4f66fe542cfd6b1ebee45a5487aad556f5d6b7e42596084a2464d15b376dcc5"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "experts4bit_qlora.engines.glue_r2:_patch_layer.<locals>._fwd",
+      "sha256": "cb1e0b2d6b88df1fa1d7758138bae77ce4bc54796f5baf6f9cffc618fb0b0f74"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "experts4bit_qlora.engines.glue_r2:_patch_attention.<locals>._fwd",
+      "sha256": "dd2266902b610659fcc3d35ee494df9654f2d5a312fbd87b574fefc85e3e754b"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "experts4bit_qlora.engines.glue_r2:_patch_attention_unfused.<locals>._fwd",
+      "sha256": "1331c40d16eeba897ab2c7a49f4d5f4816c4a98fb440579acea869f8f0099aea"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "experts4bit_qlora.engines.glue_r2:_patch_attention_rope_only.<locals>._fwd",
+      "sha256": "629483af71ec74c70f406b3bd223bb30c37237ae181182c93ab7ed02dc514bb5"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "experts4bit_qlora.engines.router_epilogue:fuse_router_epilogue.<locals>._fwd",
+      "sha256": "fe5052e575a553882ebd648c5ee3345ae93b33e791c68f6380bd550db7e44fba"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "experts4bit_qlora.engines.router_epilogue:fuse_router_epilogue.<locals>._fwd",
+      "sha256": "8afb2669e8e0d0efe5874ad2ad3707e8cb87f8b8ba67b3a414a648be3e29395e"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "experts4bit_qlora.engines.router_epilogue:fuse_router_epilogue.<locals>._fwd",
+      "sha256": "1126aef4dd0a3154955dbbb64a161fa5c6fb100b57a080b1bd9a48f4396d3d8d"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "experts4bit_qlora.engines.router_epilogue:fuse_router_epilogue.<locals>._fwd",
+      "sha256": "14812583801d20d5c462261e89b2bb0833f6df32e2bb3ded9dee1eb8bd92e228"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "experts4bit_qlora.engines.router_epilogue:fuse_router_epilogue.<locals>._fwd",
+      "sha256": "22b3507a9aed414e56f6d52093e1312bb92d3bc2a7be0973d3c1b9c468538a94"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "hot:module",
+      "sha256": "fe8141a0e519528dde7afa133493a56e92d4f5fed79561e8c6c5a7207b1447d7"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "hot:module",
+      "sha256": "96dbf0316df6a63454aaa1cd476f405d7a25393fd89d702ee03e45f108af90d5"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "qkv:module",
+      "sha256": "bd92be70d3ceeb2763fe873d6c4113f69085d7bd5c66c9b4dbb5d9e56534f5c2"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "qkv:module",
+      "sha256": "627c4f7a58bbe515b1e6d5fae2e5c3ce0d7e6e35ea87ea4a68bef2741b5ecaaa"
+    },
+    {
+      "matched": true,
+      "mutation_rejected": true,
+      "name": "nf4:module",
+      "sha256": "99fe3048bbc125a558ed0ddd00a8a9664c4983ebfe0a75cba49bdea310deb9ad"
+    }
+  ],
+  "schema": 1,
+  "scope": "CPU canonical AST validation on OCI-verified extracted proof interpreter; no full-image/install/GPU evidence",
+  "soabi": "cpython-311-x86_64-linux-gnu"
+}

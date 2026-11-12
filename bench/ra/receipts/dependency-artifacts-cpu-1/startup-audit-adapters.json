@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "status": "PROPOSED_AUDIT_ONLY",
+  "adapters": [
+    {
+      "name": "setuptools",
+      "version": "84.0.0",
+      "wheel_sha256": "51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670",
+      "startup": {
+        "distutils-precedence.pth": "2638ce9e2500e572a5e0de7faed6661eb569d1b696fcba07b0dd223da5f5d224"
+      },
+      "semantics": "SETUPTOOLS_USE_DISTUTILS defaults to local; enabled branch imports _distutils_hack and calls add_shim"
+    }
+  ]
+}
